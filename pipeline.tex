@@ -49,17 +49,59 @@ Raxter's approach shows good speedups but:
 \begin{itemize}
 \item Each stage of pipeline invokes a kernel
 \item Each pipe component transforms data somehow (frequency image). See \ref{sec:kernel_parallelism}.
-\item 
+\begin{itemize}
+\item Each component takes input and produces output. Need something that reasons how input of certain dimension is transformed into output of certain dimension.
+\item Does the input/output live on the CPU/GPU?
+\item Automatically deduce what to copy between each stage of the pipeline? Or specify...
+\end{itemize}
+\begin{itemize}
+\item Input
+\begin{itemize}
+\item Point Sources. $B^{(k)}$ term.
+\item Jones Matrices. $E_p^{(k)}$, $K_p^{(k)}$, $G_p^H$. This can either be supplied as a {\bf model (implemented by kernel)} or {\bf table (matrix)}.
+\end{itemize}
+\item Output
+\begin{itemize}
+\item antenna one $\times$ antenna two $\times$ frequency $\times$ time
+\end{itemize}
 \end{itemize}
 
 \subsection{Kernel Parallelism}
 \label{sec:kernel_parallelism}
 
-antenna one $\times$ antenna two $\times$ frequency $\times$ time
+\item The $\sum_k^N E_p^{(k)} K_p^{(k)} B^{(k)} K_q^{(k)} E_q^{(k)}$ term is probably very parallel.
+\begin{itemize}
+\item Calculate then perform reduction. {\it Richard does this, only considers $\sum_k^N K_p^{(k)} B^{(k)} K_q^{(k)}$}
+\end{itemize}
+\item How many sources can we support?
+\begin{itemize}
+\item Richard's thesis tries to fit as many sources onto the GPU as possible.
+\item If not, sources are split into separate batches.
+\item Data for each batch has to be loaded.
+\item {\bf Shared memory allows more sources to be processed}.
+\end{itemize}
+\end{itemize}
 
-\section{Implementation Details}
+\section{Questions}
 
-OpenCL vs CUDA?
+\begin{itemize}
+\item {\bf Richard's thesis mentions that shared memory can't be used for a multiple kernel model}
+\begin{itemize}
+\item probably discarding some performance benefits and number of in memory sources that can be accommodated.
+\item but, less register pressure.
+\item $18 \times$ with shared mem, $15 \times$ with global mem, with Meq-tree overheads
+\item $110 \times$ with shared mem, $\sim 65 \times$ with global mem, without Meq-tree overheads
+\end{itemize}
+\item OpenCL vs CUDA?
+\item PyCUDA?
+\item Thrust?
+\item OSKAR has abstraction that separates CPU and GPU code.
+\item Do we need this? i.e. is this already implemented for CPUs in MeqTrees?
+\item Can PyCUDA do this?
+\item PyCUDA supports asynchronous operations (memory copies).
+\item Can we embed thrust code into PyCUDA to do this?
+\item Integrated with MeqTrees?
+\end{itemize}
 
 \bibliography{../../bibliography/postdoc.bib}
 \bibliographystyle{plain}
