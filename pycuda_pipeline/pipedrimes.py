@@ -146,12 +146,67 @@ class GPUNode(NullNode):
         pass
 
 class StreamNode1(Node):
-    def __init__(self):
+    INIT = 'init'
+    PRE = 'pre'
+    EXEC = 'exec'
+    POST = 'post'
+    SHUTDOWN = 'shutdown'
+
+    def __init__(self,K=4):
         super(StreamNode1, self).__init__()
+        self.K = 4
+        self.N = 4096
+        self.event_names = [StreamNode1.INIT, \
+            StreamNode1.PRE, StreamNode1.EXEC, StreamNode1.POST, StreamNode1.SHUTDOWN]
     def initialise(self, shared_data):
-        pass
+        stream = [cuda.Stream() for k in range(self.K)]
+        event = [dict([(en, cuda.Event()) for en in self.event_names]) for k in range(self.K)]
+
+        for k in range(self.K):
+            event[k][StreamNode1.INIT].record(stream[k])
+
+        shared_data.a_cpu = np.random.random(self.N*self.N)
+
+        for k in range(self.K):
+            event[k][StreamNode1.PRE].record(stream[k])
+
+        shared_data.a_gpu = gpuarray.to_gpu_async(shared_data.a_cpu, stream=stream[0])
+
+        for k in range(self.K):
+            event[k][StreamNode1.EXEC].record(stream[k])
+
+        shared_data.a_gpu = gpuarray.to_gpu_async(shared_data.a_cpu, stream=stream[0])
+
+        for k in range(self.K):
+            event[k][StreamNode1.POST].record(stream[k])
+
+        shared_data.stream = stream
+        shared_data.event = event
+
     def shutdown(self, shared_data):
-        pass
+        for k in range(self.K):
+            shared_data.event[k][StreamNode1.SHUTDOWN].record(shared_data.stream[k])
+
+#        for k in range(self.K):
+        if True:
+            k = 0
+            event_streams = shared_data.event[k]
+            init_event = event_streams[StreamNode1.INIT]
+            pre_event = event_streams[StreamNode1.PRE]
+            exec_event = event_streams[StreamNode1.EXEC]
+            post_event = event_streams[StreamNode1.POST]
+            shutdown_event = event_streams[StreamNode1.SHUTDOWN]
+
+            print
+            print StreamNode1.SHUTDOWN, init_event.time_till(init_event), 'ms'
+            print StreamNode1.PRE, pre_event.time_till(pre_event), 'ms'
+            print StreamNode1.EXEC, pre_event.time_till(exec_event), 'ms'
+            print StreamNode1.POST, pre_event.time_till(post_event), 'ms'
+            print StreamNode1.SHUTDOWN, pre_event.time_till(shutdown_event), 'ms'
+
+
+        del shared_data.stream
+        del shared_data.event
     def pre_execution(self, shared_data):
         pass
     def execute(self, shared_data):
@@ -221,6 +276,13 @@ class PipedRimes:
         """
         shared_data = SharedData()
 
+        if self.__init_pipeline(shared_data) is True:
+            self.__execute_pipeline(shared_data)
+        self.__shutdown_pipeline(shared_data)
+
+        return shared_data
+
+    def __init_pipeline(self, shared_data):
         print 'Initialising pipeline'
 
         try:
@@ -231,13 +293,16 @@ class PipedRimes:
         except PipeLineError as e:
             print
             print 'Pipeline Error occurred during RIME pipeline initialisation', e
-            return shared_data
+            return False
         except Exception, e:
             print
             print 'Unexpected exception occurred during RIME pipeline initialisation', e
-            return shared_data
+            return False
 
         print 'Initialisation of pipeline complete'
+        return True
+
+    def __execute_pipeline(self, shared_data):
         print 'Executing pipeline'
 
         try:
@@ -252,32 +317,37 @@ class PipedRimes:
         except PipeLineError as e:
             print
             print 'Pipeline Error occurred during RIME pipeline execution', e
-            return shared_data
+            return False
         except Exception, e:
             print
             print 'Unexpected exception occurred during RIME pipeline execution', e
-            return shared_data
+            return False
 
         print 'Execution of pipeline complete'
+        return False
+
+    def __shutdown_pipeline(self, shared_data):
         print 'Shutting down pipeline'
 
-        try:
-            for node in self.pipeline:
-                print '\tShutting down node \'' + node.description() + '\'',
-                node.shutdown(shared_data)
-                print 'Done'
-        except PipeLineError as e:
-            print
-            print 'Pipeline Error occurred during RIME pipeline shutdown', e
-            return shared_data            
-        except Exception, e:
-            print
-            print 'Unexpected exception occurred during RIME pipeline shutdown', e
-            return shared_data            
+        success = True
+
+        # Even if shutdown fails, keep trying on the other nodes
+        for node in self.pipeline:
+            try:
+                    print '\tShutting down node \'' + node.description() + '\'',
+                    node.shutdown(shared_data)
+                    print 'Done'
+            except PipeLineError as e:
+                print
+                print 'Pipeline Error occurred during RIME pipeline shutdown', e
+                success = False
+#            except Exception, e:
+#                print
+#                print 'Unexpected exception occurred during RIME pipeline shutdown', e
+#                success = False
 
         print 'Shutdown of pipeline Complete'
-
-        return shared_data
+        return success
 
     def __str__(self):
     	return ' '.join([node.description() for node in self.pipeline])
