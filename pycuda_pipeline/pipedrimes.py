@@ -8,6 +8,8 @@ import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 import pycuda.autoinit
 
+from pycuda.elementwise import ElementwiseKernel
+
 class ArrayData(object):
     """ Unused Descriptor Class. For gpuarrays """
     def __init__(self, value=None):
@@ -155,27 +157,45 @@ class StreamNode1(Node):
     def __init__(self,K=4):
         super(StreamNode1, self).__init__()
         self.K = 4
-        self.N = 4096
+        self.N = 1024
+        self.kernel = ElementwiseKernel(
+            "float * in, float a, float * out",
+#            "out[i] = a*in[i]",
+            "out[i]=a*in[i]",
+            "timestwo")
         self.event_names = [StreamNode1.INIT, \
             StreamNode1.PRE, StreamNode1.EXEC, StreamNode1.POST, StreamNode1.SHUTDOWN]
     def initialise(self, shared_data):
         stream = [cuda.Stream() for k in range(self.K)]
         event = [dict([(en, cuda.Event()) for en in self.event_names]) for k in range(self.K)]
 
+        a_cpu = np.random.random(self.N*self.N).astype(np.float32)
+
         for k in range(self.K):
             event[k][StreamNode1.INIT].record(stream[k])
 
-        shared_data.a_cpu = np.random.random(self.N*self.N)
+        a_gpu = gpuarray.to_gpu_async(a_cpu, stream=stream[0])
+        b_gpu = gpuarray.zeros_like(a_gpu)
 
         for k in range(self.K):
             event[k][StreamNode1.PRE].record(stream[k])
 
-        shared_data.a_gpu = gpuarray.to_gpu_async(shared_data.a_cpu, stream=stream[0])
+        print
+        print 'b_gpu', b_gpu.get_async(stream=stream[0])[:10]
+
+        self.kernel(a_gpu, 2., b_gpu, stream=stream[0])
+        b_cpu = b_gpu.get_async(stream=stream[0])
+
+#        assert (b_cpu*2 == a_cpu).all()
+
+        print 'a_cpu', a_cpu[:10]
+        print 'a_gpu', a_gpu[:10]
+        print 'b_cpu', b_cpu[:10]
 
         for k in range(self.K):
             event[k][StreamNode1.EXEC].record(stream[k])
 
-        shared_data.a_gpu = gpuarray.to_gpu_async(shared_data.a_cpu, stream=stream[0])
+        a_gpu = gpuarray.to_gpu_async(a_cpu, stream=stream[0])
 
         for k in range(self.K):
             event[k][StreamNode1.POST].record(stream[k])
@@ -294,10 +314,10 @@ class PipedRimes:
             print
             print 'Pipeline Error occurred during RIME pipeline initialisation', e
             return False
-        except Exception, e:
-            print
-            print 'Unexpected exception occurred during RIME pipeline initialisation', e
-            return False
+#        except Exception, e:
+#            print
+#            print 'Unexpected exception occurred duri8\ng RIME pipeline initialisation', e
+#            return False
 
         print 'Initialisation of pipeline complete'
         return True
@@ -318,10 +338,10 @@ class PipedRimes:
             print
             print 'Pipeline Error occurred during RIME pipeline execution', e
             return False
-        except Exception, e:
-            print
-            print 'Unexpected exception occurred during RIME pipeline execution', e
-            return False
+#        except Exception, e:
+#            print
+#            print 'Unexpected exception occurred during RIME pipeline execution', e
+#            return False
 
         print 'Execution of pipeline complete'
         return False
@@ -379,11 +399,11 @@ def main(argv=None):
     parser.add_argument('-g','--image-depth',  dest='imagedepth', help='Image Depth', type=int, default=8)
     args = parser.parse_args(argv[1:])
 
-    sp = PipedRimes([GPUNode(), GPUNode()])
-    data = sp.execute()
+#    sp = PipedRimes([GPUNode(), GPUNode()])
+#    data = sp.execute()
 
-    print data.a_cpu[data.N-10:]
-    print data.result[data.N-10:]
+#    print data.a_cpu[data.N-10:]
+#    print data.result[data.N-10:]
 
 
     sp = PipedRimes([StreamNode1(), StreamNode2(), StreamNode3()])
