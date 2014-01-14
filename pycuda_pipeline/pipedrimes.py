@@ -8,6 +8,7 @@ import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 import pycuda.autoinit
 
+from pycuda.compiler import SourceModule
 from pycuda.elementwise import ElementwiseKernel
 
 class ArrayData(object):
@@ -165,6 +166,7 @@ class StreamNode1(Node):
             "timestwo")
         self.event_names = [StreamNode1.INIT, \
             StreamNode1.PRE, StreamNode1.EXEC, StreamNode1.POST, StreamNode1.SHUTDOWN]
+
     def initialise(self, shared_data):
         stream = [cuda.Stream() for k in range(self.K)]
         event = [dict([(en, cuda.Event()) for en in self.event_names]) for k in range(self.K)]
@@ -180,17 +182,17 @@ class StreamNode1(Node):
         for k in range(self.K):
             event[k][StreamNode1.PRE].record(stream[k])
 
-        print
-        print 'b_gpu', b_gpu.get_async(stream=stream[0])[:10]
+#        print
+#        print 'b_gpu', b_gpu.get_async(stream=stream[0])[:10]
 
         self.kernel(a_gpu, 2., b_gpu, stream=stream[0])
         b_cpu = b_gpu.get_async(stream=stream[0])
 
 #        assert (b_cpu*2 == a_cpu).all()
 
-        print 'a_cpu', a_cpu[:10]
-        print 'a_gpu', a_gpu[:10]
-        print 'b_cpu', b_cpu[:10]
+#        print 'a_cpu', a_cpu[:10]
+#        print 'a_gpu', a_gpu[:10]
+#        print 'b_cpu', b_cpu[:10]
 
         for k in range(self.K):
             event[k][StreamNode1.EXEC].record(stream[k])
@@ -218,7 +220,7 @@ class StreamNode1(Node):
             shutdown_event = event_streams[StreamNode1.SHUTDOWN]
 
             print
-            print StreamNode1.SHUTDOWN, init_event.time_till(init_event), 'ms'
+            print StreamNode1.INIT, init_event.time_till(init_event), 'ms'
             print StreamNode1.PRE, pre_event.time_till(pre_event), 'ms'
             print StreamNode1.EXEC, pre_event.time_till(exec_event), 'ms'
             print StreamNode1.POST, pre_event.time_till(post_event), 'ms'
@@ -238,15 +240,164 @@ class StreamNode2(Node):
     def __init__(self):
         super(StreamNode2, self).__init__()
     def initialise(self, shared_data):
-        pass
+        self.mod = SourceModule("""
+#include <pycuda-complex.hpp>
+#include \"math_constants.h\"
+
+__device__ void Product2by2(
+    const pycuda::complex<double> * lhs,
+    const pycuda::complex<double> * rhs,
+    pycuda::complex<double> * result)
+{
+    const pycuda::complex<double> & a00 = lhs[0];
+    const pycuda::complex<double> & a10 = lhs[2];
+    const pycuda::complex<double> & a01 = lhs[1];
+    const pycuda::complex<double> & a11 = lhs[3];
+
+    const pycuda::complex<double> & b00 = rhs[0];
+    const pycuda::complex<double> & b10 = rhs[2];
+    const pycuda::complex<double> & b01 = rhs[1];
+    const pycuda::complex<double> & b11 = rhs[3];
+
+    result[0]=a00*b00+a01*b10;
+    result[1]=a00*b01+a01*b11;
+    result[2]=a10*b00+a11*b10;
+    result[3]=a10*b01+a11*b11;
+}
+
+__device__ void Product2by2H(
+    const pycuda::complex<double> * lhs,
+    const pycuda::complex<double> * rhs,
+    pycuda::complex<double> * result)
+{
+    const pycuda::complex<double> & a00 = lhs[0];
+    const pycuda::complex<double> & a10 = lhs[2];
+    const pycuda::complex<double> & a01 = lhs[1];
+    const pycuda::complex<double> & a11 = lhs[3];
+
+    const pycuda::complex<double> b00 = pycuda::conj(rhs[0]);
+    const pycuda::complex<double> b10 = pycuda::conj(rhs[2]);
+    const pycuda::complex<double> b01 = pycuda::conj(rhs[1]);
+    const pycuda::complex<double> b11 = pycuda::conj(rhs[3]);
+
+    result[0]=a00*b00+a01*b10;
+    result[1]=a00*b01+a01*b11;
+    result[2]=a10*b00+a11*b10;
+    result[3]=a10*b01+a11*b11;
+}
+
+
+__global__ void predict(
+    pycuda::complex<double> * VisIn,
+    double * UVWin,
+    double * LM,
+    int ndir, int nchan)
+{
+    const int i = blockIdx.x*blockDim.x + threadIdx.x;
+
+    const pycuda::complex<double> I = pycuda::complex<double>(0,1);
+    const pycuda::complex<double> c0 = 2.0*CUDART_PI_F*I;
+
+    double wavelength[1024];
+
+    const double refwave = 3e8;
+
+    pycuda::complex<double> * p0 = VisIn;
+    double * p1 = UVWin;
+
+    return;
+
+    for(int dd=0;dd<ndir;dd++){
+        double l=LM[0];
+        double m=LM[1];
+        double fI=LM[2]; // flux
+        double alpha=LM[3];
+        double fQ=LM[4];
+        double fU=LM[5];
+        double fV=LM[6];        
+        double n = sqrt(1.-l*l-m*m)-1.;
+
+        LM+=6;
+  
+        VisIn = p0;
+        UVWin = p1;
+
+        pycuda::complex<double> sky[4] =
+        {
+            fI+fQ,
+            fU+I*fV,
+            fU-I*fV,
+            fI-fQ
+        };
+
+        pycuda::complex<double> JJ[4];
+
+        double phase = UVWin[0]*l + UVWin[1]*m + UVWin[2]*n;
+        UVWin += 3;
+
+        for(int ch=0; ch<nchan; ch++){ 
+            pycuda::complex<double> c1=c0/wavelength[ch];
+            double thisflux=pow(refwave/wavelength[ch],alpha);
+            pycuda::complex<double> result=thisflux*pycuda::exp(phase*c1);
+
+            //Sols shape: Nd, Nf, Na, 4
+//            J0=Sols+ dd*na*nchan*4 + ch*na*4 + A0[i]*4;
+//            J1=Sols+ dd*na*nchan*4 + ch*na*4 + A1[i]*4;
+        }
+    }    
+}
+""")
+
+        self.kernel = self.mod.get_function('predict')
+
     def shutdown(self, shared_data):
         pass
     def pre_execution(self, shared_data):
         pass
     def execute(self, shared_data):
-        pass
+        N = 1024
+        samples = 200
+        vis = (np.random.random(N*3) + np.random.random(N*3)*1j).astype(np.complex128)
+        uvw = np.random.random(N*3).astype(np.float64)
+        lmfa = np.random.random(samples*4).astype(np.float64)
+        nchan = 32
+
+        vis_gpu = gpuarray.to_gpu_async(vis, stream=shared_data.stream[0])
+        uvw_gpu = gpuarray.to_gpu_async(uvw, stream=shared_data.stream[0])
+        lmfa_gpu = gpuarray.to_gpu_async(lmfa, stream=shared_data.stream[0])
+
+        self.kernel(vis_gpu, uvw_gpu, lmfa_gpu, np.int32(samples), np.int32(nchan),
+            block=(512,1,1), stream=shared_data.stream[0], grid=(1,1))
+
     def post_execution(self, shared_data):
         pass
+
+class StreamNodeOld2(Node):
+    def __init__(self):
+        super(StreamNode2, self).__init__()
+    def initialise(self, shared_data):
+        self.N = 1024
+        self.a_cpu = np.random.random(self.N).astype(np.float64)
+        self.a_gpu = gpuarray.to_gpu_async(self.a_cpu, stream=shared_data.stream[0])
+        self.mod = SourceModule("""
+__global__ void my_kernel(double *d)
+{
+    const int i = threadIdx.x;
+    d[i] = d[i] * 2.0;
+}
+""")
+        self.kernel = self.mod.get_function('my_kernel')
+
+    def shutdown(self, shared_data):
+        pass
+    def pre_execution(self, shared_data):
+        pass
+    def execute(self, shared_data):
+        self.kernel(self.a_gpu, block=(self.N,1,1), stream=shared_data.stream[0])
+        array = self.a_gpu.get_async(stream=shared_data.stream[0])
+        assert np.allclose(array,self.a_cpu*2.).all(), 'May fail for > 512'
+    def post_execution(self, shared_data):
+        pass                
 
 class StreamNode3(Node):
     def __init__(self):
