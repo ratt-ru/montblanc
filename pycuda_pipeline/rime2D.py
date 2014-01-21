@@ -263,17 +263,16 @@ __global__ void predict(
         print 'block = (' + str(baselines_per_block) + ',' + str(ddes_per_block) + ',1)'
         print 'grid = (' + str(baseline_blocks) + ',' + str(dde_blocks) + ',1)'
 
-        vis_gpu = cuda.mem_alloc(vis.nbytes)
+        vis_gpu = cuda.mem_alloc(vis[:,:,0,:].nbytes)
         uvw_gpu = cuda.mem_alloc(uvw.nbytes)
         lms_gpu = cuda.mem_alloc(lms.nbytes)
         A0_gpu = cuda.mem_alloc(A0.nbytes)
         A1_gpu = cuda.mem_alloc(A1.nbytes)
-        sols_gpu = cuda.mem_alloc(sols.nbytes)
+        sols_gpu = cuda.mem_alloc(sols[:,:,0,:].nbytes)
 
         for chan in range(nchan):
             # TODO: Fix the .copy(), its expensive
-            #cuda.memcpy_htod_async(vis_gpu, vis[:,:,chan,:].copy(),
-            cuda.memcpy_htod_async(vis_gpu, vis,
+            cuda.memcpy_htod_async(vis_gpu, vis[:,:,chan,:].copy(),
                 stream=foreground_stream)
             cuda.memcpy_htod_async(uvw_gpu, uvw,
                 stream=foreground_stream)
@@ -284,8 +283,7 @@ __global__ void predict(
             cuda.memcpy_htod_async(A1_gpu, A1,
                 stream=foreground_stream)
             # TODO: Fix the .copy(), its expensive
-            #cuda.memcpy_htod_async(sols_gpu, sols[:,:,chan,:].copy(),
-            cuda.memcpy_htod_async(sols_gpu, sols,
+            cuda.memcpy_htod_async(sols_gpu, sols[:,:,chan,:].copy(),
                 stream=foreground_stream)
 
             self.kernel(vis_gpu, uvw_gpu, lms_gpu,
