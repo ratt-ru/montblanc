@@ -324,17 +324,21 @@ __global__ void predict(
     // Channel/Frequency
     const int CHAN = blockIdx.z*blockDim.z + threadIdx.z;
 
-//    if(BL < nrows || CHAN < nchan || DDE < ndir)
-//        return;
+    if(BL >= nrows || CHAN >= nchan || DDE >= ndir)
+        return;
 
     // Constants
     const pycuda::complex<double> I = pycuda::complex<double>(0.,1.);
     const pycuda::complex<double> c0 = 2.0*CUDART_PI*I;
-    const double refwave = 1e7;
+    const double refwave = 1e6;
 
     // Coalesced loads should occur here!
     // l, m etc. are spaced ndir doubles apart
     // within LM
+    // TODO this won't work because
+    // DDE's aren't next to each other in the thread
+    // sense, instead, CHANS are...
+	// WAIT, it might still work, we should get broadcasts...
     double l = LM[DDE+0*ndir];
     double m = LM[DDE+1*ndir];
     double fI = LM[DDE+2*ndir];
@@ -361,7 +365,9 @@ __global__ void predict(
 
     double phase = u*l + v*m + w*n;
 
-    pycuda::complex<double> c1 = c0 / wavelength[CHAN];
+    return;
+
+    pycuda::complex<double> c1 = c0/wavelength[CHAN];
     double flux = pow(refwave/wavelength[CHAN],alpha);
     pycuda::complex<double> result = flux*pycuda::exp(c1*phase);
 
@@ -378,21 +384,28 @@ __global__ void predict(
     pycuda::complex<double> result_jones[4];
 
     // Internals of Product2by2 should produce coalesced loads
-    Product2by2(ant0_jones, ant1_jones, result_jones);
+    Product2by2(ant0_jones, sky, result_jones);
+    Product2by2H(result_jones, ant1_jones, result_jones);
 
-#if 0
+#if 1
     VisIn[i+0] = result_jones[0]*result;
     VisIn[i+1] = result_jones[1]*result;
     VisIn[i+2] = result_jones[2]*result;
     VisIn[i+3] = result_jones[3]*result;
+
+    VisIn[i+0] = result;
+    VisIn[i+1] = result;
+    VisIn[i+2] = result;
+    VisIn[i+3] = result;
+
 #endif
 
-#if 1
+#if 0
     // Useful for testing that the right indices
     // end up in the right place
-    VisIn[i+0] = pycuda::complex<double>(BL,0);
-    VisIn[i+1] = pycuda::complex<double>(DDE,0);
-    VisIn[i+2] = pycuda::complex<double>(CHAN,0);
+    VisIn[i+0] = pycuda::complex<double>(BL,nrows);
+    VisIn[i+1] = pycuda::complex<double>(DDE,ndir);
+    VisIn[i+2] = pycuda::complex<double>(CHAN,nchan);
     VisIn[i+3] = pycuda::complex<double>(i,0);
 #endif
 
