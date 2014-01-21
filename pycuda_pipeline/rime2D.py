@@ -114,6 +114,8 @@ __global__ void predict(
     double fU = LM[DDE+5*ndir];
     double fV = LM[DDE+6*ndir];
 
+    __syncthreads();
+
     double n = sqrt(1.0 - l*l - m*m) - 1.0;
 
     pycuda::complex<double> sky[4] =
@@ -129,6 +131,8 @@ __global__ void predict(
     double u = UVWin[BL+0*nbl];
     double v = UVWin[BL+1*nbl];
     double w = UVWin[BL+2*nbl];
+
+    __syncthreads();
 
     double phase = u*l + v*m + w*n;
 
@@ -200,15 +204,21 @@ __global__ void predict(
         ndir=2048               # Number of DDES
 
         # Visibilities ! has to have double complex
-        #Vis=np.complex128(np.zeros((nbl,nchan,4)))
+        # vis=np.complex128(np.zeros((nbl,nchan,4)))
         # BASELINE x DDE x CHAN
-        Vis=np.complex128(np.zeros((nbl,ndir,nchan,4)))
+        vis_shape = (nbl,ndir,nchan,4)
+        vis = cuda.pagelocked_empty(vis_shape,np.complex128)
+        vis[:] = np.zeros(vis_shape).astype(vis.dtype.type)
         # UVW coordinates
-        uvw=np.float64(np.arange(nbl*3).reshape((nbl,3)))
+        uvw_shape = (nbl,3)
+        uvw = cuda.pagelocked_empty(uvw_shape,np.float64)
+        uvw[:] = np.arange(nbl*3).reshape(uvw_shape).astype(uvw.dtype.type)
 
         # Frequencies in Hz
         freqs=np.float64(np.linspace(1e6,2e6,nchan))
-        wavelength=3e8/freqs
+        wavelength = cuda.pagelocked_empty(freqs.shape,freqs.dtype.type)
+        wavelength[:] = 3e8/freqs
+
         # Sky coordinates
         l=np.float64(np.random.randn(ndir)*0.1)
         m=np.float64(np.random.randn(ndir)*0.1)
@@ -217,22 +227,28 @@ __global__ void predict(
         fV=np.float64(np.ones((ndir,)))
         fU=np.float64(np.ones((ndir,)))
         fQ=np.float64(np.ones((ndir,)))
-        lms=(np.array([l,m,fI,alpha,fV,fU,fQ]).T).copy().astype(np.float64)
+        lms_shape = (ndir,len([l,m,fI,alpha,fV,fU,fQ]))
+        lms = cuda.pagelocked_empty(lms_shape,l.dtype.type)
+        lms[:]=(np.array([l,m,fI,alpha,fV,fU,fQ]).T).astype(np.float64)
 
         # Antennas
-        A0=np.int64(np.random.rand(nbl)*na)
-        A1=np.int64(np.random.rand(nbl)*na)
+        A0=cuda.pagelocked_empty((nbl), np.int64)
+        A1=cuda.pagelocked_empty((nbl), np.int64)
+        A0[:]=np.random.rand(nbl)*na
+        A1[:]=np.random.rand(nbl)*na
 
         # Jones matrices
         #Sols=np.complex128(np.random.randn(ndir,nchan,na,4)+1j*np.random.randn(ndir,nchan,na,4))
         # ANTENNA X DDE X CHAN
-        Sols=np.complex128(np.ones((na,ndir,nchan,4))+1j*np.zeros((na,ndir,nchan,4)))
+        sols_shape = (na,ndir,nchan,4)
+        sols=cuda.pagelocked_empty(sols_shape, np.complex128)
+        sols[:] = np.ones(sols_shape)+1j*np.zeros(sols_shape)
 
         # Matrix containing information, here just the reference frequency
         # to estimate the flux from spectral index
         Info=np.array([1e6],np.float64)
 
-#        P1=predict.predictSols(Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
+#        P1=predict.predictSols(vis, A0, A1, uvw, lms, WaveL, Sols, Info)
 
         f = open('test.txt','w')
 
@@ -247,24 +263,30 @@ __global__ void predict(
         print 'block = (' + str(baselines_per_block) + ',' + str(ddes_per_block) + ',1)'
         print 'grid = (' + str(baseline_blocks) + ',' + str(dde_blocks) + ',1)'
 
-        for chan in range(nchan):
-            # TODO: fix this copy
-            vis_gpu = gpuarray.to_gpu_async(Vis[:,:,chan,:].copy(),
-                stream=foreground_stream)
-            # GPU CHANGE transpose for the GPU version
-            uvw_gpu = gpuarray.to_gpu_async(uvw.T,
-                stream=foreground_stream)
-            lms_gpu = gpuarray.to_gpu_async(lms,
-                stream=foreground_stream)
-            A0_gpu = gpuarray.to_gpu_async(A0,
-                stream=foreground_stream)
-            A1_gpu = gpuarray.to_gpu_async(A1,
-                stream=foreground_stream)
-            # TODO: fix this copy
-            sols_gpu = gpuarray.to_gpu_async(Sols[:,:,chan,:].copy(),
-                stream=foreground_stream)
+        vis_gpu = cuda.mem_alloc(vis.nbytes)
+        uvw_gpu = cuda.mem_alloc(uvw.nbytes)
+        lms_gpu = cuda.mem_alloc(lms.nbytes)
+        A0_gpu = cuda.mem_alloc(A0.nbytes)
+        A1_gpu = cuda.mem_alloc(A1.nbytes)
+        sols_gpu = cuda.mem_alloc(sols.nbytes)
 
-            foreground_stream,background_stream = background_stream,foreground_stream
+        for chan in range(nchan):
+            # TODO: Fix the .copy(), its expensive
+            #cuda.memcpy_htod_async(vis_gpu, vis[:,:,chan,:].copy(),
+            cuda.memcpy_htod_async(vis_gpu, vis,
+                stream=foreground_stream)
+            cuda.memcpy_htod_async(uvw_gpu, uvw,
+                stream=foreground_stream)
+            cuda.memcpy_htod_async(lms_gpu, lms,
+                stream=foreground_stream)
+            cuda.memcpy_htod_async(A0_gpu, A0,
+                stream=foreground_stream)
+            cuda.memcpy_htod_async(A1_gpu, A1,
+                stream=foreground_stream)
+            # TODO: Fix the .copy(), its expensive
+            #cuda.memcpy_htod_async(sols_gpu, sols[:,:,chan,:].copy(),
+            cuda.memcpy_htod_async(sols_gpu, sols,
+                stream=foreground_stream)
 
             self.kernel(vis_gpu, uvw_gpu, lms_gpu,
                 A0_gpu, A1_gpu, sols_gpu, wavelength[chan],
@@ -273,7 +295,9 @@ __global__ void predict(
                 block=(baselines_per_block,ddes_per_block,1),
                 grid=(baseline_blocks,dde_blocks,1))
 
-            Vis[:,:,chan,:] = vis_gpu.get_async(stream=foreground_stream)
+            foreground_stream,background_stream = background_stream,foreground_stream
+
+            #vis[:,:,chan,:] = vis_gpu.get_async(stream=foreground_stream)
 
 #            print vis.shape
 
@@ -282,6 +306,14 @@ __global__ void predict(
 #                f.write(str(v) + '\n')
 
         f.close()
+        vis_gpu.free()
+        uvw_gpu.free()
+        lms_gpu.free()
+        A0_gpu.free()
+        A1_gpu.free()
+        sols_gpu.free()
+
+
 
     def post_execution(self, shared_data):
         pass
