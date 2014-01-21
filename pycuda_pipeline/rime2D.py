@@ -62,11 +62,11 @@ __global__ void predict(
     double * LM,
     long * A0,
     long * A1,
-    double * wavelength,
     pycuda::complex<double> * jones,
-    int ndir, int nchan, int na, int nrows)
+    double wavelength,
+    int ndir, int na, int nbl)
 {
-    // Our space of visibilities is a 3D matrix of BL x DDE x CHAN
+    // Our space of visibilities is a 2D matrix of BL x DDE
     // This is the output
 
 /*
@@ -90,10 +90,8 @@ __global__ void predict(
     const int BL = blockIdx.x*blockDim.x + threadIdx.x;
     // Direction Dependent Effect
     const int DDE = blockIdx.y*blockDim.y + threadIdx.y;
-    // Channel/Frequency
-    const int CHAN = blockIdx.z*blockDim.z + threadIdx.z;
 
-    if(BL >= nrows || CHAN >= nchan || DDE >= ndir)
+    if(BL >= nbl || DDE >= ndir)
         return;
 
     // Constants
@@ -128,27 +126,29 @@ __global__ void predict(
 
     // Coalesced load should occur here!
     // u, v and w are spaced na doubles apart
-    double u = UVWin[BL+0*nrows];
-    double v = UVWin[BL+1*nrows];
-    double w = UVWin[BL+2*nrows];
+    double u = UVWin[BL+0*nbl];
+    double v = UVWin[BL+1*nbl];
+    double w = UVWin[BL+2*nbl];
 
     double phase = u*l + v*m + w*n;
 
-    return;
-
-    pycuda::complex<double> c1 = c0/wavelength[CHAN];
-    double flux = pow(refwave/wavelength[CHAN],alpha);
+    pycuda::complex<double> c1 = c0/wavelength;
+    double flux = pow(refwave/wavelength,alpha);
     pycuda::complex<double> result = flux*pycuda::exp(c1*phase);
 
+    return;
+
     // Index into the visibility matrix
-    const int i = (BL*SLICE_STRIDE + DDE*ROW_STRIDE + CHAN)*4; 
+    // TODO: FIX THESE, THEY ARE WRONG NOW THAT THE CHAN HAS BEEN REMOVED
+//    const int i = (BL*SLICE_STRIDE + DDE*ROW_STRIDE + CHAN)*4; 
+    const int i = (BL*SLICE_STRIDE + DDE*ROW_STRIDE)*4; 
 
     // Our space of jone's matrices is a 3D matrix of ANTENNA x DDE x CHAN
     // This is our input. We choose ANTENNA as our major axis.
     const pycuda::complex<double> * ant0_jones = jones +
-        (A0[BL]*SLICE_STRIDE + DDE*ROW_STRIDE + CHAN)*4;
+        (A0[BL]*SLICE_STRIDE + DDE*ROW_STRIDE)*4;
     const pycuda::complex<double> * ant1_jones = jones +
-        (A1[BL]*SLICE_STRIDE + DDE*ROW_STRIDE + CHAN)*4;
+        (A1[BL]*SLICE_STRIDE + DDE*ROW_STRIDE)*4;
 
     pycuda::complex<double> result_jones[4];
 
@@ -172,7 +172,7 @@ __global__ void predict(
 #if 0
     // Useful for testing that the right indices
     // end up in the right place
-    VisIn[i+0] = pycuda::complex<double>(BL,nrows);
+    VisIn[i+0] = pycuda::complex<double>(BL,nbl);
     VisIn[i+1] = pycuda::complex<double>(DDE,ndir);
     VisIn[i+2] = pycuda::complex<double>(CHAN,nchan);
     VisIn[i+3] = pycuda::complex<double>(i,0);
@@ -194,17 +194,17 @@ __global__ void predict(
         pass
     def execute(self, shared_data):
         ## Here I define my data, and my Jones matrices
-        na=10        # Number of antenna
-        nrow=10      # Number of rows
-        nchan=10     # Number of channels
-        ndir=20      # Number of directions
+        na=10                   # Number of antenna
+        nbl=(na * (na-1))/2     # Number of baselines
+        nchan=6                # Number of channels
+        ndir=2048               # Number of DDES
 
         # Visibilities ! has to have double complex
-        #Vis=np.complex128(np.zeros((nrow,nchan,4)))
+        #Vis=np.complex128(np.zeros((nbl,nchan,4)))
         # BASELINE x DDE x CHAN
-        Vis=np.complex128(np.zeros((nrow,ndir,nchan,4)))
+        Vis=np.complex128(np.zeros((nbl,ndir,nchan,4)))
         # UVW coordinates
-        uvw=np.float64(np.arange(nrow*3).reshape((nrow,3)))
+        uvw=np.float64(np.arange(nbl*3).reshape((nbl,3)))
 
         # Frequencies in Hz
         freqs=np.float64(np.linspace(1e6,2e6,nchan))
@@ -220,12 +220,8 @@ __global__ void predict(
         lms=(np.array([l,m,fI,alpha,fV,fU,fQ]).T).copy().astype(np.float64)
 
         # Antennas
-        A0=np.int64(np.random.rand(nrow)*na)
-        A1=np.int64(np.random.rand(nrow)*na)
-
-        print
-        print A0
-        print A1
+        A0=np.int64(np.random.rand(nbl)*na)
+        A1=np.int64(np.random.rand(nbl)*na)
 
         # Jones matrices
         #Sols=np.complex128(np.random.randn(ndir,nchan,na,4)+1j*np.random.randn(ndir,nchan,na,4))
@@ -238,29 +234,52 @@ __global__ void predict(
 
 #        P1=predict.predictSols(Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
 
-        vis_gpu = gpuarray.to_gpu_async(Vis, stream=shared_data.stream[0])
-        # GPU CHANGE transpose for the GPU version
-        uvw_gpu = gpuarray.to_gpu_async(uvw.T, stream=shared_data.stream[0])
-        lms_gpu = gpuarray.to_gpu_async(lms, stream=shared_data.stream[0])
-        A0_gpu = gpuarray.to_gpu_async(A0, stream=shared_data.stream[0])
-        A1_gpu = gpuarray.to_gpu_async(A1, stream=shared_data.stream[0])
-        wavelength_gpu = gpuarray.to_gpu_async(wavelength, stream=shared_data.stream[0])
-        sols_gpu = gpuarray.to_gpu_async(Sols, stream=shared_data.stream[0])
-
-        self.kernel(vis_gpu, uvw_gpu, lms_gpu,
-            A0_gpu, A1_gpu, wavelength_gpu, sols_gpu,
-            np.int32(ndir), np.int32(nchan),
-            np.int32(na), np.int32(nrow),
-            stream=shared_data.stream[0], block=(8,8,8), grid=(2,2,2))
-
-        vis = vis_gpu.get_async(stream=shared_data.stream[0])
-
-        print vis.shape
-
         f = open('test.txt','w')
 
-        for v in vis:
-            f.write(str(v) + '\n')
+        baselines_per_block = 16
+        ddes_per_block = 16
+        foreground_stream,background_stream = shared_data.stream[0], shared_data.stream[1]
+
+        baseline_blocks = (nbl + baselines_per_block - 1) / baselines_per_block
+        dde_blocks = (ndir + ddes_per_block - 1) / ddes_per_block
+
+        print
+        print 'block = (' + str(baselines_per_block) + ',' + str(ddes_per_block) + ',1)'
+        print 'grid = (' + str(baseline_blocks) + ',' + str(dde_blocks) + ',1)'
+
+        for chan in range(nchan):
+            # TODO: fix this copy
+            vis_gpu = gpuarray.to_gpu_async(Vis[:,:,chan,:].copy(),
+                stream=foreground_stream)
+            # GPU CHANGE transpose for the GPU version
+            uvw_gpu = gpuarray.to_gpu_async(uvw.T,
+                stream=foreground_stream)
+            lms_gpu = gpuarray.to_gpu_async(lms,
+                stream=foreground_stream)
+            A0_gpu = gpuarray.to_gpu_async(A0,
+                stream=foreground_stream)
+            A1_gpu = gpuarray.to_gpu_async(A1,
+                stream=foreground_stream)
+            # TODO: fix this copy
+            sols_gpu = gpuarray.to_gpu_async(Sols[:,:,chan,:].copy(),
+                stream=foreground_stream)
+
+            foreground_stream,background_stream = background_stream,foreground_stream
+
+            self.kernel(vis_gpu, uvw_gpu, lms_gpu,
+                A0_gpu, A1_gpu, sols_gpu, wavelength[chan],
+                np.int32(ndir), np.int32(na), np.int32(nbl),
+                stream=foreground_stream,
+                block=(baselines_per_block,ddes_per_block,1),
+                grid=(baseline_blocks,dde_blocks,1))
+
+            Vis[:,:,chan,:] = vis_gpu.get_async(stream=foreground_stream)
+
+#            print vis.shape
+
+
+#            for v in vis:
+#                f.write(str(v) + '\n')
 
         f.close()
 

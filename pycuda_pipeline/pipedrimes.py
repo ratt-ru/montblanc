@@ -7,6 +7,7 @@ import pycuda.autoinit
 
 from node import *
 from rime3D import *
+from rime2D import *
 
 class GPUNode(NullNode):
     def __init__(self):
@@ -23,7 +24,7 @@ class GPUNode(NullNode):
         #del shared_data.a_cpu
         pass
 
-class StreamNode1(Node):
+class StartNode(Node):
     INIT = 'init'
     PRE = 'pre'
     EXEC = 'exec'
@@ -31,46 +32,46 @@ class StreamNode1(Node):
     SHUTDOWN = 'shutdown'
 
     def __init__(self,K=4):
-        super(StreamNode1, self).__init__()
+        super(StartNode, self).__init__()
         self.K = 4
 
-        self.event_names = [StreamNode1.INIT, \
-            StreamNode1.PRE, StreamNode1.EXEC, \
-            StreamNode1.POST, StreamNode1.SHUTDOWN]
+        self.event_names = [StartNode.INIT, \
+            StartNode.PRE, StartNode.EXEC, \
+            StartNode.POST, StartNode.SHUTDOWN]
 
     def initialise(self, shared_data):
         stream = [cuda.Stream() for k in range(self.K)]
         event = [dict([(en, cuda.Event()) for en in self.event_names]) for k in range(self.K)]
 
         for k in range(self.K):
-            event[k][StreamNode1.INIT].record(stream[k])
-            event[k][StreamNode1.PRE].record(stream[k])
-            event[k][StreamNode1.EXEC].record(stream[k])
-            event[k][StreamNode1.POST].record(stream[k])
+            event[k][StartNode.INIT].record(stream[k])
+            event[k][StartNode.PRE].record(stream[k])
+            event[k][StartNode.EXEC].record(stream[k])
+            event[k][StartNode.POST].record(stream[k])
 
         shared_data.stream = stream
         shared_data.event = event
 
     def shutdown(self, shared_data):
         for k in range(self.K):
-            shared_data.event[k][StreamNode1.SHUTDOWN].record(shared_data.stream[k])
+            shared_data.event[k][StartNode.SHUTDOWN].record(shared_data.stream[k])
 
 #        for k in range(self.K):
         if True:
             k = 0
             event_streams = shared_data.event[k]
-            init_event = event_streams[StreamNode1.INIT]
-            pre_event = event_streams[StreamNode1.PRE]
-            exec_event = event_streams[StreamNode1.EXEC]
-            post_event = event_streams[StreamNode1.POST]
-            shutdown_event = event_streams[StreamNode1.SHUTDOWN]
+            init_event = event_streams[StartNode.INIT]
+            pre_event = event_streams[StartNode.PRE]
+            exec_event = event_streams[StartNode.EXEC]
+            post_event = event_streams[StartNode.POST]
+            shutdown_event = event_streams[StartNode.SHUTDOWN]
 
             print
-            print StreamNode1.INIT, init_event.time_till(init_event), 'ms'
-            print StreamNode1.PRE, pre_event.time_till(pre_event), 'ms'
-            print StreamNode1.EXEC, pre_event.time_till(exec_event), 'ms'
-            print StreamNode1.POST, pre_event.time_till(post_event), 'ms'
-            print StreamNode1.SHUTDOWN, pre_event.time_till(shutdown_event), 'ms'
+            print StartNode.INIT, init_event.time_till(init_event), 'ms'
+            print StartNode.PRE, pre_event.time_till(pre_event), 'ms'
+            print StartNode.EXEC, pre_event.time_till(exec_event), 'ms'
+            print StartNode.POST, pre_event.time_till(post_event), 'ms'
+            print StartNode.SHUTDOWN, pre_event.time_till(shutdown_event), 'ms'
 
         del shared_data.stream
         del shared_data.event
@@ -81,9 +82,9 @@ class StreamNode1(Node):
     def post_execution(self, shared_data):
         pass
 
-class StreamNode3(Node):
+class FinalNode(Node):
     def __init__(self):
-        super(StreamNode3, self).__init__()
+        super(FinalNode, self).__init__()
     def initialise(self, shared_data):
         pass
     def shutdown(self, shared_data):
@@ -232,7 +233,7 @@ def main(argv=None):
     parser.add_argument('-g','--image-depth',  dest='imagedepth', help='Image Depth', type=int, default=8)
     args = parser.parse_args(argv[1:])
 
-    sp = PipedRimes([StreamNode1(), Rime3D(), StreamNode3()])
+    sp = PipedRimes([StartNode(), Rime2D(), FinalNode()])
     data = sp.execute()
 
     print sp
