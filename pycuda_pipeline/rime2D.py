@@ -69,22 +69,11 @@ __global__ void predict(
     // Our space of visibilities is a 2D matrix of BL x DDE
     // This is the output
 
-/*
-    const unsigned long long int blockId
-        = blockIdx.x
-        + blockIdx.y*gridDim.x
-        + blockIdx.z*gridDim.x*gridDim.y;
-
-    const unsigned long long int threadId
-        = blockId*blockDim.x + threadIdx.x;
-*/
-
     #define CUDA_XDIM blockDim.x*gridDim.x
     #define CUDA_YDIM blockDim.y*gridDim.y
     #define CUDA_ZDIM blockDim.z*gridDim.z
 
-    #define SLICE_STRIDE CUDA_YDIM*CUDA_ZDIM
-    #define ROW_STRIDE CUDA_ZDIM
+    #define ROW_STRIDE CUDA_YDIM
 
     // Baseline
     const int BL = blockIdx.x*blockDim.x + threadIdx.x;
@@ -93,6 +82,19 @@ __global__ void predict(
 
     if(BL >= nbl || DDE >= ndir)
         return;
+
+    // Index into the visibility matrix
+//    const int i = (BL*ROW_STRIDE + DDE)*4; 
+    const int i = (BL*ndir + DDE)*4; 
+
+#if 1
+    // Useful for testing that the right indices
+    // end up in the right place
+    VisIn[i+0] = pycuda::complex<double>(BL,nbl);
+    VisIn[i+1] = pycuda::complex<double>(DDE,ndir);
+    VisIn[i+2] = pycuda::complex<double>(threadIdx.x,threadIdx.y);
+    VisIn[i+3] = pycuda::complex<double>(i,0);
+#endif
 
     // Constants
     const pycuda::complex<double> I = pycuda::complex<double>(0.,1.);
@@ -140,19 +142,16 @@ __global__ void predict(
     double flux = pow(refwave/wavelength,alpha);
     pycuda::complex<double> result = flux*pycuda::exp(c1*phase);
 
+
     return;
 
-    // Index into the visibility matrix
-    // TODO: FIX THESE, THEY ARE WRONG NOW THAT THE CHAN HAS BEEN REMOVED
-//    const int i = (BL*SLICE_STRIDE + DDE*ROW_STRIDE + CHAN)*4; 
-    const int i = (BL*SLICE_STRIDE + DDE*ROW_STRIDE)*4; 
 
     // Our space of jone's matrices is a 3D matrix of ANTENNA x DDE x CHAN
     // This is our input. We choose ANTENNA as our major axis.
     const pycuda::complex<double> * ant0_jones = jones +
-        (A0[BL]*SLICE_STRIDE + DDE*ROW_STRIDE)*4;
+        (A0[BL]*ROW_STRIDE + DDE)*4;
     const pycuda::complex<double> * ant1_jones = jones +
-        (A1[BL]*SLICE_STRIDE + DDE*ROW_STRIDE)*4;
+        (A1[BL]*ROW_STRIDE + DDE)*4;
 
     pycuda::complex<double> result_jones[4];
 
@@ -173,15 +172,6 @@ __global__ void predict(
 
 #endif
 
-#if 0
-    // Useful for testing that the right indices
-    // end up in the right place
-    VisIn[i+0] = pycuda::complex<double>(BL,nbl);
-    VisIn[i+1] = pycuda::complex<double>(DDE,ndir);
-    VisIn[i+2] = pycuda::complex<double>(CHAN,nchan);
-    VisIn[i+3] = pycuda::complex<double>(i,0);
-#endif
-
     #undef SLICE_STRIDE
     #undef ROW_STRIDE
 
@@ -200,13 +190,13 @@ __global__ void predict(
         ## Here I define my data, and my Jones matrices
         na=10                   # Number of antenna
         nbl=(na * (na-1))/2     # Number of baselines
-        nchan=6                # Number of channels
-        ndir=2048               # Number of DDES
+        nchan=6                 # Number of channels
+        ndir=200                # Number of DDES
 
         # Visibilities ! has to have double complex
         # vis=np.complex128(np.zeros((nbl,nchan,4)))
-        # BASELINE x DDE x CHAN
-        vis_shape = (nbl,ndir,nchan,4)
+        # CHAN x BASELINE x DDE
+        vis_shape = (nchan,nbl,ndir,4)
         vis = cuda.pagelocked_empty(vis_shape,np.complex128)
         vis[:] = np.zeros(vis_shape).astype(vis.dtype.type)
         # UVW coordinates
@@ -240,7 +230,7 @@ __global__ void predict(
         # Jones matrices
         #Sols=np.complex128(np.random.randn(ndir,nchan,na,4)+1j*np.random.randn(ndir,nchan,na,4))
         # ANTENNA X DDE X CHAN
-        sols_shape = (na,ndir,nchan,4)
+        sols_shape = (nchan,na,ndir,4)
         sols=cuda.pagelocked_empty(sols_shape, np.complex128)
         sols[:] = np.ones(sols_shape)+1j*np.zeros(sols_shape)
 
@@ -252,8 +242,8 @@ __global__ void predict(
 
         f = open('test.txt','w')
 
-        baselines_per_block = 16
-        ddes_per_block = 16
+        baselines_per_block = 8 if nbl > 8 else nbl
+        ddes_per_block = 32 if ndir > 32 else ndir
         foreground_stream,background_stream = shared_data.stream[0], shared_data.stream[1]
 
         baseline_blocks = (nbl + baselines_per_block - 1) / baselines_per_block
@@ -263,16 +253,19 @@ __global__ void predict(
         print 'block = (' + str(baselines_per_block) + ',' + str(ddes_per_block) + ',1)'
         print 'grid = (' + str(baseline_blocks) + ',' + str(dde_blocks) + ',1)'
 
-        vis_gpu = cuda.mem_alloc(vis[:,:,0,:].nbytes)
+#        print 'vis shape', vis[0,:,:,:].shape
+#        print 'vis bytes', vis[0,:,:,:].nbytes
+
+        vis_gpu = cuda.mem_alloc(vis[0,:,:,:].nbytes)
         uvw_gpu = cuda.mem_alloc(uvw.nbytes)
         lms_gpu = cuda.mem_alloc(lms.nbytes)
         A0_gpu = cuda.mem_alloc(A0.nbytes)
         A1_gpu = cuda.mem_alloc(A1.nbytes)
-        sols_gpu = cuda.mem_alloc(sols[:,:,0,:].nbytes)
+        sols_gpu = cuda.mem_alloc(sols[0,:,:,:].nbytes)
 
         for chan in range(nchan):
             # TODO: Fix the .copy(), its expensive
-            cuda.memcpy_htod_async(vis_gpu, vis[:,:,chan,:].copy(),
+            cuda.memcpy_htod_async(vis_gpu, vis[chan,:,:,:],
                 stream=foreground_stream)
             cuda.memcpy_htod_async(uvw_gpu, uvw,
                 stream=foreground_stream)
@@ -283,7 +276,7 @@ __global__ void predict(
             cuda.memcpy_htod_async(A1_gpu, A1,
                 stream=foreground_stream)
             # TODO: Fix the .copy(), its expensive
-            cuda.memcpy_htod_async(sols_gpu, sols[:,:,chan,:].copy(),
+            cuda.memcpy_htod_async(sols_gpu, sols[chan,:,:,:],
                 stream=foreground_stream)
 
             self.kernel(vis_gpu, uvw_gpu, lms_gpu,
@@ -295,13 +288,12 @@ __global__ void predict(
 
             foreground_stream,background_stream = background_stream,foreground_stream
 
-            #vis[:,:,chan,:] = vis_gpu.get_async(stream=foreground_stream)
-
-#            print vis.shape
-
-
-#            for v in vis:
-#                f.write(str(v) + '\n')
+            cuda.memcpy_dtoh_async(vis[chan,:,:,:], vis_gpu,
+                stream=foreground_stream)
+ 
+            f.write('Channel ' + str(chan) + '\n')
+            for v in vis[chan,:,:,:]:
+                f.write(str(v) + '\n')
 
         f.close()
         vis_gpu.free()
@@ -310,8 +302,6 @@ __global__ void predict(
         A0_gpu.free()
         A1_gpu.free()
         sols_gpu.free()
-
-
 
     def post_execution(self, shared_data):
         pass
