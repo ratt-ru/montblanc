@@ -84,10 +84,9 @@ __global__ void predict(
         return;
 
     // Index into the visibility matrix
-//    const int i = (BL*ROW_STRIDE + DDE)*4; 
     const int i = (BL*ndir + DDE)*4; 
 
-#if 1
+#if 0
     // Useful for testing that the right indices
     // end up in the right place
     VisIn[i+0] = pycuda::complex<double>(BL,nbl);
@@ -118,7 +117,7 @@ __global__ void predict(
 
     __syncthreads();
 
-    double n = sqrt(1.0 - l*l - m*m) - 1.0;
+    double n = sqrt(1.0 - l*l - m*m);
 
     pycuda::complex<double> sky[4] =
     {
@@ -142,16 +141,12 @@ __global__ void predict(
     double flux = pow(refwave/wavelength,alpha);
     pycuda::complex<double> result = flux*pycuda::exp(c1*phase);
 
-
-    return;
-
-
     // Our space of jone's matrices is a 3D matrix of ANTENNA x DDE x CHAN
     // This is our input. We choose ANTENNA as our major axis.
     const pycuda::complex<double> * ant0_jones = jones +
-        (A0[BL]*ROW_STRIDE + DDE)*4;
+        (A0[BL]*ndir + DDE)*4;
     const pycuda::complex<double> * ant1_jones = jones +
-        (A1[BL]*ROW_STRIDE + DDE)*4;
+        (A1[BL]*ndir + DDE)*4;
 
     pycuda::complex<double> result_jones[4];
 
@@ -160,14 +155,14 @@ __global__ void predict(
     Product2by2H(result_jones, ant1_jones, result_jones);
 
 #if 1
-    VisIn[i+0] = result_jones[0]*result;
-    VisIn[i+1] = result_jones[1]*result;
-    VisIn[i+2] = result_jones[2]*result;
-    VisIn[i+3] = result_jones[3]*result;
+//    VisIn[i+0] = result_jones[0]*result;
+//    VisIn[i+1] = result_jones[1]*result;
+//    VisIn[i+2] = result_jones[2]*result;
+//    VisIn[i+3] = result_jones[3]*result;
 
-    VisIn[i+0] = result;
-    VisIn[i+1] = result;
-    VisIn[i+2] = result;
+    VisIn[i+0] = pycuda::complex<double>(u,l);
+    VisIn[i+1] = pycuda::complex<double>(v,m);
+    VisIn[i+2] = pycuda::complex<double>(w,n);
     VisIn[i+3] = result;
 
 #endif
@@ -189,7 +184,7 @@ __global__ void predict(
     def execute(self, shared_data):
         ## Here I define my data, and my Jones matrices
         na=10                   # Number of antenna
-        nbl=(na * (na-1))/2     # Number of baselines
+        nbl=(na*(na-1))/2     # Number of baselines
         nchan=6                 # Number of channels
         ndir=200                # Number of DDES
 
@@ -200,9 +195,9 @@ __global__ void predict(
         vis = cuda.pagelocked_empty(vis_shape,np.complex128)
         vis[:] = np.zeros(vis_shape).astype(vis.dtype.type)
         # UVW coordinates
-        uvw_shape = (nbl,3)
+        uvw_shape = (3,nbl)
         uvw = cuda.pagelocked_empty(uvw_shape,np.float64)
-        uvw[:] = np.arange(nbl*3).reshape(uvw_shape).astype(uvw.dtype.type)
+        uvw[:] = np.array([np.ones(nbl)*1., np.ones(nbl)*2., np.ones(nbl)*3.],dtype=uvw.dtype.type)
 
         # Frequencies in Hz
         freqs=np.float64(np.linspace(1e6,2e6,nchan))
@@ -210,16 +205,16 @@ __global__ void predict(
         wavelength[:] = 3e8/freqs
 
         # Sky coordinates
-        l=np.float64(np.random.randn(ndir)*0.1)
-        m=np.float64(np.random.randn(ndir)*0.1)
+        l=np.float64(np.random.random(ndir)*0.5)
+        m=np.float64(np.random.random(ndir)*0.5)
         fI=np.float64(np.ones((ndir,)))
         alpha=np.float64(np.zeros((ndir,)))
         fV=np.float64(np.ones((ndir,)))
         fU=np.float64(np.ones((ndir,)))
         fQ=np.float64(np.ones((ndir,)))
-        lms_shape = (ndir,len([l,m,fI,alpha,fV,fU,fQ]))
+        lms_shape = (len([l,m,fI,alpha,fV,fU,fQ]),ndir)
         lms = cuda.pagelocked_empty(lms_shape,l.dtype.type)
-        lms[:]=(np.array([l,m,fI,alpha,fV,fU,fQ]).T).astype(np.float64)
+        lms[:]=(np.array([l,m,fI,alpha,fV,fU,fQ])).astype(np.float64)
 
         # Antennas
         A0=cuda.pagelocked_empty((nbl), np.int64)
