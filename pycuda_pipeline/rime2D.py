@@ -107,13 +107,13 @@ __global__ void predict(
     // DDE's aren't next to each other in the thread
     // sense, instead, CHANS are...
     // WAIT, it might still work, we should get broadcasts...
-    double l = LM[DDE+0*ndir];
-    double m = LM[DDE+1*ndir];
-    double fI = LM[DDE+2*ndir];
-    double alpha = LM[DDE+3*ndir];
-    double fQ = LM[DDE+4*ndir];
-    double fU = LM[DDE+5*ndir];
-    double fV = LM[DDE+6*ndir];
+    const double l = LM[DDE+0*ndir];
+    const double m = LM[DDE+1*ndir];
+    const double fI = LM[DDE+2*ndir];
+    const double alpha = LM[DDE+3*ndir];
+    const double fQ = LM[DDE+4*ndir];
+    const double fU = LM[DDE+5*ndir];
+    const double fV = LM[DDE+6*ndir];
 
     __syncthreads();
 
@@ -129,17 +129,17 @@ __global__ void predict(
 
     // Coalesced load should occur here!
     // u, v and w are spaced na doubles apart
-    double u = UVWin[BL+0*nbl];
-    double v = UVWin[BL+1*nbl];
-    double w = UVWin[BL+2*nbl];
+    const double u = UVWin[BL+0*nbl];
+    const double v = UVWin[BL+1*nbl];
+    const double w = UVWin[BL+2*nbl];
 
     __syncthreads();
 
-    double phase = u*l + v*m + w*n;
+    const double phase = u*l + v*m + w*n;
 
-    pycuda::complex<double> c1 = c0/wavelength;
-    double flux = pow(refwave/wavelength,alpha);
-    pycuda::complex<double> result = flux*pycuda::exp(c1*phase);
+    const pycuda::complex<double> c1 = c0/wavelength;
+    const double flux = pow(refwave/wavelength,alpha);
+    const pycuda::complex<double> result = flux*pycuda::exp(c1*phase);
 
     // Our space of jone's matrices is a 3D matrix of ANTENNA x DDE x CHAN
     // This is our input. We choose ANTENNA as our major axis.
@@ -148,22 +148,62 @@ __global__ void predict(
     const pycuda::complex<double> * ant1_jones = jones +
         (A1[BL]*ndir + DDE)*4;
 
-    pycuda::complex<double> result_jones[4];
+    //Product2by2(ant0_jones, sky, result_jones);
+    // TODO: Currently uncoalesced.
+    const pycuda::complex<double> A0_a00 = ant0_jones[0];
+    const pycuda::complex<double> A0_a01 = ant0_jones[1];
+    const pycuda::complex<double> A0_a10 = ant0_jones[2];
+    const pycuda::complex<double> A0_a11 = ant0_jones[3];
 
-    // Internals of Product2by2 should produce coalesced loads
-    Product2by2(ant0_jones, sky, result_jones);
-    Product2by2H(result_jones, ant1_jones, result_jones);
+    __syncthreads();
+
+    // References to complex numbers in the local sky array
+    const pycuda::complex<double> & s00 = sky[0];
+    const pycuda::complex<double> & s01 = sky[1];
+    const pycuda::complex<double> & s10 = sky[2];
+    const pycuda::complex<double> & s11 = sky[3];
+
+    pycuda::complex<double> result_jones[4] =
+    {
+        A0_a00*s00+A0_a01*s10,
+        A0_a00*s01+A0_a01*s11,
+        A0_a10*s00+A0_a11*s10,
+        A0_a10*s01+A0_a11*s11
+    };
+
+    //Product2by2H(result_jones, ant1_jones, result_jones);
+    // References to complex numbers in the local jones result array
+    const pycuda::complex<double> & r00 = result_jones[0];
+    const pycuda::complex<double> & r01 = result_jones[1];
+    const pycuda::complex<double> & r10 = result_jones[2];
+    const pycuda::complex<double> & r11 = result_jones[3];
+
+    // Coalesced load of antenna 1's jones matrix
+    // TODO: Currently uncoalesced.
+    const pycuda::complex<double> A1_b00 = pycuda::conj(ant1_jones[0]);
+    const pycuda::complex<double> A1_b01 = pycuda::conj(ant1_jones[1]);
+    const pycuda::complex<double> A1_b10 = pycuda::conj(ant1_jones[2]);
+    const pycuda::complex<double> A1_b11 = pycuda::conj(ant1_jones[3]);
+
+    __syncthreads();
 
 #if 1
+    // Coalesced store of the computation
+    VisIn[i+ndir*0]=r00*A1_b00+r01*A1_b10*result;
+    VisIn[i+ndir*1]=r00*A1_b01+r01*A1_b11*result;
+    VisIn[i+ndir*2]=r10*A1_b00+r11*A1_b10*result;
+    VisIn[i+ndir*3]=r10*A1_b01+r11*A1_b11*result;
+
+
 //    VisIn[i+0] = result_jones[0]*result;
 //    VisIn[i+1] = result_jones[1]*result;
 //    VisIn[i+2] = result_jones[2]*result;
 //    VisIn[i+3] = result_jones[3]*result;
 
-    VisIn[i+0] = pycuda::complex<double>(u,l);
-    VisIn[i+1] = pycuda::complex<double>(v,m);
-    VisIn[i+2] = pycuda::complex<double>(w,n);
-    VisIn[i+3] = result;
+//    VisIn[i+0] = pycuda::complex<double>(u,l);
+//    VisIn[i+1] = pycuda::complex<double>(v,m);
+//    VisIn[i+2] = pycuda::complex<double>(w,n);
+//    VisIn[i+3] = result;
 
 #endif
 
@@ -174,7 +214,8 @@ __global__ void predict(
     #undef CUDA_YDIM
     #undef CUDA_ZDIM
 }
-""")
+""",
+options=['-lineinfo'])
         self.kernel = self.mod.get_function('predict')
 
     def shutdown(self, shared_data):
@@ -185,8 +226,8 @@ __global__ void predict(
         ## Here I define my data, and my Jones matrices
         na=10                   # Number of antenna
         nbl=(na*(na-1))/2     # Number of baselines
-        nchan=6                 # Number of channels
-        ndir=200                # Number of DDES
+        nchan=32                 # Number of channels
+        ndir=2048                # Number of DDES
 
         # Visibilities ! has to have double complex
         # vis=np.complex128(np.zeros((nbl,nchan,4)))
@@ -238,7 +279,7 @@ __global__ void predict(
         f = open('test.txt','w')
 
         baselines_per_block = 8 if nbl > 8 else nbl
-        ddes_per_block = 32 if ndir > 32 else ndir
+        ddes_per_block = 16 if ndir > 16 else ndir
         foreground_stream,background_stream = shared_data.stream[0], shared_data.stream[1]
 
         baseline_blocks = (nbl + baselines_per_block - 1) / baselines_per_block
@@ -281,14 +322,14 @@ __global__ void predict(
                 block=(baselines_per_block,ddes_per_block,1),
                 grid=(baseline_blocks,dde_blocks,1))
 
-            foreground_stream,background_stream = background_stream,foreground_stream
-
             cuda.memcpy_dtoh_async(vis[chan,:,:,:], vis_gpu,
                 stream=foreground_stream)
+
+            foreground_stream,background_stream = background_stream,foreground_stream
  
-            f.write('Channel ' + str(chan) + '\n')
-            for v in vis[chan,:,:,:]:
-                f.write(str(v) + '\n')
+            #f.write('Channel ' + str(chan) + '\n')
+            #for v in vis[chan,:,:,:]:
+            #    f.write(str(v) + '\n')
 
         f.close()
         vis_gpu.free()
