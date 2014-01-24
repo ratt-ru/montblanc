@@ -8,6 +8,8 @@ import pycuda.autoinit
 from node import *
 from rime3D import *
 from rime2D import *
+from RimeJonesBK import *
+from RimeJonesMultiply import *
 
 class GPUNode(NullNode):
     def __init__(self):
@@ -233,7 +235,7 @@ def main(argv=None):
     parser.add_argument('-g','--image-depth',  dest='imagedepth', help='Image Depth', type=int, default=8)
     args = parser.parse_args(argv[1:])
 
-    sp = PipedRimes([StartNode(), Rime2D(), FinalNode()])
+    sp = PipedRimes([StartNode(), RimeJonesBK(), RimeJonesMultiply(), FinalNode()])
     data = sp.execute()
 
     print sp
