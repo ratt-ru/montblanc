@@ -157,7 +157,7 @@ options=['-lineinfo'])
         sky[:] = np.array([fI,fV,fU,fQ], dtype=fI.dtype.type)
 
         # Output jones matrix
-        jones_shape = (nbl,ndir,4)
+        jones_shape = (4,nbl,ndir)
         jones = cuda.pagelocked_empty(jones_shape, dtype=np.complex128)
 
         baselines_per_block = 8 if nbl > 8 else nbl
