@@ -14,8 +14,9 @@ class RimeJonesBK(Node):
 #include <pycuda-complex.hpp>
 #include \"math_constants.h\"
 
+extern __shared__ double smem_d[];
+
 __global__
-//__launch_bounds__( 256, 2 )
 void rime_jones_BK(
     double * UVW,
     double * LMA,
@@ -25,41 +26,51 @@ void rime_jones_BK(
     int ndir, int na, int nbl)
 {
     // Our data space a 2D matrix of BL x DDE
-//    const int stride = blockDim.y*gridDim.y;
 
     // Baseline
     const int BL = blockIdx.x*blockDim.x + threadIdx.x;
     // Direction Dependent Effect
     const int DDE = blockIdx.y*blockDim.y + threadIdx.y;
-    // Index into the visibility matrix
-    const int i = (BL*ndir + DDE)*4; 
 
     if(BL >= nbl || DDE >= ndir)
         return;
 
-    // Coalesced loads should occur here!
-    // l, m etc. are spaced ndir doubles apart
-    // within LM
-    // TODO this won't work because
-    // DDE's aren't next to each other in the thread
-    // sense, instead, CHANS are...
-    // WAIT, it might still work, we should get broadcasts...
-    const double l = LMA[DDE+0*ndir];
-    const double m = LMA[DDE+1*ndir];
-    const double alpha = LMA[DDE+2*ndir];
+    // Index into the jones array
+    const int i = (BL*ndir + DDE)*4; 
 
-    double n = sqrt(1.0 - l*l - m*m);
+    /* Cache input and output data from global memory. */
+    double * u = smem_d;
+    double * v = &u[blockDim.x];
+    double * w = &v[blockDim.x];
+    double * l = &w[blockDim.x];
+    double * m = &l[blockDim.y];
+    double * a = &m[blockDim.y];
 
-    // Coalesced load should occur here!
-    // u, v and w are spaced na doubles apart
-    const double u = UVW[BL+0*nbl];
-    const double v = UVW[BL+1*nbl];
-    const double w = UVW[BL+2*nbl];
+    if (BL < nbl && threadIdx.y == 0)
+    {
+        u[threadIdx.x] = UVW[BL+0*nbl];
+        v[threadIdx.x] = UVW[BL+1*nbl];
+        w[threadIdx.x] = UVW[BL+2*nbl];
+    }
 
-    // Calculate u*l + v*m + w*n
-    double phase = u*l;
-    phase += v*m;
-    phase += w*n;
+    if (DDE < ndir && threadIdx.x == 0)
+    {
+        l[threadIdx.y] = LMA[DDE+0*ndir];
+        m[threadIdx.y] = LMA[DDE+1*ndir];
+        a[threadIdx.y] = LMA[DDE+2*ndir];
+    }
+
+    __syncthreads();
+
+    // Calculate the n term first
+    double phase = 1.0 - l[threadIdx.y]*l[threadIdx.y];
+    phase -= m[threadIdx.y]*m[threadIdx.y];
+    phase = sqrt(phase);
+
+    // u*l + v*m + w*n, in the wrong order :)
+    phase *= w[threadIdx.x];                  // w*n
+    phase += v[threadIdx.x]*m[threadIdx.y];   // v*m
+    phase += u[threadIdx.x]*l[threadIdx.y];   // u*l
 
     // Multiply by 2*pi/wavelength
     phase *= (2. * CUDART_PI);
@@ -72,13 +83,13 @@ void rime_jones_BK(
     sincos(phase, &result._M_re, &result._M_im);
 
     // Multiply by the wavelength to the power of alpha
-    result *= pow(1e6/wavelength,alpha);
+    result *= pow(1e6/wavelength,a[threadIdx.y]);
 
 #if 0
     // Coalesced store of the computation
-    jones[i+0]=pycuda::complex<double>(l,u);
-    jones[i+1]=pycuda::complex<double>(m,v);
-    jones[i+2]=pycuda::complex<double>(n,w);
+    jones[i+0]=pycuda::complex<double>(l[threadIdx.y],u[threadIdx.x]);
+    jones[i+1]=pycuda::complex<double>(m[threadIdx.y],v[threadIdx.x]);
+    jones[i+2]=pycuda::complex<double>(0.0,w[threadIdx.x]);
     jones[i+3]=pycuda::complex<double>(i,0);
 #endif
 
@@ -150,10 +161,15 @@ options=['-lineinfo'])
         jones = cuda.pagelocked_empty(jones_shape, dtype=np.complex128)
 
         baselines_per_block = 8 if nbl > 8 else nbl
-        ddes_per_block = 32 if ndir > 16 else ndir
+        ddes_per_block = 16 if ndir > 16 else ndir
 
         baseline_blocks = (nbl + baselines_per_block - 1) / baselines_per_block
         dde_blocks = (ndir + ddes_per_block - 1) / ddes_per_block
+
+        block=(baselines_per_block,ddes_per_block,1)
+        grid=(baselines_per_block,ddes_per_block,1)
+
+        print 'block', block, 'grid', grid
 
         foreground_stream,background_stream = shared_data.stream[0], shared_data.stream[1]
         chan = 0
@@ -167,8 +183,10 @@ options=['-lineinfo'])
             wavelength[chan],  jones_gpu,
             np.int32(ndir), np.int32(na), np.int32(nbl),
             stream=foreground_stream,
-            block=(baselines_per_block,ddes_per_block,1),
-            grid=(baseline_blocks,dde_blocks,1))
+            block=block,
+            grid=grid,
+            shared=3*(baselines_per_block+ddes_per_block)
+				*np.dtype(np.float64).itemsize)
 
         print jones_gpu.get_async(stream=foreground_stream)
 
