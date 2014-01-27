@@ -161,13 +161,13 @@ options=['-lineinfo'])
         jones = cuda.pagelocked_empty(jones_shape, dtype=np.complex128)
 
         baselines_per_block = 8 if nbl > 8 else nbl
-        ddes_per_block = 16 if ndir > 16 else ndir
+        ddes_per_block = 128 if ndir > 128 else ndir
 
         baseline_blocks = (nbl + baselines_per_block - 1) / baselines_per_block
         dde_blocks = (ndir + ddes_per_block - 1) / ddes_per_block
 
         block=(baselines_per_block,ddes_per_block,1)
-        grid=(baselines_per_block,ddes_per_block,1)
+        grid=(baseline_blocks,dde_blocks,1)
 
         print 'block', block, 'grid', grid
 
