@@ -45,35 +45,41 @@ void rime_jones_multiply(
     double2 * out_jones,
     int njones)
 {
-    const int i = (blockIdx.x*blockDim.x + threadIdx.x);
+    double2 * result = smem_d2;
 
-    const double2 a00 = lhs[i+0*njones];
-    const double2 a01 = lhs[i+1*njones];
-    const double2 a10 = lhs[i+2*njones];
-    const double2 a11 = lhs[i+3*njones];
+    int i = (blockIdx.x*blockDim.x + threadIdx.x);
 
-    const double2 b00 = rhs[i+0*njones];
-    const double2 b01 = rhs[i+1*njones];
-    const double2 b10 = rhs[i+2*njones];
-    const double2 b11 = rhs[i+3*njones];
+    const double2 a00 = lhs[i]; i += njones;
+    const double2 a01 = lhs[i]; i += njones;
+    const double2 a10 = lhs[i]; i += njones;
+    const double2 a11 = lhs[i];
 
-    double2 result;
+    i = (blockIdx.x*blockDim.x + threadIdx.x);
 
-    complex_multiply_double2(&a00,&b00,&result);
-    complex_multiply_add_double2(&a01,&b10,&result);
-    out_jones[i+0*njones] = result;
+    const double2 b00 = rhs[i]; i += njones;
+    const double2 b01 = rhs[i]; i += njones;
+    const double2 b10 = rhs[i]; i += njones;
+    const double2 b11 = rhs[i];
 
-    complex_multiply_double2(&a00,&b01,&result);
-    complex_multiply_add_double2(&a01,&b11,&result);
-    out_jones[i+1*njones] = result;
+    complex_multiply_double2(&a00,&b00,&result[threadIdx.x]);
+    complex_multiply_add_double2(&a01,&b10,&result[threadIdx.x]);
+    i = blockIdx.x*blockDim.x + threadIdx.x;
+    out_jones[i] = result[threadIdx.x];
 
-    complex_multiply_double2(&a10,&b00,&result);
-    complex_multiply_add_double2(&a11,&b10,&result);
-    out_jones[i+2*njones] = result;
+    complex_multiply_double2(&a00,&b01,&result[threadIdx.x]);
+    complex_multiply_add_double2(&a01,&b11,&result[threadIdx.x]);
+    i += njones;
+    out_jones[i] = result[threadIdx.x];
 
-    complex_multiply_double2(&a10,&b01,&result);
-    complex_multiply_add_double2(&a11,&b11,&result);
-    out_jones[i+3*njones] = result;
+    complex_multiply_double2(&a10,&b00,&result[threadIdx.x]);
+    complex_multiply_add_double2(&a11,&b10,&result[threadIdx.x]);
+    i += njones;
+    out_jones[i] = result[threadIdx.x];
+
+    complex_multiply_double2(&a10,&b01,&result[threadIdx.x]);
+    complex_multiply_add_double2(&a11,&b11,&result[threadIdx.x]);
+    i += njones;
+    out_jones[i] = result[threadIdx.x];
 }
 """,
 options=['-lineinfo'])
@@ -97,7 +103,7 @@ options=['-lineinfo'])
         jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(jones_shape)
         jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(jones_shape)
 
-        jones_per_block = 16 if njones > 16 else njones
+        jones_per_block = 256 if njones > 256 else njones
         jones_blocks = (njones + jones_per_block - 1) / jones_per_block
         block, grid = (jones_per_block,1,1), (jones_blocks,1,1)
 
@@ -110,7 +116,8 @@ options=['-lineinfo'])
         jones_output_gpu = gpuarray.empty(shape=jones_shape, dtype=np.complex128)
 
         self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, np.int32(njones),
-            stream=foreground_stream, block=block, grid=grid)
+            stream=foreground_stream, block=block, grid=grid,
+            shared=1*jones_per_block*np.dtype(np.complex128).itemsize)
 
 #        print jones_gpu.get_async(stream=foreground_stream)
 
