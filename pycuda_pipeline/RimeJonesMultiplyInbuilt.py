@@ -119,7 +119,24 @@ options=['-lineinfo'])
             stream=foreground_stream, block=block, grid=grid,
             shared=1*jones_per_block*np.dtype(np.complex128).itemsize)
 
-#        print jones_gpu.get_async(stream=foreground_stream)
+        jones_output = jones_output_gpu.get_async(stream=foreground_stream)
+
+        # Perform the calculation on the CPU
+        jones_output_cpu = np.empty(shape=jones_shape, dtype=np.complex128)
+
+        for baseline in range(nbl):
+            for direction in range(ndir):
+                jones_output_cpu[:,baseline,direction] = np.dot(
+                    jones_lhs[:,baseline,direction].reshape(2,2),
+                    jones_rhs[:,baseline,direction].reshape(2,2)).reshape(4)
+
+        # Confirm similar results
+        assert np.allclose(jones_output, jones_output_cpu)
+
+
+        sum = gpuarray.sum(jones_output_gpu[0,:,:],stream=foreground_stream)
+        print 'GPU first jones matrix element sum', sum
+        print 'CPU first jones matrix element sum', jones_output[0,:,:].sum()
 
     def post_execution(self, shared_data):
         pass
