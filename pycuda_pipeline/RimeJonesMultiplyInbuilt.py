@@ -133,10 +133,5 @@ options=['-lineinfo'])
         # Confirm similar results
         assert np.allclose(jones_output, jones_output_cpu)
 
-
-        sum = gpuarray.sum(jones_output_gpu[0,:,:],stream=foreground_stream)
-        print 'GPU first jones matrix element sum', sum
-        print 'CPU first jones matrix element sum', jones_output[0,:,:].sum()
-
     def post_execution(self, shared_data):
         pass

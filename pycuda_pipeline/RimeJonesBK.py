@@ -188,7 +188,7 @@ options=['-lineinfo'])
             shared=3*(baselines_per_block+ddes_per_block)
 				*np.dtype(np.float64).itemsize)
 
-        print jones_gpu.get_async(stream=foreground_stream)
+        #print jones_gpu.get_async(stream=foreground_stream)
 
         shared_data.jones_gpu = jones_gpu
         shared_data.na = na
