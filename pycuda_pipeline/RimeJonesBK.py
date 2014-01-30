@@ -190,6 +190,7 @@ options=['-lineinfo'])
 
         #print jones_gpu.get_async(stream=foreground_stream)
 
+        shared_data.jones_shape = jones_shape
         shared_data.jones_gpu = jones_gpu
         shared_data.na = na
         shared_data.nbl = nbl
