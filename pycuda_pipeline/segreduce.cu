@@ -28,7 +28,7 @@ extern "C" {
 
 /* ==== Set up the methods table ====================== */
 static PyMethodDef segreduce_Methods[] = {
-	{"segmented_reduce_complex128_sum", segmented_reduce_complex128_sum, METH_VARARGS},
+	{"segmented_reduce_complex128_sum", (PyCFunction) segmented_reduce_complex128_sum, METH_VARARGS | METH_KEYWORDS},
 	{NULL, NULL}     /* Sentinel - marks the end of this structure */
 };
 
@@ -39,44 +39,71 @@ void initsegreduce()  {
 	import_array();  // Must be present for NumPy.  Called first after above line.
 }
 
-PyObject * segmented_reduce_complex128_sum(PyObject * self, PyObject * args)
+PyObject * segmented_reduce_complex128_sum(PyObject * self, PyObject * args, PyObject * kw)
 {
-	PyObject * value_array;
-	PyObject * segment_starts;
-	PyObject * segment_sums;
-	PyObject * cuda_device_id;
-	PyObject * cuda_stream;
+	PyObject * value_array;		// pycuda.gpuarray
+	PyObject * segment_starts;	// pycuda.gpuarray
+	PyObject * segment_sums;	// pycuda.gpuarray
+	int device_id;				// int
+	PyObject * stream;			// pycuda.driver.Stream
 
-	if(!PyArg_ParseTuple(args, "OOOOO",
+    static char *kwlist[] = {
+    	"value_array",
+    	"segment_starts",
+    	"segment_sums",
+    	"device_id",
+    	"stream",
+    	NULL };
+
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|iO", kwlist,
 		&value_array,
 		&segment_starts,
 		&segment_sums,
-		&cuda_device_id,
-		&cuda_stream)) return NULL;
+		&device_id,
+		&stream)) return NULL;
 
-	CUdeviceptr value_ptr = (CUdeviceptr) PyObject_GetAttrString(value_array, "gpudata");
-	int * size =  (int *) PyObject_GetAttrString(value_array, "size");
+	PyObject * value_gpu = PyObject_GetAttrString(value_array, "gpudata");
+	PyObject * value_size =  PyObject_GetAttrString(value_array, "size");
+	PyObject * segments_gpu = PyObject_GetAttrString(segment_starts, "gpudata");
+	PyObject * segments_size =  PyObject_GetAttrString(segment_starts, "size");
+	PyObject * segment_sums_gpu = PyObject_GetAttrString(segment_sums, "gpudata");
+	PyObject * stream_handle = PyObject_GetAttrString(stream, "handle"); 
 
-	printf("address %d size %d\n", value_ptr, *size);
+	// Extract cuda device pointers, array sizes and stream_id
+	// from the Python Objects
+	CUdeviceptr value_ptr = (CUdeviceptr) value_gpu;
+	CUdeviceptr segment_ptr = (CUdeviceptr) segments_gpu;
+	CUdeviceptr segment_sums_ptr = (CUdeviceptr) segment_sums_gpu;
+	long n_values =  PyInt_AsLong(value_size);
+	long n_segments =  PyInt_AsLong(segments_size);
+	CUstream stream_id = (CUstream) PyInt_AsLong(stream_handle);
 
-	CUdeviceptr segment_start_ptr = NULL;
-	CUdeviceptr segment_sum_ptr = NULL;
+	printf("values address=%p size=%ld\n", value_ptr, n_values);
 
-	int n_values = 1024*1024;
-	int n_segments = 10;
+	printf("segments address=%p size=%ld\n", segment_ptr, n_segments);
 
-	CUstream stream = 0;
+	printf("segment sums address=%p\n", segment_sums_ptr);
 
+	printf("device_id=%ld stream=%ld\n", device_id, stream_id);
 
-	mgpu::ContextPtr context_ptr = mgpu::CreateCudaDeviceAttachStream(1, stream);
+	// We've finished using all these Python Objects.
+	Py_DECREF(value_gpu);
+	Py_DECREF(value_size);
+	Py_DECREF(segments_gpu);
+	Py_DECREF(segments_size);
+	Py_DECREF(segment_sums_gpu);
+	Py_DECREF(stream_handle);
+
+	mgpu::ContextPtr context_ptr = mgpu::CreateCudaDeviceAttachStream(
+		device_id, stream_id);
 
 	mgpu::SegReduceCsr(
 		(double2 *) value_ptr,
-		(int *) segment_start_ptr,
+		(int *) segment_ptr,
 		n_values,
 		n_segments,
 		false,
-		(double2 *) segment_sum_ptr,
+		(double2 *) segment_sums_ptr,
 		make_double2(0.,0.),
 		mgpu::plus<double2>(),
 		*context_ptr);

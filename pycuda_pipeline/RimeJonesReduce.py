@@ -4,113 +4,80 @@ import pycuda.curandom
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
+from pycuda.tools import dtype_to_ctype
 
 from node import *
+
+import segreduce
+
+KERNEL_TEMPLATE = """
+#include <pycuda-helpers.hpp>
+
+//#define BLOCK_SIZE %(block_size)d
+//#define WARP_SIZE %(warp_size)d
+
+//typedef %(value_type)s value_type;
+//typedef %(index_type)s index_type;
+
+__global__ void seg_reduce_sum()
+{
+    
+}
+
+"""
 
 class RimeJonesReduce(Node):
     def __init__(self):
         super(RimeJonesReduce, self).__init__()
     def initialise(self, shared_data):
-        self.mod = SourceModule("""
-extern __shared__ double sres[];
-
-__device__ double atomicAdd(double* address, double val)
-{
-    unsigned long long int * address_as_ull =
-        (unsigned long long int*)address;
-    unsigned long long int old = *address_as_ull, assumed;
-    do {
-        assumed = old;
-        old = atomicCAS(address_as_ull, assumed,
-            __double_as_longlong(val +
-                __longlong_as_double(assumed)));
-    } while (assumed != old);
-    return __longlong_as_double(old);
-}
-
-// Prepare keys for segmented reduction
-__global__ void seg_reduce_keyrange_per_block(int * keys, int* ranges,
-                                              int n, int blockdim) {
-    int i = threadIdx.x;
-    if(i < blockdim) {
-        ranges[2*i] = keys[i*blockdim];
-        ranges[2*i+1] = keys[(i+1)*blockdim - 1];
-    }
-}
-
-//template<class Method>
-__global__
-void segmented_reduction_kernel(double * values, int n_values, int* keys, int n_keys,
-    int * keyranges,  double * result)
-{
-    __shared__ int skeys[256];
-    __shared__ int svalues[256];
-    int minkey = keyranges[2*blockIdx.x];
-    int keydiff = keyranges[2*blockIdx.x + 1] - minkey;
-
-    int thread = threadIdx.x;
-    int index = blockIdx.x*blockDim.x + threadIdx.x;
-
-    // load keys and values
-    svalues[thread] = values[index];
-    skeys[thread] = keys[index];
-
-    // result with the proper length
-    if(thread <= keydiff)
-        sres[thread] = 0;
-
-    __syncthreads();
-    for(int i = 1; i < blockDim.x; i *= 2) {
-        if(thread % (2*i) == 0) {
-            int w0 = skeys[thread];
-            int w1 = skeys[thread + i];
-            if(w0 != w1) {
-                sres[w1 - minkey] += svalues[thread + i];
-            }
-            else {
-                svalues[thread] += svalues[thread + i];
-            }
-        }
-        __syncthreads();
-    }
-    // atomicAdd is fine here, as there are only few of those ops per
-    // thread
-    if(thread <= keydiff)
-        atomicAdd(&result[minkey+thread], sres[thread]);
-    __syncthreads();
-    if(thread == 0)
-        atomicAdd(&result[skeys[0]],svalues[0]);
-}
-""")
-        self.seg_reduce_prep = self.mod.get_function('seg_reduce_keyrange_per_block')
-        self.seg_reduce_kernel = self.mod.get_function('segmented_reduction_kernel')
+        self.mod = SourceModule(KERNEL_TEMPLATE % {
+                # Huge assumption here. The handle sitting in
+                # the stream object is a CUStream type.
+                # (Check the stream class in src/cpp/cuda.hpp).
+                # mgpu::CreateCudaDeviceAttachStream in KERNEL_TEMPLATE
+                # wants a cudaStream_t. However, according to the following
+                #  http://developer.download.nvidia.com/compute/cuda/4_1/rel/toolkit/docs/online/group__CUDART__DRIVER.html
+                # 'The types CUstream and cudaStream_t are identical and may be used interchangeably.'
+                'stream_handle' : shared_data.stream[0].handle,
+                'block_size' : 256,
+                'warp_size' : 32,
+                'value_type' : dtype_to_ctype(np.float64),
+                'index_type' : dtype_to_ctype(np.int32)
+            },
+            no_extern_c=1)
     def shutdown(self, shared_data):
         pass
     def pre_execution(self, shared_data):
         pass
     def execute(self, shared_data):
-        N = 1024*1024
-        keys = np.int32(np.random.rand(N)*N)
+        nbl = shared_data.nbl
+        ndir = shared_data.ndir
+
+        jones_shape = shared_data.jones_shape
+
+        njones = np.product(jones_shape)
+        keys = np.empty(jones_shape[0:2])
+
+        for i in range(jones_shape[0]):
+            for bl in range(jones_shape[1]):
+#                for dir in jones_shape[2]:
+                keys[i,bl] = bl*4 + i
+
         n_threads = 256
-        n_blocks = (N + n_threads - 1) / n_threads
+        n_blocks = (njones + n_threads - 1) / n_threads
         block, grid = (n_threads,1,1), (n_blocks,1,1)
 
+        print 'njones=', njones, 'stream=', shared_data.stream[0].handle
+
         keys_gpu = gpuarray.to_gpu_async(keys, stream=shared_data.stream[0])
-        key_ranges_gpu = gpuarray.empty([2*n_blocks],dtype=np.int32)
-        a = pycuda.curandom.rand(N, dtype=np.float64)
-        result_gpu = gpuarray.empty(N, dtype=np.float64)
+        sums_gpu = gpuarray.empty(shape=jones_shape, dtype=shared_data.jones_gpu.dtype.type)
 
-        self.seg_reduce_prep(keys_gpu, key_ranges_gpu,
-            np.int32(N), np.int32(1024),
-            block=(1024,1,1), grid=(1,1,1),
+        segreduce.segmented_reduce_complex128_sum(
+            shared_data.jones_gpu,
+            keys_gpu,
+            sums_gpu,
+            device_id=0,
             stream=shared_data.stream[0])
-
-        self.seg_reduce_kernel(a, np.int32(N),
-            keys_gpu, key_ranges_gpu, result_gpu,
-            block=block, grid=grid,
-            stream=shared_data.stream[0])
-
-#        print result_gpu.get_async(stream=shared_data.stream[0])
 
     def post_execution(self, shared_data):
         pass
