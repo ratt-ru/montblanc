@@ -9,7 +9,8 @@ from node import *
 from rime3D import *
 from rime2D import *
 from RimeJonesBK import *
-from RimeJonesMultiply import *
+from RimeJonesMultiplyInbuilt import *
+from RimeJonesReduce import *
 
 class GPUNode(NullNode):
     def __init__(self):
@@ -116,7 +117,7 @@ class PipedRimes:
 
         self.pipeline = node_list
 
-    def execute(self):
+    def execute(self, shared_data=None):
         """ Iterates over the pipeline of nodes, executing the functionality contained
         in each.
 
@@ -130,7 +131,9 @@ class PipedRimes:
         >>> data = pipe.execute()
         >>> print data.result # result member created by one of the nodes
         """
-        shared_data = SharedData()
+
+        if shared_data is None:
+            shared_data = SharedData()
 
         if self.__init_pipeline(shared_data) is True:
             self.__execute_pipeline(shared_data)
@@ -219,6 +222,82 @@ def is_valid_file(parser, arg):
     else:
         return open(arg, 'r')
 
+class RimeShared(SharedData):
+    INIT = 'init'
+    PRE = 'pre'
+    EXEC = 'exec'
+    POST = 'post'
+    SHUTDOWN = 'shutdown'
+
+    uvw_gpu = ArrayData()
+    lma_gpu = ArrayData()
+    sky_gpu = ArrayData()
+
+    nbl = Parameter(10)
+    nchan = Parameter(32)
+    ndir = Parameter(200)
+
+    def __init__(self):
+        super(SharedData, self).__init__()
+
+    def configure(self):
+        import pycuda.driver as cuda
+        import pycuda.gpuarray as gpuarray
+
+        self.stream = [cuda.Stream(), cuda.Stream()]
+
+        self.event_names = [RimeShared.INIT, \
+            RimeShared.PRE, RimeShared.EXEC, \
+            RimeShared.POST, RimeShared.SHUTDOWN]
+        self.nevents = len(self.event_names)
+
+        self.na = 10
+        self.nbl = (self.na*(self.na-1))/2
+        self.nchan = 32
+        self.ndir = 200
+
+        self.uvw_shape = (3, self.nbl)
+        self.lma_shape = (3, self.ndir)
+        self.sky_shape = (4, self.ndir)
+
+        self.uvw = cuda.pagelocked_empty(self.uvw_shape, dtype=np.float64)
+        self.lma = cuda.pagelocked_empty(self.lma_shape, dtype=np.float64)
+        self.sky = cuda.pagelocked_empty(self.sky_shape, dtype=np.float64)
+
+        # Baseline coordinates in the u,v,w (frequency) domain
+        self.uvw[:] = np.array([ \
+            np.ones(self.nbl)*1., \
+            np.ones(self.nbl)*2., \
+            np.ones(self.nbl)*3.], \
+            dtype=self.uvw.dtype.type)
+
+        # DDE source coordinates in the l,m,n (sky image) domain
+        l=np.float64(np.random.random(self.ndir)*0.5)
+        m=np.float64(np.random.random(self.ndir)*0.5)
+        alpha=np.float64(np.ones((self.ndir,)))
+        self.lma[:]=np.array([ \
+            l,m,alpha], \
+            dtype=self.lma.dtype.type)
+
+        # Brightness matrix for the DDE sources
+        fI=np.float64(np.ones((self.ndir,)))
+        fV=np.float64(np.ones((self.ndir,)))
+        fU=np.float64(np.ones((self.ndir,)))
+        fQ=np.float64(np.ones((self.ndir,)))
+        self.sky[:] = np.array([ \
+            fI,fV,fU,fQ], \
+            dtype=self.sky.dtype.type)
+
+        self.uvw_gpu = gpuarray.to_gpu_async(self.uvw, stream=self.stream[0])
+        self.lma_gpu = gpuarray.to_gpu_async(self.lma, stream=self.stream[0])
+        self.sky_gpu = gpuarray.to_gpu_async(self.sky, stream=self.stream[0])
+
+        # Output jones matrix
+        self.jones_shape = (4,self.nbl,self.ndir)
+        self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=np.complex128)
+#        self.jones = cuda.pagelocked_empty(self.jones_shape, dtype=np.complex128)
+
+
 def main(argv=None):
     """
     'Main entry point for the RIME Pipeline script'
@@ -235,8 +314,13 @@ def main(argv=None):
     parser.add_argument('-g','--image-depth',  dest='imagedepth', help='Image Depth', type=int, default=8)
     args = parser.parse_args(argv[1:])
 
-    sp = PipedRimes([StartNode(), RimeJonesBK(), RimeJonesMultiply(), FinalNode()])
-    data = sp.execute()
+    #sp = PipedRimes([StartNode(), RimeJonesBK(), RimeJonesMultiply(), RimeJonesReduce(), FinalNode()])
+    sp = PipedRimes([RimeJonesBK(), RimeJonesMultiply()])
+
+    shared_data = RimeShared()
+    shared_data.configure()
+
+    sp.execute(shared_data)
 
     print sp
 

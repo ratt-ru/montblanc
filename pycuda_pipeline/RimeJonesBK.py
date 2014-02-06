@@ -123,65 +123,28 @@ options=['-lineinfo'])
     def pre_execution(self, shared_data):
         pass
     def execute(self, shared_data):
-        ## Here I define my data, and my Jones matrices
-        na=10                    # Number of antenna
-        nbl=(na*(na-1))/2        # Number of baselines
-        nchan=32                 # Number of channels
-        ndir=2048                # Number of DDES
+        sd = shared_data
 
-        # Baseline coordinates in the u,v,w (frequency) domain
-        uvw_shape = (3,nbl)
-        uvw = cuda.pagelocked_empty(uvw_shape,dtype=np.float64)
-        uvw[:] = np.array([np.ones(nbl)*1., np.ones(nbl)*2., np.ones(nbl)*3.],dtype=uvw.dtype.type)
+        freqs=np.float64(np.linspace(1e6,2e6,sd.nchan))
+        wavelength = 3e8/freqs
 
-        # Frequencies in Hz
-        freqs=np.float64(np.linspace(1e6,2e6,nchan))
-        wavelength = cuda.pagelocked_empty(freqs.shape,freqs.dtype.type)
-        wavelength[:] = 3e8/freqs
+        baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
+        ddes_per_block = 128 if sd.ndir > 128 else sd.ndir
 
-        # DDE source coordinates in the l,m,n (sky image) domain
-        l=np.float64(np.random.random(ndir)*0.5)
-        m=np.float64(np.random.random(ndir)*0.5)
-        alpha=np.float64(np.ones((ndir,)))
-        lma_shape = (len([l,m,alpha]),ndir)
-        lma = cuda.pagelocked_empty(lma_shape,dtype=l.dtype.type)
-        lma[:]=np.array([l,m,alpha],dtype=np.float64)
-
-        # Brightness matrix for the DDE sources
-        fI=np.float64(np.ones((ndir,)))
-        fV=np.float64(np.ones((ndir,)))
-        fU=np.float64(np.ones((ndir,)))
-        fQ=np.float64(np.ones((ndir,)))
-        sky_shape = (len([fI,fV,fU,fQ]),ndir)
-        sky = cuda.pagelocked_empty(sky_shape,dtype=fI.dtype.type)
-        sky[:] = np.array([fI,fV,fU,fQ], dtype=fI.dtype.type)
-
-        # Output jones matrix
-        jones_shape = (4,nbl,ndir)
-        jones = cuda.pagelocked_empty(jones_shape, dtype=np.complex128)
-
-        baselines_per_block = 8 if nbl > 8 else nbl
-        ddes_per_block = 128 if ndir > 128 else ndir
-
-        baseline_blocks = (nbl + baselines_per_block - 1) / baselines_per_block
-        dde_blocks = (ndir + ddes_per_block - 1) / ddes_per_block
+        baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
+        dde_blocks = (sd.ndir + ddes_per_block - 1) / ddes_per_block
 
         block=(baselines_per_block,ddes_per_block,1)
         grid=(baseline_blocks,dde_blocks,1)
 
         print 'block', block, 'grid', grid
 
-        foreground_stream,background_stream = shared_data.stream[0], shared_data.stream[1]
+        foreground_stream,background_stream = sd.stream[0], sd.stream[1]
         chan = 0
 
-        uvw_gpu = gpuarray.to_gpu_async(uvw, stream=foreground_stream)
-        lma_gpu = gpuarray.to_gpu_async(lma, stream=foreground_stream)
-        sky_gpu = gpuarray.to_gpu_async(sky, stream=foreground_stream)
-        jones_gpu = gpuarray.empty(jones_shape,dtype=jones.dtype.type)
-
-        self.kernel(uvw_gpu, lma_gpu, sky_gpu,
-            wavelength[chan],  jones_gpu,
-            np.int32(ndir), np.int32(na), np.int32(nbl),
+        self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+            wavelength[chan],  sd.jones_gpu,
+            np.int32(sd.ndir), np.int32(sd.na), np.int32(sd.nbl),
             stream=foreground_stream,
             block=block,
             grid=grid,
@@ -190,12 +153,6 @@ options=['-lineinfo'])
 
         #print jones_gpu.get_async(stream=foreground_stream)
 
-        shared_data.jones_shape = jones_shape
-        shared_data.jones_gpu = jones_gpu
-        shared_data.na = na
-        shared_data.nbl = nbl
-        shared_data.nchan = nchan
-        shared_data.ndir = ndir
 
     def post_execution(self, shared_data):
         pass

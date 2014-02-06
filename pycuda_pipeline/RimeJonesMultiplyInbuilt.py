@@ -49,6 +49,9 @@ void rime_jones_multiply(
 
     int i = (blockIdx.x*blockDim.x + threadIdx.x);
 
+    if(i >= njones)
+        { return; }
+
     const double2 a00 = lhs[i]; i += njones;
     const double2 a01 = lhs[i]; i += njones;
     const double2 a10 = lhs[i]; i += njones;
@@ -90,21 +93,22 @@ options=['-lineinfo'])
     def pre_execution(self, shared_data):
         pass
     def execute(self, shared_data):
-        ## Here I define my data, and my Jones matrices
-        na=shared_data.na          # Number of antenna
-        nbl=shared_data.nbl        # Number of baselines
-        nchan=shared_data.nchan    # Number of channels
-        ndir=shared_data.ndir      # Number of DDES
-        jones_shape = shared_data.jones_shape
+        sd = shared_data
 
-        foreground_stream,background_stream = shared_data.stream[0], shared_data.stream[1]
+        ## Here I define my data, and my Jones matrices
+        na=sd.na          # Number of antenna
+        nbl=sd.nbl        # Number of baselines
+        nchan=sd.nchan    # Number of channels
+        ndir=sd.ndir      # Number of DDES
+
+        foreground_stream,background_stream = sd.stream[0], sd.stream[1]
 
         # Output jones matrix
         njones = nbl*ndir
-        jsize = np.product(jones_shape) # Number of complex  numbers
+        jsize = np.product(sd.jones_shape) # Number of complex  numbers
         #jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(jones_shape)
-        jones_lhs = shared_data.jones_gpu.get_async(stream=foreground_stream)
-        jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(jones_shape)
+        jones_lhs = sd.jones_gpu.get_async(stream=foreground_stream)
+        jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(sd.jones_shape)
 
         jones_per_block = 256 if njones > 256 else njones
         jones_blocks = (njones + jones_per_block - 1) / jones_per_block
@@ -112,11 +116,9 @@ options=['-lineinfo'])
 
         print 'block', block, 'grid', grid
 
-
-        #jones_lhs_gpu = gpuarray.to_gpu_async(jones_lhs, stream=foreground_stream)
-        jones_lhs_gpu = shared_data.jones_gpu
+        jones_lhs_gpu = sd.jones_gpu
         jones_rhs_gpu = gpuarray.to_gpu_async(jones_rhs, stream=foreground_stream)
-        jones_output_gpu = gpuarray.empty(shape=jones_shape, dtype=np.complex128)
+        jones_output_gpu = gpuarray.empty(shape=sd.jones_shape, dtype=np.complex128)
 
         self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, np.int32(njones),
             stream=foreground_stream, block=block, grid=grid,
@@ -125,7 +127,7 @@ options=['-lineinfo'])
         jones_output = jones_output_gpu.get_async(stream=foreground_stream)
 
         # Perform the calculation on the CPU
-        jones_output_cpu = np.empty(shape=jones_shape, dtype=np.complex128)
+        jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=np.complex128)
 
         for baseline in range(nbl):
             for direction in range(ndir):
@@ -136,7 +138,7 @@ options=['-lineinfo'])
         # Confirm similar results
         assert np.allclose(jones_output, jones_output_cpu)
 
-        shared_data.jones_gpu = jones_output_gpu
+        sd.jones_gpu = jones_output_gpu
 
     def post_execution(self, shared_data):
         pass
