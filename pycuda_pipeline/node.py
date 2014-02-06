@@ -1,8 +1,25 @@
+class Parameter(object):
+    """ Unused Descriptor Class. For gpuarrays """
+    def __init__(self, value=None):
+#        if value is None:
+#            value = []
+
+        self.value = value
+
+    def __get__(self, instance, owner):
+        return self.value
+
+    def __set__(self, instance, value):
+        if value < 0:
+            raise ValueError('Negative parameter value: %s' % value )
+        self.value = value
+
+
 class ArrayData(object):
     """ Unused Descriptor Class. For gpuarrays """
     def __init__(self, value=None):
-        if value is None:
-            value = []
+#        if value is None:
+#            value = []
 
         self.value = value
 
