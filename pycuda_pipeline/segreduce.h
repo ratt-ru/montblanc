@@ -7,7 +7,8 @@ extern "C" {
 
 void initsegreduce(void);
 
-PyObject * segmented_reduce_complex128_sum(PyObject * self, PyObject * args, PyObject * kw);
+static PyObject * segmented_reduce_complex128_sum(PyObject * self, PyObject * args, PyObject * kw);
+static PyObject * segmented_reduce_float32_sum(PyObject * self, PyObject * args,PyObject * kw);
 
 #ifdef __cplusplus
 } // extern "C" {}
