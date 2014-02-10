@@ -1,11 +1,5 @@
 /* A file to test importing C modules for handling arrays to Python */
 
-#include "Python.h"
-#include "arrayobject.h"
-#include <math.h>
-#include <assert.h>
-#include <stdio.h>
-
 #include "segreduce.h"
 
 #include <cuda.h>
@@ -16,6 +10,13 @@ inline __host__ __device__ double2 operator+(const double2 & lhs, const double2 
 	{ return make_double2(lhs.x + rhs.x, rhs.y + lhs.y); }
 
 inline __host__ __device__ double2 & operator+=(double2 & lhs, const double2 & rhs)
+	{ lhs.x += rhs.x; lhs.y += rhs.y; return lhs; }
+
+// Need a plus operator for this
+inline __host__ __device__ float2 operator+(const float2 & lhs, const float2 & rhs)
+	{ return make_float2(lhs.x + rhs.x, rhs.y + lhs.y); }
+
+inline __host__ __device__ float2 & operator+=(float2 & lhs, const float2 & rhs)
 	{ lhs.x += rhs.x; lhs.y += rhs.y; return lhs; }
 
 
@@ -172,6 +173,8 @@ extern "C" {
 /* ==== Set up the methods table ====================== */
 static PyMethodDef segreduce_Methods[] = {
 	{"segmented_reduce_complex128_sum", (PyCFunction) 		segmented_reduce_complex128_sum, METH_VARARGS | METH_KEYWORDS},
+	{"segmented_reduce_complex64_sum", (PyCFunction) 		segmented_reduce_complex64_sum, METH_VARARGS | METH_KEYWORDS},
+	{"segmented_reduce_float64_sum", (PyCFunction) 		segmented_reduce_float64_sum, METH_VARARGS | METH_KEYWORDS},
 	{"segmented_reduce_float32_sum", (PyCFunction) 		segmented_reduce_float32_sum, METH_VARARGS | METH_KEYWORDS},
 	{NULL, NULL}     /* Sentinel - marks the end of this structure */
 };
@@ -189,10 +192,22 @@ static PyObject * segmented_reduce_complex128_sum(PyObject * self, PyObject * ar
 		make_double2(0.,0.), mgpu::plus<double2>());	
 }
 
+static PyObject * segmented_reduce_complex64_sum(PyObject * self, PyObject * args,PyObject * kw)
+{
+	return extract_and_segment(self, args, kw,
+		make_float2(0.,0.), mgpu::plus<float2>());	
+}
+
+static PyObject * segmented_reduce_float64_sum(PyObject * self, PyObject * args,PyObject * kw)
+{
+	return extract_and_segment(self, args, kw,
+		double(0.0), mgpu::plus<double>());
+}
+
 static PyObject * segmented_reduce_float32_sum(PyObject * self, PyObject * args,PyObject * kw)
 {
 	return extract_and_segment(self, args, kw,
-		0.0f, mgpu::plus<float>());
+		float(0.0), mgpu::plus<float>());
 }
 
 #ifdef __cplusplus
