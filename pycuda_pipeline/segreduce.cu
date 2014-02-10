@@ -159,6 +159,13 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	seg_reduce_csr_expand(value_ptr, segment_ptr, n_values,
 		n_segments, segment_sums_ptr, identity, op, stream);
 
+	Py_DECREF(value_gpu);
+	Py_DECREF(value_size);
+	Py_DECREF(segments_gpu);
+	Py_DECREF(segments_size);
+	Py_DECREF(segment_sums_gpu);
+	Py_DECREF(stream_handle); 
+
 	return value_array;
 }
 
