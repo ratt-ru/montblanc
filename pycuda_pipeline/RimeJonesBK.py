@@ -15,6 +15,8 @@ class RimeJonesBK(Node):
 
 extern __shared__ double smem_d[];
 
+// Based on OSKAR's implementation of the RIME K term.
+// Baseline on the x dimension, source on the y dimension
 __global__
 void rime_jones_BK(
     double * UVW,
@@ -24,18 +26,18 @@ void rime_jones_BK(
     double2 * jones,
     int ndir, int na, int nbl)
 {
-    // Our data space a 2D matrix of BL x DDE
+    // Our data space a 2D matrix of BL x SRC
 
     // Baseline
     const int BL = blockIdx.x*blockDim.x + threadIdx.x;
     // Direction Dependent Effect
-    const int DDE = blockIdx.y*blockDim.y + threadIdx.y;
+    const int SRC = blockIdx.y*blockDim.y + threadIdx.y;
 
-    if(BL >= nbl || DDE >= ndir)
+    if(BL >= nbl || SRC >= ndir)
         return;
 
     // Index into the jones array
-    const int i = (BL*ndir + DDE)*4; 
+    const int i = (BL*ndir + SRC)*4; 
 
     /* Cache input and output data from global memory. */
     double * u = smem_d;
@@ -52,11 +54,11 @@ void rime_jones_BK(
         w[threadIdx.x] = UVW[BL+2*nbl];
     }
 
-    if (DDE < ndir && threadIdx.x == 0)
+    if (SRC < ndir && threadIdx.x == 0)
     {
-        l[threadIdx.y] = LMA[DDE+0*ndir];
-        m[threadIdx.y] = LMA[DDE+1*ndir];
-        a[threadIdx.y] = LMA[DDE+2*ndir];
+        l[threadIdx.y] = LMA[SRC+0*ndir];
+        m[threadIdx.y] = LMA[SRC+1*ndir];
+        a[threadIdx.y] = LMA[SRC+2*ndir];
     }
 
     __syncthreads();
@@ -65,7 +67,7 @@ void rime_jones_BK(
     // n = sqrt(1.0 - l*l - m*m) - 1.0
     double phase = 1.0 - l[threadIdx.y]*l[threadIdx.y];
     phase -= m[threadIdx.y]*m[threadIdx.y];
-    phase = sqrt(phase) - 1.0; 
+    phase = sqrt(phase) - 1.0;
 
     // u*l + v*m + w*n, in the wrong order :)
     phase *= w[threadIdx.x];                  // w*n
@@ -95,10 +97,10 @@ void rime_jones_BK(
 
 
 #if 1
-    const double fI = sky[DDE+0*ndir];
-    const double fQ = sky[DDE+1*ndir];
-    const double fU = sky[DDE+2*ndir];
-    const double fV = sky[DDE+3*ndir];
+    const double fI = sky[SRC+0*ndir];
+    const double fQ = sky[SRC+1*ndir];
+    const double fU = sky[SRC+2*ndir];
+    const double fV = sky[SRC+3*ndir];
 
     // TODO, this is *still* uncoalesced
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
