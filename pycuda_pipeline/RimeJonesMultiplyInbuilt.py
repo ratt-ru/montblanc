@@ -99,10 +99,10 @@ options=['-lineinfo'])
         na=sd.na          # Number of antenna
         nbl=sd.nbl        # Number of baselines
         nchan=sd.nchan    # Number of channels
-        ndir=sd.ndir      # Number of DDES
+        nsrc=sd.nsrc      # Number of DDES
 
         # Output jones matrix
-        njones = nbl*ndir
+        njones = nbl*nsrc
         jsize = np.product(sd.jones_shape) # Number of complex  numbers
         #jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(jones_shape)
         jones_lhs = sd.jones_gpu.get()
@@ -128,7 +128,7 @@ options=['-lineinfo'])
         jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=np.complex128)
 
         for baseline in range(nbl):
-            for direction in range(ndir):
+            for direction in range(nsrc):
                 jones_output_cpu[:,baseline,direction] = np.dot(
                     jones_lhs[:,baseline,direction].reshape(2,2),
                     jones_rhs[:,baseline,direction].reshape(2,2)).reshape(4)

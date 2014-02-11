@@ -24,7 +24,7 @@ void rime_jones_BK(
     double * sky,
     double wavelength,
     double2 * jones,
-    int ndir, int na, int nbl)
+    int nsrc, int na, int nbl)
 {
     // Our data space a 2D matrix of BL x SRC
 
@@ -33,11 +33,11 @@ void rime_jones_BK(
     // Direction Dependent Effect
     const int SRC = blockIdx.y*blockDim.y + threadIdx.y;
 
-    if(BL >= nbl || SRC >= ndir)
+    if(BL >= nbl || SRC >= nsrc)
         return;
 
     // Index into the jones array
-    const int i = (BL*ndir + SRC)*4; 
+    const int i = (BL*nsrc + SRC)*4; 
 
     /* Cache input and output data from global memory. */
     double * u = smem_d;
@@ -54,11 +54,11 @@ void rime_jones_BK(
         w[threadIdx.x] = UVW[BL+2*nbl];
     }
 
-    if (SRC < ndir && threadIdx.x == 0)
+    if (SRC < nsrc && threadIdx.x == 0)
     {
-        l[threadIdx.y] = LMA[SRC+0*ndir];
-        m[threadIdx.y] = LMA[SRC+1*ndir];
-        a[threadIdx.y] = LMA[SRC+2*ndir];
+        l[threadIdx.y] = LMA[SRC+0*nsrc];
+        m[threadIdx.y] = LMA[SRC+1*nsrc];
+        a[threadIdx.y] = LMA[SRC+2*nsrc];
     }
 
     __syncthreads();
@@ -97,10 +97,10 @@ void rime_jones_BK(
 
 
 #if 1
-    const double fI = sky[SRC+0*ndir];
-    const double fQ = sky[SRC+1*ndir];
-    const double fU = sky[SRC+2*ndir];
-    const double fV = sky[SRC+3*ndir];
+    const double fI = sky[SRC+0*nsrc];
+    const double fQ = sky[SRC+1*nsrc];
+    const double fU = sky[SRC+2*nsrc];
+    const double fV = sky[SRC+3*nsrc];
 
     // TODO, this is *still* uncoalesced
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
@@ -144,13 +144,13 @@ options=['-lineinfo'])
         wavelength = 3e8/freqs
 
         baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
-        ddes_per_block = 128 if sd.ndir > 128 else sd.ndir
+        srcs_per_block = 128 if sd.nsrc > 128 else sd.nsrc
 
         baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
-        dde_blocks = (sd.ndir + ddes_per_block - 1) / ddes_per_block
+        src_blocks = (sd.nsrc + srcs_per_block - 1) / srcs_per_block
 
-        block=(baselines_per_block,ddes_per_block,1)
-        grid=(baseline_blocks,dde_blocks,1)
+        block=(baselines_per_block,srcs_per_block,1)
+        grid=(baseline_blocks,src_blocks,1)
 
         print 'block', block, 'grid', grid
 
@@ -158,10 +158,10 @@ options=['-lineinfo'])
 
         self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
             wavelength[chan],  sd.jones_gpu,
-            np.int32(sd.ndir), np.int32(sd.na), np.int32(sd.nbl),
+            np.int32(sd.nsrc), np.int32(sd.na), np.int32(sd.nbl),
             block=block,
             grid=grid,
-            shared=3*(baselines_per_block+ddes_per_block)
+            shared=3*(baselines_per_block+srcs_per_block)
 				*np.dtype(np.float64).itemsize)
 
         #print sd.jones_gpu.get_async(stream=foreground_stream)

@@ -233,7 +233,7 @@ class RimeShared(SharedData):
 
     nbl = Parameter(10)
     nchan = Parameter(32)
-    ndir = Parameter(200)
+    nsrc = Parameter(200)
 
     def __init__(self):
         super(SharedData, self).__init__()
@@ -252,7 +252,7 @@ class RimeShared(SharedData):
         self.na = 10
         self.nbl = (self.na*(self.na-1))/2
         self.nchan = 32
-        self.ndir = 200
+        self.nsrc = 200
 
         # Baseline coordinates in the u,v,w (frequency) domain
         self.uvw = np.array([ \
@@ -262,17 +262,17 @@ class RimeShared(SharedData):
             dtype=np.float64)
 
         # DDE source coordinates in the l,m,n (sky image) domain
-        l=np.float64(np.random.random(self.ndir)*0.5)
-        m=np.float64(np.random.random(self.ndir)*0.5)
-        alpha=np.float64(np.ones((self.ndir,)))
+        l=np.float64(np.random.random(self.nsrc)*0.5)
+        m=np.float64(np.random.random(self.nsrc)*0.5)
+        alpha=np.float64(np.ones((self.nsrc,)))
         self.lma=np.array([l,m,alpha], \
             dtype=np.float64)
 
         # Brightness matrix for the DDE sources
-        fI=np.float64(np.ones((self.ndir,)))
-        fV=np.float64(np.ones((self.ndir,)))
-        fU=np.float64(np.ones((self.ndir,)))
-        fQ=np.float64(np.ones((self.ndir,)))
+        fI=np.float64(np.ones((self.nsrc,)))
+        fV=np.float64(np.ones((self.nsrc,)))
+        fU=np.float64(np.ones((self.nsrc,)))
+        fQ=np.float64(np.ones((self.nsrc,)))
         self.sky = np.array([ fI,fV,fU,fQ], \
             dtype=np.float64)
 
@@ -281,7 +281,7 @@ class RimeShared(SharedData):
         self.sky_gpu = gpuarray.to_gpu(self.sky)
 
         # Output jones matrix
-        self.jones_shape = (4,self.nbl,self.ndir)
+        self.jones_shape = (4,self.nbl,self.nsrc)
         self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=np.complex128)
 
 

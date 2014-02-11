@@ -20,7 +20,7 @@ class RimeJonesReduce(Node):
     def execute(self, shared_data):
         """
         nbl = shared_data.nbl
-        ndir = shared_data.ndir
+        nsrc = shared_data.nsrc
 
         jones_shape = shared_data.jones_shape
 

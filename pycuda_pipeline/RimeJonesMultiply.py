@@ -52,11 +52,11 @@ options=['-lineinfo'])
         na=shared_data.na          # Number of antenna
         nbl=shared_data.nbl        # Number of baselines
         nchan=shared_data.nchan    # Number of channels
-        ndir=shared_data.ndir      # Number of DDES
+        nsrc=shared_data.nsrc      # Number of DDES
 
         # Output jones matrix
-        jones_shape = (4,nbl,ndir)
-        njones = nbl*ndir
+        jones_shape = (4,nbl,nsrc)
+        njones = nbl*nsrc
         jsize = np.product(jones_shape) # Number of complex  numbers
         jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(jones_shape)
         jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(jones_shape)
