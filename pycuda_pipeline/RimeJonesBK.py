@@ -11,7 +11,6 @@ class RimeJonesBK(Node):
         super(RimeJonesBK, self).__init__()
     def initialise(self, shared_data):
         self.mod = SourceModule("""
-#include <pycuda-complex.hpp>
 #include \"math_constants.h\"
 
 extern __shared__ double smem_d[];
@@ -22,7 +21,7 @@ void rime_jones_BK(
     double * LMA,
     double * sky,
     double wavelength,
-    pycuda::complex<double> * jones,
+    double2 * jones,
     int ndir, int na, int nbl)
 {
     // Our data space a 2D matrix of BL x DDE
@@ -78,20 +77,20 @@ void rime_jones_BK(
     phase /= wavelength;
 
     // Calculate the complex exponential from the phase
-//    pycuda::complex<double> result = pycuda::exp(pycuda::complex<double>(0,phase));
-    // Uses two registers less than the above approach.
-    pycuda::complex<double> result;
-    sincos(phase, &result._M_im, &result._M_re);
+    double2 result;
+    sincos(phase, &result.y, &result.x);
 
     // Multiply by the wavelength to the power of alpha
-    result *= pow(1e6/wavelength,a[threadIdx.y]);
+    phase = pow(1e6/wavelength,a[threadIdx.y]);
+    result.x *= phase;
+    result.y *= phase;
 
 #if 0
     // Coalesced store of the computation
-    jones[i+0]=pycuda::complex<double>(l[threadIdx.y],u[threadIdx.x]);
-    jones[i+1]=pycuda::complex<double>(m[threadIdx.y],v[threadIdx.x]);
-    jones[i+2]=pycuda::complex<double>(0.0,w[threadIdx.x]);
-    jones[i+3]=pycuda::complex<double>(i,0);
+    jones[i+0]=make_double2(l[threadIdx.y],u[threadIdx.x]);
+    jones[i+1]=make_double2(m[threadIdx.y],v[threadIdx.x]);
+    jones[i+2]=make_double2(0.0,w[threadIdx.x]);
+    jones[i+3]=make_double2(i,0);
 #endif
 
 
@@ -100,12 +99,25 @@ void rime_jones_BK(
     const double fQ = sky[DDE+1*ndir];
     const double fU = sky[DDE+2*ndir];
     const double fV = sky[DDE+3*ndir];
-    // TODO, this is uncoalesced
-    jones[i+0]=pycuda::complex<double>(fI+fQ,0.)*result;
-    jones[i+1]=pycuda::complex<double>(fU,fV)*result;
-    jones[i+2]=pycuda::complex<double>(fU,-fV)*result;
-    jones[i+3]=pycuda::complex<double>(fU-fQ,0.)*result;
 
+    // TODO, this is *still* uncoalesced
+    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+    // a = fI+fQ, b=0.0, c=result.x, d = result.y
+    jones[i+0]=make_double2(
+        (fI+fQ)*result.x - 0.0*result.y,
+        (fI+fQ)*result.y + 0.0*result.x);
+    // a=fU, b=fV, c=result.x, d = result.y 
+    jones[i+1]=make_double2(
+        fU*result.x - fV*result.y,
+        fU*result.y + fV*result.x);
+    // a=fU, b=-fV, c=result.x, d = result.y 
+    jones[i+2]=make_double2(
+        fU*result.x - -fV*result.y,
+        fU*result.y + -fV*result.x);
+    // a=fU-fQ, b=0.0, c=result.x, d = result.y 
+    jones[i+3]=make_double2(
+        (fU-fQ)*result.x - 0.0*result.y,
+        (fU-fQ)*result.y + 0.0*result.x);
 #endif
 
     #undef SLICE_STRIDE
