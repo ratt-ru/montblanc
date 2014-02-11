@@ -315,7 +315,7 @@ def main(argv=None):
     args = parser.parse_args(argv[1:])
 
     #sp = PipedRimes([StartNode(), RimeJonesBK(), RimeJonesMultiply(), RimeJonesReduce(), FinalNode()])
-    sp = PipedRimes([RimeJonesBK(), RimeJonesMultiply()])
+    sp = PipedRimes([RimeJonesBK(), RimeJonesMultiply(), RimeJonesReduce()])
 
     shared_data = RimeShared()
     shared_data.configure()
