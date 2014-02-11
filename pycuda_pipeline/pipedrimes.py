@@ -6,8 +6,6 @@ import numpy as np
 import pycuda.autoinit
 
 from node import *
-from rime3D import *
-from rime2D import *
 from RimeJonesBK import *
 from RimeJonesMultiplyInbuilt import *
 from RimeJonesReduce import *
