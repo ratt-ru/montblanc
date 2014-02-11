@@ -63,9 +63,10 @@ void rime_jones_BK(
     __syncthreads();
 
     // Calculate the n term first
+    // n = sqrt(1.0 - l*l - m*m) - 1.0
     double phase = 1.0 - l[threadIdx.y]*l[threadIdx.y];
     phase -= m[threadIdx.y]*m[threadIdx.y];
-    phase = sqrt(phase);
+    phase = sqrt(phase) - 1.0; 
 
     // u*l + v*m + w*n, in the wrong order :)
     phase *= w[threadIdx.x];                  // w*n
@@ -80,7 +81,7 @@ void rime_jones_BK(
 //    pycuda::complex<double> result = pycuda::exp(pycuda::complex<double>(0,phase));
     // Uses two registers less than the above approach.
     pycuda::complex<double> result;
-    sincos(phase, &result._M_re, &result._M_im);
+    sincos(phase, &result._M_im, &result._M_re);
 
     // Multiply by the wavelength to the power of alpha
     result *= pow(1e6/wavelength,a[threadIdx.y]);
@@ -151,7 +152,7 @@ options=['-lineinfo'])
             shared=3*(baselines_per_block+ddes_per_block)
 				*np.dtype(np.float64).itemsize)
 
-        #print jones_gpu.get_async(stream=foreground_stream)
+        #print sd.jones_gpu.get_async(stream=foreground_stream)
 
 
     def post_execution(self, shared_data):
