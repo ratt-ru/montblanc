@@ -59,16 +59,49 @@ class RimeJonesReduce(Node):
         keys_gpu = gpuarray.to_gpu_async(keys, stream=shared_data.stream[0])
         sums_gpu = gpuarray.zeros(shape=keys.shape, dtype=jones_gpu.dtype.type)
 
+        print 'shape=', sums_gpu.shape
+
         # http://blog.gmane.org/gmane.comp.python.cuda/month=20131101
         # At present, this creates a new context, which is not ideal
         segreduce.segmented_reduce_complex128_sum(
-            jones_gpu, keys_gpu, sums_gpu,
+            data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
             device_id=0, stream=shared_data.stream[0])
 
-        sums = sums_gpu.get_async(stream=shared_data.stream[0])
-        print sums
+        del jones_gpu
+        del keys_gpu
 
-        jones = np.arange(64).astype(np.float32);
+        sums = sums_gpu.get_async(stream=shared_data.stream[0])
+        print 'sums', sums
+
+        del sums_gpu
+        """
+
+        jones = np.arange(N).astype(np.complex64)
+        jones.imag = jones.real
+        keys = np.array([0, 15, 31, 63],dtype=np.int32)
+
+        #print 'jones=', jones, 'keys=', keys
+        print 'njones=', njones, 'stream=', shared_data.stream[0].handle
+
+        jones_gpu = gpuarray.to_gpu_async(jones, stream=shared_data.stream[0])
+        keys_gpu = gpuarray.to_gpu_async(keys, stream=shared_data.stream[0])
+        sums_gpu = gpuarray.zeros(shape=keys.shape, dtype=jones.dtype.type)
+
+        print 'shape=', sums_gpu.shape
+
+        segreduce.segmented_reduce_complex64_sum(
+            data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
+            device_id=0, stream=shared_data.stream[0])
+
+        del jones_gpu
+        del keys_gpu
+
+        sums = sums_gpu.get_async(stream=shared_data.stream[0])
+        print 'sums', sums
+
+        del sums_gpu
+
+        jones = np.arange(N).astype(np.float32);
         keys = np.array([0, 15, 31, 63],dtype=np.int32)
 
         print 'jones=', jones, 'keys=', keys
@@ -78,12 +111,22 @@ class RimeJonesReduce(Node):
         keys_gpu = gpuarray.to_gpu_async(keys, stream=shared_data.stream[0])
         sums_gpu = gpuarray.zeros(shape=keys.shape, dtype=jones.dtype.type)
 
+        print 'jones.shape=',jones.shape, 'jones_gpu.shape=', jones_gpu.shape, 'sums_gpu.shape=', sums_gpu.shape, 'sums_gpu.shape=', sums_gpu.shape,
+
         segreduce.segmented_reduce_float32_sum(
-            jones_gpu, keys_gpu, sums_gpu,
+            data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
             device_id=0, stream=shared_data.stream[0])
+
+        print 'jones_gpu.shape=', jones_gpu.shape, 'sums_gpu.shape=', sums_gpu.shape, 'sums_gpu.shape=', sums_gpu.shape,
+
+        del jones_gpu
+        del keys_gpu
 
         sums = sums_gpu.get_async(stream=shared_data.stream[0])
         print 'sums', sums
+
+        del sums_gpu
+        """
 
     def post_execution(self, shared_data):
         pass
