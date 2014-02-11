@@ -112,7 +112,7 @@ void seg_reduce_csr_expand(InputIt data_global, CsrIt csr_global, int count,
 
 template <typename T, typename Op>
 PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
-	T identity, Op op)
+	const T & identity, const Op & op)
 {
 	PyObject * value_array;		// pycuda.gpuarray
 	PyObject * segment_starts;	// pycuda.gpuarray
@@ -121,11 +121,11 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	PyObject * stream_obj;		// pycuda.driver.Stream
 
     static char * kwlist[] = {
-    	(char *) "value_array",
-    	(char *) "segment_starts",
-    	(char *) "segment_sums",
-    	(char *) "device_id",
-    	(char *) "stream",
+    	"data",
+    	"seg_starts",
+    	"seg_sums",
+    	"device_id",
+    	"stream",
     	NULL };
 
     if (!PyArg_ParseTupleAndKeywords(args, kw, "OOOiO", kwlist,
@@ -142,6 +142,14 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	PyObject * segment_sums_gpu = PyObject_GetAttrString(segment_sums, "gpudata");
 	PyObject * stream_handle = PyObject_GetAttrString(stream_obj, "handle"); 
 
+	// Could do some better error handling here...
+	if(value_gpu == NULL) { printf("value_gpu is NULL"); }
+	if(value_size == NULL) { printf("value_size is NULL"); }
+	if(segments_gpu == NULL) { printf("segments_gpu is NULL"); }
+	if(segments_size == NULL) { printf("segments_size is NULL"); }
+	if(segment_sums_gpu == NULL) { printf("segment_sums_gpu is NULL"); }
+	if(stream_handle == NULL) { printf("stream_handle is NULL"); }
+
 	// Extract cuda device pointers, array sizes and stream_id
 	// from the Python Objects
 	T * value_ptr = (T *) PyInt_AsUnsignedLongLongMask(value_gpu);
@@ -151,7 +159,7 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	int n_segments =  PyInt_AsLong(segments_size);
 	CUstream stream = (CUstream) PyInt_AsUnsignedLongLongMask(stream_handle);
 
-	printf("values address=%p size=%ld\n", value_ptr, n_values);
+	printf("\nvalues address=%p size=%ld\n", value_ptr, n_values);
 	printf("segments address=%p size=%ld\n", segment_ptr, n_segments);
 	printf("segment sums address=%p\n", segment_sums_ptr);
 	printf("device_id=%ld stream=%ld\n", device_id, stream);
