@@ -261,14 +261,14 @@ class RimeShared(SharedData):
             np.ones(self.nbl, dtype=np.float64)*3.], \
             dtype=np.float64)
 
-        # DDE source coordinates in the l,m,n (sky image) domain
+        # Point source coordinates in the l,m,n (sky image) domain
         l=np.float64(np.random.random(self.nsrc)*0.5)
         m=np.float64(np.random.random(self.nsrc)*0.5)
         alpha=np.float64(np.ones((self.nsrc,)))
         self.lma=np.array([l,m,alpha], \
             dtype=np.float64)
 
-        # Brightness matrix for the DDE sources
+        # Brightness matrix for the point sources
         fI=np.float64(np.ones((self.nsrc,)))
         fV=np.float64(np.ones((self.nsrc,)))
         fU=np.float64(np.ones((self.nsrc,)))
@@ -276,6 +276,7 @@ class RimeShared(SharedData):
         self.sky = np.array([ fI,fV,fU,fQ], \
             dtype=np.float64)
 
+        # Copy the uvw, lma and sky data to the gpu
         self.uvw_gpu = gpuarray.to_gpu(self.uvw)
         self.lma_gpu = gpuarray.to_gpu(self.lma)
         self.sky_gpu = gpuarray.to_gpu(self.sky)

@@ -121,13 +121,6 @@ void rime_jones_BK(
         (fU-fQ)*result.x - 0.0*result.y,
         (fU-fQ)*result.y + 0.0*result.x);
 #endif
-
-    #undef SLICE_STRIDE
-    #undef ROW_STRIDE
-
-    #undef CUDA_XDIM
-    #undef CUDA_YDIM
-    #undef CUDA_ZDIM
 }
 """,
 options=['-lineinfo'])
