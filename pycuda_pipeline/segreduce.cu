@@ -56,7 +56,7 @@ void seg_reduce_csr_expand(InputIt data_global, CsrIt csr_global, int count,
 
 		int numBlocks2 = MGPU_DIV_UP(numPartitions, NT);
 
-		mgpu::KernelPartitionCsrSegReduce<NT><<<numBlocks2, NT, 0, stream>>>(
+		mgpu::KernelPartitionCsrSegReduce<NT><<<numBlocks2, NT, 0>>>(
 			count, NV, csr_global, numRows, numRows2, numPartitions,
 			limitsDevice);
 		// TODO: Add kernel error checking here
@@ -67,7 +67,7 @@ void seg_reduce_csr_expand(InputIt data_global, CsrIt csr_global, int count,
 	cudaMalloc(&carryOutDevice, sizeof(T)*numBlocks);
 
 	mgpu::KernelSegReduceCsr<Tuning, false>
-		<<<numBlocks, launch.x, 0, stream>>>(csr_global,
+		<<<numBlocks, launch.x, 0>>>(csr_global,
 		sources_global, count, limitsDevice,
 		data_global, identity, op, 
 		dest_global, carryOutDevice);
@@ -86,7 +86,7 @@ void seg_reduce_csr_expand(InputIt data_global, CsrIt csr_global, int count,
 		cudaMalloc(&carryOutDevice, sizeof(T)*numBlocks);
 
 		// Fix-up the segment outputs between the original tiles.
-		mgpu::KernelSegReduceSpine1<NT><<<numBlocks, NT, 0, stream>>>(
+		mgpu::KernelSegReduceSpine1<NT><<<numBlocks, NT, 0>>>(
 			limits_global, count, dest_global, carryIn_global, identity, op,
 			carryOutDevice);
 		// TODO: Add kernel error checking here
@@ -94,7 +94,7 @@ void seg_reduce_csr_expand(InputIt data_global, CsrIt csr_global, int count,
 		// Loop over the segments that span the tiles of 
 		// KernelSegReduceSpine1 and fix those.
 		if(numBlocks > 1) {
-			mgpu::KernelSegReduceSpine2<NT><<<1, NT, 0, stream>>>(
+			mgpu::KernelSegReduceSpine2<NT><<<1, NT, 0>>>(
 				limits_global, numBlocks, count, NT, dest_global,
 				carryOutDevice, identity, op);
 		// TODO: Add kernel error checking here
@@ -114,11 +114,11 @@ template <typename T, typename Op>
 PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	const T & identity, const Op & op)
 {
-	PyObject * value_array;		// pycuda.gpuarray
-	PyObject * segment_starts;	// pycuda.gpuarray
-	PyObject * segment_sums;	// pycuda.gpuarray
-	int device_id;				// int
-	PyObject * stream_obj;		// pycuda.driver.Stream
+	PyObject * value_array = NULL;		// pycuda.gpuarray
+	PyObject * segment_starts = NULL;	// pycuda.gpuarray
+	PyObject * segment_sums = NULL;		// pycuda.gpuarray
+	int device_id = -1;					// int
+	PyObject * stream_obj  = NULL;		// pycuda.driver.Stream
 
     static char * kwlist[] = {
     	"data",
@@ -128,7 +128,7 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
     	"stream",
     	NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOOiO", kwlist,
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|iO", kwlist,
 		&value_array,
 		&segment_starts,
 		&segment_sums,
@@ -140,7 +140,8 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	PyObject * segments_gpu = PyObject_GetAttrString(segment_starts, "gpudata");
 	PyObject * segments_size =  PyObject_GetAttrString(segment_starts, "size");
 	PyObject * segment_sums_gpu = PyObject_GetAttrString(segment_sums, "gpudata");
-	PyObject * stream_handle = PyObject_GetAttrString(stream_obj, "handle"); 
+	PyObject * stream_handle = (stream_obj == NULL ? NULL :
+		 PyObject_GetAttrString(stream_obj, "handle"));
 
 	// Could do some better error handling here...
 	if(value_gpu == NULL) { printf("value_gpu is NULL"); }
@@ -157,7 +158,8 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	T * segment_sums_ptr = (T *) PyInt_AsUnsignedLongLongMask(segment_sums_gpu);
 	int n_values =  PyInt_AsLong(value_size);
 	int n_segments =  PyInt_AsLong(segments_size);
-	CUstream stream = (CUstream) PyInt_AsUnsignedLongLongMask(stream_handle);
+	CUstream stream = (stream_handle == NULL ? (CUstream) 0 :
+		(CUstream) PyInt_AsUnsignedLongLongMask(stream_handle));
 
 	printf("\nvalues address=%p size=%ld\n", value_ptr, n_values);
 	printf("segments address=%p size=%ld\n", segment_ptr, n_segments);
@@ -172,9 +174,10 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	Py_DECREF(segments_gpu);
 	Py_DECREF(segments_size);
 	Py_DECREF(segment_sums_gpu);
-	Py_DECREF(stream_handle); 
+	Py_XDECREF(stream_handle); 
 
-	return value_array;
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
 #ifdef __cplusplus

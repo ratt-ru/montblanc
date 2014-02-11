@@ -67,16 +67,15 @@ options=['-lineinfo'])
 
         print 'block', block, 'grid', grid
 
-        foreground_stream,background_stream = shared_data.stream[0], shared_data.stream[1]
 
-        jones_lhs_gpu = gpuarray.to_gpu_async(jones_lhs, stream=foreground_stream)
-        jones_rhs_gpu = gpuarray.to_gpu_async(jones_rhs, stream=foreground_stream)
+        jones_lhs_gpu = gpuarray.to_gpu(jones_lhs)
+        jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
         jones_output_gpu = gpuarray.empty(shape=jones_shape, dtype=np.complex128)
 
         self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, np.int32(njones),
-            stream=foreground_stream, block=block, grid=grid)
+            block=block, grid=grid)
 
-#        print jones_gpu.get_async(stream=foreground_stream)
+#        print jones_gpu.get()
 
     def post_execution(self, shared_data):
         pass

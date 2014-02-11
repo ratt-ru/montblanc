@@ -51,12 +51,12 @@ class RimeJonesReduce(Node):
         print 'jones=', jones
         print 'keys=', keys
 
-        print 'njones=', njones, 'stream=', shared_data.stream[0].handle#, \
+        print 'njones=', njones, \
 #            'gpudata=', int(shared_data.jones_gpu.gpudata)
         """
 
-        jones_gpu = gpuarray.to_gpu_async(jones, stream=shared_data.stream[0])
-        keys_gpu = gpuarray.to_gpu_async(keys, stream=shared_data.stream[0])
+        jones_gpu = gpuarray.to_gpu(jones)
+        keys_gpu = gpuarray.to_gpu(keys)
         sums_gpu = gpuarray.zeros(shape=keys.shape, dtype=jones_gpu.dtype.type)
 
         print 'shape=', sums_gpu.shape
@@ -65,12 +65,12 @@ class RimeJonesReduce(Node):
         # At present, this creates a new context, which is not ideal
         segreduce.segmented_reduce_complex128_sum(
             data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
-            device_id=0, stream=shared_data.stream[0])
+            device_id=0)
 
         del jones_gpu
         del keys_gpu
 
-        sums = sums_gpu.get_async(stream=shared_data.stream[0])
+        sums = sums_gpu.get()
         print 'sums', sums
 
         del sums_gpu
@@ -81,22 +81,22 @@ class RimeJonesReduce(Node):
         keys = np.array([0, 15, 31, 63],dtype=np.int32)
 
         #print 'jones=', jones, 'keys=', keys
-        print 'njones=', njones, 'stream=', shared_data.stream[0].handle
+        print 'njones=', njones
 
-        jones_gpu = gpuarray.to_gpu_async(jones, stream=shared_data.stream[0])
-        keys_gpu = gpuarray.to_gpu_async(keys, stream=shared_data.stream[0])
+        jones_gpu = gpuarray.to_gpu(jones)
+        keys_gpu = gpuarray.to_gpu(keys)
         sums_gpu = gpuarray.zeros(shape=keys.shape, dtype=jones.dtype.type)
 
         print 'shape=', sums_gpu.shape
 
         segreduce.segmented_reduce_complex64_sum(
             data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
-            device_id=0, stream=shared_data.stream[0])
+            device_id=0)
 
         del jones_gpu
         del keys_gpu
 
-        sums = sums_gpu.get_async(stream=shared_data.stream[0])
+        sums = sums_gpu.get()
         print 'sums', sums
 
         del sums_gpu
@@ -105,24 +105,24 @@ class RimeJonesReduce(Node):
         keys = np.array([0, 15, 31, 63],dtype=np.int32)
 
         print 'jones=', jones, 'keys=', keys
-        print 'njones=', njones, 'stream=', shared_data.stream[0].handle
+        print 'njones=', njones
 
-        jones_gpu = gpuarray.to_gpu_async(jones, stream=shared_data.stream[0])
-        keys_gpu = gpuarray.to_gpu_async(keys, stream=shared_data.stream[0])
+        jones_gpu = gpuarray.to_gpu(jones)
+        keys_gpu = gpuarray.to_gpu(keys)
         sums_gpu = gpuarray.zeros(shape=keys.shape, dtype=jones.dtype.type)
 
         print 'jones.shape=',jones.shape, 'jones_gpu.shape=', jones_gpu.shape, 'sums_gpu.shape=', sums_gpu.shape, 'sums_gpu.shape=', sums_gpu.shape,
 
         segreduce.segmented_reduce_float32_sum(
             data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
-            device_id=0, stream=shared_data.stream[0])
+            device_id=0)
 
         print 'jones_gpu.shape=', jones_gpu.shape, 'sums_gpu.shape=', sums_gpu.shape, 'sums_gpu.shape=', sums_gpu.shape,
 
         del jones_gpu
         del keys_gpu
 
-        sums = sums_gpu.get_async(stream=shared_data.stream[0])
+        sums = sums_gpu.get()
         print 'sums', sums
 
         del sums_gpu

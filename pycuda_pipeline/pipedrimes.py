@@ -256,46 +256,35 @@ class RimeShared(SharedData):
         self.nchan = 32
         self.ndir = 200
 
-        self.uvw_shape = (3, self.nbl)
-        self.lma_shape = (3, self.ndir)
-        self.sky_shape = (4, self.ndir)
-
-        self.uvw = cuda.pagelocked_empty(self.uvw_shape, dtype=np.float64)
-        self.lma = cuda.pagelocked_empty(self.lma_shape, dtype=np.float64)
-        self.sky = cuda.pagelocked_empty(self.sky_shape, dtype=np.float64)
-
         # Baseline coordinates in the u,v,w (frequency) domain
-        self.uvw[:] = np.array([ \
-            np.ones(self.nbl)*1., \
-            np.ones(self.nbl)*2., \
-            np.ones(self.nbl)*3.], \
-            dtype=self.uvw.dtype.type)
+        self.uvw = np.array([ \
+            np.ones(self.nbl, dtype=np.float64)*1., \
+            np.ones(self.nbl, dtype=np.float64)*2., \
+            np.ones(self.nbl, dtype=np.float64)*3.], \
+            dtype=np.float64)
 
         # DDE source coordinates in the l,m,n (sky image) domain
         l=np.float64(np.random.random(self.ndir)*0.5)
         m=np.float64(np.random.random(self.ndir)*0.5)
         alpha=np.float64(np.ones((self.ndir,)))
-        self.lma[:]=np.array([ \
-            l,m,alpha], \
-            dtype=self.lma.dtype.type)
+        self.lma=np.array([l,m,alpha], \
+            dtype=np.float64)
 
         # Brightness matrix for the DDE sources
         fI=np.float64(np.ones((self.ndir,)))
         fV=np.float64(np.ones((self.ndir,)))
         fU=np.float64(np.ones((self.ndir,)))
         fQ=np.float64(np.ones((self.ndir,)))
-        self.sky[:] = np.array([ \
-            fI,fV,fU,fQ], \
-            dtype=self.sky.dtype.type)
+        self.sky = np.array([ fI,fV,fU,fQ], \
+            dtype=np.float64)
 
-        self.uvw_gpu = gpuarray.to_gpu_async(self.uvw, stream=self.stream[0])
-        self.lma_gpu = gpuarray.to_gpu_async(self.lma, stream=self.stream[0])
-        self.sky_gpu = gpuarray.to_gpu_async(self.sky, stream=self.stream[0])
+        self.uvw_gpu = gpuarray.to_gpu(self.uvw)
+        self.lma_gpu = gpuarray.to_gpu(self.lma)
+        self.sky_gpu = gpuarray.to_gpu(self.sky)
 
         # Output jones matrix
         self.jones_shape = (4,self.nbl,self.ndir)
         self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=np.complex128)
-#        self.jones = cuda.pagelocked_empty(self.jones_shape, dtype=np.complex128)
 
 
 def main(argv=None):
@@ -314,7 +303,6 @@ def main(argv=None):
     parser.add_argument('-g','--image-depth',  dest='imagedepth', help='Image Depth', type=int, default=8)
     args = parser.parse_args(argv[1:])
 
-    #sp = PipedRimes([StartNode(), RimeJonesBK(), RimeJonesMultiply(), RimeJonesReduce(), FinalNode()])
     sp = PipedRimes([RimeJonesBK(), RimeJonesMultiply(), RimeJonesReduce()])
 
     shared_data = RimeShared()

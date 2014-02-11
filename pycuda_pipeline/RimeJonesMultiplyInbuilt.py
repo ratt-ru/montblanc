@@ -101,13 +101,11 @@ options=['-lineinfo'])
         nchan=sd.nchan    # Number of channels
         ndir=sd.ndir      # Number of DDES
 
-        foreground_stream,background_stream = sd.stream[0], sd.stream[1]
-
         # Output jones matrix
         njones = nbl*ndir
         jsize = np.product(sd.jones_shape) # Number of complex  numbers
         #jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(jones_shape)
-        jones_lhs = sd.jones_gpu.get_async(stream=foreground_stream)
+        jones_lhs = sd.jones_gpu.get()
         jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(sd.jones_shape)
 
         jones_per_block = 256 if njones > 256 else njones
@@ -117,14 +115,14 @@ options=['-lineinfo'])
         print 'block', block, 'grid', grid
 
         jones_lhs_gpu = sd.jones_gpu
-        jones_rhs_gpu = gpuarray.to_gpu_async(jones_rhs, stream=foreground_stream)
+        jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
         jones_output_gpu = gpuarray.empty(shape=sd.jones_shape, dtype=np.complex128)
 
         self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, np.int32(njones),
-            stream=foreground_stream, block=block, grid=grid,
+            block=block, grid=grid,
             shared=1*jones_per_block*np.dtype(np.complex128).itemsize)
 
-        jones_output = jones_output_gpu.get_async(stream=foreground_stream)
+        jones_output = jones_output_gpu.get()
 
         # Perform the calculation on the CPU
         jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=np.complex128)

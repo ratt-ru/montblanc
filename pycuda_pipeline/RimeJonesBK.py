@@ -154,13 +154,11 @@ options=['-lineinfo'])
 
         print 'block', block, 'grid', grid
 
-        foreground_stream,background_stream = sd.stream[0], sd.stream[1]
         chan = 0
 
         self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
             wavelength[chan],  sd.jones_gpu,
             np.int32(sd.ndir), np.int32(sd.na), np.int32(sd.nbl),
-            stream=foreground_stream,
             block=block,
             grid=grid,
             shared=3*(baselines_per_block+ddes_per_block)
