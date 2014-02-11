@@ -104,15 +104,11 @@ options=['-lineinfo'])
         # Output jones matrix
         njones = nbl*nsrc
         jsize = np.product(sd.jones_shape) # Number of complex  numbers
-        #jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(jones_shape)
-        jones_lhs = sd.jones_gpu.get()
         jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(sd.jones_shape)
 
         jones_per_block = 256 if njones > 256 else njones
         jones_blocks = (njones + jones_per_block - 1) / jones_per_block
         block, grid = (jones_per_block,1,1), (jones_blocks,1,1)
-
-        print 'block', block, 'grid', grid
 
         jones_lhs_gpu = sd.jones_gpu
         jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
@@ -121,20 +117,6 @@ options=['-lineinfo'])
         self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, np.int32(njones),
             block=block, grid=grid,
             shared=1*jones_per_block*np.dtype(np.complex128).itemsize)
-
-        jones_output = jones_output_gpu.get()
-
-        # Perform the calculation on the CPU
-        jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=np.complex128)
-
-        for baseline in range(nbl):
-            for direction in range(nsrc):
-                jones_output_cpu[:,baseline,direction] = np.dot(
-                    jones_lhs[:,baseline,direction].reshape(2,2),
-                    jones_rhs[:,baseline,direction].reshape(2,2)).reshape(4)
-
-        # Confirm similar results
-        assert np.allclose(jones_output, jones_output_cpu)
 
         sd.jones_gpu = jones_output_gpu
 

@@ -152,8 +152,6 @@ options=['-lineinfo'])
         block=(baselines_per_block,srcs_per_block,1)
         grid=(baseline_blocks,src_blocks,1)
 
-        print 'block', block, 'grid', grid
-
         chan = 0
 
         self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
@@ -163,9 +161,6 @@ options=['-lineinfo'])
             grid=grid,
             shared=3*(baselines_per_block+srcs_per_block)
 				*np.dtype(np.float64).itemsize)
-
-        #print sd.jones_gpu.get_async(stream=foreground_stream)
-
 
     def post_execution(self, shared_data):
         pass
