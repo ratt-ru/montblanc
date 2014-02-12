@@ -105,6 +105,8 @@ void rime_jones_BK(
 
 
 #if 0
+    i = (BL*nsrc + SRC)*4;
+
     double fI = sky[SRC+0*nsrc];
     double fQ = sky[SRC+1*nsrc];
     double fU = sky[SRC+2*nsrc];

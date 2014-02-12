@@ -108,29 +108,37 @@ class TestRimes(unittest.TestCase):
 
 		jones = sd.jones_gpu.get()
 
-		print 'uvw shape', sd.uvw.shape, sd.uvw
-		print 'src shape', sd.lma.shape, sd.lma
-		print 'wavelength[chan]', wavelength[chan]
-
-		print jones.flatten()[:128]
+#		print 'uvw shape', sd.uvw.shape, sd.uvw
+#		print 'src shape', sd.lma.shape, sd.lma
+#		print 'wavelength[chan]', wavelength[chan]
+	
+		print 'jones.shape', jones.shape
+		print 'jones=', jones
 
 		# n = sqrt(1 - l^2 - m^2) - 1
 		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
 
-		# u*l+v*m+w*n
-		phase = np.array([np.outer(sd.lma[0], sd.uvw[0]),
-			np.outer(sd.lma[1], sd.uvw[1]),
-			np.outer(n, sd.uvw[2])])
+		print 'lma=',sd.lma
+		print 'uvw=', sd.uvw
+		print np.outer(sd.lma[0,:], sd.uvw[0,:])
 
-		# sqrt(u*l+v*m+w*n)
-		phase = np.sqrt(phase)
-		# 2*pi*sqrt(u*l+v*m+w*n)
-		phase *= 2.*np.pi / wavelength[chan]
+		# u*l+v*m+w*n. This is probably wrong
+		phase = np.outer(sd.lma[0], sd.uvw[0]) + \
+			np.outer(sd.lma[1], sd.uvw[1]) + \
+			np.outer(n, sd.uvw[2])
 
+		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength
+		phase = 2*np.pi*1j*np.sqrt(phase)/wavelength[chan]
 		power = np.power(1e6/wavelength[chan], sd.lma[2])
-		np.exp(phase)*power[:,np.newaxis]
+		# Hope this works as expected...
+		phase_term = np.exp(phase)*power[:,np.newaxis]
 
+		print 'wavelength=', wavelength[chan]
+		print 'phase=', phase
+		print 'power=', power
+		print 'phase_term=', phase_term
 
+		print phase.shape, power.shape, phase_term.shape
 
 		rime_bk.shutdown(sd)
 	
