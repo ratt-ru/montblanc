@@ -105,24 +105,14 @@ class TestRimes(unittest.TestCase):
 		    block=block, grid=grid,
 		    shared=3*(baselines_per_block+srcs_per_block)*np.dtype(np.float64).itemsize)
 
-
+		# The phase term lives in the 4th position,
+		# with stride 4
 		jones = sd.jones_gpu.get().flatten()[3::4]
-
-#		print 'uvw shape', sd.uvw.shape, sd.uvw
-#		print 'src shape', sd.lma.shape, sd.lma
-#		print 'wavelength[chan]', wavelength[chan]
 	
-		print 'jones.shape', jones.shape
-		print 'jones=', jones.imag
-
 		# n = sqrt(1 - l^2 - m^2) - 1
 		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
 
-		print 'lma=',sd.lma
-		print 'uvw=', sd.uvw
-		print np.outer(sd.lma[0,:], sd.uvw[0,:])
-
-		# u*l+v*m+w*n. This is probably wrong
+		# u*l+v*m+w*n.
 		phase = np.outer(sd.uvw[0], sd.lma[0]) + \
 			np.outer(sd.uvw[1], sd.lma[1]) + \
 			np.outer(sd.uvw[2],n)
@@ -133,21 +123,7 @@ class TestRimes(unittest.TestCase):
 		# Hope this works as expected...
 		phase_term = power*np.exp(phase)
 
-		print 'wavelength=', wavelength[chan]
-		print 'phase=', phase
-		print 'power=', power
-		print 'phase_term=', phase_term.imag
-
-		print 'jones=', jones.imag
-
 		self.assertTrue(np.allclose(jones,phase_term.flat))
-
-		print jones[0::4]
-		print jones[1::4]
-		print jones[2::4]
-		print jones[3::4]
-
-		print phase.shape, power.shape, phase_term.shape
 
 		rime_bk.shutdown(sd)
 	
