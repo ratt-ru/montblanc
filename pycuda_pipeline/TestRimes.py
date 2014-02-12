@@ -7,6 +7,8 @@ import numpy as np
 
 class TestRimes(unittest.TestCase):
 	def setUp(self):
+		np.random.seed(100)
+
 		sd = self.shared_data = RimeShared()
 		sd.configure()
 
@@ -99,9 +101,36 @@ class TestRimes(unittest.TestCase):
 
 		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
 		    wavelength[chan],  sd.jones_gpu,
-		    np.int32(sd.nsrc), np.int32(sd.na), np.int32(sd.nbl),
+		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    block=block, grid=grid,
 		    shared=3*(baselines_per_block+srcs_per_block)*np.dtype(np.float64).itemsize)
+
+
+		jones = sd.jones_gpu.get()
+
+		print 'uvw shape', sd.uvw.shape, sd.uvw
+		print 'src shape', sd.lma.shape, sd.lma
+		print 'wavelength[chan]', wavelength[chan]
+
+		print jones.flatten()[:128]
+
+		# n = sqrt(1 - l^2 - m^2) - 1
+		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
+
+		# u*l+v*m+w*n
+		phase = np.array([np.outer(sd.lma[0], sd.uvw[0]),
+			np.outer(sd.lma[1], sd.uvw[1]),
+			np.outer(n, sd.uvw[2])])
+
+		# sqrt(u*l+v*m+w*n)
+		phase = np.sqrt(phase)
+		# 2*pi*sqrt(u*l+v*m+w*n)
+		phase *= 2.*np.pi / wavelength[chan]
+
+		power = np.power(1e6/wavelength[chan], sd.lma[2])
+		np.exp(phase)*power[:,np.newaxis]
+
+
 
 		rime_bk.shutdown(sd)
 	

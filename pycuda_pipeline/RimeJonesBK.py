@@ -24,20 +24,17 @@ void rime_jones_BK(
     double * sky,
     double wavelength,
     double2 * jones,
-    int nsrc, int na, int nbl)
+    int nsrc, int nbl)
 {
-    // Our data space a 2D matrix of BL x SRC
+    // Our data space is a 2D matrix of BL x SRC
 
     // Baseline
-    const int BL = blockIdx.x*blockDim.x + threadIdx.x;
+    int BL = blockIdx.x*blockDim.x + threadIdx.x;
     // Direction Dependent Effect
-    const int SRC = blockIdx.y*blockDim.y + threadIdx.y;
+    int SRC = blockIdx.y*blockDim.y + threadIdx.y;
 
     if(BL >= nbl || SRC >= nsrc)
         return;
-
-    // Index into the jones array
-    const int i = (BL*nsrc + SRC)*4; 
 
     /* Cache input and output data from global memory. */
     double * u = smem_d;
@@ -47,18 +44,21 @@ void rime_jones_BK(
     double * m = &l[blockDim.y];
     double * a = &m[blockDim.y];
 
+    // Index
+    int i;
+
     if (BL < nbl && threadIdx.y == 0)
     {
-        u[threadIdx.x] = UVW[BL+0*nbl];
-        v[threadIdx.x] = UVW[BL+1*nbl];
-        w[threadIdx.x] = UVW[BL+2*nbl];
+        i = BL;   u[threadIdx.x] = UVW[i];
+        i += nbl; v[threadIdx.x] = UVW[i];
+        i += nbl; w[threadIdx.x] = UVW[i];
     }
 
     if (SRC < nsrc && threadIdx.x == 0)
     {
-        l[threadIdx.y] = LMA[SRC+0*nsrc];
-        m[threadIdx.y] = LMA[SRC+1*nsrc];
-        a[threadIdx.y] = LMA[SRC+2*nsrc];
+        i = SRC;   l[threadIdx.y] = LMA[i];
+        i += nsrc; m[threadIdx.y] = LMA[i];
+        i += nsrc; a[threadIdx.y] = LMA[i];
     }
 
     __syncthreads();
@@ -68,11 +68,17 @@ void rime_jones_BK(
     double phase = 1.0 - l[threadIdx.y]*l[threadIdx.y];
     phase -= m[threadIdx.y]*m[threadIdx.y];
     phase = sqrt(phase) - 1.0;
+    // TODO: remove this superfluous variable
+    // It only exists for debugging purposes
+    double n = phase;
 
     // u*l + v*m + w*n, in the wrong order :)
     phase *= w[threadIdx.x];                  // w*n
     phase += v[threadIdx.x]*m[threadIdx.y];   // v*m
     phase += u[threadIdx.x]*l[threadIdx.y];   // u*l
+
+    // sqrt(u*l + v*m + w*n)
+    phase = sqrt(phase);
 
     // Multiply by 2*pi/wavelength
     phase *= (2. * CUDART_PI);
@@ -83,24 +89,26 @@ void rime_jones_BK(
     sincos(phase, &result.y, &result.x);
 
     // Multiply by the wavelength to the power of alpha
-    phase = pow(1e6/wavelength,a[threadIdx.y]);
+    phase = pow(1e6/wavelength, a[threadIdx.y]);
     result.x *= phase;
     result.y *= phase;
 
-#if 0
+#if 1
+    // Index into the jones array
+    i = (BL*nsrc + SRC)*4;
     // Coalesced store of the computation
     jones[i+0]=make_double2(l[threadIdx.y],u[threadIdx.x]);
     jones[i+1]=make_double2(m[threadIdx.y],v[threadIdx.x]);
-    jones[i+2]=make_double2(0.0,w[threadIdx.x]);
-    jones[i+3]=make_double2(i,0);
+    jones[i+2]=make_double2(n,w[threadIdx.x]);
+    jones[i+3]=result;
 #endif
 
 
-#if 1
-    const double fI = sky[SRC+0*nsrc];
-    const double fQ = sky[SRC+1*nsrc];
-    const double fU = sky[SRC+2*nsrc];
-    const double fV = sky[SRC+3*nsrc];
+#if 0
+    double fI = sky[SRC+0*nsrc];
+    double fQ = sky[SRC+1*nsrc];
+    double fU = sky[SRC+2*nsrc];
+    double fV = sky[SRC+3*nsrc];
 
     // TODO, this is *still* uncoalesced
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
@@ -108,14 +116,17 @@ void rime_jones_BK(
     jones[i+0]=make_double2(
         (fI+fQ)*result.x - 0.0*result.y,
         (fI+fQ)*result.y + 0.0*result.x);
+
     // a=fU, b=fV, c=result.x, d = result.y 
     jones[i+1]=make_double2(
         fU*result.x - fV*result.y,
         fU*result.y + fV*result.x);
+
     // a=fU, b=-fV, c=result.x, d = result.y 
     jones[i+2]=make_double2(
         fU*result.x - -fV*result.y,
         fU*result.y + -fV*result.x);
+
     // a=fU-fQ, b=0.0, c=result.x, d = result.y 
     jones[i+3]=make_double2(
         (fU-fQ)*result.x - 0.0*result.y,
@@ -149,7 +160,7 @@ options=['-lineinfo'])
 
         self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
             wavelength[chan],  sd.jones_gpu,
-            np.int32(sd.nsrc), np.int32(sd.na), np.int32(sd.nbl),
+            np.int32(sd.nsrc), np.int32(sd.nbl),
             block=block,
             grid=grid,
             shared=3*(baselines_per_block+srcs_per_block)
