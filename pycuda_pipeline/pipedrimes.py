@@ -249,16 +249,25 @@ class RimeShared(SharedData):
             RimeShared.POST, RimeShared.SHUTDOWN]
         self.nevents = len(self.event_names)
 
+        # Antenna, Baseline, Channel, Source and Timestep counts
         self.na = 10
         self.nbl = (self.na*(self.na-1))/2
         self.nchan = 32
         self.nsrc = 200
+        self.ntime = 10
 
         # Baseline coordinates in the u,v,w (frequency) domain
+        """
         self.uvw = np.array([ \
-            np.ones(self.nbl, dtype=np.float64)*1., \
+            np.ones(self.nbl, dtype=np.float64)*3., \
             np.ones(self.nbl, dtype=np.float64)*2., \
-            np.ones(self.nbl, dtype=np.float64)*3.], \
+            np.ones(self.nbl, dtype=np.float64)*1.], \
+            dtype=np.float64)
+        """
+        self.uvw = np.array([ \
+            np.arange(1,self.nbl+1).astype(np.float64)*3., \
+            np.arange(1,self.nbl+1).astype(np.float64)*2., \
+            np.arange(1,self.nbl+1).astype(np.float64)*1.], \
             dtype=np.float64)
 
         # Point source coordinates in the l,m,n (sky image) domain
@@ -273,7 +282,7 @@ class RimeShared(SharedData):
         fV=np.float64(np.ones((self.nsrc,)))
         fU=np.float64(np.ones((self.nsrc,)))
         fQ=np.float64(np.ones((self.nsrc,)))
-        self.sky = np.array([ fI,fV,fU,fQ], \
+        self.sky = np.array([fI,fV,fU,fQ], \
             dtype=np.float64)
 
         # Copy the uvw, lma and sky data to the gpu
