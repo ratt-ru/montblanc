@@ -22,7 +22,7 @@ void rime_jones_BK(
     double * UVW,
     double * LMA,
     double * sky,
-    double wavelength,
+    double * wavelength,
     double2 * jones,
     int nsrc, int nbl)
 {
@@ -70,7 +70,7 @@ void rime_jones_BK(
     phase = sqrt(phase) - 1.0;
     // TODO: remove this superfluous variable
     // It only exists for debugging purposes
-    double n = phase;
+    // double n = phase;
 
     // u*l + v*m + w*n, in the wrong order :)
     phase *= w[threadIdx.x];                  // w*n
@@ -80,16 +80,16 @@ void rime_jones_BK(
     // sqrt(u*l + v*m + w*n)
     phase = sqrt(phase);
 
-    // Multiply by 2*pi/wavelength
+    // Multiply by 2*pi/wavelength[0]
     phase *= (2. * CUDART_PI);
-    phase /= wavelength;
+    phase /= wavelength[0];
 
     // Calculate the complex exponential from the phase
     double2 result;
     sincos(phase, &result.y, &result.x);
 
     // Multiply by the wavelength to the power of alpha
-    phase = pow(1e6/wavelength, a[threadIdx.y]);
+    phase = pow(1e6/wavelength[0], a[threadIdx.y]);
     result.x *= phase;
     result.y *= phase;
 
@@ -146,9 +146,6 @@ options=['-lineinfo'])
     def execute(self, shared_data):
         sd = shared_data
 
-        freqs=np.float64(np.linspace(1e6,2e6,sd.nchan))
-        wavelength = 3e8/freqs
-
         baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
         srcs_per_block = 128 if sd.nsrc > 128 else sd.nsrc
 
@@ -161,7 +158,7 @@ options=['-lineinfo'])
         chan = 0
 
         self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
-            wavelength[chan],  sd.jones_gpu,
+            sd.wavelength_gpu,  sd.jones_gpu,
             np.int32(sd.nsrc), np.int32(sd.nbl),
             block=block,
             grid=grid,

@@ -285,10 +285,14 @@ class RimeShared(SharedData):
         self.sky = np.array([fI,fV,fU,fQ], \
             dtype=np.float64)
 
+        # Generate nchan frequencies/wavelengths
+        self.wavelength = 3e8/np.float64(np.linspace(1e6,2e6,self.nchan))
+
         # Copy the uvw, lma and sky data to the gpu
         self.uvw_gpu = gpuarray.to_gpu(self.uvw)
         self.lma_gpu = gpuarray.to_gpu(self.lma)
         self.sky_gpu = gpuarray.to_gpu(self.sky)
+        self.wavelength_gpu = gpuarray.to_gpu(self.wavelength)
 
         # Output jones matrix
         self.jones_shape = (4,self.nbl,self.nsrc)

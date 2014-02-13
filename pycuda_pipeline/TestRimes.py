@@ -83,9 +83,6 @@ class TestRimes(unittest.TestCase):
 
 		rime_bk.initialise(sd)
 
-		freqs=np.float64(np.linspace(1e6,2e6,sd.nchan))
-		wavelength = 3e8/freqs
-
 		baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
 		srcs_per_block = 128 if sd.nsrc > 128 else sd.nsrc
 
@@ -100,7 +97,7 @@ class TestRimes(unittest.TestCase):
 		chan = 0
 
 		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
-		    wavelength[chan],  sd.jones_gpu,
+		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    block=block, grid=grid,
 		    shared=3*(baselines_per_block+srcs_per_block)*np.dtype(np.float64).itemsize)
@@ -117,9 +114,9 @@ class TestRimes(unittest.TestCase):
 			np.outer(sd.uvw[2],n)
 
 		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nsrcs
-		phase = 2*np.pi*1j*np.sqrt(phase)/wavelength[chan]
+		phase = 2*np.pi*1j*np.sqrt(phase)/sd.wavelength[chan]
 		# Dim 1xnsrcs
-		power = np.power(1e6/wavelength[chan], sd.lma[2])
+		power = np.power(1e6/sd.wavelength[chan], sd.lma[2])
 		# This works due to broadcast! Dim nbl x nsrcs
 		phase_term = power*np.exp(phase)
 
@@ -133,7 +130,6 @@ class TestRimes(unittest.TestCase):
 			sd.sky[1] - 1j*sd.sky[2],
 			# fU-fQ + 0j
 			sd.sky[0]-sd.sky[3] + 0j]).T
-
 
 		# This works due to broadcast! Multiplies along
 		# srcs axis of sky. Dim nbl x nsrcs x 4
