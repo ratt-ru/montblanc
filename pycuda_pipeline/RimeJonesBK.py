@@ -93,7 +93,7 @@ void rime_jones_BK(
     result.x *= phase;
     result.y *= phase;
 
-#if 1
+#if 0
     // Index into the jones array
     i = (BL*nsrc + SRC)*4;
     // Coalesced store of the computation
@@ -104,7 +104,7 @@ void rime_jones_BK(
 #endif
 
 
-#if 0
+#if 1
     i = (BL*nsrc + SRC)*4;
 
     double fI = sky[SRC+0*nsrc];

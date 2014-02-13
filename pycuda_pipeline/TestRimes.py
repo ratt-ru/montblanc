@@ -105,27 +105,51 @@ class TestRimes(unittest.TestCase):
 		    block=block, grid=grid,
 		    shared=3*(baselines_per_block+srcs_per_block)*np.dtype(np.float64).itemsize)
 
-		# The phase term lives in the 4th position,
-		# with stride 4
-		jones = sd.jones_gpu.get().flatten()[3::4]
+		# Get the jones matrices calculated by the GPU
+		jones = sd.jones_gpu.get()
 	
-		# n = sqrt(1 - l^2 - m^2) - 1
+		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
 		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
 
-		# u*l+v*m+w*n.
+		# u*l+v*m+w*n. Outer product creates array of dim nbl x nsrcs
 		phase = np.outer(sd.uvw[0], sd.lma[0]) + \
 			np.outer(sd.uvw[1], sd.lma[1]) + \
 			np.outer(sd.uvw[2],n)
 
-		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength
+		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nsrcs
 		phase = 2*np.pi*1j*np.sqrt(phase)/wavelength[chan]
+		# Dim 1xnsrcs
 		power = np.power(1e6/wavelength[chan], sd.lma[2])
-		# Hope this works as expected...
+		# This works due to broadcast! Dim nbl x nsrcs
 		phase_term = power*np.exp(phase)
 
-		self.assertTrue(np.allclose(jones,phase_term.flat))
+		# Create the brightness matrix. Dim nsrcs x 4
+		sky = np.complex128([
+			# fU+fQ + 0j
+			sd.sky[0]+sd.sky[3] + 0j,
+			# fI + fQ*1j
+			sd.sky[1] + 1j*sd.sky[2],
+			# fI - fQ*1j
+			sd.sky[1] - 1j*sd.sky[2],
+			# fU-fQ + 0j
+			sd.sky[0]-sd.sky[3] + 0j]).T
+
+
+		# This works due to broadcast! Multiplies along
+		# srcs axis of sky. Dim nbl x nsrcs x 4
+		jones_cpu = phase_term[:,:,np.newaxis]*sky
+
+		#print 'sky shape', sky.shape
+		#print 'phase_term shape', phase_term.shape
+		#print 'jones_cpu shape', jones_cpu.shape
+		#print 'jones_gpu shape', jones.shape
+
+		#print 'jones_cpu', jones_cpu.flatten()
+		#print 'jones_gpu', jones.flatten()
+
+		self.assertTrue(np.allclose(jones_cpu.flatten(), jones.flatten()))
 
 		rime_bk.shutdown(sd)
-	
+
 if __name__ == '__main__':
     unittest.main()
