@@ -139,14 +139,7 @@ class TestRimes(unittest.TestCase):
 		# srcs axis of sky. Dim nbl x nsrcs x 4
 		jones_cpu = phase_term[:,:,np.newaxis]*sky
 
-		#print 'sky shape', sky.shape
-		#print 'phase_term shape', phase_term.shape
-		#print 'jones_cpu shape', jones_cpu.shape
-		#print 'jones_gpu shape', jones.shape
-
-		#print 'jones_cpu', jones_cpu.flatten()
-		#print 'jones_gpu', jones.flatten()
-
+		# Test that the jones CPU calculation matches that of the GPU calculation
 		self.assertTrue(np.allclose(jones_cpu.flatten(), jones.flatten()))
 
 		rime_bk.shutdown(sd)
