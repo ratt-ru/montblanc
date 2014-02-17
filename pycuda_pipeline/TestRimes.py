@@ -40,7 +40,7 @@ class TestRimes(unittest.TestCase):
 		sd, rime_bk = self.shared_data, self.rime_bk
 
 		baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
-		srcs_per_block = 128 if sd.nsrc > 128 else sd.nsrc
+		srcs_per_block = 64 if sd.nsrc > 64 else sd.nsrc
 
 		baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
 		src_blocks = (sd.nsrc + srcs_per_block - 1) / srcs_per_block
@@ -78,23 +78,25 @@ class TestRimes(unittest.TestCase):
 		# This works due to broadcast! Dim nbl x nsrcs
 		phase_term = power*np.exp(phase)
 
-		# Create the brightness matrix. Dim nsrcs x 4
+		# Create the brightness matrix. Dim 4 x nsrcs
 		sky = np.complex128([
-			# fU+fQ + 0j
-			sd.sky[0]+sd.sky[3] + 0j,
-			# fI + fQ*1j
-			sd.sky[1] + 1j*sd.sky[2],
-			# fI - fQ*1j
-			sd.sky[1] - 1j*sd.sky[2],
-			# fU-fQ + 0j
-			sd.sky[0]-sd.sky[3] + 0j]).T
+			sd.sky[0]+sd.sky[3] + 0j,		# fU+fQ + 0j
+			sd.sky[1] + 1j*sd.sky[2],		# fI + fQ*1j
+			sd.sky[1] - 1j*sd.sky[2],		# fI - fQ*1j
+			sd.sky[0]-sd.sky[3] + 0j]).T	# fU-fQ + 0j
 
 		# This works due to broadcast! Multiplies along
 		# srcs axis of sky. Dim nbl x nsrcs x 4
+		# There may be a better way of multiplying
+		# so that we don't have to do a rollaxis.
+		# Its good enough for testing tho!
 		jones_cpu = phase_term[:,:,np.newaxis]*sky
+		# Roll axis so that dim is 4 x nbl x nsrcs.
+		# matching the GPU dimensions.
+		jones_cpu = np.rollaxis(jones_cpu,axis=2,start=0)
 
 		# Test that the jones CPU calculation matches that of the GPU calculation
-		self.assertTrue(np.allclose(jones_cpu.flatten(), jones.flatten()))
+		self.assertTrue(np.allclose(jones_cpu, jones))
 
 	def test_multiply(self):
 		sd, rime_multiply = self.shared_data, self.rime_multiply

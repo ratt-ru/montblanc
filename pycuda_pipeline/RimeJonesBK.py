@@ -105,32 +105,35 @@ void rime_jones_BK(
 
 
 #if 1
-    i = (BL*nsrc + SRC)*4;
-
     double fI = sky[SRC+0*nsrc];
     double fQ = sky[SRC+1*nsrc];
     double fU = sky[SRC+2*nsrc];
     double fV = sky[SRC+3*nsrc];
 
-    // TODO, this is *still* uncoalesced
+    // Index into the jones matrices
+    i = (BL*nsrc + SRC);
+
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = fI+fQ, b=0.0, c=result.x, d = result.y
-    jones[i+0]=make_double2(
+    jones[i]=make_double2(
         (fI+fQ)*result.x - 0.0*result.y,
         (fI+fQ)*result.y + 0.0*result.x);
 
     // a=fU, b=fV, c=result.x, d = result.y 
-    jones[i+1]=make_double2(
+    i += nbl*nsrc;
+    jones[i]=make_double2(
         fU*result.x - fV*result.y,
         fU*result.y + fV*result.x);
 
     // a=fU, b=-fV, c=result.x, d = result.y 
-    jones[i+2]=make_double2(
+    i += nbl*nsrc;
+    jones[i]=make_double2(
         fU*result.x - -fV*result.y,
         fU*result.y + -fV*result.x);
 
     // a=fU-fQ, b=0.0, c=result.x, d = result.y 
-    jones[i+3]=make_double2(
+    i += nbl*nsrc;
+    jones[i]=make_double2(
         (fU-fQ)*result.x - 0.0*result.y,
         (fU-fQ)*result.y + 0.0*result.x);
 #endif
@@ -147,7 +150,7 @@ options=['-lineinfo'])
         sd = shared_data
 
         baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
-        srcs_per_block = 128 if sd.nsrc > 128 else sd.nsrc
+        srcs_per_block = 64 if sd.nsrc > 64 else sd.nsrc
 
         baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
         src_blocks = (sd.nsrc + srcs_per_block - 1) / srcs_per_block
