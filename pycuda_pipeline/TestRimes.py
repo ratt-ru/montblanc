@@ -16,7 +16,17 @@ class TestRimes(unittest.TestCase):
 		self.rime_multiply = RimeJonesMultiply()
 		self.rime_reduce = RimeJonesReduce()
 
+		self.rime_bk.initialise(sd)
+		self.rime_multiply.initialise(sd)
+		self.rime_reduce.initialise(sd)
+
 	def tearDown(self):
+		sd = self.shared_data
+		
+		self.rime_bk.shutdown(sd)
+		self.rime_multiply.shutdown(sd)
+		self.rime_reduce.shutdown(sd)
+
 		del self.rime_bk
 		del self.rime_multiply
 		del self.rime_reduce
@@ -26,8 +36,6 @@ class TestRimes(unittest.TestCase):
 		import pycuda.gpuarray as gpuarray
 
 		sd, rime_multiply = self.shared_data, self.rime_multiply
-
-		rime_multiply.initialise(sd)
 
 		## Here I define my data, and my Jones matrices
 		na=sd.na          # Number of antenna
@@ -73,15 +81,11 @@ class TestRimes(unittest.TestCase):
 		# Confirm similar results
 		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
 
-		rime_multiply.shutdown(sd)
-
 	def test_BK(self):
 		import pycuda.autoinit
 		import pycuda.gpuarray as gpuarray
 
 		sd, rime_bk = self.shared_data, self.rime_bk
-
-		rime_bk.initialise(sd)
 
 		baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
 		srcs_per_block = 128 if sd.nsrc > 128 else sd.nsrc
@@ -137,8 +141,6 @@ class TestRimes(unittest.TestCase):
 
 		# Test that the jones CPU calculation matches that of the GPU calculation
 		self.assertTrue(np.allclose(jones_cpu.flatten(), jones.flatten()))
-
-		rime_bk.shutdown(sd)
 
 if __name__ == '__main__':
     unittest.main()
