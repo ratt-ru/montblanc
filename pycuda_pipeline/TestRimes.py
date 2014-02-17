@@ -22,7 +22,7 @@ class TestRimes(unittest.TestCase):
 
 	def tearDown(self):
 		sd = self.shared_data
-		
+
 		self.rime_bk.shutdown(sd)
 		self.rime_multiply.shutdown(sd)
 		self.rime_reduce.shutdown(sd)
@@ -30,56 +30,6 @@ class TestRimes(unittest.TestCase):
 		del self.rime_bk
 		del self.rime_multiply
 		del self.rime_reduce
-
-	def test_multiply(self):
-		import pycuda.autoinit
-		import pycuda.gpuarray as gpuarray
-
-		sd, rime_multiply = self.shared_data, self.rime_multiply
-
-		## Here I define my data, and my Jones matrices
-		na=sd.na          # Number of antenna
-		nbl=sd.nbl        # Number of baselines
-		nchan=sd.nchan    # Number of channels
-		nsrc=sd.nsrc      # Number of DDES
-
-		# Output jones matrix
-		njones = nbl*nsrc
-		jsize = np.product(sd.jones_shape) # Number of complex  numbers
-		# Create some random jones matrices to multiply together
-		jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
-			.astype(np.complex128).reshape(sd.jones_shape)
-		jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
-			.astype(np.complex128).reshape(sd.jones_shape)
-
-		jones_per_block = 256 if njones > 256 else njones
-		jones_blocks = (njones + jones_per_block - 1) / jones_per_block
-		block, grid = (jones_per_block,1,1), (jones_blocks,1,1)
-
-		print 'block', block, 'grid', grid
-
-		jones_lhs_gpu = gpuarray.to_gpu(jones_lhs)
-		jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
-		jones_output_gpu = gpuarray.empty(shape=sd.jones_shape, dtype=np.complex128)
-
-		rime_multiply.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu,
-			np.int32(njones), block=block, grid=grid,
-		    shared=1*jones_per_block*np.dtype(np.complex128).itemsize)
-
-		# Get the result off the gpu
-		jones_output = jones_output_gpu.get()
-
-		# Perform the calculation on the CPU
-		jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=np.complex128)
-
-		for baseline in range(nbl):
-		    for direction in range(nsrc):
-		        jones_output_cpu[:,baseline,direction] = np.dot(
-		            jones_lhs[:,baseline,direction].reshape(2,2),
-		            jones_rhs[:,baseline,direction].reshape(2,2)).reshape(4)
-
-		# Confirm similar results
-		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
 
 	def test_BK(self):
 		import pycuda.autoinit
@@ -141,6 +91,56 @@ class TestRimes(unittest.TestCase):
 
 		# Test that the jones CPU calculation matches that of the GPU calculation
 		self.assertTrue(np.allclose(jones_cpu.flatten(), jones.flatten()))
+
+	def test_multiply(self):
+		import pycuda.autoinit
+		import pycuda.gpuarray as gpuarray
+
+		sd, rime_multiply = self.shared_data, self.rime_multiply
+
+		## Here I define my data, and my Jones matrices
+		na=sd.na          # Number of antenna
+		nbl=sd.nbl        # Number of baselines
+		nchan=sd.nchan    # Number of channels
+		nsrc=sd.nsrc      # Number of DDES
+
+		# Output jones matrix
+		njones = nbl*nsrc
+		jsize = np.product(sd.jones_shape) # Number of complex  numbers
+		# Create some random jones matrices to multiply together
+		jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
+			.astype(np.complex128).reshape(sd.jones_shape)
+		jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
+			.astype(np.complex128).reshape(sd.jones_shape)
+
+		jones_per_block = 256 if njones > 256 else njones
+		jones_blocks = (njones + jones_per_block - 1) / jones_per_block
+		block, grid = (jones_per_block,1,1), (jones_blocks,1,1)
+
+		print 'block', block, 'grid', grid
+
+		jones_lhs_gpu = gpuarray.to_gpu(jones_lhs)
+		jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
+		jones_output_gpu = gpuarray.empty(shape=sd.jones_shape, dtype=np.complex128)
+
+		rime_multiply.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu,
+			np.int32(njones), block=block, grid=grid,
+		    shared=1*jones_per_block*np.dtype(np.complex128).itemsize)
+
+		# Get the result off the gpu
+		jones_output = jones_output_gpu.get()
+
+		# Perform the calculation on the CPU
+		jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=np.complex128)
+
+		for baseline in range(nbl):
+		    for direction in range(nsrc):
+		        jones_output_cpu[:,baseline,direction] = np.dot(
+		            jones_lhs[:,baseline,direction].reshape(2,2),
+		            jones_rhs[:,baseline,direction].reshape(2,2)).reshape(4)
+
+		# Confirm similar results
+		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
 
 if __name__ == '__main__':
     unittest.main()
