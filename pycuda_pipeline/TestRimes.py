@@ -5,6 +5,11 @@ from RimeJonesReduce import RimeJonesReduce
 from RimeJonesMultiplyInbuilt import RimeJonesMultiply
 import numpy as np
 
+import pycuda.autoinit
+import pycuda.gpuarray as gpuarray
+import segreduce
+
+
 class TestRimes(unittest.TestCase):
 	def setUp(self):
 		np.random.seed(100)
@@ -32,9 +37,6 @@ class TestRimes(unittest.TestCase):
 		del self.rime_reduce
 
 	def test_BK(self):
-		import pycuda.autoinit
-		import pycuda.gpuarray as gpuarray
-
 		sd, rime_bk = self.shared_data, self.rime_bk
 
 		baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
@@ -46,15 +48,17 @@ class TestRimes(unittest.TestCase):
 		block=(baselines_per_block,srcs_per_block,1)
 		grid=(baseline_blocks,src_blocks,1)
 
-		print 'block', block, 'grid', grid
-
-		chan = 0
+		#print 'block', block, 'grid', grid
 
 		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    block=block, grid=grid,
 		    shared=3*(baselines_per_block+srcs_per_block)*np.dtype(np.float64).itemsize)
+
+		# Assuming that we only calculate channel 0 on the GPU.
+		# TODO: This *will change
+		chan = 0
 
 		# Get the jones matrices calculated by the GPU
 		jones = sd.jones_gpu.get()
@@ -93,9 +97,6 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_cpu.flatten(), jones.flatten()))
 
 	def test_multiply(self):
-		import pycuda.autoinit
-		import pycuda.gpuarray as gpuarray
-
 		sd, rime_multiply = self.shared_data, self.rime_multiply
 
 		## Here I define my data, and my Jones matrices
@@ -117,7 +118,7 @@ class TestRimes(unittest.TestCase):
 		jones_blocks = (njones + jones_per_block - 1) / jones_per_block
 		block, grid = (jones_per_block,1,1), (jones_blocks,1,1)
 
-		print 'block', block, 'grid', grid
+		#print 'block', block, 'grid', grid
 
 		jones_lhs_gpu = gpuarray.to_gpu(jones_lhs)
 		jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
@@ -142,5 +143,43 @@ class TestRimes(unittest.TestCase):
 		# Confirm similar results
 		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
 
+	def test_reduce(self):
+		sd, rime_reduce = self.shared_data, self.rime_reduce
+
+		na=sd.na
+		nbl=sd.nbl
+		nchan=sd.nchan
+		nsrc=sd.nsrc
+
+		assert sd.jones_shape == (4, sd.nbl, sd.nsrc)
+
+		# Create the jones matrices
+		jsize = np.product(sd.jones_shape)
+		#jones = np.arange(jsize).astype(np.complex128).reshape(sd.jones_shape);
+
+		jones = (np.random.random(jsize) + 1j*np.random.random(jsize))\
+			.astype(np.complex128).reshape(sd.jones_shape)
+
+		# Create the keys
+		keys = (np.arange(np.product(sd.jones_shape[0:2]))*sd.jones_shape[2])\
+			.astype(np.int32)
+		
+		# Send the jones and keys to the gpu, and create the output array for
+		# the segmented sums
+		jones_gpu = gpuarray.to_gpu(jones.flatten())
+		keys_gpu = gpuarray.to_gpu(keys)
+		sums_gpu = gpuarray.empty(shape=keys.shape, dtype=jones.dtype.type)
+
+		segreduce.segmented_reduce_complex128_sum(
+			data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
+			device_id=0)
+
+		# Add everything along the src axis
+		sums_cpu = np.sum(jones,axis=2)
+
+		# Confirm similar results
+		self.assertTrue(np.allclose(sums_cpu.flatten(), sums_gpu.get()))
+
 if __name__ == '__main__':
-    unittest.main()
+	suite = unittest.TestLoader().loadTestsFromTestCase(TestRimes)
+	unittest.TextTestRunner(verbosity=2).run(suite)

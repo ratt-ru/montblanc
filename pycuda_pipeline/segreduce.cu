@@ -144,12 +144,12 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 		 PyObject_GetAttrString(stream_obj, "handle"));
 
 	// Could do some better error handling here...
-	if(value_gpu == NULL) { printf("value_gpu is NULL"); }
-	if(value_size == NULL) { printf("value_size is NULL"); }
-	if(segments_gpu == NULL) { printf("segments_gpu is NULL"); }
-	if(segments_size == NULL) { printf("segments_size is NULL"); }
-	if(segment_sums_gpu == NULL) { printf("segment_sums_gpu is NULL"); }
-	if(stream_handle == NULL) { printf("stream_handle is NULL"); }
+	//if(value_gpu == NULL) { printf("value_gpu is NULL"); }
+	//if(value_size == NULL) { printf("value_size is NULL"); }
+	//if(segments_gpu == NULL) { printf("segments_gpu is NULL"); }
+	//if(segments_size == NULL) { printf("segments_size is NULL"); }
+	//if(segment_sums_gpu == NULL) { printf("segment_sums_gpu is NULL"); }
+	//if(stream_handle == NULL) { printf("stream_handle is NULL"); }
 
 	// Extract cuda device pointers, array sizes and stream_id
 	// from the Python Objects
@@ -161,10 +161,10 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	CUstream stream = (stream_handle == NULL ? (CUstream) 0 :
 		(CUstream) PyInt_AsUnsignedLongLongMask(stream_handle));
 
-	printf("\nvalues address=%p size=%ld\n", value_ptr, n_values);
-	printf("segments address=%p size=%ld\n", segment_ptr, n_segments);
-	printf("segment sums address=%p\n", segment_sums_ptr);
-	printf("device_id=%ld stream=%ld\n", device_id, stream);
+	//printf("\nvalues address=%p size=%ld\n", value_ptr, n_values);
+	//printf("segments address=%p size=%ld\n", segment_ptr, n_segments);
+	//printf("segment sums address=%p\n", segment_sums_ptr);
+	//printf("device_id=%ld stream=%ld\n", device_id, stream);
 
 	seg_reduce_csr_expand(value_ptr, segment_ptr, n_values,
 		n_segments, segment_sums_ptr, identity, op, stream);
