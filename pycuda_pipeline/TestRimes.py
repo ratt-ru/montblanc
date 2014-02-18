@@ -83,17 +83,11 @@ class TestRimes(unittest.TestCase):
 			sd.sky[0]+sd.sky[3] + 0j,		# fU+fQ + 0j
 			sd.sky[1] + 1j*sd.sky[2],		# fI + fQ*1j
 			sd.sky[1] - 1j*sd.sky[2],		# fI - fQ*1j
-			sd.sky[0]-sd.sky[3] + 0j]).T	# fU-fQ + 0j
+			sd.sky[0]-sd.sky[3] + 0j])  	# fU-fQ + 0j
 
 		# This works due to broadcast! Multiplies along
 		# srcs axis of sky. Dim nbl x nsrcs x 4
-		# There may be a better way of multiplying
-		# so that we don't have to do a rollaxis.
-		# Its good enough for testing tho!
-		jones_cpu = phase_term[:,:,np.newaxis]*sky
-		# Roll axis so that dim is 4 x nbl x nsrcs.
-		# matching the GPU dimensions.
-		jones_cpu = np.rollaxis(jones_cpu,axis=2,start=0)
+		jones_cpu = phase_term*sky[:,np.newaxis,:]
 
 		# Test that the jones CPU calculation matches that of the GPU calculation
 		self.assertTrue(np.allclose(jones_cpu, jones))
