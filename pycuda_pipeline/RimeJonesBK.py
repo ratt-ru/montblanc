@@ -24,16 +24,20 @@ void rime_jones_BK(
     double * sky,
     double * wavelength,
     double2 * jones,
-    int nsrc, int nbl)
+    int nsrc, int nbl,
+    int nchan, int ntime)
 {
-    // Our data space is a 2D matrix of BL x SRC
+    // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
 
     // Baseline
     int BL = blockIdx.x*blockDim.x + threadIdx.x;
     // Direction Dependent Effect
     int SRC = blockIdx.y*blockDim.y + threadIdx.y;
 
-    if(BL >= nbl || SRC >= nsrc)
+    int CHAN = (blockIdx.z*blockDim.z + threadIdx.z) / ntime;
+    int TIME = (blockIdx.z*blockDim.z + threadIdx.z) % ntime;
+
+    if(BL >= nbl || SRC >= nsrc || CHAN >= nchan || TIME >= ntime)
         return;
 
     /* Cache input and output data from global memory. */
@@ -43,22 +47,28 @@ void rime_jones_BK(
     double * l = &w[blockDim.x];
     double * m = &l[blockDim.y];
     double * a = &m[blockDim.y];
+    double * wave = &a[blockDim.y];
 
     // Index
     int i;
 
-    if (BL < nbl && threadIdx.y == 0)
+    if(threadIdx.y == 0)
     {
         i = BL;   u[threadIdx.x] = UVW[i];
         i += nbl; v[threadIdx.x] = UVW[i];
         i += nbl; w[threadIdx.x] = UVW[i];
     }
 
-    if (SRC < nsrc && threadIdx.x == 0)
+    if(threadIdx.x == 0)
     {
         i = SRC;   l[threadIdx.y] = LMA[i];
         i += nsrc; m[threadIdx.y] = LMA[i];
         i += nsrc; a[threadIdx.y] = LMA[i];
+    }
+
+    if(threadIdx.z == 0)
+    {
+        i = CHAN; wave[threadIdx.z] = wavelength[i];
     }
 
     __syncthreads();
@@ -80,16 +90,16 @@ void rime_jones_BK(
     // sqrt(u*l + v*m + w*n)
     phase = sqrt(phase);
 
-    // Multiply by 2*pi/wavelength[0]
+    // Multiply by 2*pi/wave[threadIdx.z]
     phase *= (2. * CUDART_PI);
-    phase /= wavelength[0];
+    phase /= wave[threadIdx.z];
 
     // Calculate the complex exponential from the phase
     double2 result;
     sincos(phase, &result.y, &result.x);
 
     // Multiply by the wavelength to the power of alpha
-    phase = pow(1e6/wavelength[0], a[threadIdx.y]);
+    phase = pow(1e6/wave[threadIdx.z], a[threadIdx.y]);
     result.x *= phase;
     result.y *= phase;
 
@@ -111,7 +121,7 @@ void rime_jones_BK(
     double fV = sky[SRC+3*nsrc];
 
     // Index into the jones matrices
-    i = (BL*nsrc + SRC);
+    i = (BL*nsrc*nchan*ntime + SRC*nchan*ntime + CHAN*ntime + TIME);
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = fI+fQ, b=0.0, c=result.x, d = result.y
@@ -120,19 +130,20 @@ void rime_jones_BK(
         (fI+fQ)*result.y + 0.0*result.x);
 
     // a=fU, b=fV, c=result.x, d = result.y 
-    i += nbl*nsrc;
+    i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
         fU*result.x - fV*result.y,
         fU*result.y + fV*result.x);
 
+
     // a=fU, b=-fV, c=result.x, d = result.y 
-    i += nbl*nsrc;
+    i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
         fU*result.x - -fV*result.y,
         fU*result.y + -fV*result.x);
 
     // a=fU-fQ, b=0.0, c=result.x, d = result.y 
-    i += nbl*nsrc;
+    i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
         (fU-fQ)*result.x - 0.0*result.y,
         (fU-fQ)*result.y + 0.0*result.x);
