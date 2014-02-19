@@ -132,8 +132,11 @@ class TestRimes(unittest.TestCase):
 		# Perform the calculation on the CPU
 		jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=np.complex128)
 
-		# There must be a more numpy way to do this...
+		# TODO: There must be a more numpy way to do this
 		# Its dog slow...
+		# Possible alternative to use with np.rollaxis:
+		# from numpy.core.umath_tests import matrix_multiply
+		# Doesn't work with complex numbers tho
 		for bl in range(nbl):
 			for src in range(nsrc):
 				for ch in range(nchan):
