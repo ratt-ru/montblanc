@@ -7,7 +7,7 @@ import pycuda.autoinit
 
 from node import *
 from RimeJonesBK import *
-from RimeJonesMultiplyInbuilt import *
+from RimeJonesMultiply import *
 from RimeJonesReduce import *
 
 class GPUNode(NullNode):
