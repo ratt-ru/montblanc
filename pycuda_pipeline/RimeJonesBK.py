@@ -121,7 +121,7 @@ void rime_jones_BK(
     double fV = sky[SRC+3*nsrc];
 
     // Index into the jones matrices
-    i = (BL*nsrc*nchan*ntime + SRC*nchan*ntime + CHAN*ntime + TIME);
+    i = (BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc + SRC);
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = fI+fQ, b=0.0, c=result.x, d = result.y

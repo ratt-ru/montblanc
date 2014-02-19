@@ -295,7 +295,7 @@ class RimeShared(SharedData):
         self.wavelength_gpu = gpuarray.to_gpu(self.wavelength)
 
         # Output jones matrix
-        self.jones_shape = (4,self.nbl,self.nsrc,self.nchan,self.ntime)
+        self.jones_shape = (4,self.nbl,self.nchan,self.ntime,self.nsrc)
         self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=np.complex128)
 
         # Create the key positions. This snippet creates an array

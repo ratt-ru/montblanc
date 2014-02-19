@@ -60,7 +60,10 @@ class TestRimes(unittest.TestCase):
 		    	np.dtype(np.float64).itemsize)
 
 		# Repeat the wavelengths along the timesteps for now
-		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.wavelength.size, sd.ntime)
+		# dim nchan x ntime. This is a 1D array for now
+		# as it makes broadcasting easier below. We reshape
+		# it into nchan x ntime just before the final comparison
+		w = np.repeat(sd.wavelength,sd.ntime)
 
 		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
 		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
@@ -70,11 +73,11 @@ class TestRimes(unittest.TestCase):
 			np.outer(sd.uvw[1], sd.lma[1]) + \
 			np.outer(sd.uvw[2],n)
 
-		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nsrcs x nchan x ntime
-		phase = (2*np.pi*1j*np.sqrt(phase))[:,:,np.newaxis,np.newaxis]/w
-		# Dim nsrcs x nchan x ntime
-		power = np.power(1e6/w, sd.lma[2][:,np.newaxis,np.newaxis])
-		# This works due to broadcast! Dim nbl x nsrcs x nchan x ntime
+		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
+		phase = (2*np.pi*1j*np.sqrt(phase))[:,np.newaxis,:]/w[:,np.newaxis]
+		# Dim nchan x ntime x nsrcs 
+		power = np.power(1e6/w[:,np.newaxis], sd.lma[2])
+		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
 		phase_term = power*np.exp(phase)
 
 		# Create the brightness matrix. Dim 4 x nsrcs
@@ -85,8 +88,11 @@ class TestRimes(unittest.TestCase):
 			sd.sky[0]-sd.sky[3] + 0j])		# fU-fQ + 0j
 
 		# This works due to broadcast! Multiplies along
-		# srcs axis of sky. Dim 4 x nbl x nsrcs x nchan x ntime
-		jones_cpu = phase_term*sky[:,np.newaxis,:,np.newaxis, np.newaxis]
+		# srcs axis of sky. Dim 4 x nbl x nsrcs x nchan x ntime.
+		# Also reshape the combined nchan and ntime axis into
+		# two separate axes
+		jones_cpu = (phase_term*sky[:,np.newaxis, np.newaxis,:])\
+			.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
 
 		# Get the jones matrices calculated by the GPU
 		jones = sd.jones_gpu.get()
@@ -138,12 +144,12 @@ class TestRimes(unittest.TestCase):
 		# from numpy.core.umath_tests import matrix_multiply
 		# Doesn't work with complex numbers tho
 		for bl in range(nbl):
-			for src in range(nsrc):
-				for ch in range(nchan):
-					for t in range(ntime):	    		
-						jones_output_cpu[:,bl,src,ch,t] = np.dot(
-						jones_lhs[:,bl,src,ch,t].reshape(2,2),
-						jones_rhs[:,bl,src,ch,t].reshape(2,2)).reshape(4)
+			for ch in range(nchan):
+				for t in range(ntime):	    		
+					for src in range(nsrc):
+						jones_output_cpu[:,bl,ch,t,src] = np.dot(
+						jones_lhs[:,bl,ch,t,src].reshape(2,2),
+						jones_rhs[:,bl,ch,t,src].reshape(2,2)).reshape(4)
 
 		# Confirm similar results
 		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
