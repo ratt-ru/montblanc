@@ -315,7 +315,7 @@ def main(argv=None):
     parser.add_argument('-g','--image-depth',  dest='imagedepth', help='Image Depth', type=int, default=8)
     args = parser.parse_args(argv[1:])
 
-    sp = PipedRimes([RimeJonesBK(), RimeJonesMultiply(), RimeJonesReduce()])
+    sp = PipedRimes([RimeJonesBK(), RimeJonesReduce()])
 
     shared_data = RimeShared()
     shared_data.configure()
