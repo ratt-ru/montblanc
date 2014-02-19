@@ -298,6 +298,15 @@ class RimeShared(SharedData):
         self.jones_shape = (4,self.nbl,self.nsrc,self.nchan,self.ntime)
         self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=np.complex128)
 
+        # Create the key positions. This snippet creates an array
+        # equal to the list of positions of the last array element timestep)
+        self.keys = (np.arange(np.product(self.jones_shape[:-1]))
+            *self.jones_shape[-1]).astype(np.int32)
+        self.keys_gpu = gpuarray.to_gpu(self.keys)
+
+        # Output sum matrix
+        self.sums_gpu = gpuarray.empty(self.keys.shape, dtype=np.complex128)
+
 
 def main(argv=None):
     """

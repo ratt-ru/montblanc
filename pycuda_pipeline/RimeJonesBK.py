@@ -169,13 +169,10 @@ options=['-lineinfo'])
         block=(baselines_per_block,srcs_per_block,1)
         grid=(baseline_blocks,src_blocks,1)
 
-        chan = 0
-
         self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
             sd.wavelength_gpu,  sd.jones_gpu,
             np.int32(sd.nsrc), np.int32(sd.nbl),
-            block=block,
-            grid=grid,
+            block=block, grid=grid,
             shared=3*(baselines_per_block+srcs_per_block)
 				*np.dtype(np.float64).itemsize)
 
