@@ -113,9 +113,9 @@ void rime_jones_BK(
 
 #if 1
     double fI = sky[SRC+0*nsrc];
-    double fQ = sky[SRC+1*nsrc];
-    double fU = sky[SRC+2*nsrc];
-    double fV = sky[SRC+3*nsrc];
+    double fU = sky[SRC+1*nsrc];
+    double fV = sky[SRC+2*nsrc];
+    double fQ = sky[SRC+3*nsrc];
 
     // Index into the jones matrices
     i = (BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc + SRC);
@@ -132,14 +132,13 @@ void rime_jones_BK(
         fU*result.x - fV*result.y,
         fU*result.y + fV*result.x);
 
-
     // a=fU, b=-fV, c=result.x, d = result.y 
     i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
         fU*result.x - -fV*result.y,
         fU*result.y + -fV*result.x);
 
-    // a=fU-fQ, b=0.0, c=result.x, d = result.y 
+    // a=fI-fQ, b=0.0, c=result.x, d = result.y 
     i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
         (fI-fQ)*result.x - 0.0*result.y,

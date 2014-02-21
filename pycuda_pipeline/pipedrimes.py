@@ -281,19 +281,15 @@ class RimeShared(SharedData):
         # Point source coordinates in the l,m,n (sky image) domain
         l=np.float64(np.random.random(self.nsrc)*0.1)
         m=np.float64(np.random.random(self.nsrc)*0.1)
-        #alpha=np.float64(np.ones((self.nsrc,)))
-        alpha=np.float64(np.zeros((self.nsrc,)))
+        alpha=np.float64(np.random.random(self.nsrc)*0.1)
         self.lma=np.array([l,m,alpha], \
             dtype=np.float64)
 
         # Brightness matrix for the point sources
         fI=np.float64(np.ones((self.nsrc,)))
-        #fV=np.float64(np.ones((self.nsrc,)))
-        #fU=np.float64(np.ones((self.nsrc,)))
-        #fQ=np.float64(np.ones((self.nsrc,)))
-        fV=np.float64(np.zeros((self.nsrc,)))
-        fU=np.float64(np.zeros((self.nsrc,)))
-        fQ=np.float64(np.zeros((self.nsrc,)))
+        fV=np.float64(np.random.random(self.nsrc)*0.5)
+        fU=np.float64(np.random.random(self.nsrc)*0.5)
+        fQ=np.float64(np.random.random(self.nsrc)*0.5)
         self.sky = np.array([fI,fV,fU,fQ], \
             dtype=np.float64)
 
