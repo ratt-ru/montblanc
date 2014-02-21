@@ -87,9 +87,6 @@ void rime_jones_BK(
     phase += v[threadIdx.x]*m[threadIdx.y];   // v*m
     phase += u[threadIdx.x]*l[threadIdx.y];   // u*l
 
-    // sqrt(u*l + v*m + w*n)
-    phase = sqrt(phase);
-
     // Multiply by 2*pi/wave[threadIdx.z]
     phase *= (2. * CUDART_PI);
     phase /= wave[threadIdx.z];

@@ -250,11 +250,19 @@ class RimeShared(SharedData):
         self.nevents = len(self.event_names)
 
         # Antenna, Baseline, Channel, Source and Timestep counts
+        self.na = 3
+        self.nbl = (self.na*(self.na-1))/2
+        self.nchan = 5
+        self.nsrc = 2
+        self.ntime = 1
+
+        """
         self.na = 10
         self.nbl = (self.na*(self.na-1))/2
         self.nchan = 32
-        self.nsrc = 200
+        self.nsrc = 1000
         self.ntime = 10
+        """
 
         # Baseline coordinates in the u,v,w (frequency) domain
         """
@@ -271,17 +279,21 @@ class RimeShared(SharedData):
             dtype=np.float64)
 
         # Point source coordinates in the l,m,n (sky image) domain
-        l=np.float64(np.random.random(self.nsrc)*0.5)
-        m=np.float64(np.random.random(self.nsrc)*0.5)
-        alpha=np.float64(np.ones((self.nsrc,)))
+        l=np.float64(np.random.random(self.nsrc)*0.1)
+        m=np.float64(np.random.random(self.nsrc)*0.1)
+        #alpha=np.float64(np.ones((self.nsrc,)))
+        alpha=np.float64(np.zeros((self.nsrc,)))
         self.lma=np.array([l,m,alpha], \
             dtype=np.float64)
 
         # Brightness matrix for the point sources
         fI=np.float64(np.ones((self.nsrc,)))
-        fV=np.float64(np.ones((self.nsrc,)))
-        fU=np.float64(np.ones((self.nsrc,)))
-        fQ=np.float64(np.ones((self.nsrc,)))
+        #fV=np.float64(np.ones((self.nsrc,)))
+        #fU=np.float64(np.ones((self.nsrc,)))
+        #fQ=np.float64(np.ones((self.nsrc,)))
+        fV=np.float64(np.zeros((self.nsrc,)))
+        fU=np.float64(np.zeros((self.nsrc,)))
+        fQ=np.float64(np.zeros((self.nsrc,)))
         self.sky = np.array([fI,fV,fU,fQ], \
             dtype=np.float64)
 
