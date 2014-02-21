@@ -258,10 +258,10 @@ class RimeShared(SharedData):
         self.ntime = 1
         """
 
-        self.na = 10
+        self.na = 5
         self.nbl = (self.na*(self.na-1))/2
         self.nchan = 32
-        self.nsrc = 1000
+        self.nsrc = 100
         self.ntime = 10
 
         # Baseline coordinates in the u,v,w (frequency) domain
