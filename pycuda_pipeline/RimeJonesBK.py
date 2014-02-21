@@ -29,11 +29,11 @@ void rime_jones_BK(
 {
     // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
 
-    // Baseline
-    int BL = blockIdx.x*blockDim.x + threadIdx.x;
-    // Direction Dependent Effect
-    int SRC = blockIdx.y*blockDim.y + threadIdx.y;
+    #define REFWAVE 1e6
 
+    // Baseline, Source, Channel and Time indices
+    int BL = blockIdx.x*blockDim.x + threadIdx.x;
+    int SRC = blockIdx.y*blockDim.y + threadIdx.y;
     int CHAN = (blockIdx.z*blockDim.z + threadIdx.z) / ntime;
     int TIME = (blockIdx.z*blockDim.z + threadIdx.z) % ntime;
 
@@ -99,7 +99,7 @@ void rime_jones_BK(
     sincos(phase, &result.y, &result.x);
 
     // Multiply by the wavelength to the power of alpha
-    phase = pow(1e6/wave[threadIdx.z], a[threadIdx.y]);
+    phase = pow(REFWAVE/wave[threadIdx.z], a[threadIdx.y]);
     result.x *= phase;
     result.y *= phase;
 
@@ -145,9 +145,11 @@ void rime_jones_BK(
     // a=fU-fQ, b=0.0, c=result.x, d = result.y 
     i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
-        (fU-fQ)*result.x - 0.0*result.y,
-        (fU-fQ)*result.y + 0.0*result.x);
+        (fI-fQ)*result.x - 0.0*result.y,
+        (fI-fQ)*result.y + 0.0*result.x);
 #endif
+
+    #undef REFWAVE
 }
 """,
 options=['-lineinfo'])
