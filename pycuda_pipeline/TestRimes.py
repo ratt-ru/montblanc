@@ -102,7 +102,7 @@ class TestRimes(unittest.TestCase):
 		# Test that the jones CPU calculation matches that of the GPU calculation
 		self.assertTrue(np.allclose(jones_cpu, jones))
 
-	#@unittest.skip('test_multiply numpy code is somewhat inefficient')
+	@unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
 	def test_multiply(self):
 		sd, rime_multiply = self.shared_data, self.rime_multiply
 

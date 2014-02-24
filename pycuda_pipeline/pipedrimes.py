@@ -4,6 +4,8 @@ import sys
 
 import numpy as np
 import pycuda.autoinit
+import pycuda.driver as cuda
+import pycuda.gpuarray as gpuarray
 
 from node import *
 from RimeJonesBK import *
@@ -239,9 +241,6 @@ class RimeShared(SharedData):
         super(SharedData, self).__init__()
 
     def configure(self):
-        import pycuda.driver as cuda
-        import pycuda.gpuarray as gpuarray
-
         self.stream = [cuda.Stream(), cuda.Stream()]
 
         self.event_names = [RimeShared.INIT, \
@@ -261,7 +260,7 @@ class RimeShared(SharedData):
         self.na = 5
         self.nbl = (self.na*(self.na-1))/2
         self.nchan = 32
-        self.nsrc = 100
+        self.nsrc = 200
         self.ntime = 10
 
         # Baseline coordinates in the u,v,w (frequency) domain
