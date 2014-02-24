@@ -155,24 +155,33 @@ options=['-lineinfo'])
         pass
     def pre_execution(self, shared_data):
         pass
-    def execute(self, shared_data):
+
+    def get_kernel_params(self, shared_data):
         sd = shared_data
 
         baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
-        srcs_per_block = 64 if sd.nsrc > 64 else sd.nsrc
+        srcs_per_block = 96 if sd.nsrc > 96 else sd.nsrc
+        time_chans_per_block = 1
 
         baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
         src_blocks = (sd.nsrc + srcs_per_block - 1) / srcs_per_block
+        time_chan_blocks = sd.ntime*sd.nchan
 
-        block=(baselines_per_block,srcs_per_block,1)
-        grid=(baseline_blocks,src_blocks,1)
+        return {
+            'block' : (baselines_per_block,srcs_per_block,1), \
+            'grid'  : (baseline_blocks,src_blocks,time_chan_blocks), \
+            'shared' : (3*baselines_per_block + \
+                        3*srcs_per_block + \
+                        1*time_chans_per_block)*\
+                            np.dtype(np.float64).itemsize }
+
+    def execute(self, shared_data):
+        sd = shared_data
+        params = self.get_kernel_params(sd)
 
         self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
             sd.wavelength_gpu,  sd.jones_gpu,
-            np.int32(sd.nsrc), np.int32(sd.nbl),
-            block=block, grid=grid,
-            shared=3*(baselines_per_block+srcs_per_block)
-				*np.dtype(np.float64).itemsize)
+            np.int32(sd.nsrc), np.int32(sd.nbl), **params)
 
     def post_execution(self, shared_data):
         pass

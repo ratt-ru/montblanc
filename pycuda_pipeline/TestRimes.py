@@ -32,25 +32,11 @@ class TestRimes(unittest.TestCase):
 		except e:
 			raise e
 
-		baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
-		srcs_per_block = 64 if sd.nsrc > 64 else sd.nsrc
-
-		baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
-		src_blocks = (sd.nsrc + srcs_per_block - 1) / srcs_per_block
-		time_chan_blocks = sd.ntime*sd.nchan
-
-		block=(baselines_per_block,srcs_per_block,1)
-		grid=(baseline_blocks,src_blocks,time_chan_blocks)
-
-		#print 'block', block, 'grid', grid
-
 		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),
-		    block=block, grid=grid,
-		    shared=3*(baselines_per_block+srcs_per_block)*\
-		    	np.dtype(np.float64).itemsize)
+		    **rime_bk.get_kernel_params(sd))
 
 		# Shutdown the rime_bk node, we don't need it any more
 		try:
@@ -264,17 +250,6 @@ class TestRimes(unittest.TestCase):
 		log.debug('predict start: %fs end: %fs elapsed time: %fs',
 			predict_start, predict_end, predict_end - predict_start)
 
-		# Call the GPU RimeJonesBK node. First set up the grid parameters
-		baselines_per_block = 8 if nbl > 8 else nbl
-		srcs_per_block = 64 if nsrc > 64 else nsrc
-
-		baseline_blocks = (nbl + baselines_per_block - 1) / baselines_per_block
-		src_blocks = (nsrc + srcs_per_block - 1) / srcs_per_block
-		time_chan_blocks = sd.ntime*sd.nchan
-
-		block=(baselines_per_block,srcs_per_block,1)
-		grid=(baseline_blocks,src_blocks,time_chan_blocks)
-
 		# Create jones_gpu result matrices
 		jones_gpu = gpuarray.empty(jones_shape,dtype=np.complex128)
 
@@ -289,6 +264,8 @@ class TestRimes(unittest.TestCase):
 		keys_gpu = gpuarray.to_gpu(keys)
 		sums_gpu = gpuarray.empty(shape=keys.shape, dtype=sd.jones_gpu.dtype.type)
 
+		bk_params = rime_bk.get_kernel_params(sd)
+
 		kernels_start, kernels_end = cuda.Event(), cuda.Event()
 
 		kernels_start.record()
@@ -298,9 +275,7 @@ class TestRimes(unittest.TestCase):
 		    sd.wavelength_gpu,  jones_gpu,
 		    np.int32(nsrc), np.int32(nbl),
 		    np.int32(nchan), np.int32(ntime),
-		    block=block, grid=grid,
-		    shared=3*(baselines_per_block+srcs_per_block)*\
-		    	np.dtype(np.float64).itemsize)
+			**bk_params)
 
 		# Invoke the kernel
 		segreduce.segmented_reduce_complex128_sum(
