@@ -192,7 +192,7 @@ class TestRimes(unittest.TestCase):
 	def test_predict(self):
 		import time
 
-		sd = RimeShared(10,200,32,1)
+		sd = RimeShared(10,1000,32,1)
 		sd.configure()
 		rime_bk = RimeJonesBK()
 		rime_reduce = RimeJonesReduce()
@@ -236,15 +236,17 @@ class TestRimes(unittest.TestCase):
 		Info=np.array([1e6],np.float64)
 
 		# Call Cyrils' predict code
-		predict_start = time.clock()
+		predict_start = time.time()
 		P1=predict.predictSolsPol(Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
-		predict_end = time.clock()
+		predict_end = time.time()
 
 		log.debug('predict start: %fs end: %fs elapsed time: %fs',
 			predict_start, predict_end, predict_end - predict_start)
 
 		# Create jones_gpu result matrices
 		jones_gpu = gpuarray.empty(jones_shape,dtype=np.complex128)
+
+		log.debug('jones_gpu size: %.2f MB', jones_gpu.nbytes/(1024*1024))
 
 		# Set up the segmented reduction
 		# Create the key positions. This snippet creates an array
