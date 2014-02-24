@@ -11,7 +11,7 @@ import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
 import predict
-import segreduce
+import crimes
 import sys
 
 
@@ -173,7 +173,7 @@ class TestRimes(unittest.TestCase):
 		keys_gpu = gpuarray.to_gpu(keys)
 		sums_gpu = gpuarray.empty(shape=keys.shape, dtype=jones.dtype.type)
 
-		segreduce.segmented_reduce_complex128_sum(
+		crimes.segmented_reduce_complex128_sum(
 			data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
 			device_id=0)
 
@@ -273,7 +273,7 @@ class TestRimes(unittest.TestCase):
 			**bk_params)
 
 		# Invoke the kernel
-		segreduce.segmented_reduce_complex128_sum(
+		crimes.segmented_reduce_complex128_sum(
 			data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
 			device_id=0)
 

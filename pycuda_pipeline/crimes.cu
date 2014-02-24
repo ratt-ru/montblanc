@@ -1,6 +1,6 @@
 /* A file to test importing C modules for handling arrays to Python */
 
-#include "segreduce.h"
+#include "crimes.h"
 
 #include <cuda.h>
 #include <moderngpu.cuh>
@@ -189,7 +189,7 @@ extern "C" {
     Assumes PyArray is contiguous in memory.             */
 
 /* ==== Set up the methods table ====================== */
-static PyMethodDef segreduce_Methods[] = {
+static PyMethodDef crimes_Methods[] = {
 	{"segmented_reduce_complex128_sum", (PyCFunction) 		segmented_reduce_complex128_sum, METH_VARARGS | METH_KEYWORDS},
 	{"segmented_reduce_complex64_sum", (PyCFunction) 		segmented_reduce_complex64_sum, METH_VARARGS | METH_KEYWORDS},
 	{"segmented_reduce_float64_sum", (PyCFunction) 		segmented_reduce_float64_sum, METH_VARARGS | METH_KEYWORDS},
@@ -199,8 +199,8 @@ static PyMethodDef segreduce_Methods[] = {
 
 /* ==== Initialize the C_test functions ====================== */
 // Module name must be _C_arraytest in compile and linked 
-void initsegreduce()  {
-	(void) Py_InitModule("segreduce", segreduce_Methods);
+void initcrimes()  {
+	(void) Py_InitModule("crimes", crimes_Methods);
 	import_array();  // Must be present for NumPy.  Called first after above line.
 }
 

@@ -6,7 +6,7 @@ import pycuda.gpuarray as gpuarray
 
 from node import *
 
-import segreduce
+import crimes
 
 class RimeJonesReduce(Node):
     def __init__(self):
@@ -20,7 +20,7 @@ class RimeJonesReduce(Node):
     def execute(self, shared_data):
         sd = shared_data
 
-        segreduce.segmented_reduce_complex128_sum(
+        crimes.segmented_reduce_complex128_sum(
             data=sd.jones_gpu, seg_starts=sd.keys_gpu,
             seg_sums=sd.sums_gpu, device_id=0)
 
