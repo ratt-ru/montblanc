@@ -16,30 +16,18 @@ class TestRimes(unittest.TestCase):
 	def setUp(self):
 		np.random.seed(100)
 
-		sd = self.shared_data = RimeShared()
-		sd.configure()
-
-		self.rime_bk = RimeJonesBK()
-		self.rime_multiply = RimeJonesMultiply()
-		self.rime_reduce = RimeJonesReduce()
-
-		self.rime_bk.initialise(sd)
-		self.rime_multiply.initialise(sd)
-		self.rime_reduce.initialise(sd)
-
 	def tearDown(self):
-		sd = self.shared_data
-
-		self.rime_bk.shutdown(sd)
-		self.rime_multiply.shutdown(sd)
-		self.rime_reduce.shutdown(sd)
-
-		del self.rime_bk
-		del self.rime_multiply
-		del self.rime_reduce
+		pass
 
 	def test_BK(self):
-		sd, rime_bk = self.shared_data, self.rime_bk
+		sd = RimeShared(10, 200,32,10)
+		sd.configure()
+		rime_bk = RimeJonesBK()
+
+		try:
+			rime_bk.initialise(sd)
+		except e:
+			raise e
 
 		baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
 		srcs_per_block = 64 if sd.nsrc > 64 else sd.nsrc
@@ -60,6 +48,12 @@ class TestRimes(unittest.TestCase):
 		    block=block, grid=grid,
 		    shared=3*(baselines_per_block+srcs_per_block)*\
 		    	np.dtype(np.float64).itemsize)
+
+		# Shutdown the rime_bk node, we don't need it any more
+		try:
+			rime_bk.shutdown(sd)
+		except:
+			pass
 
 		# Repeat the wavelengths along the timesteps for now
 		# dim nchan x ntime. This is a 1D array for now
@@ -104,7 +98,15 @@ class TestRimes(unittest.TestCase):
 
 	@unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
 	def test_multiply(self):
-		sd, rime_multiply = self.shared_data, self.rime_multiply
+		# Make the problem size smaller, due to slow numpy code
+		sd = RimeShared(5, 10, 4, 2)
+		sd.configure()
+		rime_multiply = RimeJonesMultiply()
+
+		try:
+			rime_multiply.initialise(sd)
+		except e:
+			raise e
 
 		na=sd.na          # Number of antenna
 		nbl=sd.nbl        # Number of baselines
@@ -135,6 +137,12 @@ class TestRimes(unittest.TestCase):
 			np.int32(njones), block=block, grid=grid,
 		    shared=1*jones_per_block*np.dtype(np.complex128).itemsize)
 
+		# Shutdown the rime node, we don't need it any more
+		try:
+			rime_multiply.shutdown(sd)
+		except:
+			pass
+
 		# Get the result off the gpu
 		jones_output = jones_output_gpu.get()
 
@@ -158,7 +166,14 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
 
 	def test_reduce(self):
-		sd, rime_reduce = self.shared_data, self.rime_reduce
+		sd = RimeShared(10, 200,32,10)
+		sd.configure()
+		rime_reduce = RimeJonesReduce()
+
+		try:
+			rime_reduce.initialise(sd)
+		except e:
+			raise e
 
 		# Create the jones matrices
 		jsize = np.product(sd.jones_shape)
@@ -180,6 +195,12 @@ class TestRimes(unittest.TestCase):
 			data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
 			device_id=0)
 
+		# Shutdown the rime node, we don't need it any more
+		try:
+			rime_reduce.shutdown(sd)
+		except:
+			pass
+
 		# Add everything along the last axis (time)
 		sums_cpu = np.sum(jones,axis=len(sd.jones_shape)-1)
 
@@ -187,7 +208,16 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(sums_cpu.flatten(), sums_gpu.get()))
 
 	def test_predict(self):
-		sd, rime_bk, rime_reduce = self.shared_data, self.rime_bk, self.rime_reduce
+		sd = RimeShared(10, 200,32,10)
+		sd.configure()
+		rime_bk = RimeJonesBK()
+		rime_reduce = RimeJonesReduce()
+
+		try:
+			rime_bk.initialise(sd)
+			rime_reduce.initialise(sd)
+		except e:
+			raise e
 
 		na=sd.na          # Number of antenna
 		nbl=sd.nbl        # Number of baselines
@@ -259,6 +289,13 @@ class TestRimes(unittest.TestCase):
 		segreduce.segmented_reduce_complex128_sum(
 			data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
 			device_id=0)
+
+		# Shutdown the rime node, we don't need it any more
+		try:
+			rime_bk.shutdown(sd)
+			rime_reduce.shutdown(sd)
+		except:
+			pass
 
 		# Shift the gpu jones matrices so they are on the last axis
 		sums_cpu = np.rollaxis(sums_gpu.get(),0,len(jones_shape)-2)

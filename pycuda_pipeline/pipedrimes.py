@@ -4,8 +4,6 @@ import sys
 
 import numpy as np
 import pycuda.autoinit
-import pycuda.driver as cuda
-import pycuda.gpuarray as gpuarray
 
 from node import *
 from RimeJonesBK import *
@@ -233,35 +231,34 @@ class RimeShared(SharedData):
     lma_gpu = ArrayData()
     sky_gpu = ArrayData()
 
-    nbl = Parameter(10)
+    na = Parameter(7)
+    nbl = Parameter((7*6)/2)
     nchan = Parameter(32)
     nsrc = Parameter(200)
+    ntime = Parameter(10)
 
-    def __init__(self):
+    def __init__(self, na=7, nsrc=10, nchan=32, ntime=10):
         super(SharedData, self).__init__()
+        self.set_params(na,nsrc,nchan,ntime)
+
+    def set_params(self, na, nsrc, nchan, ntime):
+        # Antenna, Baseline, Channel, Source and Timestep counts
+        self.na = na
+        self.nbl = (self.na*(self.na-1))/2
+        self.nchan = nchan
+        self.nsrc = nsrc
+        self.ntime = ntime
 
     def configure(self):
+        import pycuda.driver as cuda
+        import pycuda.gpuarray as gpuarray
+
         self.stream = [cuda.Stream(), cuda.Stream()]
 
         self.event_names = [RimeShared.INIT, \
             RimeShared.PRE, RimeShared.EXEC, \
             RimeShared.POST, RimeShared.SHUTDOWN]
         self.nevents = len(self.event_names)
-
-        # Antenna, Baseline, Channel, Source and Timestep counts
-        """
-        self.na = 3
-        self.nbl = (self.na*(self.na-1))/2
-        self.nchan = 5
-        self.nsrc = 2
-        self.ntime = 1
-        """
-
-        self.na = 5
-        self.nbl = (self.na*(self.na-1))/2
-        self.nchan = 32
-        self.nsrc = 200
-        self.ntime = 10
 
         # Baseline coordinates in the u,v,w (frequency) domain
         """
@@ -333,7 +330,7 @@ def main(argv=None):
 
     sp = PipedRimes([RimeJonesBK(), RimeJonesReduce()])
 
-    shared_data = RimeShared()
+    shared_data = RimeShared(7,200,32,10)
     shared_data.configure()
 
     sp.execute(shared_data)
