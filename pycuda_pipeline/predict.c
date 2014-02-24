@@ -280,6 +280,7 @@ static PyObject *predictSolsPol(PyObject *self, PyObject *args)
 
   double ThisFlux, fI, fQ, fU, fV, Alpha;
 
+  //#pragma omp parallel for
   for(dd=0;dd<ndir;dd++){
     l=LM[0];
     m=LM[1];
@@ -324,8 +325,8 @@ static PyObject *predictSolsPol(PyObject *self, PyObject *args)
 	  
 
 	  //	  Prod22H(J0,J1,JJ);
-	  Prod22(J0,Sky,JJ);
-	  Prod22H(JJ,J1,JJ);
+	  //Prod22(J0,Sky,JJ);
+	  //Prod22H(JJ,J1,JJ);
 
 	  /* int pol; */
 	  /* for(pol=0; pol<4; pol++){ */
@@ -346,10 +347,15 @@ static PyObject *predictSolsPol(PyObject *self, PyObject *args)
 	  /* //printf("\n"); */
 	  
 
-	  VisIn[0]+=JJ[0]*result;
-	  VisIn[1]+=JJ[1]*result;
-	  VisIn[2]+=JJ[2]*result;
-	  VisIn[3]+=JJ[3]*result;
+	  //VisIn[0]+=JJ[0]*result;
+	  //VisIn[1]+=JJ[1]*result;
+	  //VisIn[2]+=JJ[2]*result;
+	  //VisIn[3]+=JJ[3]*result;
+
+    VisIn[0]+=Sky[0]*result;
+    VisIn[1]+=Sky[1]*result;
+    VisIn[2]+=Sky[2]*result;
+    VisIn[3]+=Sky[3]*result;
 
 	  /* VisIn[0]+=result; */
 	  /* VisIn[3]+=result; */
