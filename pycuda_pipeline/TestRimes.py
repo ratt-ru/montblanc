@@ -1,3 +1,4 @@
+import logging
 import unittest
 from pipedrimes import RimeShared
 from RimeJonesBK import RimeJonesBK
@@ -6,10 +7,12 @@ from RimeJonesMultiplyInbuilt import RimeJonesMultiply
 import numpy as np
 
 import pycuda.autoinit
+import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
 import predict
 import segreduce
+import sys
 
 
 class TestRimes(unittest.TestCase):
@@ -208,10 +211,14 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(sums_cpu.flatten(), sums_gpu.get()))
 
 	def test_predict(self):
+		import time
+
 		sd = RimeShared(10, 200,32,10)
 		sd.configure()
 		rime_bk = RimeJonesBK()
 		rime_reduce = RimeJonesReduce()
+
+		log = logging.getLogger('TestRimes.test_predict')
 
 		try:
 			rime_bk.initialise(sd)
@@ -250,7 +257,12 @@ class TestRimes(unittest.TestCase):
 		Info=np.array([1e6],np.float64)
 
 		# Call Cyrils' predict code
+		predict_start = time.clock()
 		P1=predict.predictSolsPol(Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
+		predict_end = time.clock()
+
+		log.debug('predict start: %fs end: %fs elapsed time: %fs',
+			predict_start, predict_end, predict_end - predict_start)
 
 		# Call the GPU RimeJonesBK node. First set up the grid parameters
 		baselines_per_block = 8 if nbl > 8 else nbl
@@ -263,16 +275,8 @@ class TestRimes(unittest.TestCase):
 		block=(baselines_per_block,srcs_per_block,1)
 		grid=(baseline_blocks,src_blocks,time_chan_blocks)
 
+		# Create jones_gpu result matrices
 		jones_gpu = gpuarray.empty(jones_shape,dtype=np.complex128)
-
-		# Invoke the kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
-		    sd.wavelength_gpu,  jones_gpu,
-		    np.int32(nsrc), np.int32(nbl),
-		    np.int32(nchan), np.int32(ntime),
-		    block=block, grid=grid,
-		    shared=3*(baselines_per_block+srcs_per_block)*\
-		    	np.dtype(np.float64).itemsize)
 
 		# Set up the segmented reduction
 		# Create the key positions. This snippet creates an array
@@ -285,10 +289,29 @@ class TestRimes(unittest.TestCase):
 		keys_gpu = gpuarray.to_gpu(keys)
 		sums_gpu = gpuarray.empty(shape=keys.shape, dtype=sd.jones_gpu.dtype.type)
 
+		kernels_start, kernels_end = cuda.Event(), cuda.Event()
+
+		kernels_start.record()
+
+		# Invoke the kernel
+		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		    sd.wavelength_gpu,  jones_gpu,
+		    np.int32(nsrc), np.int32(nbl),
+		    np.int32(nchan), np.int32(ntime),
+		    block=block, grid=grid,
+		    shared=3*(baselines_per_block+srcs_per_block)*\
+		    	np.dtype(np.float64).itemsize)
+
 		# Invoke the kernel
 		segreduce.segmented_reduce_complex128_sum(
 			data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
 			device_id=0)
+
+		kernels_end.record()
+		kernels_end.synchronize()
+
+		log.debug('kernels: elapsed time: %fs',
+			kernels_start.time_till(kernels_end)*1e-3)
 
 		# Shutdown the rime node, we don't need it any more
 		try:
@@ -305,5 +328,8 @@ class TestRimes(unittest.TestCase):
 
 
 if __name__ == '__main__':
+	logging.basicConfig(stream=sys.stderr)
+	logging.getLogger('TestRimes.test_predict').setLevel(logging.DEBUG)
+
 	suite = unittest.TestLoader().loadTestsFromTestCase(TestRimes)
 	unittest.TextTestRunner(verbosity=2).run(suite)
