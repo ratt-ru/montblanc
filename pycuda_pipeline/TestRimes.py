@@ -18,6 +18,8 @@ import sys
 class TestRimes(unittest.TestCase):
 	def setUp(self):
 		np.random.seed(100)
+		# Set up various things that aren't possible in PyCUDA
+		crimes.setup_cuda()
 
 	def tearDown(self):
 		pass

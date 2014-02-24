@@ -328,6 +328,9 @@ def main(argv=None):
     parser.add_argument('-g','--image-depth',  dest='imagedepth', help='Image Depth', type=int, default=8)
     args = parser.parse_args(argv[1:])
 
+    # Set up various thing that aren't possible in PyCUDA
+    crimes.setup_cuda()
+
     sp = PipedRimes([RimeJonesBK(), RimeJonesReduce()])
 
     shared_data = RimeShared(7,200,32,10)

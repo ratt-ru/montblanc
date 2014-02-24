@@ -15,6 +15,7 @@ extern "C" {
 
 void initcrimes(void);
 
+static PyObject * setup_cuda(PyObject * self, PyObject * args);
 static PyObject * segmented_reduce_complex128_sum(PyObject * self, PyObject * args,PyObject * kw);
 static PyObject * segmented_reduce_complex64_sum(PyObject * self, PyObject * args,PyObject * kw);
 static PyObject * segmented_reduce_float64_sum(PyObject * self, PyObject * args,PyObject * kw);

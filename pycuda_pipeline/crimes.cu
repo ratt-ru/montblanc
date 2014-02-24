@@ -190,6 +190,7 @@ extern "C" {
 
 /* ==== Set up the methods table ====================== */
 static PyMethodDef crimes_Methods[] = {
+	{"setup_cuda", setup_cuda, METH_VARARGS},
 	{"segmented_reduce_complex128_sum", (PyCFunction) 		segmented_reduce_complex128_sum, METH_VARARGS | METH_KEYWORDS},
 	{"segmented_reduce_complex64_sum", (PyCFunction) 		segmented_reduce_complex64_sum, METH_VARARGS | METH_KEYWORDS},
 	{"segmented_reduce_float64_sum", (PyCFunction) 		segmented_reduce_float64_sum, METH_VARARGS | METH_KEYWORDS},
@@ -202,6 +203,14 @@ static PyMethodDef crimes_Methods[] = {
 void initcrimes()  {
 	(void) Py_InitModule("crimes", crimes_Methods);
 	import_array();  // Must be present for NumPy.  Called first after above line.
+}
+
+static PyObject * setup_cuda(PyObject * self, PyObject * args)
+{	
+	cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+	
+    Py_INCREF(Py_None);
+    return Py_None;	
 }
 
 static PyObject * segmented_reduce_complex128_sum(PyObject * self, PyObject * args,PyObject * kw)
