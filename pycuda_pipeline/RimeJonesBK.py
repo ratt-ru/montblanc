@@ -47,7 +47,11 @@ void rime_jones_BK(
     double * l = &w[blockDim.x];
     double * m = &l[blockDim.y];
     double * a = &m[blockDim.y];
-    double * wave = &a[blockDim.y];
+    double * fI = &a[blockDim.y];
+    double * fV = &fI[blockDim.y];
+    double * fU = &fV[blockDim.y];
+    double * fQ = &fU[blockDim.y];
+    double * wave = &fQ[blockDim.y];
 
     // Index
     int i;
@@ -64,6 +68,11 @@ void rime_jones_BK(
         i = SRC;   l[threadIdx.y] = LMA[i];
         i += nsrc; m[threadIdx.y] = LMA[i];
         i += nsrc; a[threadIdx.y] = LMA[i];
+
+        i = SRC;   fI[threadIdx.y] = sky[i];
+        i += nsrc; fU[threadIdx.y] = sky[i];
+        i += nsrc; fV[threadIdx.y] = sky[i];
+        i += nsrc; fQ[threadIdx.y] = sky[i];
     }
 
     if(threadIdx.z == 0)
@@ -92,13 +101,12 @@ void rime_jones_BK(
     phase /= wave[threadIdx.z];
 
     // Calculate the complex exponential from the phase
-    double2 result;
-    sincos(phase, &result.y, &result.x);
+    double real, imag;
+    sincos(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
     phase = pow(REFWAVE/wave[threadIdx.z], a[threadIdx.y]);
-    result.x *= phase;
-    result.y *= phase;
+    real *= phase; imag *= phase;
 
 #if 0
     // Index into the jones array
@@ -112,37 +120,32 @@ void rime_jones_BK(
 
 
 #if 1
-    double fI = sky[SRC+0*nsrc];
-    double fU = sky[SRC+1*nsrc];
-    double fV = sky[SRC+2*nsrc];
-    double fQ = sky[SRC+3*nsrc];
-
     // Index into the jones matrices
     i = (BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc + SRC);
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    // a = fI+fQ, b=0.0, c=result.x, d = result.y
+    // a = fI+fQ, b=0.0, c=real, d = imag
     jones[i]=make_double2(
-        (fI+fQ)*result.x - 0.0*result.y,
-        (fI+fQ)*result.y + 0.0*result.x);
+        (fI[threadIdx.y]+fQ[threadIdx.y])*real - 0.0*imag,
+        (fI[threadIdx.y]+fQ[threadIdx.y])*imag + 0.0*real);
 
-    // a=fU, b=fV, c=result.x, d = result.y 
+    // a=fU, b=fV, c=real, d = imag 
     i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
-        fU*result.x - fV*result.y,
-        fU*result.y + fV*result.x);
+        fU[threadIdx.y]*real - fV[threadIdx.y]*imag,
+        fU[threadIdx.y]*imag + fV[threadIdx.y]*real);
 
-    // a=fU, b=-fV, c=result.x, d = result.y 
+    // a=fU, b=-fV, c=real, d = imag 
     i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
-        fU*result.x - -fV*result.y,
-        fU*result.y + -fV*result.x);
+        fU[threadIdx.y]*real - -fV[threadIdx.y]*imag,
+        fU[threadIdx.y]*imag + -fV[threadIdx.y]*real);
 
-    // a=fI-fQ, b=0.0, c=result.x, d = result.y 
+    // a=fI-fQ, b=0.0, c=real, d = imag 
     i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
-        (fI-fQ)*result.x - 0.0*result.y,
-        (fI-fQ)*result.y + 0.0*result.x);
+        (fI[threadIdx.y]-fQ[threadIdx.y])*real - 0.0*imag,
+        (fI[threadIdx.y]-fQ[threadIdx.y])*imag + 0.0*real);
 #endif
 
     #undef REFWAVE
@@ -160,7 +163,7 @@ options=['-lineinfo'])
         sd = shared_data
 
         baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
-        srcs_per_block = 96 if sd.nsrc > 96 else sd.nsrc
+        srcs_per_block = 64 if sd.nsrc > 64 else sd.nsrc
         time_chans_per_block = 1
 
         baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
@@ -171,7 +174,7 @@ options=['-lineinfo'])
             'block' : (baselines_per_block,srcs_per_block,1), \
             'grid'  : (baseline_blocks,src_blocks,time_chan_blocks), \
             'shared' : (3*baselines_per_block + \
-                        3*srcs_per_block + \
+                        7*srcs_per_block + \
                         1*time_chans_per_block)*\
                             np.dtype(np.float64).itemsize }
 
