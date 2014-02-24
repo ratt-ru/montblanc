@@ -23,7 +23,7 @@ class TestRimes(unittest.TestCase):
 		pass
 
 	def test_BK(self):
-		sd = RimeShared(10, 200,32,10)
+		sd = RimeShared(10,200,32,10)
 		sd.configure()
 		rime_bk = RimeJonesBK()
 
@@ -148,7 +148,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
 
 	def test_reduce(self):
-		sd = RimeShared(10, 200,32,10)
+		sd = RimeShared(10,200,32,10)
 		sd.configure()
 		rime_reduce = RimeJonesReduce()
 
@@ -192,7 +192,7 @@ class TestRimes(unittest.TestCase):
 	def test_predict(self):
 		import time
 
-		sd = RimeShared(10, 200,32,10)
+		sd = RimeShared(10,200,32,1)
 		sd.configure()
 		rime_bk = RimeJonesBK()
 		rime_reduce = RimeJonesReduce()
@@ -209,7 +209,7 @@ class TestRimes(unittest.TestCase):
 		nbl=sd.nbl        # Number of baselines
 		nchan=sd.nchan    # Number of channels
 		nsrc=sd.nsrc      # Number of sources
-		ntime=1 		  # Number of timesteps
+		ntime=sd.ntime	  # Number of timesteps
 
 		jones_shape=(4,nbl,nchan,ntime,nsrc)
 
