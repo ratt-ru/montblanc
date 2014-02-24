@@ -3,7 +3,7 @@ import unittest
 from pipedrimes import RimeShared
 from RimeJonesBK import RimeJonesBK
 from RimeJonesReduce import RimeJonesReduce
-from RimeJonesMultiplyInbuilt import RimeJonesMultiply
+from RimeJonesMultiply import RimeJonesMultiply
 import numpy as np
 
 import pycuda.autoinit
@@ -112,19 +112,12 @@ class TestRimes(unittest.TestCase):
 		jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
 			.astype(np.complex128).reshape(sd.jones_shape)
 
-		jones_per_block = 256 if njones > 256 else njones
-		jones_blocks = (njones + jones_per_block - 1) / jones_per_block
-		block, grid = (jones_per_block,1,1), (jones_blocks,1,1)
-
-		#print 'block', block, 'grid', grid
-
 		jones_lhs_gpu = gpuarray.to_gpu(jones_lhs)
 		jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
 		jones_output_gpu = gpuarray.empty(shape=sd.jones_shape, dtype=np.complex128)
 
 		rime_multiply.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu,
-			np.int32(njones), block=block, grid=grid,
-		    shared=1*jones_per_block*np.dtype(np.complex128).itemsize)
+			np.int32(njones), **rime_multiply.get_kernel_params(sd))
 
 		# Shutdown the rime node, we don't need it any more
 		try:

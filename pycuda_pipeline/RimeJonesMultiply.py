@@ -92,32 +92,37 @@ options=['-lineinfo'])
         pass
     def pre_execution(self, shared_data):
         pass
+
+    def get_kernel_params(self, shared_data):
+        sd = shared_data
+
+        njones = sd.nbl*sd.nchan*sd.ntime*sd.nsrc
+        jones_per_block = 256 if njones > 256 else njones
+        jones_blocks = (njones + jones_per_block - 1) / jones_per_block
+
+        return {
+            'block'  : (jones_per_block,1,1), \
+            'grid'   : (jones_per_block,1,1), \
+            'shared' : 1*jones_per_block*np.dtype(np.complex128).itemsize }
+
+        block, grid = (jones_per_block,1,1), (jones_blocks,1,1)
     def execute(self, shared_data):
         sd = shared_data
 
-        ## Here I define my data, and my Jones matrices
-        na=sd.na          # Number of antenna
-        nbl=sd.nbl        # Number of baselines
-        nchan=sd.nchan    # Number of channels
-        nsrc=sd.nsrc      # Number of DDES
-
         # Output jones matrix
-        njones = nbl*nsrc
+        njones = sd.nbl*sd.nchan*sd.ntime*sd.nsrc
         jsize = np.product(sd.jones_shape) # Number of complex  numbers
-        jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize)).astype(np.complex128).reshape(sd.jones_shape)
-
-        jones_per_block = 256 if njones > 256 else njones
-        jones_blocks = (njones + jones_per_block - 1) / jones_per_block
-        block, grid = (jones_per_block,1,1), (jones_blocks,1,1)
+        jones_rhs = (np.random.random(jsize) + \
+             1j*np.random.random(jsize)) \
+            .astype(np.complex128).reshape(sd.jones_shape)
 
         jones_lhs_gpu = sd.jones_gpu
         jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
         jones_output_gpu = gpuarray.empty(shape=sd.jones_shape, dtype=np.complex128)
 
-        self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, np.int32(njones),
-            block=block, grid=grid,
-            shared=1*jones_per_block*np.dtype(np.complex128).itemsize)
-
+        self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, \
+            np.int32(njones), **get_kernel_params())
+            
         sd.jones_gpu = jones_output_gpu
 
     def post_execution(self, shared_data):
