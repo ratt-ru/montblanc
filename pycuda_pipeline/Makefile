@@ -4,11 +4,11 @@ CRIMES_INCLUDES = \
 	-I/usr/include/python2.7 \
 	-I/usr/lib/python2.7/dist-packages/numpy/core/include/numpy \
 	-Imoderngpu/include
-CRIMES_CFLAGS = $(CRIMES_INCLUDES)
+CRIMES_CFLAGS = $(CRIMES_INCLUDES) -O3
 
 CRIMES_LIBDIRS=-L/usr/lib/nvidia-331
 CRIMES_LIBS = -lcuda
-CRIMES_LDFLAGS = $(CRIMES_LIBDIRS) $(CRIMES_LIBS) 
+CRIMES_LDFLAGS = $(CRIMES_LIBDIRS) $(CRIMES_LIBS) -O3
 
 GENCODE_SM20 := -gencode arch=compute_20,code=sm_20
 GENCODE_SM30 := -gencode arch=compute_30,code=sm_30
@@ -24,11 +24,11 @@ CC=gcc
 PREDICT_INCLUDES = \
 	-I/usr/include/python2.7 \
 	-I/usr/lib/python2.7/dist-packages/numpy/core/include/numpy
-PREDICT_CFLAGS = $(PREDICT_INCLUDES) -fopenmp -fPIC
+PREDICT_CFLAGS = $(PREDICT_INCLUDES) -fopenmp -fPIC -O3
 
 PREDICT_LIBDIRS =
 PREDICT_LIBS = -lgomp
-PREDICT_LDFLAGS = $(PREDICT_LIBDIRS) $(PREDICT_LIBS) -fopenmp
+PREDICT_LDFLAGS = $(PREDICT_LIBDIRS) $(PREDICT_LIBS) -fopenmp -O3
 
 PREDICT_OBJECTS = predict.o
 PREDICT_LIBRARY = predict.so
