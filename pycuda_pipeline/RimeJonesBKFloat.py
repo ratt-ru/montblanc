@@ -14,7 +14,7 @@ extern __shared__ float smem_d[];
 // Based on OSKAR's implementation of the RIME K term.
 // Baseline on the x dimension, source on the y dimension
 __global__
-void rime_jones_BK(
+void rime_jones_BK_float(
     float * UVW,
     float * LMA,
     float * sky,
@@ -153,7 +153,7 @@ class RimeJonesBKFloat(Node):
         super(RimeJonesBKFloat, self).__init__()
     def initialise(self, shared_data):
         self.mod = SourceModule(FLOAT_KERNEL, options=['-lineinfo'])
-        self.kernel = self.mod.get_function('rime_jones_BK')
+        self.kernel = self.mod.get_function('rime_jones_BK_float')
 
     def shutdown(self, shared_data):
         pass
@@ -164,7 +164,7 @@ class RimeJonesBKFloat(Node):
         sd = shared_data
 
         baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
-        srcs_per_block = 64 if sd.nsrc > 64 else sd.nsrc
+        srcs_per_block = 16 if sd.nsrc > 16 else sd.nsrc
         time_chans_per_block = 1
 
         baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block

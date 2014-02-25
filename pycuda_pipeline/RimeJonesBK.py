@@ -164,7 +164,7 @@ class RimeJonesBK(Node):
         sd = shared_data
 
         baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
-        srcs_per_block = 64 if sd.nsrc > 64 else sd.nsrc
+        srcs_per_block = 32 if sd.nsrc > 32 else sd.nsrc
         time_chans_per_block = 1
 
         baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
