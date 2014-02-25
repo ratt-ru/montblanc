@@ -1,11 +1,13 @@
 import logging
 import unittest
+import numpy as np
+import sys
+
 from pipedrimes import RimeShared
 from RimeJonesBK import RimeJonesBK
 from RimeJonesBKFloat import RimeJonesBKFloat
 from RimeJonesReduce import RimeJonesReduce
 from RimeJonesMultiply import RimeJonesMultiply
-import numpy as np
 
 import pycuda.autoinit
 import pycuda.driver as cuda
@@ -13,7 +15,6 @@ import pycuda.gpuarray as gpuarray
 
 import predict
 import crimes
-import sys
 
 
 class TestRimes(unittest.TestCase):
