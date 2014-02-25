@@ -6,20 +6,20 @@ from pycuda.compiler import SourceModule
 
 from node import *
 
-DOUBLE_KERNEL = """
+FLOAT_KERNEL = """
 #include \"math_constants.h\"
 
-extern __shared__ double smem_d[];
+extern __shared__ float smem_d[];
 
 // Based on OSKAR's implementation of the RIME K term.
 // Baseline on the x dimension, source on the y dimension
 __global__
 void rime_jones_BK(
-    double * UVW,
-    double * LMA,
-    double * sky,
-    double * wavelength,
-    double2 * jones,
+    float * UVW,
+    float * LMA,
+    float * sky,
+    float * wavelength,
+    float2 * jones,
     int nsrc, int nbl,
     int nchan, int ntime)
 {
@@ -37,17 +37,17 @@ void rime_jones_BK(
         return;
 
     /* Cache input and output data from global memory. */
-    double * u = smem_d;
-    double * v = &u[blockDim.x];
-    double * w = &v[blockDim.x];
-    double * l = &w[blockDim.x];
-    double * m = &l[blockDim.y];
-    double * a = &m[blockDim.y];
-    double * fI = &a[blockDim.y];
-    double * fV = &fI[blockDim.y];
-    double * fU = &fV[blockDim.y];
-    double * fQ = &fU[blockDim.y];
-    double * wave = &fQ[blockDim.y];
+    float * u = smem_d;
+    float * v = &u[blockDim.x];
+    float * w = &v[blockDim.x];
+    float * l = &w[blockDim.x];
+    float * m = &l[blockDim.y];
+    float * a = &m[blockDim.y];
+    float * fI = &a[blockDim.y];
+    float * fV = &fI[blockDim.y];
+    float * fU = &fV[blockDim.y];
+    float * fQ = &fU[blockDim.y];
+    float * wave = &fQ[blockDim.y];
 
     // Index
     int i;
@@ -80,12 +80,12 @@ void rime_jones_BK(
 
     // Calculate the n term first
     // n = sqrt(1.0 - l*l - m*m) - 1.0
-    double phase = 1.0 - l[threadIdx.y]*l[threadIdx.y];
+    float phase = 1.0 - l[threadIdx.y]*l[threadIdx.y];
     phase -= m[threadIdx.y]*m[threadIdx.y];
     phase = sqrt(phase) - 1.0;
     // TODO: remove this superfluous variable
     // It only exists for debugging purposes
-    // double n = phase;
+    // float n = phase;
 
     // u*l + v*m + w*n, in the wrong order :)
     phase *= w[threadIdx.x];                  // w*n
@@ -97,20 +97,20 @@ void rime_jones_BK(
     phase /= wave[threadIdx.z];
 
     // Calculate the complex exponential from the phase
-    double real, imag;
-    sincos(phase, &imag, &real);
+    float real, imag;
+    sincosf(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    phase = pow(REFWAVE/wave[threadIdx.z], a[threadIdx.y]);
+    phase = powf(REFWAVE/wave[threadIdx.z], a[threadIdx.y]);
     real *= phase; imag *= phase;
 
 #if 0
     // Index into the jones array
     i = (BL*nsrc + SRC)*4;
     // Coalesced store of the computation
-    jones[i+0]=make_double2(l[threadIdx.y],u[threadIdx.x]);
-    jones[i+1]=make_double2(m[threadIdx.y],v[threadIdx.x]);
-    jones[i+2]=make_double2(n,w[threadIdx.x]);
+    jones[i+0]=make_float2(l[threadIdx.y],u[threadIdx.x]);
+    jones[i+1]=make_float2(m[threadIdx.y],v[threadIdx.x]);
+    jones[i+2]=make_float2(n,w[threadIdx.x]);
     jones[i+3]=result;
 #endif
 
@@ -121,25 +121,25 @@ void rime_jones_BK(
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = fI+fQ, b=0.0, c=real, d = imag
-    jones[i]=make_double2(
+    jones[i]=make_float2(
         (fI[threadIdx.y]+fQ[threadIdx.y])*real - 0.0*imag,
         (fI[threadIdx.y]+fQ[threadIdx.y])*imag + 0.0*real);
 
     // a=fU, b=fV, c=real, d = imag 
     i += nbl*nsrc*nchan*ntime;
-    jones[i]=make_double2(
+    jones[i]=make_float2(
         fU[threadIdx.y]*real - fV[threadIdx.y]*imag,
         fU[threadIdx.y]*imag + fV[threadIdx.y]*real);
 
     // a=fU, b=-fV, c=real, d = imag 
     i += nbl*nsrc*nchan*ntime;
-    jones[i]=make_double2(
+    jones[i]=make_float2(
         fU[threadIdx.y]*real - -fV[threadIdx.y]*imag,
         fU[threadIdx.y]*imag + -fV[threadIdx.y]*real);
 
     // a=fI-fQ, b=0.0, c=real, d = imag 
     i += nbl*nsrc*nchan*ntime;
-    jones[i]=make_double2(
+    jones[i]=make_float2(
         (fI[threadIdx.y]-fQ[threadIdx.y])*real - 0.0*imag,
         (fI[threadIdx.y]-fQ[threadIdx.y])*imag + 0.0*real);
 #endif
@@ -148,11 +148,11 @@ void rime_jones_BK(
 }
 """
 
-class RimeJonesBK(Node):
+class RimeJonesBKFloat(Node):
     def __init__(self):
-        super(RimeJonesBK, self).__init__()
+        super(RimeJonesBKFloat, self).__init__()
     def initialise(self, shared_data):
-        self.mod = SourceModule(DOUBLE_KERNEL, options=['-lineinfo'])
+        self.mod = SourceModule(FLOAT_KERNEL, options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_BK')
 
     def shutdown(self, shared_data):

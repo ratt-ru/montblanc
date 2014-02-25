@@ -2,6 +2,7 @@ import logging
 import unittest
 from pipedrimes import RimeShared
 from RimeJonesBK import RimeJonesBK
+from RimeJonesBKFloat import RimeJonesBKFloat
 from RimeJonesReduce import RimeJonesReduce
 from RimeJonesMultiply import RimeJonesMultiply
 import numpy as np
@@ -24,15 +25,12 @@ class TestRimes(unittest.TestCase):
 	def tearDown(self):
 		pass
 
-	def test_BK(self):
-		sd = RimeShared(10,200,32,10)
+	def test_BK_float(self):
+		sd = RimeShared(10,200,32,10, np.float32, np.complex64)
 		sd.configure()
-		rime_bk = RimeJonesBK()
+		rime_bk = RimeJonesBKFloat()
 
-		try:
-			rime_bk.initialise(sd)
-		except e:
-			raise e
+		rime_bk.initialise(sd)
 
 		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
@@ -41,10 +39,64 @@ class TestRimes(unittest.TestCase):
 		    **rime_bk.get_kernel_params(sd))
 
 		# Shutdown the rime_bk node, we don't need it any more
-		try:
-			rime_bk.shutdown(sd)
-		except:
-			pass
+		rime_bk.shutdown(sd)
+
+		# Repeat the wavelengths along the timesteps for now
+		# dim nchan x ntime. This is a 1D array for now
+		# as it makes broadcasting easier below. We reshape
+		# it into nchan x ntime just before the final comparison
+		w = np.repeat(sd.wavelength,sd.ntime)
+
+		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
+		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
+
+		# u*l+v*m+w*n. Outer product creates array of dim nbl x nsrcs
+		phase = np.outer(sd.uvw[0], sd.lma[0]) + \
+			np.outer(sd.uvw[1], sd.lma[1]) + \
+			np.outer(sd.uvw[2],n)
+
+		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
+		phase = (2*np.pi*1j*phase)[:,np.newaxis,:]/w[:,np.newaxis]
+		# Dim nchan x ntime x nsrcs 
+		power = np.power(1e6/w[:,np.newaxis], sd.lma[2])
+		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
+		phase_term = power*np.exp(phase)
+
+		# Create the brightness matrix. Dim 4 x nsrcs
+		sky = np.complex128([
+			sd.sky[0]+sd.sky[3] + 0j,		# fI+fQ + 0j
+			sd.sky[1] + 1j*sd.sky[2],		# fU + fV*1j
+			sd.sky[1] - 1j*sd.sky[2],		# fU - fV*1j
+			sd.sky[0]-sd.sky[3] + 0j])		# fI-fQ + 0j
+
+		# This works due to broadcast! Multiplies along
+		# srcs axis of sky. Dim 4 x nbl x nsrcs x nchan x ntime.
+		# Also reshape the combined nchan and ntime axis into
+		# two separate axes
+		jones_cpu = (phase_term*sky[:,np.newaxis, np.newaxis,:])\
+			.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
+
+		# Get the jones matrices calculated by the GPU
+		jones = sd.jones_gpu.get()
+
+		# Test that the jones CPU calculation matches that of the GPU calculation
+		self.assertTrue(np.allclose(jones_cpu, jones))
+
+	def test_BK(self):
+		sd = RimeShared(10,200,32,10)
+		sd.configure()
+		rime_bk = RimeJonesBK()
+
+		rime_bk.initialise(sd)
+
+		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		    sd.wavelength_gpu,  sd.jones_gpu,
+		    np.int32(sd.nsrc), np.int32(sd.nbl),
+		    np.int32(sd.nchan), np.int32(sd.ntime),
+		    **rime_bk.get_kernel_params(sd))
+
+		# Shutdown the rime_bk node, we don't need it any more
+		rime_bk.shutdown(sd)
 
 		# Repeat the wavelengths along the timesteps for now
 		# dim nchan x ntime. This is a 1D array for now
@@ -94,10 +146,7 @@ class TestRimes(unittest.TestCase):
 		sd.configure()
 		rime_multiply = RimeJonesMultiply()
 
-		try:
-			rime_multiply.initialise(sd)
-		except e:
-			raise e
+		rime_multiply.initialise(sd)
 
 		na=sd.na          # Number of antenna
 		nbl=sd.nbl        # Number of baselines
@@ -122,10 +171,7 @@ class TestRimes(unittest.TestCase):
 			np.int32(njones), **rime_multiply.get_kernel_params(sd))
 
 		# Shutdown the rime node, we don't need it any more
-		try:
-			rime_multiply.shutdown(sd)
-		except:
-			pass
+		rime_multiply.shutdown(sd)
 
 		# Get the result off the gpu
 		jones_output = jones_output_gpu.get()
@@ -154,10 +200,7 @@ class TestRimes(unittest.TestCase):
 		sd.configure()
 		rime_reduce = RimeJonesReduce()
 
-		try:
-			rime_reduce.initialise(sd)
-		except e:
-			raise e
+		rime_reduce.initialise(sd)
 
 		# Create the jones matrices
 		jsize = np.product(sd.jones_shape)
@@ -180,10 +223,7 @@ class TestRimes(unittest.TestCase):
 			device_id=0)
 
 		# Shutdown the rime node, we don't need it any more
-		try:
-			rime_reduce.shutdown(sd)
-		except:
-			pass
+		rime_reduce.shutdown(sd)
 
 		# Add everything along the last axis (time)
 		sums_cpu = np.sum(jones,axis=len(sd.jones_shape)-1)
@@ -201,11 +241,8 @@ class TestRimes(unittest.TestCase):
 
 		log = logging.getLogger('TestRimes.test_predict')
 
-		try:
-			rime_bk.initialise(sd)
-			rime_reduce.initialise(sd)
-		except e:
-			raise e
+		rime_bk.initialise(sd)
+		rime_reduce.initialise(sd)
 
 		na=sd.na          # Number of antenna
 		nbl=sd.nbl        # Number of baselines
@@ -286,11 +323,8 @@ class TestRimes(unittest.TestCase):
 			kernels_start.time_till(kernels_end)*1e-3)
 
 		# Shutdown the rime node, we don't need it any more
-		try:
-			rime_bk.shutdown(sd)
-			rime_reduce.shutdown(sd)
-		except:
-			pass
+		rime_bk.shutdown(sd)
+		rime_reduce.shutdown(sd)
 
 		# Shift the gpu jones matrices so they are on the last axis
 		sums_cpu = np.rollaxis(sums_gpu.get(),0,len(jones_shape)-2)
