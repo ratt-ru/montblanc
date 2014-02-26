@@ -1,6 +1,7 @@
 import logging
 import unittest
 import numpy as np
+import time
 import sys
 
 from pipedrimes import RimeShared
@@ -232,115 +233,7 @@ class TestRimes(unittest.TestCase):
 		# Confirm similar results
 		self.assertTrue(np.allclose(sums_cpu.flatten(), sums_gpu.get()))
 
-	def test_predict(self):
-		import time
-
-		sd = RimeShared(10,1000,32,1)
-		sd.configure()
-		rime_bk = RimeJonesBK()
-		rime_reduce = RimeJonesReduce()
-
-		log = logging.getLogger('TestRimes.test_predict')
-
-		rime_bk.initialise(sd)
-		rime_reduce.initialise(sd)
-
-		na=sd.na          # Number of antenna
-		nbl=sd.nbl        # Number of baselines
-		nchan=sd.nchan    # Number of channels
-		nsrc=sd.nsrc      # Number of sources
-		ntime=sd.ntime	  # Number of timesteps
-
-		# Visibilities ! has to have double complex
-		Vis=sd.ct(np.zeros((nbl,nchan,4)))
-		# UVW coordinates
-		uvw=sd.uvw.T.copy()
-
-		# Frequencies in Hz
-		WaveL = sd.wavelength
-		# Sky coordinates
-		lms=np.array([sd.lma[0], sd.lma[1], sd.sky[0], sd.lma[2], 
-			sd.sky[3], sd.sky[1], sd.sky[2]]).astype(sd.ft).T.copy()
-
-		# Antennas
-		A0=np.int64(np.random.rand(nbl)*na)
-		A1=np.int64(np.random.rand(nbl)*na)
-
-		# Create a the jones matrices, but make them identity matrices
-		Sols=np.ones((nsrc,nchan,na))[:,:,:,np.newaxis]*(np.eye(2).reshape(4)).astype(sd.ct)
-
-		# Matrix containing information, here just the reference frequency
-		# to estimate the flux from spectral index
-		Info=np.array([1e6],sd.ft)
-
-		# Call Cyrils' predict code
-		predict_start = time.time()
-		P1=predict.predictSolsPol(Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
-		predict_end = time.time()
-
-		log.debug('predict start: %fs end: %fs elapsed time: %fs',
-			predict_start, predict_end, predict_end - predict_start)
-
-		log.debug('jones_gpu size: %.2f MB', sd.jones_gpu.nbytes/(1024*1024))
-
-		# Set up the segmented reduction
-		# Create the key positions. This snippet creates an array
-		# equal to the list of positions of the last array element timestep)
-		keys = (np.arange(np.product(sd.jones_shape[:-1]))*sd.jones_shape[-1])\
-			.astype(np.int32).reshape(sd.jones_shape[:-2])
-		
-		# Send the keys to the gpu, and create the output array for
-		# the segmented sums
-		keys_gpu = gpuarray.to_gpu(keys)
-		sums_gpu = gpuarray.empty(shape=keys.shape, dtype=sd.jones_gpu.dtype.type)
-
-		bk_params = rime_bk.get_kernel_params(sd)
-
-		kernels_start, kernels_end = cuda.Event(), cuda.Event()
-
-		kernels_start.record()
-
-		# Invoke the kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
-		    sd.wavelength_gpu,  sd.jones_gpu,
-		    np.int32(nsrc), np.int32(nbl),
-		    np.int32(nchan), np.int32(ntime),
-			**bk_params)
-
-		# Invoke the kernel
-		crimes.segmented_reduce_complex128_sum(
-			data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
-			device_id=0)
-
-		kernels_end.record()
-		kernels_end.synchronize()
-
-		log.debug('kernels: elapsed time: %fs',
-			kernels_start.time_till(kernels_end)*1e-3)
-
-		# Shutdown the rime node, we don't need it any more
-		rime_bk.shutdown(sd)
-		rime_reduce.shutdown(sd)
-
-		# Shift the gpu jones matrices so they are on the last axis
-		sums_cpu = np.rollaxis(sums_gpu.get(),0,len(sd.jones_shape)-2)
-
-		# Compare the GPU solution with Cyril's predict code
-		self.assertTrue(np.allclose(sums_cpu, Vis))
-
-	def test_predict_float(self):
-		import time
-
-		sd = RimeShared(10,1000,32,1, np.float32, np.complex64)
-		sd.configure()
-		rime_bk = RimeJonesBKFloat()
-		rime_reduce = RimeJonesReduce()
-
-		log = logging.getLogger('TestRimes.test_predict_float')
-
-		rime_bk.initialise(sd)
-		rime_reduce.initialise(sd)
-
+	def time_predict(self, sd, log):
 		na=sd.na          # Number of antenna
 		nbl=sd.nbl        # Number of baselines
 		nchan=sd.nchan    # Number of channels
@@ -377,6 +270,19 @@ class TestRimes(unittest.TestCase):
 		log.debug('predict start: %fs end: %fs elapsed time: %fs',
 			predict_start, predict_end, predict_end - predict_start)
 
+		return Vis
+	
+	def do_predict_test(self, shared_data, log):
+		sd = shared_data		
+
+		# Choose between the double and float kernel
+		rime_bk = RimeJonesBK() if sd.ft == np.float64 else RimeJonesBKFloat()
+
+		# Initialise the node
+		rime_bk.initialise(sd)
+
+		sums_predict = self.time_predict(sd, log)
+
 		log.debug('jones_gpu size: %.2f MB', sd.jones_gpu.nbytes/(1024*1024))
 
 		# Set up the segmented reduction
@@ -393,19 +299,25 @@ class TestRimes(unittest.TestCase):
 		bk_params = rime_bk.get_kernel_params(sd)
 
 		kernels_start, kernels_end = cuda.Event(), cuda.Event()
+
 		kernels_start.record()
 
 		# Invoke the kernel
 		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
-		    np.int32(nsrc), np.int32(nbl),
-		    np.int32(nchan), np.int32(ntime),
+		    np.int32(sd.nsrc), np.int32(sd.nbl),
+		    np.int32(sd.nchan), np.int32(sd.ntime),
 			**bk_params)
 
-		# Invoke the kernel
-		crimes.segmented_reduce_complex64_sum(
-			data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
-			device_id=0)
+		# Choose between the double and float kernel
+		if sd.ft == np.float64:
+			crimes.segmented_reduce_complex128_sum(
+				data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
+				device_id=0)
+		else:
+			crimes.segmented_reduce_complex64_sum(
+				data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
+				device_id=0)
 
 		kernels_end.record()
 		kernels_end.synchronize()
@@ -415,20 +327,31 @@ class TestRimes(unittest.TestCase):
 
 		# Shutdown the rime node, we don't need it any more
 		rime_bk.shutdown(sd)
-		rime_reduce.shutdown(sd)
 
 		# Shift the gpu jones matrices so they are on the last axis
 		sums_cpu = np.rollaxis(sums_gpu.get(),0,len(sd.jones_shape)-2)
 
-		#print 'Vis', Vis
-		#print 'sums cpu', sums_cpu
-
 		# Compare the GPU solution with Cyril's predict code
-		self.assertTrue(np.allclose(sums_cpu, Vis))
+		self.assertTrue(np.allclose(sums_cpu, sums_predict))
+
+
+	def test_predict_double(self):
+		sd = RimeShared(10,10000,32,1)
+		sd.configure()
+		log = logging.getLogger('TestRimes.test_predict_double')
+
+		self.do_predict_test(sd, log)
+
+	def test_predict_float(self):
+		sd = RimeShared(10,10000,32,1, np.float32, np.complex64)
+		sd.configure()
+		log = logging.getLogger('TestRimes.test_predict_float')
+
+		self.do_predict_test(sd, log)
 
 if __name__ == '__main__':
 	logging.basicConfig(stream=sys.stderr)
-	logging.getLogger('TestRimes.test_predict').setLevel(logging.DEBUG)
+	logging.getLogger('TestRimes.test_predict_double').setLevel(logging.DEBUG)
 	logging.getLogger('TestRimes.test_predict_float').setLevel(logging.DEBUG)
 
 	suite = unittest.TestLoader().loadTestsFromTestCase(TestRimes)
