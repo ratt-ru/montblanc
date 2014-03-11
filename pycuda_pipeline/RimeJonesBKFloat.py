@@ -98,10 +98,10 @@ void rime_jones_BK_float(
 
     // Calculate the complex exponential from the phase
     float real, imag;
-    sincosf(phase, &imag, &real);
+    __sincosf(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    phase = powf(REFWAVE/wave[threadIdx.z], a[threadIdx.y]);
+    phase = __powf(REFWAVE/wave[threadIdx.z], a[threadIdx.y]);
     real *= phase; imag *= phase;
 
 #if 0
