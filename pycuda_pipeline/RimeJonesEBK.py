@@ -26,26 +26,25 @@ void rime_jones_EBK(
     // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
 
     #define REFWAVE 1e6
+    #define COS3_CONST 45*1e-9
 
     // Baseline, Source, Channel and Time indices
     int BL = blockIdx.x*blockDim.x + threadIdx.x;
     int SRC = blockIdx.y*blockDim.y + threadIdx.y;
     int CHAN = (blockIdx.z*blockDim.z + threadIdx.z) / ntime;
     int TIME = (blockIdx.z*blockDim.z + threadIdx.z) % ntime;
-    int ANT1 = (1+int(sqrtf(1+8*BL)))/2;
-    int ANT2 = ANT1 - 1;
+    // Calculates the antenna pairs from the baseline!
+    int ANT1 = int(floor((sqrtf(1+8*BL)-1)/2));
+    int ANT2 = ANT1*(ANT1-1)/2;
+    ANT1 += 1;
 
     if(BL >= nbl || SRC >= nsrc || CHAN >= nchan || TIME >= ntime)
         return;
 
     // Cache input and output data from global memory.
-    // UVW coordinates
-    double * u = smem_d;
-    double * v = &u[blockDim.x];
-    double * w = &v[blockDim.x];
 
     // Pointing errors for antenna one (p) and two (q)
-    double * ld_p = &w[blockDim.x];
+    double * ld_p = &smem_d[blockDim.x];
     double * md_p = &ld_p[blockDim.x];
     double * ld_q = &md_p[blockDim.x];
     double * md_q = &ld_q[blockDim.x];
@@ -54,11 +53,10 @@ void rime_jones_EBK(
     // and brightness matrix
     double * l = &md_q[blockDim.x];
     double * m = &l[blockDim.y];
-    double * a = &m[blockDim.y];
-    double * fI = &a[blockDim.y];
+    double * fI = &m[blockDim.y];
     double * fV = &fI[blockDim.y];
     double * fU = &fV[blockDim.y];
-    double * fQ = &fU[blockDim.y];
+    double * fQ = &fU[blockDim.y];    
 
     // Wavelengths
     double * wave = &fQ[blockDim.y];
@@ -68,10 +66,6 @@ void rime_jones_EBK(
 
     if(threadIdx.y == 0)
     {
-        i = BL;   u[threadIdx.x] = UVW[i];
-        i += nbl; v[threadIdx.x] = UVW[i];
-        i += nbl; w[threadIdx.x] = UVW[i];
-
         i = ANT1; ld_p[threadIdx.x] = point_error[i];
         i += na;  md_p[threadIdx.x] = point_error[i];
         i = ANT2; ld_q[threadIdx.x] = point_error[i];
@@ -80,17 +74,13 @@ void rime_jones_EBK(
 
     if(threadIdx.x == 0)
     {
-        i = SRC;   l[threadIdx.y] = LMA[i];
-        i += nsrc; m[threadIdx.y] = LMA[i];
-        i += nsrc; a[threadIdx.y] = LMA[i];
-
-        i = SRC;   fI[threadIdx.y] = sky[i];
-        i += nsrc; fU[threadIdx.y] = sky[i];
+        i = SRC;   l[threadIdx.y] = LMA[i]; fI[threadIdx.y] = sky[i];
+        i += nsrc; m[threadIdx.y] = LMA[i]; fU[threadIdx.y] = sky[i];
         i += nsrc; fV[threadIdx.y] = sky[i];
-        i += nsrc; fQ[threadIdx.y] = sky[i];
+        i += nsrc; fQ[threadIdx.y] = sky[i];        
     }
 
-    if(threadIdx.z == 0)
+   if(threadIdx.z == 0)
     {
         i = CHAN; wave[threadIdx.z] = wavelength[i];
     }
@@ -107,9 +97,9 @@ void rime_jones_EBK(
     // double n = phase;
 
     // u*l + v*m + w*n, in the wrong order :)
-    phase *= w[threadIdx.x];                  // w*n
-    phase += v[threadIdx.x]*m[threadIdx.y];   // v*m
-    phase += u[threadIdx.x]*l[threadIdx.y];   // u*l
+    i = BL + 2*nbl; phase *= UVW[i];            // w*n
+    i -= nbl; phase += UVW[i]*m[threadIdx.y];   // v*m
+    i -= nbl; phase += UVW[i]*l[threadIdx.y];   // u*l
 
     // Multiply by 2*pi/wave[threadIdx.z]
     phase *= (2. * CUDART_PI);
@@ -120,20 +110,20 @@ void rime_jones_EBK(
     sincos(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    phase = pow(REFWAVE/wave[threadIdx.z], a[threadIdx.y]);
+    i = SRC+nsrc*2; phase = pow(REFWAVE/wave[threadIdx.z], LMA[i]);
     real *= phase; imag *= phase;
 
     double E_p = (l[threadIdx.x]+ld_p[threadIdx.x])*(l[threadIdx.x]*ld_p[threadIdx.x]);
     E_p += (m[threadIdx.x]+md_p[threadIdx.x])*(m[threadIdx.x]*md_p[threadIdx.x]);
     E_p = sqrt(E_p);
-    E_p = cos(1e9*wave[threadIdx.z]*E_p);
+    E_p = cos(COS3_CONST*wave[threadIdx.z]*E_p);
     E_p = E_p*E_p*E_p;
     real *= E_p; imag *= E_p;
 
     double E_q = (l[threadIdx.x]+ld_q[threadIdx.x])*(l[threadIdx.x]*ld_q[threadIdx.x]);
     E_q += (m[threadIdx.x]+md_q[threadIdx.x])*(m[threadIdx.x]*md_q[threadIdx.x]);
     E_q = sqrt(E_q);
-    E_q = cos(1e9*wave[threadIdx.z]*E_q);
+    E_q = cos(COS3_CONST*wave[threadIdx.z]*E_q);
     E_q = E_q*E_q*E_q;
     real *= E_q; imag *= E_q;
 
