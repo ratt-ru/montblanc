@@ -1,3 +1,3 @@
-[submodule "pycuda_pipeline/moderngpu"]
-	path = pycuda_pipeline/moderngpu
-	url = git://github.com/NVlabs/moderngpu.git
+[submodule "moderngpu"]
+	path = moderngpu
+	url = https://github.com/NVlabs/moderngpu
