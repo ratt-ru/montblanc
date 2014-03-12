@@ -8,6 +8,7 @@ from pipedrimes import RimeShared
 from RimeJonesBK import RimeJonesBK
 from RimeJonesBKFloat import RimeJonesBKFloat
 from RimeJonesEBK import RimeJonesEBK
+from RimeJonesEBKFloat import RimeJonesEBKFloat
 from RimeJonesReduce import RimeJonesReduce
 from RimeJonesMultiply import RimeJonesMultiply
 
@@ -154,6 +155,19 @@ class TestRimes(unittest.TestCase):
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
 		    **rime_ebk.get_kernel_params(sd))
+
+	def test_EBK_float(self):
+		sd = RimeShared(10,200,32,10, np.float32, np.complex64)
+		sd.configure()
+		rime_ebk = RimeJonesEBKFloat()
+
+		rime_ebk.initialise(sd)
+
+		rime_ebk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		    sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
+		    np.int32(sd.nsrc), np.int32(sd.nbl),
+		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
+		    **rime_ebk.get_kernel_params(sd))		
 
 	@unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
 	def test_multiply(self):
