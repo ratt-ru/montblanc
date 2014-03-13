@@ -66,10 +66,10 @@ void rime_jones_EBK_float(
 
     if(threadIdx.y == 0)
     {
-        i = ANT1; ld_p[threadIdx.x] = point_error[i];
-        i += na;  md_p[threadIdx.x] = point_error[i];
-        i = ANT2; ld_q[threadIdx.x] = point_error[i];
-        i += na;  md_q[threadIdx.x] = point_error[i];
+        i = ANT1;      ld_p[threadIdx.x] = point_error[i];
+        i += na*ntime; md_p[threadIdx.x] = point_error[i];
+        i = ANT2;      ld_q[threadIdx.x] = point_error[i];
+        i += na*ntime; md_q[threadIdx.x] = point_error[i];
     }
 
     if(threadIdx.x == 0)
