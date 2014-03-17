@@ -4,13 +4,13 @@ import numpy as np
 import time
 import sys
 
-from pipedrimes import RimeShared
 from RimeJonesBK import RimeJonesBK
 from RimeJonesBKFloat import RimeJonesBKFloat
 from RimeJonesEBK import RimeJonesEBK
 from RimeJonesEBKFloat import RimeJonesEBKFloat
 from RimeJonesReduce import RimeJonesReduce
 from RimeJonesMultiply import RimeJonesMultiply
+from TestRimeSharedData import TestRimeSharedData
 
 import pycuda.autoinit
 import pycuda.driver as cuda
@@ -30,7 +30,7 @@ class TestRimes(unittest.TestCase):
 		pass
 
 	def test_BK_float(self):
-		sd = RimeShared(10,200,32,10, np.float32, np.complex64)
+		sd = TestRimeSharedData(10,200,32,10, np.float32)
 		sd.configure()
 		rime_bk = RimeJonesBKFloat()
 
@@ -87,7 +87,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_cpu, jones))
 
 	def test_BK(self):
-		sd = RimeShared(10,200,32,10)
+		sd = TestRimeSharedData(10,200,32,10)
 		sd.configure()
 		rime_bk = RimeJonesBK()
 
@@ -144,7 +144,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_cpu, jones))
 
 	def test_EBK(self):
-		sd = RimeShared(10,200,32,10)
+		sd = TestRimeSharedData(10,200,32,10)
 		sd.configure()
 		rime_ebk = RimeJonesEBK()
 
@@ -157,11 +157,44 @@ class TestRimes(unittest.TestCase):
 		    **rime_ebk.get_kernel_params(sd))
 
 	def test_EBK_float(self):
-		sd = RimeShared(10,200,32,10, np.float32, np.complex64)
+		sd = TestRimeSharedData(10,200,32,10, np.float32)
 		sd.configure()
 		rime_ebk = RimeJonesEBKFloat()
+		rime_bk = RimeJonesBKFloat()
 
 		rime_ebk.initialise(sd)
+		rime_bk.initialise(sd)
+
+		# Invoke the BK kernel
+		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		    sd.wavelength_gpu,  sd.jones_gpu,
+		    np.int32(sd.nsrc), np.int32(sd.nbl),
+		    np.int32(sd.nchan), np.int32(sd.ntime),
+			**rime_bk.get_kernel_params(sd))
+
+		jones_cpu = sd.jones_gpu.get()
+
+		for bl in range(sd.nbl):
+			ANT1 = int(np.floor((np.sqrt(1+8*bl)-1)/2))
+			ANT2 = ANT1*(ANT1-1)/2
+			ANT1 += 1;
+
+		"""
+		for bl in range(sd.nbl):
+			ANT1 = int(np.floor((np.sqrt(1+8*bl)-1)/2))
+			ANT2 = ANT1*(ANT1-1)/2
+			ANT1 += 1;
+
+			for chan in range(sd.nchan):
+				wave = sd.wavelength[chan]
+				for time in range(sd.ntime):
+					for src in range(sd.nsrc):
+						l, m = sd.lma[0][src]
+
+						jones[4:,bl,chan,time,src]
+		"""
+
+		
 
 		rime_ebk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
 		    sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
@@ -172,7 +205,7 @@ class TestRimes(unittest.TestCase):
 	@unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
 	def test_multiply(self):
 		# Make the problem size smaller, due to slow numpy code
-		sd = RimeShared(5, 10, 4, 2)
+		sd = TestRimeSharedData(5, 10, 4, 2)
 		sd.configure()
 		rime_multiply = RimeJonesMultiply()
 
@@ -226,7 +259,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
 
 	def test_reduce(self):
-		sd = RimeShared(10,200,32,10)
+		sd = TestRimeSharedData(10,200,32,10)
 		sd.configure()
 		rime_reduce = RimeJonesReduce()
 
@@ -363,14 +396,14 @@ class TestRimes(unittest.TestCase):
 
 
 	def test_predict_double(self):
-		sd = RimeShared(10,10000,32,1)
+		sd = TestRimeSharedData(10,10000,32,1)
 		sd.configure()
 		log = logging.getLogger('TestRimes.test_predict_double')
 
 		self.do_predict_test(sd, log)
 
 	def test_predict_float(self):
-		sd = RimeShared(10,10000,32,1, np.float32, np.complex64)
+		sd = TestRimeSharedData(10,10000,32,1, np.float32)
 		sd.configure()
 		log = logging.getLogger('TestRimes.test_predict_float')
 

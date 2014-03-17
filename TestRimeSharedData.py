@@ -19,11 +19,11 @@ class TestRimeSharedData(SharedData):
     ntime = Parameter(10)
 
     def __init__(self, na=7, nsrc=10, nchan=32, ntime=10,
-            float_dtype=np.float64, complex_dtype=np.complex128):
+            float_dtype=np.float64):
         super(TestRimeSharedData, self).__init__()
-        self.set_params(na,nsrc,nchan,ntime,float_dtype, complex_dtype)
+        self.set_params(na,nsrc,nchan,ntime,float_dtype)
 
-    def set_params(self, na, nsrc, nchan, ntime, float_dtype, complex_dtype):
+    def set_params(self, na, nsrc, nchan, ntime, float_dtype):
         # Antenna, Baseline, Channel, Source and Timestep counts
         self.na = na
         self.nbl = (self.na*(self.na-1))/2
@@ -31,8 +31,14 @@ class TestRimeSharedData(SharedData):
         self.nsrc = nsrc
         self.ntime = ntime
 
+        if float_dtype == np.float32:
+            self.ct = np.complex64
+        elif float_dtype == np.float64:
+            self.ct = np.complex128
+        else:
+            raise TypeError, 'Must specify either np.float32 or np.float64 for float_dtype'
+
         self.ft = float_dtype
-        self.ct = complex_dtype
 
     def configure(self):
         import pycuda.driver as cuda
@@ -41,8 +47,10 @@ class TestRimeSharedData(SharedData):
         self.stream = [cuda.Stream(), cuda.Stream()]
 
         self.event_names = [TestRimeSharedData.INIT, \
-            TestRimeSharedData.PRE, TestRimeSharedData.EXEC, \
-            TestRimeSharedData.POST, TestRimeSharedData.SHUTDOWN]
+            TestRimeSharedData.PRE, \
+            TestRimeSharedData.EXEC, \
+            TestRimeSharedData.POST, \
+            TestRimeSharedData.SHUTDOWN]
         self.nevents = len(self.event_names)
 
         # Baseline coordinates in the u,v,w (frequency) domain
