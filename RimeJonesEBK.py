@@ -207,7 +207,7 @@ class RimeJonesEBK(Node):
         params = self.get_kernel_params(sd)
 
         self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
-            sd.yavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
             np.int32(sd.nsrc), np.int32(sd.nbl), np.int32(sd.na), **params)
 
     def post_execution(self, shared_data):

@@ -7,6 +7,7 @@ import pycuda.autoinit
 
 from node import *
 from RimeJonesBK import *
+from RimeJonesEBK import *
 from RimeJonesMultiply import *
 from RimeJonesReduce import *
 from TestRimeSharedData import TestRimeSharedData
@@ -153,7 +154,7 @@ def main(argv=None):
     # Set up various thing that aren't possible in PyCUDA
     crimes.setup_cuda()
 
-    sp = PipedRimes([RimeJonesBK(), RimeJonesReduce()])
+    sp = PipedRimes([RimeJonesEBK(), RimeJonesReduce()])
 
     shared_data = TestRimeSharedData(7,200,32,10)
     shared_data.configure()
