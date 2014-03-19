@@ -23,127 +23,127 @@ void rime_jones_BK(
     int nsrc, int nbl,
     int nchan, int ntime)
 {
-    // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
+    // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
 
     #define REFWAVE 1e6
 
     // Baseline, Source, Channel and Time indices
-    int BL = blockIdx.x*blockDim.x + threadIdx.x;
-    int SRC = blockIdx.y*blockDim.y + threadIdx.y;
-    int CHAN = (blockIdx.z*blockDim.z + threadIdx.z) / ntime;
-    int TIME = (blockIdx.z*blockDim.z + threadIdx.z) % ntime;
+    int SRC = blockIdx.x*blockDim.x + threadIdx.x;
+    int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / ntime;
+    int TIME = (blockIdx.y*blockDim.y + threadIdx.y) % ntime;
+    int BL = blockIdx.z*blockDim.z + threadIdx.z;
 
     if(BL >= nbl || SRC >= nsrc || CHAN >= nchan || TIME >= ntime)
         return;
 
     /* Cache input and output data from global memory. */
     double * u = smem_d;
-    double * v = &u[blockDim.x];
-    double * w = &v[blockDim.x];
-    double * l = &w[blockDim.x];
-    double * m = &l[blockDim.y];
-    double * a = &m[blockDim.y];
-    double * fI = &a[blockDim.y];
-    double * fV = &fI[blockDim.y];
-    double * fU = &fV[blockDim.y];
-    double * fQ = &fU[blockDim.y];
-    double * wave = &fQ[blockDim.y];
+    double * v = &u[blockDim.z];
+    double * w = &v[blockDim.z];
+    double * l = &w[blockDim.z];
+    double * m = &l[blockDim.x];
+    double * a = &m[blockDim.x];
+    double * fI = &a[blockDim.x];
+    double * fV = &fI[blockDim.x];
+    double * fU = &fV[blockDim.x];
+    double * fQ = &fU[blockDim.x];
+    double * wave = &fQ[blockDim.x];
 
     // Index
     int i;
 
-    if(threadIdx.y == 0)
-    {
-        // UVW is a 3 x nbl x ntime matrix
-        i = BL*ntime + TIME; u[threadIdx.x] = UVW[i];
-        i += nbl*ntime;      v[threadIdx.x] = UVW[i];
-        i += nbl*ntime;      w[threadIdx.x] = UVW[i];
-    }
-
     if(threadIdx.x == 0)
     {
-		// LMA and SKY are 3 x nsrc and 4 x nsrc matrices
-        i = SRC;   l[threadIdx.y] = LMA[i];
-        i += nsrc; m[threadIdx.y] = LMA[i];
-        i += nsrc; a[threadIdx.y] = LMA[i];
-
-        i = SRC;   fI[threadIdx.y] = sky[i];
-        i += nsrc; fU[threadIdx.y] = sky[i];
-        i += nsrc; fV[threadIdx.y] = sky[i];
-        i += nsrc; fQ[threadIdx.y] = sky[i];
+        // UVW is a 3 x nbl x ntime matrix
+        i = BL*ntime + TIME; u[threadIdx.z] = UVW[i];
+        i += nbl*ntime;      v[threadIdx.z] = UVW[i];
+        i += nbl*ntime;      w[threadIdx.z] = UVW[i];
     }
 
     if(threadIdx.z == 0)
     {
-        i = CHAN; wave[threadIdx.z] = wavelength[i];
+		// LMA and SKY are 3 x nsrc and 4 x nsrc matrices
+        i = SRC;   l[threadIdx.x] = LMA[i];
+        i += nsrc; m[threadIdx.x] = LMA[i];
+        i += nsrc; a[threadIdx.x] = LMA[i];
+
+        i = SRC;   fI[threadIdx.x] = sky[i];
+        i += nsrc; fU[threadIdx.x] = sky[i];
+        i += nsrc; fV[threadIdx.x] = sky[i];
+        i += nsrc; fQ[threadIdx.x] = sky[i];
+    }
+
+    if(threadIdx.y == 0)
+    {
+        i = CHAN; wave[threadIdx.y] = wavelength[i];
     }
 
     __syncthreads();
 
     // Calculate the n term first
     // n = sqrt(1.0 - l*l - m*m) - 1.0
-    double phase = 1.0 - l[threadIdx.y]*l[threadIdx.y];
-    phase -= m[threadIdx.y]*m[threadIdx.y];
+    double phase = 1.0 - l[threadIdx.x]*l[threadIdx.x];
+    phase -= m[threadIdx.x]*m[threadIdx.x];
     phase = sqrt(phase) - 1.0;
     // TODO: remove this superfluous variable
     // It only exists for debugging purposes
     // double n = phase;
 
     // u*l + v*m + w*n, in the wrong order :)
-    phase *= w[threadIdx.x];                  // w*n
-    phase += v[threadIdx.x]*m[threadIdx.y];   // v*m
-    phase += u[threadIdx.x]*l[threadIdx.y];   // u*l
+    phase *= w[threadIdx.z];                  // w*n
+    phase += v[threadIdx.z]*m[threadIdx.x];   // v*m
+    phase += u[threadIdx.z]*l[threadIdx.x];   // u*l
 
-    // Multiply by 2*pi/wave[threadIdx.z]
+    // Multiply by 2*pi/wave[threadIdx.y]
     phase *= (2. * CUDART_PI);
-    phase /= wave[threadIdx.z];
+    phase /= wave[threadIdx.y];
 
     // Calculate the complex exponential from the phase
     double real, imag;
     sincos(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    phase = pow(REFWAVE/wave[threadIdx.z], a[threadIdx.y]);
+    phase = pow(REFWAVE/wave[threadIdx.y], a[threadIdx.x]);
     real *= phase; imag *= phase;
 
 #if 0
     // Index into the jones array
     i = (BL*nsrc + SRC)*4;
     // Coalesced store of the computation
-    jones[i+0]=make_double2(l[threadIdx.y],u[threadIdx.x]);
-    jones[i+1]=make_double2(m[threadIdx.y],v[threadIdx.x]);
-    jones[i+2]=make_double2(n,w[threadIdx.x]);
+    jones[i+0]=make_double2(l[threadIdx.x],u[threadIdx.z]);
+    jones[i+1]=make_double2(m[threadIdx.x],v[threadIdx.z]);
+    jones[i+2]=make_double2(n,w[threadIdx.z]);
     jones[i+3]=result;
 #endif
 
 
 #if 1
     // Index into the jones matrices
-    i = (BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc + SRC);
+    i = BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc + SRC;
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = fI+fQ, b=0.0, c=real, d = imag
     jones[i]=make_double2(
-        (fI[threadIdx.y]+fQ[threadIdx.y])*real - 0.0*imag,
-        (fI[threadIdx.y]+fQ[threadIdx.y])*imag + 0.0*real);
+        (fI[threadIdx.x]+fQ[threadIdx.x])*real - 0.0*imag,
+        (fI[threadIdx.x]+fQ[threadIdx.x])*imag + 0.0*real);
 
     // a=fU, b=fV, c=real, d = imag 
     i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
-        fU[threadIdx.y]*real - fV[threadIdx.y]*imag,
-        fU[threadIdx.y]*imag + fV[threadIdx.y]*real);
+        fU[threadIdx.x]*real - fV[threadIdx.x]*imag,
+        fU[threadIdx.x]*imag + fV[threadIdx.x]*real);
 
     // a=fU, b=-fV, c=real, d = imag 
     i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
-        fU[threadIdx.y]*real - -fV[threadIdx.y]*imag,
-        fU[threadIdx.y]*imag + -fV[threadIdx.y]*real);
+        fU[threadIdx.x]*real - -fV[threadIdx.x]*imag,
+        fU[threadIdx.x]*imag + -fV[threadIdx.x]*real);
 
     // a=fI-fQ, b=0.0, c=real, d = imag 
     i += nbl*nsrc*nchan*ntime;
     jones[i]=make_double2(
-        (fI[threadIdx.y]-fQ[threadIdx.y])*real - 0.0*imag,
-        (fI[threadIdx.y]-fQ[threadIdx.y])*imag + 0.0*real);
+        (fI[threadIdx.x]-fQ[threadIdx.x])*real - 0.0*imag,
+        (fI[threadIdx.x]-fQ[threadIdx.x])*imag + 0.0*real);
 #endif
 
     #undef REFWAVE
@@ -174,8 +174,8 @@ class RimeJonesBK(Node):
         time_chan_blocks = sd.ntime*sd.nchan
 
         return {
-            'block' : (baselines_per_block,srcs_per_block,1), \
-            'grid'  : (baseline_blocks,src_blocks,time_chan_blocks), \
+            'block' : (srcs_per_block,1,baselines_per_block), \
+            'grid'  : (src_blocks,time_chan_blocks,baseline_blocks), \
             'shared' : (3*baselines_per_block + \
                         7*srcs_per_block + \
                         1*time_chans_per_block)*\

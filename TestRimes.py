@@ -105,9 +105,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.shutdown(sd)
 
 		# Repeat the wavelengths along the timesteps for now
-		# dim nchan x ntime. This is a 1D array for now
-		# as it makes broadcasting easier below. We reshape
-		# it into nchan x ntime just before the final comparison
+		# dim nchan x ntime. 
 		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
 
 		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
@@ -134,7 +132,7 @@ class TestRimes(unittest.TestCase):
 			sd.sky[0]-sd.sky[3] + 0j])		# fI-fQ + 0j
 
 		# This works due to broadcast! Multiplies along
-		# srcs axis of sky. Dim 4 x nbl x nsrcs x nchan x ntime.
+		# srcs axis of sky. Dim 4 x nbl x nchan x ntime x nsrcs.
 		# Also reshape the combined nchan and ntime axis into
 		# two separate axes
 		jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
