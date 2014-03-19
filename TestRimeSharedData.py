@@ -66,6 +66,7 @@ class TestRimeSharedData(SharedData):
             dtype=self.ft)
         """
 
+        # UVW coordinates
         self.uvw = np.array([ \
             np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*3., \
             np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*2., \
