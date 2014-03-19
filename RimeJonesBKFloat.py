@@ -54,13 +54,15 @@ void rime_jones_BK_float(
 
     if(threadIdx.y == 0)
     {
-        i = BL;   u[threadIdx.x] = UVW[i];
-        i += nbl; v[threadIdx.x] = UVW[i];
-        i += nbl; w[threadIdx.x] = UVW[i];
+        // UVW is a 3 x nbl x ntime matrix
+        i = BL*ntime + TIME; u[threadIdx.x] = UVW[i];
+        i += nbl*ntime;      v[threadIdx.x] = UVW[i];
+        i += nbl*ntime;      w[threadIdx.x] = UVW[i];
     }
 
     if(threadIdx.x == 0)
     {
+		// LMA and SKY are 3 x nsrc and 4 x nsrc matrices
         i = SRC;   l[threadIdx.y] = LMA[i];
         i += nsrc; m[threadIdx.y] = LMA[i];
         i += nsrc; a[threadIdx.y] = LMA[i];

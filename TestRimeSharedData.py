@@ -44,6 +44,10 @@ class TestRimeSharedData(SharedData):
         import pycuda.driver as cuda
         import pycuda.gpuarray as gpuarray
 
+        na, nbl = self.na, self.nbl
+        nchan, ntime = self.nchan, self.ntime
+        nsrc, ft, ct = self.nsrc, self.ft, self.ct
+
         self.stream = [cuda.Stream(), cuda.Stream()]
 
         self.event_names = [TestRimeSharedData.INIT, \
@@ -61,33 +65,32 @@ class TestRimeSharedData(SharedData):
             np.ones(self.nbl, dtype=self.ft)*1.], \
             dtype=self.ft)
         """
+
         self.uvw = np.array([ \
-            np.arange(1,self.nbl+1).astype(self.ft)*3., \
-            np.arange(1,self.nbl+1).astype(self.ft)*2., \
-            np.arange(1,self.nbl+1).astype(self.ft)*1.], \
-            dtype=self.ft)
+            np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*3., \
+            np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*2., \
+            np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*1.], \
+            dtype=ft)
 
         # Point source coordinates in the l,m,n (sky image) domain
-        l=self.ft(np.random.random(self.nsrc)*0.1)
-        m=self.ft(np.random.random(self.nsrc)*0.1)
-        alpha=self.ft(np.random.random(self.nsrc)*0.1)
-        self.lma=np.array([l,m,alpha], \
-            dtype=self.ft)
+        l=ft(np.random.random(nsrc)*0.1)
+        m=ft(np.random.random(nsrc)*0.1)
+        alpha=ft(np.random.random(nsrc)*0.1)
+        self.lma=np.array([l,m,alpha], dtype=ft)
 
         # Brightness matrix for the point sources
-        fI=self.ft(np.ones((self.nsrc,)))
-        fV=self.ft(np.random.random(self.nsrc)*0.5)
-        fU=self.ft(np.random.random(self.nsrc)*0.5)
-        fQ=self.ft(np.random.random(self.nsrc)*0.5)
-        self.sky = np.array([fI,fV,fU,fQ], \
-            dtype=self.ft)
+        fI=ft(np.ones((nsrc,)))
+        fV=ft(np.random.random(nsrc)*0.5)
+        fU=ft(np.random.random(nsrc)*0.5)
+        fQ=ft(np.random.random(nsrc)*0.5)
+        self.sky = np.array([fI,fV,fU,fQ], dtype=ft)
 
         # Generate nchan frequencies/wavelengths
-        self.wavelength = 3e8/self.ft(np.linspace(1e6,2e6,self.nchan))
+        self.wavelength = 3e8/ft(np.linspace(1e6,2e6,nchan))
 
         # Generate the antenna pointing errors
-        self.point_errors = np.random.random(2*self.na*self.ntime)\
-            .astype(self.ft).reshape((2, self.na, self.ntime))
+        self.point_errors = np.random.random(2*na*ntime)\
+            .astype(ft).reshape((2, na, ntime))
 
         # Copy the uvw, lma and sky data to the gpu
         self.uvw_gpu = gpuarray.to_gpu(self.uvw)
@@ -97,8 +100,8 @@ class TestRimeSharedData(SharedData):
         self.point_errors_gpu = gpuarray.to_gpu(self.point_errors)
 
         # Output jones matrix
-        self.jones_shape = (4,self.nbl,self.nchan,self.ntime,self.nsrc)
-        self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=self.ct)
+        self.jones_shape = (4,nbl,nchan,ntime,nsrc)
+        self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=ct)
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)
@@ -107,4 +110,4 @@ class TestRimeSharedData(SharedData):
         self.keys_gpu = gpuarray.to_gpu(self.keys)
 
         # Output sum matrix
-        self.sums_gpu = gpuarray.empty(self.keys.shape, dtype=self.ct)
+        self.sums_gpu = gpuarray.empty(self.keys.shape, dtype=ct)

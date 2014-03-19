@@ -96,10 +96,11 @@ void rime_jones_EBK_float(
     // It only exists for debugging purposes
     // float n = phase;
 
+    // UVW is 3 x nbl x ntime matrix
     // u*l + v*m + w*n, in the wrong order :)
-    i = BL + 2*nbl; phase *= UVW[i];            // w*n
-    i -= nbl; phase += UVW[i]*m[threadIdx.y];   // v*m
-    i -= nbl; phase += UVW[i]*l[threadIdx.y];   // u*l
+    i = BL*ntime + TIME + 2*nbl*ntime;         phase *= UVW[i]; // w*n
+    i -= nbl*ntime;             phase += UVW[i]*m[threadIdx.y]; // v*m
+    i -= nbl*ntime;             phase += UVW[i]*l[threadIdx.y]; // u*l
 
     // Multiply by 2*pi/wave[threadIdx.z]
     phase *= (2. * CUDART_PI);

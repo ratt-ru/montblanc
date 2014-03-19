@@ -49,20 +49,21 @@ class TestRimes(unittest.TestCase):
 		# dim nchan x ntime. This is a 1D array for now
 		# as it makes broadcasting easier below. We reshape
 		# it into nchan x ntime just before the final comparison
-		w = np.repeat(sd.wavelength,sd.ntime)
+		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
 
 		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
 		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
 
-		# u*l+v*m+w*n. Outer product creates array of dim nbl x nsrcs
-		phase = np.outer(sd.uvw[0], sd.lma[0]) + \
+		# u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
+		phase = (np.outer(sd.uvw[0], sd.lma[0]) + \
 			np.outer(sd.uvw[1], sd.lma[1]) + \
-			np.outer(sd.uvw[2],n)
+			np.outer(sd.uvw[2],n))\
+				.reshape(sd.nbl, sd.ntime, sd.nsrc)
 
 		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
-		phase = (2*np.pi*1j*phase)[:,np.newaxis,:]/w[:,np.newaxis]
+		phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
 		# Dim nchan x ntime x nsrcs 
-		power = np.power(1e6/w[:,np.newaxis], sd.lma[2])
+		power = np.power(1e6/w[:,:,np.newaxis], sd.lma[2])
 		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
 		phase_term = power*np.exp(phase)
 
@@ -77,7 +78,8 @@ class TestRimes(unittest.TestCase):
 		# srcs axis of sky. Dim 4 x nbl x nsrcs x nchan x ntime.
 		# Also reshape the combined nchan and ntime axis into
 		# two separate axes
-		jones_cpu = (phase_term*sky[:,np.newaxis, np.newaxis,:])\
+		jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
+			sky[:,np.newaxis, np.newaxis, np.newaxis,:])\
 			.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
 
 		# Get the jones matrices calculated by the GPU
@@ -106,20 +108,21 @@ class TestRimes(unittest.TestCase):
 		# dim nchan x ntime. This is a 1D array for now
 		# as it makes broadcasting easier below. We reshape
 		# it into nchan x ntime just before the final comparison
-		w = np.repeat(sd.wavelength,sd.ntime)
+		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
 
 		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
 		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
 
-		# u*l+v*m+w*n. Outer product creates array of dim nbl x nsrcs
-		phase = np.outer(sd.uvw[0], sd.lma[0]) + \
+		# u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
+		phase = (np.outer(sd.uvw[0], sd.lma[0]) + \
 			np.outer(sd.uvw[1], sd.lma[1]) + \
-			np.outer(sd.uvw[2],n)
+			np.outer(sd.uvw[2],n))\
+				.reshape(sd.nbl, sd.ntime, sd.nsrc)
 
 		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
-		phase = (2*np.pi*1j*phase)[:,np.newaxis,:]/w[:,np.newaxis]
+		phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
 		# Dim nchan x ntime x nsrcs 
-		power = np.power(1e6/w[:,np.newaxis], sd.lma[2])
+		power = np.power(1e6/w[:,:,np.newaxis], sd.lma[2])
 		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
 		phase_term = power*np.exp(phase)
 
@@ -134,7 +137,8 @@ class TestRimes(unittest.TestCase):
 		# srcs axis of sky. Dim 4 x nbl x nsrcs x nchan x ntime.
 		# Also reshape the combined nchan and ntime axis into
 		# two separate axes
-		jones_cpu = (phase_term*sky[:,np.newaxis, np.newaxis,:])\
+		jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
+			sky[:,np.newaxis, np.newaxis, np.newaxis,:])\
 			.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
 
 		# Get the jones matrices calculated by the GPU
