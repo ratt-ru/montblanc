@@ -147,14 +147,28 @@ class TestRimes(unittest.TestCase):
 		sd = TestRimeSharedData(10,200,32,10)
 		sd.configure()
 		rime_ebk = RimeJonesEBK()
+		rime_bk = RimeJonesBK()
 
 		rime_ebk.initialise(sd)
+		rime_bk.initialise(sd)
+
+		# Invoke the BK kernel
+		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		    sd.wavelength_gpu,  sd.jones_gpu,
+		    np.int32(sd.nsrc), np.int32(sd.nbl),
+		    np.int32(sd.nchan), np.int32(sd.ntime),
+			**rime_bk.get_kernel_params(sd))
+
+		jones_cpu = sd.jones_gpu.get()
 
 		rime_ebk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
 		    sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
 		    **rime_ebk.get_kernel_params(sd))
+
+		rime_ebk.shutdown(sd)
+		rime_bk.shutdown(sd)
 
 	def test_EBK_float(self):
 		sd = TestRimeSharedData(10,200,32,10, np.float32)
@@ -201,6 +215,9 @@ class TestRimes(unittest.TestCase):
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
 		    **rime_ebk.get_kernel_params(sd))		
+
+		rime_ebk.shutdown(sd)
+		rime_bk.shutdown(sd)
 
 	@unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
 	def test_multiply(self):
