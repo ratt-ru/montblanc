@@ -26,7 +26,7 @@ class TestRimeSharedData(SharedData):
     def set_params(self, na, nsrc, nchan, ntime, float_dtype):
         # Antenna, Baseline, Channel, Source and Timestep counts
         self.na = na
-        self.nbl = (self.na*(self.na-1))/2
+        self.nbl = (self.na**2 + self.na)/2
         self.nchan = nchan
         self.nsrc = nsrc
         self.ntime = ntime
