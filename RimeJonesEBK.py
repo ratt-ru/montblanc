@@ -35,7 +35,7 @@ void rime_jones_EBK(
     int BL = blockIdx.z*blockDim.z + threadIdx.z;
     // Calculates the antenna pairs from the baseline!
     int ANT1 = int(floor((sqrtf(1+8*BL)-1)/2));
-    int ANT2 = ANT1*(ANT1-1)/2;
+    int ANT2 = BL - (ANT1*ANT1+ANT1)/2;
     ANT1 += 1;
 
     if(BL >= nbl || SRC >= nsrc || CHAN >= nchan || TIME >= ntime)
@@ -174,10 +174,11 @@ void rime_jones_EBK(
 class RimeJonesEBK(Node):
     def __init__(self):
         super(RimeJonesEBK, self).__init__()
-    def initialise(self, shared_data):
         self.mod = SourceModule(DOUBLE_KERNEL, options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_EBK')
 
+    def initialise(self, shared_data):
+        pass
     def shutdown(self, shared_data):
         pass
     def pre_execution(self, shared_data):
