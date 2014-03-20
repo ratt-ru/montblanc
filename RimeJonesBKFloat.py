@@ -153,10 +153,10 @@ void rime_jones_BK_float(
 class RimeJonesBKFloat(Node):
     def __init__(self):
         super(RimeJonesBKFloat, self).__init__()
-    def initialise(self, shared_data):
         self.mod = SourceModule(FLOAT_KERNEL, options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_BK_float')
-
+    def initialise(self, shared_data):
+        pass
     def shutdown(self, shared_data):
         pass
     def pre_execution(self, shared_data):
