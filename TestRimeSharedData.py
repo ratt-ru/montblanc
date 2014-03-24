@@ -10,7 +10,7 @@ class TestRimeSharedData(SharedData):
 
     uvw_gpu = ArrayData()
     lma_gpu = ArrayData()
-    sky_gpu = ArrayData()
+    brightness_gpu = ArrayData()
 
     na = Parameter(7)
     nbl = Parameter((7*6)/2)
@@ -73,7 +73,7 @@ class TestRimeSharedData(SharedData):
             np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*1.], \
             dtype=ft)
 
-        # Point source coordinates in the l,m,n (sky image) domain
+        # Point source coordinates in the l,m,n (brightness image) domain
         l=ft(np.random.random(nsrc)*0.1)
         m=ft(np.random.random(nsrc)*0.1)
         alpha=ft(np.random.random(nsrc)*0.1)
@@ -84,7 +84,7 @@ class TestRimeSharedData(SharedData):
         fV=ft(np.random.random(nsrc)*0.5)
         fU=ft(np.random.random(nsrc)*0.5)
         fQ=ft(np.random.random(nsrc)*0.5)
-        self.sky = np.array([fI,fV,fU,fQ], dtype=ft)
+        self.brightness = np.array([fI,fV,fU,fQ], dtype=ft)
 
         # Generate nchan frequencies/wavelengths
         self.wavelength = 3e8/ft(np.linspace(1e6,2e6,nchan))
@@ -93,10 +93,10 @@ class TestRimeSharedData(SharedData):
         self.point_errors = np.random.random(2*na*ntime)\
             .astype(ft).reshape((2, na, ntime))
 
-        # Copy the uvw, lma and sky data to the gpu
+        # Copy the uvw, lma and brightness data to the gpu
         self.uvw_gpu = gpuarray.to_gpu(self.uvw)
         self.lma_gpu = gpuarray.to_gpu(self.lma)
-        self.sky_gpu = gpuarray.to_gpu(self.sky)
+        self.brightness_gpu = gpuarray.to_gpu(self.brightness)
         self.wavelength_gpu = gpuarray.to_gpu(self.wavelength)
         self.point_errors_gpu = gpuarray.to_gpu(self.point_errors)
 

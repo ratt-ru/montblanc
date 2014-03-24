@@ -36,7 +36,7 @@ class TestRimes(unittest.TestCase):
 
 		rime_bk.initialise(sd)
 
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),
@@ -66,18 +66,18 @@ class TestRimes(unittest.TestCase):
 		phase_term = power*np.exp(phase)
 
 		# Create the brightness matrix. Dim 4 x nsrcs
-		sky = sd.ct([
-			sd.sky[0]+sd.sky[3] + 0j,		# fI+fQ + 0j
-			sd.sky[1] + 1j*sd.sky[2],		# fU + fV*1j
-			sd.sky[1] - 1j*sd.sky[2],		# fU - fV*1j
-			sd.sky[0]-sd.sky[3] + 0j])		# fI-fQ + 0j
+		brightness = sd.ct([
+			sd.brightness[0]+sd.brightness[3] + 0j,		# fI+fQ + 0j
+			sd.brightness[1] + 1j*sd.brightness[2],		# fU + fV*1j
+			sd.brightness[1] - 1j*sd.brightness[2],		# fU - fV*1j
+			sd.brightness[0]-sd.brightness[3] + 0j])		# fI-fQ + 0j
 
 		# This works due to broadcast! Multiplies along
-		# srcs axis of sky. Dim 4 x nbl x nchan x ntime x nsrcs.
+		# srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
 		# Also reshape the combined nchan and ntime axis into
 		# two separate axes
 		jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
-			sky[:,np.newaxis, np.newaxis, np.newaxis,:])\
+			brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
 			.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
 
 		# Get the jones matrices calculated by the GPU
@@ -93,7 +93,7 @@ class TestRimes(unittest.TestCase):
 
 		rime_bk.initialise(sd)
 
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),
@@ -123,18 +123,18 @@ class TestRimes(unittest.TestCase):
 		phase_term = power*np.exp(phase)
 
 		# Create the brightness matrix. Dim 4 x nsrcs
-		sky = sd.ct([
-			sd.sky[0]+sd.sky[3] + 0j,		# fI+fQ + 0j
-			sd.sky[1] + 1j*sd.sky[2],		# fU + fV*1j
-			sd.sky[1] - 1j*sd.sky[2],		# fU - fV*1j
-			sd.sky[0]-sd.sky[3] + 0j])		# fI-fQ + 0j
+		brightness = sd.ct([
+			sd.brightness[0]+sd.brightness[3] + 0j,		# fI+fQ + 0j
+			sd.brightness[1] + 1j*sd.brightness[2],		# fU + fV*1j
+			sd.brightness[1] - 1j*sd.brightness[2],		# fU - fV*1j
+			sd.brightness[0]-sd.brightness[3] + 0j])		# fI-fQ + 0j
 
 		# This works due to broadcast! Multiplies along
-		# srcs axis of sky. Dim 4 x nbl x nchan x ntime x nsrcs.
+		# srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
 		# Also reshape the combined nchan and ntime axis into
 		# two separate axes
 		jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
-			sky[:,np.newaxis, np.newaxis, np.newaxis,:])\
+			brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
 			.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
 
 		# Get the jones matrices calculated by the GPU
@@ -153,7 +153,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.initialise(sd)
 
 		# Invoke the BK kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),
@@ -161,7 +161,7 @@ class TestRimes(unittest.TestCase):
 
 		jones_cpu = sd.jones_gpu.get()
 
-		rime_ebk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		rime_ebk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
@@ -180,7 +180,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.initialise(sd)
 
 		# Invoke the BK kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),
@@ -210,7 +210,7 @@ class TestRimes(unittest.TestCase):
 
 		
 
-		rime_ebk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		rime_ebk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
@@ -326,8 +326,8 @@ class TestRimes(unittest.TestCase):
 		# Frequencies in Hz
 		WaveL = sd.wavelength.astype(np.float64)
 		# Sky coordinates
-		lms=np.array([sd.lma[0], sd.lma[1], sd.sky[0], sd.lma[2], 
-			sd.sky[3], sd.sky[1], sd.sky[2]]).astype(np.float64).T.copy()
+		lms=np.array([sd.lma[0], sd.lma[1], sd.brightness[0], sd.lma[2], 
+			sd.brightness[3], sd.brightness[1], sd.brightness[2]]).astype(np.float64).T.copy()
 
 		# Antennas
 		A0=np.int64(np.random.rand(nbl)*na)
@@ -380,7 +380,7 @@ class TestRimes(unittest.TestCase):
 		kernels_start.record()
 
 		# Invoke the kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),

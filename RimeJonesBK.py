@@ -17,7 +17,7 @@ __global__
 void rime_jones_BK(
     double * UVW,
     double * LMA,
-    double * sky,
+    double * brightness,
     double * wavelength,
     double2 * jones,
     int nsrc, int nbl,
@@ -67,10 +67,10 @@ void rime_jones_BK(
         i += nsrc; m[threadIdx.x] = LMA[i];
         i += nsrc; a[threadIdx.x] = LMA[i];
 
-        i = SRC;   fI[threadIdx.x] = sky[i];
-        i += nsrc; fU[threadIdx.x] = sky[i];
-        i += nsrc; fV[threadIdx.x] = sky[i];
-        i += nsrc; fQ[threadIdx.x] = sky[i];
+        i = SRC;   fI[threadIdx.x] = brightness[i];
+        i += nsrc; fU[threadIdx.x] = brightness[i];
+        i += nsrc; fV[threadIdx.x] = brightness[i];
+        i += nsrc; fQ[threadIdx.x] = brightness[i];
     }
 
     if(threadIdx.y == 0)
@@ -186,7 +186,7 @@ class RimeJonesBK(Node):
         sd = shared_data
         params = self.get_kernel_params(sd)
 
-        self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+        self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
             sd.wavelength_gpu,  sd.jones_gpu,
             np.int32(sd.nsrc), np.int32(sd.nbl), **params)
 

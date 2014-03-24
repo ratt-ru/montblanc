@@ -17,7 +17,7 @@ __global__
 void rime_jones_EBK_float(
     float * UVW,
     float * LMA,
-    float * sky,
+    float * brightness,
     float * wavelength,
     float * point_error,
     float2 * jones,
@@ -74,10 +74,10 @@ void rime_jones_EBK_float(
 
     if(threadIdx.z == 0)
     {
-        i = SRC;   l[threadIdx.x] = LMA[i]; fI[threadIdx.x] = sky[i];
-        i += nsrc; m[threadIdx.x] = LMA[i]; fU[threadIdx.x] = sky[i];
-        i += nsrc; fV[threadIdx.x] = sky[i];
-        i += nsrc; fQ[threadIdx.x] = sky[i];        
+        i = SRC;   l[threadIdx.x] = LMA[i]; fI[threadIdx.x] = brightness[i];
+        i += nsrc; m[threadIdx.x] = LMA[i]; fU[threadIdx.x] = brightness[i];
+        i += nsrc; fV[threadIdx.x] = brightness[i];
+        i += nsrc; fQ[threadIdx.x] = brightness[i];        
     }
 
    if(threadIdx.y == 0)
@@ -208,7 +208,7 @@ class RimeJonesEBKFloat(Node):
         sd = shared_data
         params = self.get_kernel_params(sd)
 
-        self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.sky_gpu,
+        self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
             sd.yavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
             np.int32(sd.nsrc), np.int32(sd.nbl), np.int32(sd.na), **params)
 
