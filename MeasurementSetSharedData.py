@@ -159,7 +159,7 @@ if __name__ == '__main__':
 	fU=sd.ft(np.random.random(sd.nsrc)*0.5)
 	fV=sd.ft(np.random.random(sd.nsrc)*0.5)
 	alpha=sd.ft(np.random.random(sd.nsrc)*0.1)
-	brightness = np.array([fI,fQ,fV,fU,alpha], dtype=sd.ft)
+	brightness = np.array([fI,fQ,fU,fV,alpha], dtype=sd.ft)
 
 	# Generate random antenna pointing errors
 	point_errors = np.random.random(2*sd.na*sd.ntime)\
