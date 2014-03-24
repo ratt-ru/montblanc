@@ -81,10 +81,10 @@ class TestRimeSharedData(SharedData):
         # Brightness matrix for the point sources
         fI=ft(np.ones((nsrc,)))
         fQ=ft(np.random.random(nsrc)*0.5)
-        fV=ft(np.random.random(nsrc)*0.5)
         fU=ft(np.random.random(nsrc)*0.5)
+        fV=ft(np.random.random(nsrc)*0.5)
         alpha=ft(np.random.random(nsrc)*0.1)
-        self.brightness = np.array([fI,fQ,fV,fU,alpha], dtype=ft)
+        self.brightness = np.array([fI,fQ,fU,fV,alpha], dtype=ft)
 
         # Generate nchan frequencies/wavelengths
         self.wavelength = 3e8/ft(np.linspace(1e6,2e6,nchan))

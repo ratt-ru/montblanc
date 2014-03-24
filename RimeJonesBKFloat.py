@@ -62,7 +62,7 @@ void rime_jones_BK_float(
 
     if(threadIdx.z == 0)
     {
-		// LM and brightness are 3 x nsrc and 4 x nsrc matrices
+		// LM and brightness are 2 x nsrc and 5 x nsrc matrices
         i = SRC;   l[threadIdx.x] = LM[i];
         i += nsrc; m[threadIdx.x] = LM[i];
 

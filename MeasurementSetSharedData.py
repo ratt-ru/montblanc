@@ -81,8 +81,8 @@ class MeasurementSetSharedData(SharedData):
 		self.ntime = ntime
 		self.nsrc = nsrc
 
-		self.lm_shape = (3, nsrc)
-		self.brightness_shape = (4, nsrc)
+		self.lm_shape = (2, nsrc)
+		self.brightness_shape = (5, nsrc)
 		self.point_errors_shape = (2, na, ntime)
 
 		# Copy the uvw and wavelength data to the gpu
@@ -151,15 +151,15 @@ if __name__ == '__main__':
 	# Random point source coordinates in the l,m,n (brightness image) domain
 	l=sd.ft(np.random.random(sd.nsrc)*0.1)
 	m=sd.ft(np.random.random(sd.nsrc)*0.1)
-	alpha=sd.ft(np.random.random(sd.nsrc)*0.1)
-	lm=np.array([l,m,alpha], dtype=sd.ft)
+	lm=np.array([l,m], dtype=sd.ft)
 
 	# Random brightness matrix for the point sources
 	fI=sd.ft(np.ones((sd.nsrc,)))
-	fV=sd.ft(np.random.random(sd.nsrc)*0.5)
-	fU=sd.ft(np.random.random(sd.nsrc)*0.5)
 	fQ=sd.ft(np.random.random(sd.nsrc)*0.5)
-	brightness = np.array([fI,fV,fU,fQ], dtype=sd.ft)
+	fU=sd.ft(np.random.random(sd.nsrc)*0.5)
+	fV=sd.ft(np.random.random(sd.nsrc)*0.5)
+	alpha=sd.ft(np.random.random(sd.nsrc)*0.1)
+	brightness = np.array([fI,fQ,fV,fU,alpha], dtype=sd.ft)
 
 	# Generate random antenna pointing errors
 	point_errors = np.random.random(2*sd.na*sd.ntime)\
