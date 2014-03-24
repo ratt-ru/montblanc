@@ -136,7 +136,7 @@ class MeasurementSetSharedData(SharedData):
 		#sd.brightness = brightness[:].astype(sd.ft)
 		sd.brightness_gpu.set(brightness)
 
-	def get_jones(self):
+	def get_visibilities(self):
 		return self.sums_gpu.get()
 
 	def configure(self):
@@ -186,4 +186,4 @@ if __name__ == '__main__':
 		print 'kernels: elapsed time: %gs' %\
 			(kernels_start.time_till(kernels_end)*1e-3)
 
-		jones = sd.get_jones()
+		V = sd.get_visibilities()
