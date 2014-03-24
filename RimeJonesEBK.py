@@ -16,7 +16,7 @@ extern __shared__ double smem_d[];
 __global__
 void rime_jones_EBK(
     double * UVW,
-    double * LMA,
+    double * LM,
     double * brightness,
     double * wavelength,
     double * point_error,
@@ -74,10 +74,10 @@ void rime_jones_EBK(
 
     if(threadIdx.z == 0)
     {
-        i = SRC;   l[threadIdx.x] = LMA[i]; fI[threadIdx.x] = brightness[i];
-        i += nsrc; m[threadIdx.x] = LMA[i]; fU[threadIdx.x] = brightness[i];
-        i += nsrc; fV[threadIdx.x] = brightness[i];
-        i += nsrc; fQ[threadIdx.x] = brightness[i];        
+        i = SRC;   l[threadIdx.x] = LM[i]; fI[threadIdx.x] = brightness[i];
+        i += nsrc; m[threadIdx.x] = LM[i]; fQ[threadIdx.x] = brightness[i];
+        i += nsrc; fU[threadIdx.x] = brightness[i];
+        i += nsrc; fV[threadIdx.x] = brightness[i];        
     }
 
    if(threadIdx.y == 0)
@@ -111,7 +111,7 @@ void rime_jones_EBK(
     sincos(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    i = SRC+nsrc*2; phase = pow(REFWAVE/wave[threadIdx.y], LMA[i]);
+    i = SRC+nsrc*4; phase = pow(REFWAVE/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
 
     double E_p = (l[threadIdx.z]+ld_p[threadIdx.z])*(l[threadIdx.z]*ld_p[threadIdx.z]);
@@ -207,7 +207,7 @@ class RimeJonesEBK(Node):
         sd = shared_data
         params = self.get_kernel_params(sd)
 
-        self.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
+        self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
             sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
             np.int32(sd.nsrc), np.int32(sd.nbl), np.int32(sd.na), **params)
 

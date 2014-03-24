@@ -36,7 +36,7 @@ class TestRimes(unittest.TestCase):
 
 		rime_bk.initialise(sd)
 
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),
@@ -50,27 +50,27 @@ class TestRimes(unittest.TestCase):
 		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
 
 		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
-		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
+		n = np.sqrt(1. - sd.lm[0]**2 - sd.lm[1]**2) - 1.
 
 		# u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
-		phase = (np.outer(sd.uvw[0], sd.lma[0]) + \
-			np.outer(sd.uvw[1], sd.lma[1]) + \
+		phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
+			np.outer(sd.uvw[1], sd.lm[1]) + \
 			np.outer(sd.uvw[2],n))\
 				.reshape(sd.nbl, sd.ntime, sd.nsrc)
 
 		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
 		phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
 		# Dim nchan x ntime x nsrcs 
-		power = np.power(1e6/w[:,:,np.newaxis], sd.lma[2])
+		power = np.power(1e6/w[:,:,np.newaxis], sd.brightness[4])
 		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
 		phase_term = power*np.exp(phase)
 
 		# Create the brightness matrix. Dim 4 x nsrcs
 		brightness = sd.ct([
-			sd.brightness[0]+sd.brightness[3] + 0j,		# fI+fQ + 0j
-			sd.brightness[1] + 1j*sd.brightness[2],		# fU + fV*1j
-			sd.brightness[1] - 1j*sd.brightness[2],		# fU - fV*1j
-			sd.brightness[0]-sd.brightness[3] + 0j])		# fI-fQ + 0j
+			sd.brightness[0]+sd.brightness[1] + 0j,		# fI+fQ + 0j
+			sd.brightness[2] + 1j*sd.brightness[3],		# fU + fV*1j
+			sd.brightness[2] - 1j*sd.brightness[3],		# fU - fV*1j
+			sd.brightness[0]-sd.brightness[1] + 0j])		# fI-fQ + 0j
 
 		# This works due to broadcast! Multiplies along
 		# srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
@@ -93,7 +93,7 @@ class TestRimes(unittest.TestCase):
 
 		rime_bk.initialise(sd)
 
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),
@@ -107,27 +107,27 @@ class TestRimes(unittest.TestCase):
 		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
 
 		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
-		n = np.sqrt(1. - sd.lma[0]**2 - sd.lma[1]**2) - 1.
+		n = np.sqrt(1. - sd.lm[0]**2 - sd.lm[1]**2) - 1.
 
 		# u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
-		phase = (np.outer(sd.uvw[0], sd.lma[0]) + \
-			np.outer(sd.uvw[1], sd.lma[1]) + \
+		phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
+			np.outer(sd.uvw[1], sd.lm[1]) + \
 			np.outer(sd.uvw[2],n))\
 				.reshape(sd.nbl, sd.ntime, sd.nsrc)
 
 		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
 		phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
 		# Dim nchan x ntime x nsrcs 
-		power = np.power(1e6/w[:,:,np.newaxis], sd.lma[2])
+		power = np.power(1e6/w[:,:,np.newaxis], sd.brightness[4])
 		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
 		phase_term = power*np.exp(phase)
 
 		# Create the brightness matrix. Dim 4 x nsrcs
 		brightness = sd.ct([
-			sd.brightness[0]+sd.brightness[3] + 0j,		# fI+fQ + 0j
-			sd.brightness[1] + 1j*sd.brightness[2],		# fU + fV*1j
-			sd.brightness[1] - 1j*sd.brightness[2],		# fU - fV*1j
-			sd.brightness[0]-sd.brightness[3] + 0j])		# fI-fQ + 0j
+			sd.brightness[0]+sd.brightness[1] + 0j,		# fI+fQ + 0j
+			sd.brightness[2] + 1j*sd.brightness[3],		# fU + fV*1j
+			sd.brightness[2] - 1j*sd.brightness[3],		# fU - fV*1j
+			sd.brightness[0]-sd.brightness[1] + 0j])		# fI-fQ + 0j
 
 		# This works due to broadcast! Multiplies along
 		# srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
@@ -153,7 +153,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.initialise(sd)
 
 		# Invoke the BK kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),
@@ -161,7 +161,7 @@ class TestRimes(unittest.TestCase):
 
 		jones_cpu = sd.jones_gpu.get()
 
-		rime_ebk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
+		rime_ebk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
@@ -180,7 +180,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.initialise(sd)
 
 		# Invoke the BK kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),
@@ -203,14 +203,14 @@ class TestRimes(unittest.TestCase):
 				wave = sd.wavelength[chan]
 				for time in range(sd.ntime):
 					for src in range(sd.nsrc):
-						l, m = sd.lma[0][src]
+						l, m = sd.lm[0][src]
 
 						jones[4:,bl,chan,time,src]
 		"""
 
 		
 
-		rime_ebk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
+		rime_ebk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
@@ -326,8 +326,8 @@ class TestRimes(unittest.TestCase):
 		# Frequencies in Hz
 		WaveL = sd.wavelength.astype(np.float64)
 		# Sky coordinates
-		lms=np.array([sd.lma[0], sd.lma[1], sd.brightness[0], sd.lma[2], 
-			sd.brightness[3], sd.brightness[1], sd.brightness[2]]).astype(np.float64).T.copy()
+		lms=np.array([sd.lm[0], sd.lm[1], sd.brightness[0], sd.brightness[4], 
+			sd.brightness[1], sd.brightness[2], sd.brightness[3]]).astype(np.float64).T.copy()
 
 		# Antennas
 		A0=np.int64(np.random.rand(nbl)*na)
@@ -380,7 +380,7 @@ class TestRimes(unittest.TestCase):
 		kernels_start.record()
 
 		# Invoke the kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lma_gpu, sd.brightness_gpu,
+		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
 		    sd.wavelength_gpu,  sd.jones_gpu,
 		    np.int32(sd.nsrc), np.int32(sd.nbl),
 		    np.int32(sd.nchan), np.int32(sd.ntime),

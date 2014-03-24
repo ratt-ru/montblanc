@@ -81,7 +81,7 @@ class MeasurementSetSharedData(SharedData):
 		self.ntime = ntime
 		self.nsrc = nsrc
 
-		self.lma_shape = (3, nsrc)
+		self.lm_shape = (3, nsrc)
 		self.brightness_shape = (4, nsrc)
 		self.point_errors_shape = (2, na, ntime)
 
@@ -89,8 +89,8 @@ class MeasurementSetSharedData(SharedData):
 		self.uvw_gpu = gpuarray.to_gpu(self.uvw)
 		self.wavelength_gpu = gpuarray.to_gpu(self.wavelength)
 
-		# Allocate empty gpu arrays for lma, brightness and point errors
-		self.lma_gpu = gpuarray.empty(self.lma_shape, dtype=ft)
+		# Allocate empty gpu arrays for lm, brightness and point errors
+		self.lm_gpu = gpuarray.empty(self.lm_shape, dtype=ft)
 		self.brightness_gpu = gpuarray.empty(self.brightness_shape, dtype=ft)
 		self.point_errors_gpu = gpuarray.empty(self.point_errors_shape, \
 			dtype=ft)
@@ -120,13 +120,13 @@ class MeasurementSetSharedData(SharedData):
 		#sd.point_errors = point_errors[:].astype(sd.ft)
 		sd.point_errors_gpu.set(point_errors)
 
-	def set_lma(self, lma):
+	def set_lm(self, lm):
 		sd = self
-		if lma.shape != sd.lma_gpu.shape:
-			raise ValueError, 'lma shape is wrong. Should be %s, but is %s.' % (sd.lma_gpu.shape, lma.shape,)
+		if lm.shape != sd.lm_gpu.shape:
+			raise ValueError, 'lm shape is wrong. Should be %s, but is %s.' % (sd.lm_gpu.shape, lm.shape,)
 
-		#sd.lma = lma[:].astype(sd.ft)
-		sd.lma_gpu.set(lma)
+		#sd.lm = lm[:].astype(sd.ft)
+		sd.lm_gpu.set(lm)
 
 	def set_brightness(self, brightness):
 		sd = self
@@ -152,7 +152,7 @@ if __name__ == '__main__':
 	l=sd.ft(np.random.random(sd.nsrc)*0.1)
 	m=sd.ft(np.random.random(sd.nsrc)*0.1)
 	alpha=sd.ft(np.random.random(sd.nsrc)*0.1)
-	lma=np.array([l,m,alpha], dtype=sd.ft)
+	lm=np.array([l,m,alpha], dtype=sd.ft)
 
 	# Random brightness matrix for the point sources
 	fI=sd.ft(np.ones((sd.nsrc,)))
@@ -166,7 +166,7 @@ if __name__ == '__main__':
 		.astype(sd.ft).reshape((2, sd.na, sd.ntime))
 
 	# Set data on the shared data object. Uploads to GPU
-	sd.set_lma(lma)
+	sd.set_lm(lm)
 	sd.set_brightness(brightness)
 	sd.set_point_errors(point_errors)
 
@@ -175,7 +175,7 @@ if __name__ == '__main__':
 	# Execute the pipeline
 	for i in range(10):
 		# Change parameters for this run
-		sd.set_lma(lma)
+		sd.set_lm(lm)
 		# Execute the pipeline
 		kernels_start.record()
 		pipeline.execute(sd)
