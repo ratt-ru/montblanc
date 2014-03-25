@@ -26,7 +26,7 @@ void rime_jones_EBK(
     // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
 
     #define REFWAVE 1e6
-    #define COS3_CONST 45*1e-9
+    #define COS3_CONST 65*1e-9
 
     // Baseline, Source, Channel and Time indices
     int SRC = blockIdx.x*blockDim.x + threadIdx.x;
