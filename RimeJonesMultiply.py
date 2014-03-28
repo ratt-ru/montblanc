@@ -103,10 +103,9 @@ options=['-lineinfo'])
 
         return {
             'block'  : (jones_per_block,1,1), \
-            'grid'   : (jones_per_block,1,1), \
+            'grid'   : (jones_blocks,1,1), \
             'shared' : 1*jones_per_block*np.dtype(np.complex128).itemsize }
 
-        block, grid = (jones_per_block,1,1), (jones_blocks,1,1)
     def execute(self, shared_data):
         sd = shared_data
 
