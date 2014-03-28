@@ -9,7 +9,6 @@ from node import *
 class RimeJonesMultiply(Node):
     def __init__(self):
         super(RimeJonesMultiply, self).__init__()
-    def initialise(self, shared_data):
         self.mod = SourceModule("""
 #include <pycuda-complex.hpp>
 #include \"math_constants.h\"
@@ -88,6 +87,8 @@ void rime_jones_multiply(
 options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_multiply')
 
+    def initialise(self, shared_data):
+        pass
     def shutdown(self, shared_data):
         pass
     def pre_execution(self, shared_data):
