@@ -10,6 +10,7 @@ from RimeJonesEBK import RimeJonesEBK
 from RimeJonesEBKFloat import RimeJonesEBKFloat
 from RimeJonesReduce import RimeJonesReduce
 from RimeJonesMultiply import RimeJonesMultiply
+from RimeChiSquaredFloat import RimeChiSquaredFloat
 from TestRimeSharedData import TestRimeSharedData
 
 import pycuda.autoinit
@@ -274,6 +275,26 @@ class TestRimes(unittest.TestCase):
 
 		# Confirm similar results
 		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
+
+	def test_chi_squared(self):
+		sd = TestRimeSharedData(100,1,64,20, np.float32)
+		sd.configure()
+
+		rime_X_2 = RimeChiSquaredFloat()
+		rime_X_2.initialise(sd)
+
+		print rime_X_2.get_kernel_params(sd)
+		print sd.nbl, sd.nchan, sd.ntime, sd.nbl*sd.nchan*sd.ntime
+
+		rime_X_2.kernel(sd.sums_gpu, sd.bayes_model_gpu, \
+            sd.chi_sqrd_gpu, sd.sigma_sqrd, \
+            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), \
+            **rime_X_2.get_kernel_params(sd))
+
+		rime_X_2.shutdown(sd)
+
+		chi_sqrd = sd.chi_sqrd_gpu.get().flatten()
+		print chi_sqrd[0:10].astype(np.int32)
 
 	def test_reduce(self):
 		sd = TestRimeSharedData(10,200,32,10)

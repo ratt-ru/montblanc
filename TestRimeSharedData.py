@@ -112,3 +112,13 @@ class TestRimeSharedData(SharedData):
 
         # Output sum matrix
         self.sums_gpu = gpuarray.empty(self.keys.shape, dtype=ct)
+
+        # The bayesian model
+        self.bayes_model_shape = (4,nbl,nchan,ntime)
+        assert np.product(self.bayes_model_shape) == np.product(self.keys.shape)
+        self.bayes_model_gpu = gpuarray.empty(self.bayes_model_shape, dtype=ct)
+        self.sigma_sqrd = (np.random.random(1)**2).astype(ft)[0]
+
+        # Output chi squared terms
+        self.chi_sqrd_shape = (nbl,nchan,ntime)
+        self.chi_sqrd_gpu = gpuarray.empty(self.chi_sqrd_shape, dtype=ft)
