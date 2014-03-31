@@ -283,18 +283,23 @@ class TestRimes(unittest.TestCase):
 		rime_X_2 = RimeChiSquaredFloat()
 		rime_X_2.initialise(sd)
 
-		print rime_X_2.get_kernel_params(sd)
-		print sd.nbl, sd.nchan, sd.ntime, sd.nbl*sd.nchan*sd.ntime
-
+		# Run the kernel
 		rime_X_2.kernel(sd.vis_gpu, sd.bayes_model_gpu, \
             sd.chi_sqrd_gpu, sd.sigma_sqrd, \
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), \
             **rime_X_2.get_kernel_params(sd))
 
-		rime_X_2.shutdown(sd)
+		# Take the difference between the visibilities and the model
+		# (4,nbl,nchan,ntime)
+		d = sd.vis - sd.bayes_model
+		# Reduces a dimension so that we have (nbl,nchan,ntime)
+		# (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
+		chi_sqrd_cpu = (np.add.reduce(d.real**2,axis=0) + np.add.reduce(d.imag**2,axis=0))/sd.sigma_sqrd
+		chi_sqrd_gpu = sd.chi_sqrd_gpu.get()
 
-		chi_sqrd = sd.chi_sqrd_gpu.get().flatten()
-		print chi_sqrd[0:10].astype(np.int32)
+		assert np.allclose(chi_sqrd_cpu, chi_sqrd_gpu)
+
+		rime_X_2.shutdown(sd)
 
 	def test_reduce(self):
 		sd = TestRimeSharedData(10,200,32,10)

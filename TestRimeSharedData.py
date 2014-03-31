@@ -111,12 +111,20 @@ class TestRimeSharedData(SharedData):
         self.keys_gpu = gpuarray.to_gpu(self.keys)
 
         # Output visibility matrix
-        self.vis_gpu = gpuarray.empty(self.keys.shape, dtype=ct)
+        self.vis_shape = (4,nbl,nchan,ntime)
+        assert np.product(self.vis_shape) == np.product(self.keys.shape)
+        nvis = np.product(self.vis_shape)
+        self.vis = (np.random.random(nvis) + np.random.random(nvis)*1j)\
+            .astype(ct).reshape(self.vis_shape)
+        self.vis_gpu = gpuarray.to_gpu(self.vis)
 
         # The bayesian model
-        self.bayes_model_shape = (4,nbl,nchan,ntime)
+        self.bayes_model_shape = self.vis_shape
         assert np.product(self.bayes_model_shape) == np.product(self.keys.shape)
-        self.bayes_model_gpu = gpuarray.empty(self.bayes_model_shape, dtype=ct)
+        nbayes = np.product(self.bayes_model_shape)
+        self.bayes_model = (np.random.random(nbayes) + np.random.random(nbayes)*1j)\
+            .astype(ct).reshape(self.vis_shape)
+        self.bayes_model_gpu = gpuarray.to_gpu(self.bayes_model)
         self.sigma_sqrd = (np.random.random(1)**2).astype(ft)[0]
 
         # Output chi squared terms
