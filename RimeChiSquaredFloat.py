@@ -85,7 +85,7 @@ options=['-lineinfo'])
 
         print 'nvis=',nvis
 
-        self.kernel(sd.sums_gpu, sd.bayes_model_gpu, \
+        self.kernel(sd.vis_gpu, sd.bayes_model_gpu, \
             sd.chi_sqrd_gpu, sd.sigma_sqrd, \
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime) \
             **get_kernel_params(sd))

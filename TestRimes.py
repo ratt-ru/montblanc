@@ -286,7 +286,7 @@ class TestRimes(unittest.TestCase):
 		print rime_X_2.get_kernel_params(sd)
 		print sd.nbl, sd.nchan, sd.ntime, sd.nbl*sd.nchan*sd.ntime
 
-		rime_X_2.kernel(sd.sums_gpu, sd.bayes_model_gpu, \
+		rime_X_2.kernel(sd.vis_gpu, sd.bayes_model_gpu, \
             sd.chi_sqrd_gpu, sd.sigma_sqrd, \
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), \
             **rime_X_2.get_kernel_params(sd))
@@ -314,23 +314,23 @@ class TestRimes(unittest.TestCase):
 			.astype(np.int32)
 		
 		# Send the jones and keys to the gpu, and create the output array for
-		# the segmented sums
+		# the visibilities.
 		jones_gpu = gpuarray.to_gpu(jones.flatten())
 		keys_gpu = gpuarray.to_gpu(keys)
-		sums_gpu = gpuarray.empty(shape=keys.shape, dtype=jones.dtype.type)
+		vis_gpu = gpuarray.empty(shape=keys.shape, dtype=jones.dtype.type)
 
 		crimes.segmented_reduce_complex128_sum(
-			data=jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
+			data=jones_gpu, seg_starts=keys_gpu, seg_sums=vis_gpu,
 			device_id=0)
 
 		# Shutdown the rime node, we don't need it any more
 		rime_reduce.shutdown(sd)
 
 		# Add everything along the last axis (time)
-		sums_cpu = np.sum(jones,axis=len(sd.jones_shape)-1)
+		vis_cpu = np.sum(jones,axis=len(sd.jones_shape)-1)
 
 		# Confirm similar results
-		self.assertTrue(np.allclose(sums_cpu.flatten(), sums_gpu.get()))
+		self.assertTrue(np.allclose(vis_cpu.flatten(), vis_gpu.get()))
 
 	def time_predict(self, sd, log):
 		na=sd.na          # Number of antenna
@@ -380,7 +380,7 @@ class TestRimes(unittest.TestCase):
 		# Initialise the node
 		rime_bk.initialise(sd)
 
-		sums_predict = self.time_predict(sd, log)
+		vis_predict = self.time_predict(sd, log)
 
 		log.debug('jones_gpu size: %.2f MB', sd.jones_gpu.nbytes/(1024*1024))
 
@@ -391,9 +391,9 @@ class TestRimes(unittest.TestCase):
 			.astype(np.int32).reshape(sd.jones_shape[:-2])
 		
 		# Send the keys to the gpu, and create the output array for
-		# the segmented sums
+		# the visibilities.
 		keys_gpu = gpuarray.to_gpu(keys)
-		sums_gpu = gpuarray.empty(shape=keys.shape, dtype=sd.jones_gpu.dtype.type)
+		vis_gpu = gpuarray.empty(shape=keys.shape, dtype=sd.jones_gpu.dtype.type)
 
 		bk_params = rime_bk.get_kernel_params(sd)
 
@@ -410,11 +410,11 @@ class TestRimes(unittest.TestCase):
 		# Choose between the double and float kernel
 		if sd.ft == np.float64:
 			crimes.segmented_reduce_complex128_sum(
-				data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
+				data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=vis_gpu,
 				device_id=0)
 		else:
 			crimes.segmented_reduce_complex64_sum(
-				data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=sums_gpu,
+				data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=vis_gpu,
 				device_id=0)
 
 		kernels_end.record()
@@ -427,10 +427,10 @@ class TestRimes(unittest.TestCase):
 		rime_bk.shutdown(sd)
 
 		# Shift the gpu jones matrices so they are on the last axis
-		sums_cpu = np.rollaxis(sums_gpu.get(),0,len(sd.jones_shape)-2)
+		vis_cpu = np.rollaxis(vis_gpu.get(),0,len(sd.jones_shape)-2)
 
 		# Compare the GPU solution with Cyril's predict code
-		self.assertTrue(np.allclose(sums_cpu, sums_predict))
+		self.assertTrue(np.allclose(vis_cpu, vis_predict))
 
 
 	def test_predict_double(self):

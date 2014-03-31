@@ -105,8 +105,8 @@ class MeasurementSetSharedData(SharedData):
 			*self.jones_shape[-1]).astype(np.int32)
 		self.keys_gpu = gpuarray.to_gpu(self.keys)
 
-		# Output sum matrix
-		self.sums_gpu = gpuarray.empty(self.keys.shape, dtype=ct)
+		# Output visibility matrix
+		self.vis_gpu = gpuarray.empty(self.keys.shape, dtype=ct)
 
 		t.close()
 		ta.close()
@@ -137,7 +137,7 @@ class MeasurementSetSharedData(SharedData):
 		sd.brightness_gpu.set(brightness)
 
 	def get_visibilities(self):
-		return self.sums_gpu.get()
+		return self.vis_gpu.get()
 
 	def configure(self):
 		pass
