@@ -53,7 +53,6 @@ void rime_chi_squared_diff(
     sum.x += delta.x*delta.x; sum.y += delta.y*delta.y;
 
     output[j] = (sum.x + sum.y)/sigma_squared;
-    output[j]=j;
 }
 """,
 options=['-lineinfo'])
