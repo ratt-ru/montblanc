@@ -45,11 +45,12 @@ class BaseSharedData(SharedData):
         self.brightness_shape = (5, nsrc)
         self.wavelength_shape = (nchan)
         self.point_errors_shape = (2, na, ntime)
+        self.bayes_model_shape = (4,nbl,nchan,ntime)
 
         # Set up output data shapes
         self.jones_shape = (4,nbl,nchan,ntime,nsrc)
-        self.vis_shape = (4,nbl,nchan,ntime)
-
+        self.vis_shape = self.bayes_model_shape
+        self.chi_sqrd_result_shape = (nbl,nchan,ntime)
 
 class GPUSharedData(BaseSharedData):
     uvw_gpu = ArrayData()
@@ -57,23 +58,27 @@ class GPUSharedData(BaseSharedData):
     brightness_gpu = ArrayData()
     wavelength_gpu = ArrayData()
     point_errors_gpu = ArrayData()
+    bayes_model_gpu = ArrayData()
 
     jones_gpu = ArrayData()
     vis_gpu = ArrayData()
+    chi_sqrd_result_gpu = ArrayData()
 
     def __init__(self, na=7, nchan=8, ntime=5, nsrc=10, dtype=np.float32):
         super(GPUSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
 
         # Create the input data arrays on the GPU
-        self.uvw_gpu = gpuarray.empty(self.uvw_shape,dtype=self.ft)
-        self.lm_gpu = gpuarray.empty(self.lm_shape,dtype=self.ft)
-        self.brightness_gpu = gpuarray.empty(self.brightness_shape,self.ft)
-        self.wavelength_gpu = gpuarray.empty(self.wavelength_shape,self.ft)
-        self.point_errors_gpu = gpuarray.empty(self.point_errors_shape,self.ft)
+        self.uvw_gpu = gpuarray.empty(shape=self.uvw_shape,dtype=self.ft)
+        self.lm_gpu = gpuarray.empty(shape=self.lm_shape,dtype=self.ft)
+        self.brightness_gpu = gpuarray.empty(shape=self.brightness_shape,dtype=self.ft)
+        self.wavelength_gpu = gpuarray.empty(shape=self.wavelength_shape,dtype=self.ft)
+        self.point_errors_gpu = gpuarray.empty(shape=self.point_errors_shape,dtype=self.ft)
+        self.bayes_model_gpu = gpuarray.empty(shape=self.bayes_model_shape,dtype=self.ct)
 
         # Create the output data arrays on the GPU
-        self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=self.ct)
-        self.vis_gpu = gpuarray.empty(self.vis_shape,dtype=self.ct)
+        self.jones_gpu = gpuarray.empty(shape=self.jones_shape,dtype=self.ct)
+        self.vis_gpu = gpuarray.empty(shape=self.vis_shape,dtype=self.ct)
+        self.chi_sqrd_result_gpu = gpuarray.empty(shape=self.chi_sqrd_result_shape,dtype=self.ft)
 
     def transfer_uvw(self,uvw):
         self.uvw_gpu.set(uvw)
@@ -94,4 +99,7 @@ class GPUSharedData(BaseSharedData):
         self.jones_gpu.set(jones)
 
     def transfer_vis(self,vis):
-        self.vis_gpu.set(vis)
+        self.vis_gpu.set(vis)        
+
+    def transfer_bayes_model(self,bayes_model):
+        self.bayes_model_gpu.set(bayes_model)

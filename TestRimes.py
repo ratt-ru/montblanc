@@ -285,7 +285,7 @@ class TestRimes(unittest.TestCase):
 
 		# Run the kernel
 		rime_X_2.kernel(sd.vis_gpu, sd.bayes_model_gpu, \
-            sd.chi_sqrd_gpu, sd.sigma_sqrd, \
+            sd.chi_sqrd_result_gpu, sd.sigma_sqrd, \
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), \
             **rime_X_2.get_kernel_params(sd))
 
@@ -295,7 +295,7 @@ class TestRimes(unittest.TestCase):
 		# Reduces a dimension so that we have (nbl,nchan,ntime)
 		# (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
 		chi_sqrd_cpu = (np.add.reduce(d.real**2,axis=0) + np.add.reduce(d.imag**2,axis=0))/sd.sigma_sqrd
-		chi_sqrd_gpu = sd.chi_sqrd_gpu.get()
+		chi_sqrd_gpu = sd.chi_sqrd_result_gpu.get()
 
 		assert np.allclose(chi_sqrd_cpu, chi_sqrd_gpu)
 
