@@ -1,49 +1,17 @@
 import numpy as np
-from node import *
+from BaseSharedData import *
 
-class TestRimeSharedData(SharedData):
+class TestRimeSharedData(GPUSharedData):
     INIT = 'init'
     PRE = 'pre'
     EXEC = 'exec'
     POST = 'post'
     SHUTDOWN = 'shutdown'
 
-    uvw_gpu = ArrayData()
-    lm_gpu = ArrayData()
-    brightness_gpu = ArrayData()
-
-    na = Parameter(7)
-    nbl = Parameter((7*6)/2)
-    nchan = Parameter(32)
-    nsrc = Parameter(200)
-    ntime = Parameter(10)
-
-    def __init__(self, na=7, nsrc=10, nchan=32, ntime=10,
-            float_dtype=np.float64):
-        super(TestRimeSharedData, self).__init__()
-        self.set_params(na,nsrc,nchan,ntime,float_dtype)
-
-    def set_params(self, na, nsrc, nchan, ntime, float_dtype):
-        # Antenna, Baseline, Channel, Source and Timestep counts
-        self.na = na
-        self.nbl = (self.na**2 + self.na)/2
-        self.nchan = nchan
-        self.nsrc = nsrc
-        self.ntime = ntime
-
-        if float_dtype == np.float32:
-            self.ct = np.complex64
-        elif float_dtype == np.float64:
-            self.ct = np.complex128
-        else:
-            raise TypeError, 'Must specify either np.float32 or np.float64 for float_dtype'
-
-        self.ft = float_dtype
+    def __init__(self, na=7, nsrc=10, nchan=8, ntime=5, dtype=np.float64):
+        super(TestRimeSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
 
     def configure(self):
-        import pycuda.driver as cuda
-        import pycuda.gpuarray as gpuarray
-
         na, nbl = self.na, self.nbl
         nchan, ntime = self.nchan, self.ntime
         nsrc, ft, ct = self.nsrc, self.ft, self.ct
@@ -58,13 +26,6 @@ class TestRimeSharedData(SharedData):
         self.nevents = len(self.event_names)
 
         # Baseline coordinates in the u,v,w (frequency) domain
-        """
-        self.uvw = np.array([ \
-            np.ones(self.nbl, dtype=self.ft)*3., \
-            np.ones(self.nbl, dtype=self.ft)*2., \
-            np.ones(self.nbl, dtype=self.ft)*1.], \
-            dtype=self.ft)
-        """
 
         # UVW coordinates
         self.uvw = np.array([ \
@@ -94,15 +55,11 @@ class TestRimeSharedData(SharedData):
             .astype(ft).reshape((2, na, ntime))
 
         # Copy the uvw, lm and brightness data to the gpu
-        self.uvw_gpu = gpuarray.to_gpu(self.uvw)
-        self.lm_gpu = gpuarray.to_gpu(self.lm)
-        self.brightness_gpu = gpuarray.to_gpu(self.brightness)
-        self.wavelength_gpu = gpuarray.to_gpu(self.wavelength)
-        self.point_errors_gpu = gpuarray.to_gpu(self.point_errors)
-
-        # Output jones matrix
-        self.jones_shape = (4,nbl,nchan,ntime,nsrc)
-        self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=ct)
+        self.transfer_uvw(self.uvw)
+        self.transfer_lm(self.lm)
+        self.transfer_brightness(self.brightness)
+        self.transfer_wavelength(self.wavelength)
+        self.transfer_point_errors(self.point_errors)
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)
@@ -116,7 +73,7 @@ class TestRimeSharedData(SharedData):
         nvis = np.product(self.vis_shape)
         self.vis = (np.random.random(nvis) + np.random.random(nvis)*1j)\
             .astype(ct).reshape(self.vis_shape)
-        self.vis_gpu = gpuarray.to_gpu(self.vis)
+        self.transfer_vis(self.vis)
 
         # The bayesian model
         self.bayes_model_shape = self.vis_shape
