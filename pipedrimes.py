@@ -157,7 +157,6 @@ def main(argv=None):
     sp = PipedRimes([RimeJonesEBK(), RimeJonesReduce()])
 
     shared_data = TestRimeSharedData(7,200,32,10)
-    shared_data.configure()
 
     sp.execute(shared_data)
 

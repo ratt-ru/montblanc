@@ -64,9 +64,6 @@ class MeasurementSetSharedData(GPUSharedData):
 	def get_visibilities(self):
 		return self.vis_gpu.get()
 
-	def configure(self):
-		pass
-
 if __name__ == '__main__':
 	# Create a shared data object from the Measurement Set file
 	sd = MeasurementSetSharedData('/home/simon/data/WSRT.MS', nsrc=100)

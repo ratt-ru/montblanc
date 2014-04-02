@@ -5,7 +5,6 @@ class TestRimeSharedData(GPUSharedData):
     def __init__(self, na=7, nsrc=10, nchan=8, ntime=5, dtype=np.float64):
         super(TestRimeSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
 
-    def configure(self):
         sd = self
         na,nbl,nchan,ntime,nsrc = sd.na,sd.nbl,sd.nchan,sd.ntime,sd.nsrc
         ft,ct = sd.ft,sd.ct
