@@ -31,7 +31,7 @@ class TestRimes(unittest.TestCase):
 		pass
 
 	def test_BK_float(self):
-		sd = TestRimeSharedData(10,200,32,10, np.float32)
+		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)
 		sd.configure()
 		rime_bk = RimeJonesBKFloat()
 
@@ -88,7 +88,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_cpu, jones))
 
 	def test_BK(self):
-		sd = TestRimeSharedData(10,200,32,10)
+		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)
 		sd.configure()
 		rime_bk = RimeJonesBK()
 
@@ -145,7 +145,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_cpu, jones))
 
 	def test_EBK(self):
-		sd = TestRimeSharedData(10,200,32,10)
+		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)
 		sd.configure()
 		rime_ebk = RimeJonesEBK()
 		rime_bk = RimeJonesBK()
@@ -172,7 +172,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.shutdown(sd)
 
 	def test_EBK_float(self):
-		sd = TestRimeSharedData(10,200,32,10, np.float32)
+		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)
 		sd.configure()
 		rime_ebk = RimeJonesEBKFloat()
 		rime_bk = RimeJonesBKFloat()
@@ -223,7 +223,7 @@ class TestRimes(unittest.TestCase):
 	@unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
 	def test_multiply(self):
 		# Make the problem size smaller, due to slow numpy code
-		sd = TestRimeSharedData(5, 10, 4, 2)
+		sd = TestRimeSharedData(na=5,nchan=4,ntime=2,nsrc=10)
 		sd.configure()
 		rime_multiply = RimeJonesMultiply()
 
@@ -277,7 +277,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
 
 	def test_chi_squared(self):
-		sd = TestRimeSharedData(100,1,64,20, np.float32)
+		sd = TestRimeSharedData(na=100,nchan=64,ntime=20,nsrc=1,dtype=np.float32)
 		sd.configure()
 
 		rime_X_2 = RimeChiSquaredFloat()
@@ -302,7 +302,7 @@ class TestRimes(unittest.TestCase):
 		rime_X_2.shutdown(sd)
 
 	def test_reduce(self):
-		sd = TestRimeSharedData(10,200,32,10)
+		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)
 		sd.configure()
 		rime_reduce = RimeJonesReduce()
 
@@ -439,14 +439,14 @@ class TestRimes(unittest.TestCase):
 
 
 	def test_predict_double(self):
-		sd = TestRimeSharedData(10,10000,32,1)
+		sd = TestRimeSharedData(na=10,nchan=32,ntime=1,nsrc=10000)
 		sd.configure()
 		log = logging.getLogger('TestRimes.test_predict_double')
 
 		self.do_predict_test(sd, log)
 
 	def test_predict_float(self):
-		sd = TestRimeSharedData(10,10000,32,1, np.float32)
+		sd = TestRimeSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32)
 		sd.configure()
 		log = logging.getLogger('TestRimes.test_predict_float')
 

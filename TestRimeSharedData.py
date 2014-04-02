@@ -12,9 +12,9 @@ class TestRimeSharedData(GPUSharedData):
         super(TestRimeSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
 
     def configure(self):
-        na, nbl = self.na, self.nbl
-        nchan, ntime = self.nchan, self.ntime
-        nsrc, ft, ct = self.nsrc, self.ft, self.ct
+        sd = self
+        na,nbl,nchan,ntime,nsrc = sd.na,sd.nbl,sd.nchan,sd.ntime,sd.nsrc
+        ft,ct = self.ft,self.ct
 
         self.stream = [cuda.Stream(), cuda.Stream()]
 
