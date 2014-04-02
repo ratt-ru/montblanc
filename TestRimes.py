@@ -194,20 +194,14 @@ class TestRimes(unittest.TestCase):
 
 	@unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
 	def test_multiply(self):
-		# Make the problem size smaller, due to slow numpy code
+		# Make the problem size smaller, due to slow numpy code later on
 		sd = TestRimeSharedData(na=5,nchan=4,ntime=2,nsrc=10)
 		rime_multiply = RimeJonesMultiply()
 
 		rime_multiply.initialise(sd)
 
-		na=sd.na          # Number of antenna
-		nbl=sd.nbl        # Number of baselines
-		nchan=sd.nchan    # Number of channels
-		nsrc=sd.nsrc      # Number of sources
-		ntime=sd.ntime    # Number of timesteps
-
 		# Output jones matrix
-		njones = nbl*nsrc*nchan*ntime
+		njones = sd.nbl*sd.nsrc*sd.nchan*sd.ntime
 		jsize = np.product(sd.jones_shape) # Number of complex  numbers
 		# Create some random jones matrices to multiply together
 		jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
@@ -217,16 +211,15 @@ class TestRimes(unittest.TestCase):
 
 		jones_lhs_gpu = gpuarray.to_gpu(jones_lhs)
 		jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
-		jones_output_gpu = gpuarray.empty(shape=sd.jones_shape, dtype=sd.ct)
 
-		rime_multiply.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu,
+		rime_multiply.kernel(jones_lhs_gpu, jones_rhs_gpu, sd.jones_gpu,
 			np.int32(njones), **rime_multiply.get_kernel_params(sd))
 
 		# Shutdown the rime node, we don't need it any more
 		rime_multiply.shutdown(sd)
 
 		# Get the result off the gpu
-		jones_output = jones_output_gpu.get()
+		jones_output_gpu = sd.jones_gpu.get()
 
 		# Perform the calculation on the CPU
 		jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=sd.ct)
@@ -236,16 +229,16 @@ class TestRimes(unittest.TestCase):
 		# Possible alternative to use with np.rollaxis:
 		# from numpy.core.umath_tests import matrix_multiply
 		# Doesn't work with complex numbers tho
-		for bl in range(nbl):
-			for ch in range(nchan):
-				for t in range(ntime):	    		
-					for src in range(nsrc):
+		for bl in range(sd.nbl):
+			for ch in range(sd.nchan):
+				for t in range(sd.ntime):	    		
+					for src in range(sd.nsrc):
 						jones_output_cpu[:,bl,ch,t,src] = np.dot(
 						jones_lhs[:,bl,ch,t,src].reshape(2,2),
 						jones_rhs[:,bl,ch,t,src].reshape(2,2)).reshape(4)
 
 		# Confirm similar results
-		self.assertTrue(np.allclose(jones_output, jones_output_cpu))
+		self.assertTrue(np.allclose(jones_output_gpu, jones_output_cpu))
 
 	def test_chi_squared(self):
 		sd = TestRimeSharedData(na=100,nchan=64,ntime=20,nsrc=1,dtype=np.float32)
