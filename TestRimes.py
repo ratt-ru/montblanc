@@ -23,7 +23,7 @@ import crimes
 
 class TestRimes(unittest.TestCase):
 	def setUp(self):
-		np.random.seed(100)
+		np.random.seed(int(time.time()*100))
 		# Set up various things that aren't possible in PyCUDA
 		crimes.setup_cuda()
 
@@ -34,105 +34,37 @@ class TestRimes(unittest.TestCase):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
 		rime_bk = RimeJonesBKFloat()
 
+		# Initialise the BK float kernel
 		rime_bk.initialise(sd)
-
 		rime_bk.execute(sd)
-
-		# Shutdown the rime_bk node, we don't need it any more
 		rime_bk.shutdown(sd)
 
-		# Repeat the wavelengths along the timesteps for now
-		# dim nchan x ntime. 
-		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
-
-		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
-		n = np.sqrt(1. - sd.lm[0]**2 - sd.lm[1]**2) - 1.
-
-		# u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
-		phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
-			np.outer(sd.uvw[1], sd.lm[1]) + \
-			np.outer(sd.uvw[2],n))\
-				.reshape(sd.nbl, sd.ntime, sd.nsrc)
-
-		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
-		phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
-		# Dim nchan x ntime x nsrcs 
-		power = np.power(1e6/w[:,:,np.newaxis], sd.brightness[4])
-		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
-		phase_term = power*np.exp(phase)
-
-		# Create the brightness matrix. Dim 4 x nsrcs
-		brightness = sd.ct([
-			sd.brightness[0]+sd.brightness[1] + 0j,		# fI+fQ + 0j
-			sd.brightness[2] + 1j*sd.brightness[3],		# fU + fV*1j
-			sd.brightness[2] - 1j*sd.brightness[3],		# fU - fV*1j
-			sd.brightness[0]-sd.brightness[1] + 0j])		# fI-fQ + 0j
-
-		# This works due to broadcast! Multiplies along
-		# srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
-		# Also reshape the combined nchan and ntime axis into
-		# two separate axes
-		jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
-			brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
-			.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
+		# Compute the jones matrix on the CPU
+		jones_cpu = self.compute_bk_jones(sd)
 
 		# Get the jones matrices calculated by the GPU
-		jones = sd.jones_gpu.get()
+		jones_gpu = sd.jones_gpu.get()
 
 		# Test that the jones CPU calculation matches that of the GPU calculation
-		self.assertTrue(np.allclose(jones_cpu, jones))
+		self.assertTrue(np.allclose(jones_cpu, jones_gpu))
 
 	def test_BK(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
 		rime_bk = RimeJonesBK()
 
+		# Initialise the BK kernel
 		rime_bk.initialise(sd)
-
 		rime_bk.execute(sd)
-
-		# Shutdown the rime_bk node, we don't need it any more
 		rime_bk.shutdown(sd)
 
-		# Repeat the wavelengths along the timesteps for now
-		# dim nchan x ntime. 
-		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
-
-		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
-		n = np.sqrt(1. - sd.lm[0]**2 - sd.lm[1]**2) - 1.
-
-		# u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
-		phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
-			np.outer(sd.uvw[1], sd.lm[1]) + \
-			np.outer(sd.uvw[2],n))\
-				.reshape(sd.nbl, sd.ntime, sd.nsrc)
-
-		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
-		phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
-		# Dim nchan x ntime x nsrcs 
-		power = np.power(1e6/w[:,:,np.newaxis], sd.brightness[4])
-		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
-		phase_term = power*np.exp(phase)
-
-		# Create the brightness matrix. Dim 4 x nsrcs
-		brightness = sd.ct([
-			sd.brightness[0]+sd.brightness[1] + 0j,		# fI+fQ + 0j
-			sd.brightness[2] + 1j*sd.brightness[3],		# fU + fV*1j
-			sd.brightness[2] - 1j*sd.brightness[3],		# fU - fV*1j
-			sd.brightness[0]-sd.brightness[1] + 0j])		# fI-fQ + 0j
-
-		# This works due to broadcast! Multiplies along
-		# srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
-		# Also reshape the combined nchan and ntime axis into
-		# two separate axes
-		jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
-			brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
-			.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
+		# Compute the jones matrix on the CPU
+		jones_cpu = self.compute_bk_jones(sd)
 
 		# Get the jones matrices calculated by the GPU
-		jones = sd.jones_gpu.get()
+		jones_gpu = sd.jones_gpu.get()
 
 		# Test that the jones CPU calculation matches that of the GPU calculation
-		self.assertTrue(np.allclose(jones_cpu, jones))
+		self.assertTrue(np.allclose(jones_cpu, jones_gpu))
 
 	def test_EBK(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
@@ -240,7 +172,7 @@ class TestRimes(unittest.TestCase):
 		# Confirm similar results
 		self.assertTrue(np.allclose(jones_output_gpu, jones_output_cpu))
 
-	def test_chi_squared(self):
+	def test_chi_squared_float(self):
 		sd = TestRimeSharedData(na=100,nchan=64,ntime=20,nsrc=1,dtype=np.float32)
 
 		rime_X_2 = RimeChiSquaredFloat()
@@ -391,7 +323,6 @@ class TestRimes(unittest.TestCase):
 		# Compare the GPU solution with Cyril's predict code
 		self.assertTrue(np.allclose(vis_cpu, vis_predict))
 
-
 	def test_predict_double(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=1,nsrc=10000)
 		log = logging.getLogger('TestRimes.test_predict_double')
@@ -401,6 +332,45 @@ class TestRimes(unittest.TestCase):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32)
 		log = logging.getLogger('TestRimes.test_predict_float')
 		self.do_predict_test(sd, log)
+
+	def compute_bk_jones(self, shared_data):
+		sd = shared_data
+		# Repeat the wavelengths along the timesteps for now
+		# dim nchan x ntime. 
+		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
+
+		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
+		n = np.sqrt(1. - sd.lm[0]**2 - sd.lm[1]**2) - 1.
+
+		# u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
+		phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
+		    np.outer(sd.uvw[1], sd.lm[1]) + \
+		    np.outer(sd.uvw[2],n))\
+		        .reshape(sd.nbl, sd.ntime, sd.nsrc)
+
+		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
+		phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
+		# Dim nchan x ntime x nsrcs 
+		power = np.power(1e6/w[:,:,np.newaxis], sd.brightness[4])
+		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
+		phase_term = power*np.exp(phase)
+
+		# Create the brightness matrix. Dim 4 x nsrcs
+		brightness = sd.ct([
+		    sd.brightness[0]+sd.brightness[1] + 0j,     # fI+fQ + 0j
+		    sd.brightness[2] + 1j*sd.brightness[3],     # fU + fV*1j
+		    sd.brightness[2] - 1j*sd.brightness[3],     # fU - fV*1j
+		    sd.brightness[0]-sd.brightness[1] + 0j])        # fI-fQ + 0j
+
+		# This works due to broadcast! Multiplies along
+		# srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
+		# Also reshape the combined nchan and ntime axis into
+		# two separate axes
+		jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
+		    brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
+		    .reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
+
+		return jones_cpu
 
 if __name__ == '__main__':
 	logging.basicConfig(stream=sys.stderr)
