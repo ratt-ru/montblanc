@@ -68,6 +68,8 @@ if __name__ == '__main__':
 	# Create a pipeline consisting of an EBK kernel, followed by a reduction
 	pipeline = PipedRimes([RimeJonesEBKFloat(), RimeJonesReduceFloat()])
 
+	print 'Using', sd.gpu_mem()/(1024*1024), 'MB of GPU memory.'
+
 	# Random point source coordinates in the l,m,n (brightness image) domain
 	l=sd.ft(np.random.random(sd.nsrc)*0.1)
 	m=sd.ft(np.random.random(sd.nsrc)*0.1)

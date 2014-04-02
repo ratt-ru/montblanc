@@ -156,9 +156,10 @@ def main(argv=None):
 
     sp = PipedRimes([RimeJonesEBK(), RimeJonesReduce()])
 
-    shared_data = TestRimeSharedData(na=7,nchan=32,ntime=10,nsrc=200)
+    sd = TestRimeSharedData(na=7,nchan=32,ntime=10,nsrc=200)
+    print 'Using', sd.gpu_mem()/(1024*1024), 'MB of GPU memory.'
 
-    sp.execute(shared_data)
+    sp.execute(sd)
 
     print sp
 

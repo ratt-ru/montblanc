@@ -80,6 +80,21 @@ class GPUSharedData(BaseSharedData):
         self.vis_gpu = gpuarray.empty(shape=self.vis_shape,dtype=self.ct)
         self.chi_sqrd_result_gpu = gpuarray.empty(shape=self.chi_sqrd_result_shape,dtype=self.ft)
 
+        self.gpu_data = [
+            self.uvw_gpu,
+            self.lm_gpu,
+            self.brightness_gpu,
+            self.wavelength_gpu,
+            self.point_errors_gpu,
+            self.bayes_model_gpu,
+            self.jones_gpu,
+            self.vis_gpu,
+            self.chi_sqrd_result_gpu]
+
+    def gpu_mem(self):
+        """ Returns the amount of GPU memory used, in bytes """
+        return np.array([a.nbytes for a in self.gpu_data]).sum()
+
     def transfer_uvw(self,uvw):
         self.uvw_gpu.set(uvw)
 
