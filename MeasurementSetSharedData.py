@@ -5,9 +5,7 @@ from BaseSharedData import *
 import pycuda.gpuarray as gpuarray
 from pyrap.tables import table
 
-from RimeJonesBK import *
-from RimeJonesEBK import *
-from RimeJonesMultiply import *
+from RimeJonesEBKFloat import *
 from RimeJonesReduce import *
 
 from pipedrimes import PipedRimes
@@ -66,9 +64,9 @@ class MeasurementSetSharedData(GPUSharedData):
 
 if __name__ == '__main__':
 	# Create a shared data object from the Measurement Set file
-	sd = MeasurementSetSharedData('/home/simon/data/WSRT.MS', nsrc=100)
+	sd = MeasurementSetSharedData('/home/simon/data/WSRT.MS', nsrc=100, dtype=np.float32)
 	# Create a pipeline consisting of an EBK kernel, followed by a reduction
-	pipeline = PipedRimes([RimeJonesEBK(), RimeJonesReduce()])
+	pipeline = PipedRimes([RimeJonesEBKFloat(), RimeJonesReduceFloat()])
 
 	# Random point source coordinates in the l,m,n (brightness image) domain
 	l=sd.ft(np.random.random(sd.nsrc)*0.1)
