@@ -1,6 +1,6 @@
 import os.path
 import numpy as np
-from node import *
+from BaseSharedData import *
 
 import pycuda.gpuarray as gpuarray
 from pyrap.tables import table
@@ -14,21 +14,11 @@ from pipedrimes import PipedRimes
 
 import pycuda.autoinit 
 
-
-
-class MeasurementSetSharedData(SharedData):
+class MeasurementSetSharedData(GPUSharedData):
 	ANTENNA_TABLE = "ANTENNA"
 	SPECTRAL_WINDOW = "SPECTRAL_WINDOW"
 
-	na = Parameter(7)
-	nbl = Parameter((7*6)/2)
-	nchan = Parameter(32)
-	nsrc = Parameter(200)
-	ntime = Parameter(10)
-
-	def __init__(self, ms_file, nsrc, float_dtype=np.float64):
-		super(MeasurementSetSharedData, self).__init__()
-
+	def __init__(self, ms_file, nsrc, dtype=np.float64):
 		# Do some checks on the supplied filename
 		if not isinstance(ms_file, str):
 			raise TypeError, 'ms_file is not a string'
@@ -36,68 +26,30 @@ class MeasurementSetSharedData(SharedData):
 		if not os.path.isdir(ms_file):
 			raise ValueError, '%s does not appear to be a valid path' % ms_file
 
-		# Store it
+		# Store the measurement set filename
 		self.ms_file = ms_file
-
-		# Do some checks on the supplied float type
-		# Set up the complex type
-		if float_dtype == np.float32:
-			self.ct = ct = np.complex64
-		elif float_dtype == np.float64:
-			self.ct = ct = np.complex128
-		else:
-			raise TypeError, 'Must specify either np.float32 or np.float64 for float_dtype'
-
-		# Store it
-		self.ft = ft = float_dtype
 
 		# Open the measurement set
 		t = table(self.ms_file, ack=False)
 
 		# Get the UVW coordinates
-		self.uvw=t.getcol("UVW").T.astype(self.ft)
+		self.uvw=t.getcol("UVW").T.astype(dtype)
 
 		# Open the antenna table
 		ta=table(self.ms_file + os.sep + MeasurementSetSharedData.ANTENNA_TABLE, ack=False)
 		# Open the spectral window table
 		tf=table(self.ms_file + os.sep + MeasurementSetSharedData.SPECTRAL_WINDOW, ack=False)
-		f=tf.getcol("CHAN_FREQ").astype(self.ft)
+		f=tf.getcol("CHAN_FREQ").astype(dtype)
 
 		na = len(ta.getcol("NAME"))
 		nbl = (na**2+na)/2
 		nchan = f.size
 		ntime = self.uvw.shape[1] / nbl
-		self.wavelength = 3e8/ft(f)
 
-		print "Number of Antenna", na
-		print "Number of Baselines", nbl
-		print "Number of Channels", nchan
-		print "Number of Timesteps", ntime
-		print "UVW shape" , self.uvw.shape, self.uvw.size
+		super(MeasurementSetSharedData, self).__init__(\
+			na=na,nchan=nchan,ntime=ntime,nsrc=nsrc,dtype=dtype)
 
-		self.na = na
-		self.nbl = nbl
-		self.nchan = nchan
-		self.ntime = ntime
-		self.nsrc = nsrc
-
-		self.lm_shape = (2, nsrc)
-		self.brightness_shape = (5, nsrc)
-		self.point_errors_shape = (2, na, ntime)
-
-		# Copy the uvw and wavelength data to the gpu
-		self.uvw_gpu = gpuarray.to_gpu(self.uvw)
-		self.wavelength_gpu = gpuarray.to_gpu(self.wavelength)
-
-		# Allocate empty gpu arrays for lm, brightness and point errors
-		self.lm_gpu = gpuarray.empty(self.lm_shape, dtype=ft)
-		self.brightness_gpu = gpuarray.empty(self.brightness_shape, dtype=ft)
-		self.point_errors_gpu = gpuarray.empty(self.point_errors_shape, \
-			dtype=ft)
-
-		# Output jones matrix
-		self.jones_shape = (4,nbl,nchan,ntime,nsrc)
-		self.jones_gpu = gpuarray.empty(self.jones_shape,dtype=ct)
+		self.wavelength = 3e8/f
 
 		# Create the key positions. This snippet creates an array
 		# equal to the list of positions of the last array element timestep)
@@ -105,36 +57,9 @@ class MeasurementSetSharedData(SharedData):
 			*self.jones_shape[-1]).astype(np.int32)
 		self.keys_gpu = gpuarray.to_gpu(self.keys)
 
-		# Output visibility matrix
-		self.vis_gpu = gpuarray.empty(self.keys.shape, dtype=ct)
-
 		t.close()
 		ta.close()
 		tf.close()
-
-	def set_point_errors(self, point_errors):
-		sd = self
-		if point_errors.shape != sd.point_errors_gpu.shape:
-			raise ValueError, 'point_errors shape is wrong. Should be %s, but is %s.' % (sd.point_errors_gpu.shape, point_errors.shape,)
-		
-		#sd.point_errors = point_errors[:].astype(sd.ft)
-		sd.point_errors_gpu.set(point_errors)
-
-	def set_lm(self, lm):
-		sd = self
-		if lm.shape != sd.lm_gpu.shape:
-			raise ValueError, 'lm shape is wrong. Should be %s, but is %s.' % (sd.lm_gpu.shape, lm.shape,)
-
-		#sd.lm = lm[:].astype(sd.ft)
-		sd.lm_gpu.set(lm)
-
-	def set_brightness(self, brightness):
-		sd = self
-		if brightness.shape != sd.brightness_gpu.shape:
-			raise ValueError, 'brightness shape is wrong. Should be %s' % (sd.brightness_gpu.shape, brightness.shape,)
-
-		#sd.brightness = brightness[:].astype(sd.ft)
-		sd.brightness_gpu.set(brightness)
 
 	def get_visibilities(self):
 		return self.vis_gpu.get()
@@ -166,16 +91,16 @@ if __name__ == '__main__':
 		.astype(sd.ft).reshape((2, sd.na, sd.ntime))
 
 	# Set data on the shared data object. Uploads to GPU
-	sd.set_lm(lm)
-	sd.set_brightness(brightness)
-	sd.set_point_errors(point_errors)
+	sd.transfer_lm(lm)
+	sd.transfer_brightness(brightness)
+	sd.transfer_point_errors(point_errors)
 
 	kernels_start, kernels_end = cuda.Event(), cuda.Event()
 
 	# Execute the pipeline
 	for i in range(10):
 		# Change parameters for this run
-		sd.set_lm(lm)
+		sd.transfer_lm(lm)
 		# Execute the pipeline
 		kernels_start.record()
 		pipeline.execute(sd)
