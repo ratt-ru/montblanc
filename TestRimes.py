@@ -36,11 +36,7 @@ class TestRimes(unittest.TestCase):
 
 		rime_bk.initialise(sd)
 
-		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-		    sd.wavelength_gpu,  sd.jones_gpu,
-		    np.int32(sd.nsrc), np.int32(sd.nbl),
-		    np.int32(sd.nchan), np.int32(sd.ntime),
-		    **rime_bk.get_kernel_params(sd))
+		rime_bk.execute(sd)
 
 		# Shutdown the rime_bk node, we don't need it any more
 		rime_bk.shutdown(sd)
@@ -92,11 +88,7 @@ class TestRimes(unittest.TestCase):
 
 		rime_bk.initialise(sd)
 
-		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-		    sd.wavelength_gpu,  sd.jones_gpu,
-		    np.int32(sd.nsrc), np.int32(sd.nbl),
-		    np.int32(sd.nchan), np.int32(sd.ntime),
-		    **rime_bk.get_kernel_params(sd))
+		rime_bk.execute(sd)
 
 		# Shutdown the rime_bk node, we don't need it any more
 		rime_bk.shutdown(sd)
@@ -151,19 +143,11 @@ class TestRimes(unittest.TestCase):
 		rime_bk.initialise(sd)
 
 		# Invoke the BK kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-		    sd.wavelength_gpu,  sd.jones_gpu,
-		    np.int32(sd.nsrc), np.int32(sd.nbl),
-		    np.int32(sd.nchan), np.int32(sd.ntime),
-			**rime_bk.get_kernel_params(sd))
+		rime_bk.execute(sd)
 
 		jones_cpu = sd.jones_gpu.get()
 
-		rime_ebk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-		    sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
-		    np.int32(sd.nsrc), np.int32(sd.nbl),
-		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
-		    **rime_ebk.get_kernel_params(sd))
+		rime_ebk.execute(sd)
 
 		rime_ebk.shutdown(sd)
 		rime_bk.shutdown(sd)
@@ -177,11 +161,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.initialise(sd)
 
 		# Invoke the BK kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-		    sd.wavelength_gpu,  sd.jones_gpu,
-		    np.int32(sd.nsrc), np.int32(sd.nbl),
-		    np.int32(sd.nchan), np.int32(sd.ntime),
-			**rime_bk.get_kernel_params(sd))
+		rime_bk.execute(sd)
 
 		jones_cpu = sd.jones_gpu.get()
 
@@ -207,11 +187,7 @@ class TestRimes(unittest.TestCase):
 
 		
 
-		rime_ebk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-		    sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
-		    np.int32(sd.nsrc), np.int32(sd.nbl),
-		    np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
-		    **rime_ebk.get_kernel_params(sd))		
+		rime_ebk.execute(sd)		
 
 		rime_ebk.shutdown(sd)
 		rime_bk.shutdown(sd)
@@ -278,10 +254,7 @@ class TestRimes(unittest.TestCase):
 		rime_X_2.initialise(sd)
 
 		# Run the kernel
-		rime_X_2.kernel(sd.vis_gpu, sd.bayes_model_gpu, \
-            sd.chi_sqrd_result_gpu, sd.sigma_sqrd, \
-            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), \
-            **rime_X_2.get_kernel_params(sd))
+		rime_X_2.execute(sd)
 
 		# Take the difference between the visibilities and the model
 		# (4,nbl,nchan,ntime)
@@ -398,11 +371,7 @@ class TestRimes(unittest.TestCase):
 		kernels_start.record()
 
 		# Invoke the kernel
-		rime_bk.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-		    sd.wavelength_gpu,  sd.jones_gpu,
-		    np.int32(sd.nsrc), np.int32(sd.nbl),
-		    np.int32(sd.nchan), np.int32(sd.ntime),
-			**bk_params)
+		rime_bk.execute(sd)
 
 		# Choose between the double and float kernel
 		if sd.ft == np.float64:
