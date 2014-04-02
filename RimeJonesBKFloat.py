@@ -183,11 +183,12 @@ class RimeJonesBKFloat(Node):
 
     def execute(self, shared_data):
         sd = shared_data
-        params = self.get_kernel_params(sd)
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
             sd.wavelength_gpu,  sd.jones_gpu,
-            np.int32(sd.nsrc), np.int32(sd.nbl), **params)
+            np.int32(sd.nsrc), np.int32(sd.nbl),
+            np.int32(sd.nchan), np.int32(sd.ntime),
+            **self.get_kernel_params(sd))
 
     def post_execution(self, shared_data):
         pass
