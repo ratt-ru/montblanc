@@ -2,32 +2,15 @@ import numpy as np
 from BaseSharedData import *
 
 class TestRimeSharedData(GPUSharedData):
-    INIT = 'init'
-    PRE = 'pre'
-    EXEC = 'exec'
-    POST = 'post'
-    SHUTDOWN = 'shutdown'
-
     def __init__(self, na=7, nsrc=10, nchan=8, ntime=5, dtype=np.float64):
         super(TestRimeSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
 
     def configure(self):
         sd = self
         na,nbl,nchan,ntime,nsrc = sd.na,sd.nbl,sd.nchan,sd.ntime,sd.nsrc
-        ft,ct = self.ft,self.ct
-
-        self.stream = [cuda.Stream(), cuda.Stream()]
-
-        self.event_names = [TestRimeSharedData.INIT, \
-            TestRimeSharedData.PRE, \
-            TestRimeSharedData.EXEC, \
-            TestRimeSharedData.POST, \
-            TestRimeSharedData.SHUTDOWN]
-        self.nevents = len(self.event_names)
+        ft,ct = sd.ft,sd.ct
 
         # Baseline coordinates in the u,v,w (frequency) domain
-
-        # UVW coordinates
         self.uvw = np.array([ \
             np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*3., \
             np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*2., \
