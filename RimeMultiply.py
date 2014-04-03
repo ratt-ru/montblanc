@@ -6,9 +6,9 @@ from pycuda.compiler import SourceModule
 
 from node import *
 
-class RimeJonesMultiply(Node):
+class RimeMultiply(Node):
     def __init__(self):
-        super(RimeJonesMultiply, self).__init__()
+        super(RimeMultiply, self).__init__()
         self.mod = SourceModule("""
 #include <pycuda-complex.hpp>
 #include \"math_constants.h\"

@@ -6,10 +6,10 @@ import numpy as np
 import pycuda.autoinit
 
 from node import *
-from RimeJonesBK import *
-from RimeJonesEBK import *
-from RimeJonesMultiply import *
-from RimeJonesReduce import *
+from RimeBK import *
+from RimeEBK import *
+from RimeMultiply import *
+from RimeReduce import *
 from TestRimeSharedData import TestRimeSharedData
 
 class PipedRimes:
@@ -154,7 +154,7 @@ def main(argv=None):
     # Set up various thing that aren't possible in PyCUDA
     crimes.setup_cuda()
 
-    sp = PipedRimes([RimeJonesEBK(), RimeJonesReduce()])
+    sp = PipedRimes([RimeEBK(), RimeReduce()])
 
     sd = TestRimeSharedData(na=7,nchan=32,ntime=10,nsrc=200)
     print 'Using', sd.gpu_mem()/(1024*1024), 'MB of GPU memory.'

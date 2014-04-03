@@ -9,44 +9,56 @@ from node import *
 FLOAT_KERNEL = """
 #include \"math_constants.h\"
 
-extern __shared__ float smem_d[];
+extern __shared__ float smem_f[];
 
 // Based on OSKAR's implementation of the RIME K term.
 // Baseline on the x dimension, source on the y dimension
 __global__
-void rime_jones_BK_float(
+void rime_jones_EBK_float(
     float * UVW,
     float * LM,
     float * brightness,
     float * wavelength,
+    float * point_error,
     float2 * jones,
-    int nsrc, int nbl,
-    int nchan, int ntime)
+    int nsrc, int nbl, int nchan, int ntime, int na)
 {
     // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
 
     #define REFWAVE 1e6
+    #define COS3_CONST 65*1e-9
 
     // Baseline, Source, Channel and Time indices
     int SRC = blockIdx.x*blockDim.x + threadIdx.x;
     int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / ntime;
     int TIME = (blockIdx.y*blockDim.y + threadIdx.y) % ntime;
     int BL = blockIdx.z*blockDim.z + threadIdx.z;
+    // Calculates the antenna pairs from the baseline!
+    int ANT1 = int(floor((sqrtf(1+8*BL)-1)/2));
+    int ANT2 = BL - (ANT1*ANT1+ANT1)/2;
+    ANT1 += 1;
 
     if(BL >= nbl || SRC >= nsrc || CHAN >= nchan || TIME >= ntime)
         return;
 
-    /* Cache input and output data from global memory. */
-    float * u = smem_d;
-    float * v = &u[blockDim.z];
-    float * w = &v[blockDim.z];
-    float * l = &w[blockDim.z];
+    // Cache input and output data from global memory.
+
+    // Pointing errors for antenna one (p) and two (q)
+    float * ld_p = &smem_f[blockDim.z];
+    float * md_p = &ld_p[blockDim.z];
+    float * ld_q = &md_p[blockDim.z];
+    float * md_q = &ld_q[blockDim.z];
+
+    // Point source coordinates, their flux
+    // and brightness matrix
+    float * l = &md_q[blockDim.z];
     float * m = &l[blockDim.x];
-    float * a = &m[blockDim.x];
-    float * fI = &a[blockDim.x];
+    float * fI = &m[blockDim.x];
     float * fV = &fI[blockDim.x];
     float * fU = &fV[blockDim.x];
-    float * fQ = &fU[blockDim.x];
+    float * fQ = &fU[blockDim.x];    
+
+    // Wavelengths
     float * wave = &fQ[blockDim.x];
 
     // Index
@@ -54,26 +66,21 @@ void rime_jones_BK_float(
 
     if(threadIdx.x == 0)
     {
-        // UVW is a 3 x nbl x ntime matrix
-        i = BL*ntime + TIME; u[threadIdx.z] = UVW[i];
-        i += nbl*ntime;      v[threadIdx.z] = UVW[i];
-        i += nbl*ntime;      w[threadIdx.z] = UVW[i];
+        i = ANT1;      ld_p[threadIdx.z] = point_error[i];
+        i += na*ntime; md_p[threadIdx.z] = point_error[i];
+        i = ANT2;      ld_q[threadIdx.z] = point_error[i];
+        i += na*ntime; md_q[threadIdx.z] = point_error[i];
     }
 
     if(threadIdx.z == 0)
     {
-		// LM and brightness are 2 x nsrc and 5 x nsrc matrices
-        i = SRC;   l[threadIdx.x] = LM[i];
-        i += nsrc; m[threadIdx.x] = LM[i];
-
-        i = SRC;   fI[threadIdx.x] = brightness[i];
-        i += nsrc; fQ[threadIdx.x] = brightness[i];
+        i = SRC;   l[threadIdx.x] = LM[i]; fI[threadIdx.x] = brightness[i];
+        i += nsrc; m[threadIdx.x] = LM[i]; fQ[threadIdx.x] = brightness[i];
         i += nsrc; fU[threadIdx.x] = brightness[i];
-        i += nsrc; fV[threadIdx.x] = brightness[i];
-        i += nsrc; a[threadIdx.x] = brightness[i];
+        i += nsrc; fV[threadIdx.x] = brightness[i];        
     }
 
-    if(threadIdx.y == 0)
+   if(threadIdx.y == 0)
     {
         i = CHAN; wave[threadIdx.y] = wavelength[i];
     }
@@ -89,10 +96,11 @@ void rime_jones_BK_float(
     // It only exists for debugging purposes
     // float n = phase;
 
+    // UVW is 3 x nbl x ntime matrix
     // u*l + v*m + w*n, in the wrong order :)
-    phase *= w[threadIdx.z];                  // w*n
-    phase += v[threadIdx.z]*m[threadIdx.x];   // v*m
-    phase += u[threadIdx.z]*l[threadIdx.x];   // u*l
+    i = BL*ntime + TIME + 2*nbl*ntime;         phase *= UVW[i]; // w*n
+    i -= nbl*ntime;             phase += UVW[i]*m[threadIdx.x]; // v*m
+    i -= nbl*ntime;             phase += UVW[i]*l[threadIdx.x]; // u*l
 
     // Multiply by 2*pi/wave[threadIdx.y]
     phase *= (2. * CUDART_PI);
@@ -103,8 +111,22 @@ void rime_jones_BK_float(
     __sincosf(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    phase = __powf(REFWAVE/wave[threadIdx.y], a[threadIdx.x]);
+    i = SRC+nsrc*4; phase = __powf(REFWAVE/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
+
+    float E_p = (l[threadIdx.z]+ld_p[threadIdx.z])*(l[threadIdx.z]*ld_p[threadIdx.z]);
+    E_p += (m[threadIdx.z]+md_p[threadIdx.z])*(m[threadIdx.z]*md_p[threadIdx.z]);
+    E_p = sqrt(E_p);
+    E_p = __cosf(COS3_CONST*wave[threadIdx.y]*E_p);
+    E_p = E_p*E_p*E_p;
+    real *= E_p; imag *= E_p;
+
+    float E_q = (l[threadIdx.z]+ld_q[threadIdx.z])*(l[threadIdx.z]*ld_q[threadIdx.z]);
+    E_q += (m[threadIdx.z]+md_q[threadIdx.z])*(m[threadIdx.z]*md_q[threadIdx.z]);
+    E_q = sqrt(E_q);
+    E_q = __cosf(COS3_CONST*wave[threadIdx.y]*E_q);
+    E_q = E_q*E_q*E_q;
+    real *= E_q; imag *= E_q;
 
 #if 0
     // Index into the jones array
@@ -116,10 +138,9 @@ void rime_jones_BK_float(
     jones[i+3]=result;
 #endif
 
-
 #if 1
     // Index into the jones matrices
-    i = BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc + SRC;
+    i = (BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc + SRC);
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = fI+fQ, b=0.0, c=real, d = imag
@@ -150,13 +171,15 @@ void rime_jones_BK_float(
 }
 """
 
-class RimeJonesBKFloat(Node):
+class RimeEBKFloat(Node):
     def __init__(self):
-        super(RimeJonesBKFloat, self).__init__()
+        super(RimeEBKFloat, self).__init__()
         self.mod = SourceModule(FLOAT_KERNEL, options=['-lineinfo'])
-        self.kernel = self.mod.get_function('rime_jones_BK_float')
+        self.kernel = self.mod.get_function('rime_jones_EBK_float')
+
     def initialise(self, shared_data):
-        pass
+		pass	
+
     def shutdown(self, shared_data):
         pass
     def pre_execution(self, shared_data):
@@ -174,9 +197,9 @@ class RimeJonesBKFloat(Node):
         time_chan_blocks = sd.ntime*sd.nchan
 
         return {
-            'block' : (srcs_per_block,1,baselines_per_block), \
-            'grid'  : (src_blocks,time_chan_blocks,baseline_blocks), \
-            'shared' : (3*baselines_per_block + \
+            'block' : (baselines_per_block,srcs_per_block,1), \
+            'grid'  : (baseline_blocks,src_blocks,time_chan_blocks), \
+            'shared' : (7*baselines_per_block + \
                         7*srcs_per_block + \
                         1*time_chans_per_block)*\
                             np.dtype(np.float64).itemsize }
@@ -185,10 +208,10 @@ class RimeJonesBKFloat(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu,  sd.jones_gpu,
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
             np.int32(sd.nsrc), np.int32(sd.nbl),
-            np.int32(sd.nchan), np.int32(sd.ntime),
-            **self.get_kernel_params(sd))
+            np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
+            **self.get_kernel_params(sd))       
 
     def post_execution(self, shared_data):
         pass

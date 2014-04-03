@@ -4,12 +4,12 @@ import numpy as np
 import time
 import sys
 
-from RimeJonesBK import RimeJonesBK
-from RimeJonesBKFloat import RimeJonesBKFloat
-from RimeJonesEBK import RimeJonesEBK
-from RimeJonesEBKFloat import RimeJonesEBKFloat
-from RimeJonesReduce import RimeJonesReduce
-from RimeJonesMultiply import RimeJonesMultiply
+from RimeBK import RimeBK
+from RimeBKFloat import RimeBKFloat
+from RimeEBK import RimeEBK
+from RimeEBKFloat import RimeEBKFloat
+from RimeReduce import RimeReduce
+from RimeMultiply import RimeMultiply
 from RimeChiSquaredFloat import RimeChiSquaredFloat
 from TestRimeSharedData import TestRimeSharedData
 
@@ -32,7 +32,7 @@ class TestRimes(unittest.TestCase):
 
 	def test_BK_float(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
-		rime_bk = RimeJonesBKFloat()
+		rime_bk = RimeBKFloat()
 
 		# Initialise the BK float kernel
 		rime_bk.initialise(sd)
@@ -50,7 +50,7 @@ class TestRimes(unittest.TestCase):
 
 	def test_BK(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
-		rime_bk = RimeJonesBK()
+		rime_bk = RimeBK()
 
 		# Initialise the BK kernel
 		rime_bk.initialise(sd)
@@ -68,8 +68,8 @@ class TestRimes(unittest.TestCase):
 
 	def test_EBK(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
-		rime_ebk = RimeJonesEBK()
-		rime_bk = RimeJonesBK()
+		rime_ebk = RimeEBK()
+		rime_bk = RimeBK()
 
 		rime_ebk.initialise(sd)
 		rime_bk.initialise(sd)
@@ -86,8 +86,8 @@ class TestRimes(unittest.TestCase):
 
 	def test_EBK_float(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
-		rime_ebk = RimeJonesEBKFloat()
-		rime_bk = RimeJonesBKFloat()
+		rime_ebk = RimeEBKFloat()
+		rime_bk = RimeBKFloat()
 
 		rime_ebk.initialise(sd)
 		rime_bk.initialise(sd)
@@ -128,7 +128,7 @@ class TestRimes(unittest.TestCase):
 	def test_multiply(self):
 		# Make the problem size smaller, due to slow numpy code later on
 		sd = TestRimeSharedData(na=5,nchan=4,ntime=2,nsrc=10)
-		rime_multiply = RimeJonesMultiply()
+		rime_multiply = RimeMultiply()
 
 		rime_multiply.initialise(sd)
 
@@ -195,7 +195,7 @@ class TestRimes(unittest.TestCase):
 
 	def test_reduce(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
-		rime_reduce = RimeJonesReduce()
+		rime_reduce = RimeReduce()
 
 		rime_reduce.initialise(sd)
 
@@ -270,7 +270,7 @@ class TestRimes(unittest.TestCase):
 	def do_predict_test(self, shared_data, log):
 		sd = shared_data		
 		# Choose between the double and float kernel
-		rime_bk = RimeJonesBK() if sd.ft == np.float64 else RimeJonesBKFloat()
+		rime_bk = RimeBK() if sd.ft == np.float64 else RimeBKFloat()
 
 		# Initialise the node
 		rime_bk.initialise(sd)

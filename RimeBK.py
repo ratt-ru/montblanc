@@ -150,9 +150,9 @@ void rime_jones_BK(
 }
 """
 
-class RimeJonesBK(Node):
+class RimeBK(Node):
     def __init__(self):
-        super(RimeJonesBK, self).__init__()
+        super(RimeBK, self).__init__()
         self.mod = SourceModule(DOUBLE_KERNEL, options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_BK')
 

@@ -5,8 +5,8 @@ from BaseSharedData import *
 import pycuda.gpuarray as gpuarray
 from pyrap.tables import table
 
-from RimeJonesEBKFloat import *
-from RimeJonesReduce import *
+from RimeEBKFloat import *
+from RimeReduce import *
 
 from pipedrimes import PipedRimes
 
@@ -66,7 +66,7 @@ if __name__ == '__main__':
 	# Create a shared data object from the Measurement Set file
 	sd = MeasurementSetSharedData('/home/simon/data/WSRT.MS', nsrc=100, dtype=np.float32)
 	# Create a pipeline consisting of an EBK kernel, followed by a reduction
-	pipeline = PipedRimes([RimeJonesEBKFloat(), RimeJonesReduceFloat()])
+	pipeline = PipedRimes([RimeEBKFloat(), RimeReduceFloat()])
 
 	print 'Using', sd.gpu_mem()/(1024*1024), 'MB of GPU memory.'
 

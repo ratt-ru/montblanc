@@ -8,9 +8,9 @@ from node import *
 
 import crimes
 
-class RimeJonesReduce(Node):
+class RimeReduce(Node):
     def __init__(self):
-        super(RimeJonesReduce, self).__init__()
+        super(RimeReduce, self).__init__()
     def initialise(self, shared_data):
         pass
     def shutdown(self, shared_data):
@@ -27,9 +27,9 @@ class RimeJonesReduce(Node):
     def post_execution(self, shared_data):
         pass
 
-class RimeJonesReduceFloat(Node):
+class RimeReduceFloat(Node):
     def __init__(self):
-        super(RimeJonesReduceFloat, self).__init__()
+        super(RimeReduceFloat, self).__init__()
     def initialise(self, shared_data):
         pass
     def shutdown(self, shared_data):
