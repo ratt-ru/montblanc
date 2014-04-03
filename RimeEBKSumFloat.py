@@ -165,9 +165,9 @@ class RimeEBKSumFloat(Node):
     def get_kernel_params(self, shared_data):
         sd = shared_data
 
-        chans_per_block = 2 if sd.nchan > 2 else sd.nchan
-        times_per_block = 2 if sd.ntime > 2 else sd.ntime
-        baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
+        chans_per_block = 4 if sd.nchan > 2 else sd.nchan
+        times_per_block = 4 if sd.ntime > 2 else sd.ntime
+        baselines_per_block = 16 if sd.nbl > 16 else sd.nbl
 
         chan_blocks = (sd.nchan + chans_per_block - 1) / chans_per_block
         time_blocks = (sd.ntime + times_per_block - 1) / times_per_block
