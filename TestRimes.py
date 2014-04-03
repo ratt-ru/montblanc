@@ -8,6 +8,7 @@ from RimeBK import RimeBK
 from RimeBKFloat import RimeBKFloat
 from RimeEBK import RimeEBK
 from RimeEBKFloat import RimeEBKFloat
+from RimeEBKSumFloat import RimeEBKSumFloat
 from RimeReduce import RimeReduce
 from RimeMultiply import RimeMultiply
 from RimeChiSquaredFloat import RimeChiSquaredFloat
@@ -83,6 +84,24 @@ class TestRimes(unittest.TestCase):
 
 		rime_ebk.shutdown(sd)
 		rime_bk.shutdown(sd)
+
+	def test_EBK_sum_float(self):
+		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
+		rime_ebk_sum = RimeEBKSumFloat()
+
+		# Initialise the BK float kernel
+		rime_ebk_sum.initialise(sd)
+		rime_ebk_sum.execute(sd)
+		rime_ebk_sum.shutdown(sd)
+
+		# Compute the jones matrix on the CPU
+		jones_cpu = self.compute_bk_jones(sd)
+
+		# Get the jones matrices calculated by the GPU
+		jones_gpu = sd.jones_gpu.get()
+
+		# Test that the jones CPU calculation matches that of the GPU calculation
+		print np.allclose(jones_cpu, jones_gpu)
 
 	def test_EBK_float(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
