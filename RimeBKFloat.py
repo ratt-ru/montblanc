@@ -179,7 +179,7 @@ class RimeBKFloat(Node):
             'shared' : (3*baselines_per_block + \
                         7*srcs_per_block + \
                         1*time_chans_per_block)*\
-                            np.dtype(np.float64).itemsize }
+                            np.dtype(sd.ft).itemsize }
 
     def execute(self, shared_data):
         sd = shared_data
