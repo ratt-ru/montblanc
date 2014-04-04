@@ -12,7 +12,7 @@ from RimeEBKSumFloat import RimeEBKSumFloat
 from RimeReduce import RimeReduce
 from RimeMultiply import RimeMultiply
 from RimeChiSquaredFloat import RimeChiSquaredFloat
-from TestRimeSharedData import TestRimeSharedData
+from TestSharedData import TestSharedData
 
 import pycuda.autoinit
 import pycuda.driver as cuda
@@ -32,7 +32,7 @@ class TestRimes(unittest.TestCase):
 		pass
 
 	def test_BK_float(self):
-		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
+		sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
 		rime_bk = RimeBKFloat()
 
 		# Initialise the BK float kernel
@@ -50,7 +50,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_cpu, jones_gpu))
 
 	def test_BK(self):
-		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
+		sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
 		rime_bk = RimeBK()
 
 		# Initialise the BK kernel
@@ -68,7 +68,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_cpu, jones_gpu))
 
 	def test_EBK(self):
-		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
+		sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
 		rime_ebk = RimeEBK()
 		rime_bk = RimeBK()
 
@@ -86,7 +86,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.shutdown(sd)
 
 	def test_EBK_sum_float(self):
-		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32)		
+		sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32)		
 		rime_ebk_sum = RimeEBKSumFloat()
 
 		# Initialise the BK float kernel
@@ -105,7 +105,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(vis_cpu, vis_gpu))
 
 	def test_EBK_float(self):
-		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
+		sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
 		rime_ebk = RimeEBKFloat()
 		rime_bk = RimeBKFloat()
 
@@ -147,7 +147,7 @@ class TestRimes(unittest.TestCase):
 	@unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
 	def test_multiply(self):
 		# Make the problem size smaller, due to slow numpy code later on
-		sd = TestRimeSharedData(na=5,nchan=4,ntime=2,nsrc=10)
+		sd = TestSharedData(na=5,nchan=4,ntime=2,nsrc=10)
 		rime_multiply = RimeMultiply()
 
 		rime_multiply.initialise(sd)
@@ -193,7 +193,7 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(jones_output_gpu, jones_output_cpu))
 
 	def test_chi_squared_float(self):
-		sd = TestRimeSharedData(na=100,nchan=64,ntime=20,nsrc=1,dtype=np.float32)
+		sd = TestSharedData(na=100,nchan=64,ntime=20,nsrc=1,dtype=np.float32)
 
 		rime_X_2 = RimeChiSquaredFloat()
 		rime_X_2.initialise(sd)
@@ -214,7 +214,7 @@ class TestRimes(unittest.TestCase):
 		rime_X_2.shutdown(sd)
 
 	def test_reduce(self):
-		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
+		sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
 		rime_reduce = RimeReduce()
 
 		rime_reduce.initialise(sd)
@@ -344,12 +344,12 @@ class TestRimes(unittest.TestCase):
 		self.assertTrue(np.allclose(vis_cpu, vis_predict))
 
 	def test_predict_double(self):
-		sd = TestRimeSharedData(na=10,nchan=32,ntime=1,nsrc=10000)
+		sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000)
 		log = logging.getLogger('TestRimes.test_predict_double')
 		self.do_predict_test(sd, log)
 
 	def test_predict_float(self):
-		sd = TestRimeSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32)
+		sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32)
 		log = logging.getLogger('TestRimes.test_predict_float')
 		self.do_predict_test(sd, log)
 

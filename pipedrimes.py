@@ -10,7 +10,7 @@ from RimeBK import *
 from RimeEBK import *
 from RimeMultiply import *
 from RimeReduce import *
-from TestRimeSharedData import TestRimeSharedData
+from TestSharedData import TestSharedData
 
 class PipedRimes:
     """ Class describing a pipeline of RIME equations """
@@ -156,7 +156,7 @@ def main(argv=None):
 
     sp = PipedRimes([RimeEBK(), RimeReduce()])
 
-    sd = TestRimeSharedData(na=7,nchan=32,ntime=10,nsrc=200)
+    sd = TestSharedData(na=7,nchan=32,ntime=10,nsrc=200)
     print 'Using', sd.gpu_mem()/(1024*1024), 'MB of GPU memory.'
 
     sp.execute(sd)

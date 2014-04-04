@@ -1,9 +1,9 @@
 import numpy as np
 from BaseSharedData import *
 
-class TestRimeSharedData(GPUSharedData):
+class TestSharedData(GPUSharedData):
     def __init__(self, na=7, nsrc=10, nchan=8, ntime=5, dtype=np.float64):
-        super(TestRimeSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
+        super(TestSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
 
         sd = self
         na,nbl,nchan,ntime,nsrc = sd.na,sd.nbl,sd.nchan,sd.ntime,sd.nsrc
