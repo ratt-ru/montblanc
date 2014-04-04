@@ -122,26 +122,26 @@ void rime_jones_EBK_sum_float(
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         // a = fI+fQ, b=0.0, c=real, d = imag
         jones[i]=make_float2(
-            (fI[threadIdx.x]+fQ[threadIdx.x])*real - 0.0*imag,
-            (fI[threadIdx.x]+fQ[threadIdx.x])*imag + 0.0*real);
+            (fI[SRC]+fQ[SRC])*real - 0.0*imag,
+            (fI[SRC]+fQ[SRC])*imag + 0.0*real);
 
         // a=fU, b=fV, c=real, d = imag 
         i += nbl*nsrc*nchan*ntime;
         jones[i]=make_float2(
-            fU[threadIdx.x]*real - fV[threadIdx.x]*imag,
-            fU[threadIdx.x]*imag + fV[threadIdx.x]*real);
+            fU[SRC]*real - fV[SRC]*imag,
+            fU[SRC]*imag + fV[SRC]*real);
 
         // a=fU, b=-fV, c=real, d = imag 
         i += nbl*nsrc*nchan*ntime;
         jones[i]=make_float2(
-            fU[threadIdx.x]*real - -fV[threadIdx.x]*imag,
-            fU[threadIdx.x]*imag + -fV[threadIdx.x]*real);
+            fU[SRC]*real - -fV[SRC]*imag,
+            fU[SRC]*imag + -fV[SRC]*real);
 
         // a=fI-fQ, b=0.0, c=real, d = imag 
         i += nbl*nsrc*nchan*ntime;
         jones[i]=make_float2(
-            (fI[threadIdx.x]-fQ[threadIdx.x])*real - 0.0*imag,
-            (fI[threadIdx.x]-fQ[threadIdx.x])*imag + 0.0*real);
+            (fI[SRC]-fQ[SRC])*real - 0.0*imag,
+            (fI[SRC]-fQ[SRC])*imag + 0.0*real);
     }
 
     #undef REFWAVE
