@@ -86,7 +86,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.shutdown(sd)
 
 	def test_EBK_sum_float(self):
-		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		
+		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32)		
 		rime_ebk_sum = RimeEBKSumFloat()
 
 		# Initialise the BK float kernel
@@ -101,7 +101,7 @@ class TestRimes(unittest.TestCase):
 		jones_gpu = sd.jones_gpu.get()
 
 		# Test that the jones CPU calculation matches that of the GPU calculation
-		print np.allclose(jones_cpu, jones_gpu)
+		self.assertTrue(np.allclose(jones_cpu, jones_gpu))
 
 	def test_EBK_float(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		

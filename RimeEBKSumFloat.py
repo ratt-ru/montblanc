@@ -41,17 +41,17 @@ void rime_jones_EBK_sum_float(
     int ANT2 = BL - (ANT1*ANT1+ANT1)/2;
     ANT1 += 1;
 
-    float * l = smem_f;
-    float * m = &l[nsrc];
+    float * l = smem_f;       // l is at beginning of shared mem
+    float * m = &l[nsrc];     // m is at the end of l
 
-    float * fI = &m[nsrc];
-    float * fQ = &fI[nsrc];
-    float * fV = &fQ[nsrc];
-    float * fU = &fV[nsrc];
+    float * fI = &m[nsrc];    // fI is at the end of m
+    float * fQ = &fI[nsrc];   // fQ is at the end of fI
+    float * fV = &fQ[nsrc];   // fV is at the end of fQ
+    float * fU = &fV[nsrc];   // fU is at the end of fV
 
-    float * wave = &fU[nsrc]; // number of CHANS in this block
+    float * wave = &fU[nsrc]; // wave is at the end of fU
 
-    float * ld_p = &wave[blockDim.x];            // BL*TIME
+    float * ld_p = &wave[blockDim.x]; // Number of CHANS
     float * md_p = &ld_p[blockDim.z*blockDim.y]; // BL*TIME
     float * ld_q = &md_p[blockDim.z*blockDim.y]; // BL*TIME
     float * md_q = &ld_q[blockDim.z*blockDim.y]; // BL*TIME
@@ -183,9 +183,6 @@ class RimeEBKSumFloat(Node):
 
     def execute(self, shared_data):
         sd = shared_data
-
-        print 'problem shape=', sd.jones_shape
-        print self.get_kernel_params(sd)
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
             sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
