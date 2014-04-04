@@ -96,7 +96,7 @@ class TestRimes(unittest.TestCase):
 
 		# Compute the jones matrix on the CPU, and sum over
 		# the sources (axis 4)
-		vis_cpu = np.add.reduce(self.compute_bk_jones(sd),axis=4)
+		vis_cpu = self.compute_bk_vis(sd)
 
 		# Get the visibilities calculated by the GPU
 		vis_gpu = sd.vis_gpu.get()
@@ -391,6 +391,10 @@ class TestRimes(unittest.TestCase):
 		    .reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
 
 		return jones_cpu
+
+	def compute_bk_vis(self, shared_data):
+		return np.add.reduce(self.compute_bk_jones(shared_data), axis=4)
+
 
 if __name__ == '__main__':
 	logging.basicConfig(stream=sys.stderr)
