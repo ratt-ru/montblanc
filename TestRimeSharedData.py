@@ -63,3 +63,45 @@ class TestRimeSharedData(GPUSharedData):
             .astype(ct).reshape(self.bayes_model_shape)
         self.transfer_bayes_model(self.bayes_model)
         self.sigma_sqrd = (np.random.random(1)**2).astype(ft)[0]
+
+    def compute_bk_jones(self):
+        sd = self
+        # Repeat the wavelengths along the timesteps for now
+        # dim nchan x ntime. 
+        w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
+
+        # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
+        n = np.sqrt(1. - sd.lm[0]**2 - sd.lm[1]**2) - 1.
+
+        # u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
+        phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
+            np.outer(sd.uvw[1], sd.lm[1]) + \
+            np.outer(sd.uvw[2],n))\
+                .reshape(sd.nbl, sd.ntime, sd.nsrc)
+
+        # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
+        phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
+        # Dim nchan x ntime x nsrcs 
+        power = np.power(1e6/w[:,:,np.newaxis], sd.brightness[4])
+        # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
+        phase_term = power*np.exp(phase)
+
+        # Create the brightness matrix. Dim 4 x nsrcs
+        brightness = sd.ct([
+            sd.brightness[0]+sd.brightness[1] + 0j,     # fI+fQ + 0j
+            sd.brightness[2] + 1j*sd.brightness[3],     # fU + fV*1j
+            sd.brightness[2] - 1j*sd.brightness[3],     # fU - fV*1j
+            sd.brightness[0]-sd.brightness[1] + 0j])        # fI-fQ + 0j
+
+        # This works due to broadcast! Multiplies along
+        # srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
+        # Also reshape the combined nchan and ntime axis into
+        # two separate axes
+        jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
+            brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
+            .reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
+
+        return jones_cpu
+
+    def compute_bk_vis(self):
+        return np.add.reduce(self.compute_bk_jones(), axis=4)        

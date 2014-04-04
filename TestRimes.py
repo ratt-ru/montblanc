@@ -41,7 +41,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.shutdown(sd)
 
 		# Compute the jones matrix on the CPU
-		jones_cpu = self.compute_bk_jones(sd)
+		jones_cpu = sd.compute_bk_jones()
 
 		# Get the jones matrices calculated by the GPU
 		jones_gpu = sd.jones_gpu.get()
@@ -59,7 +59,7 @@ class TestRimes(unittest.TestCase):
 		rime_bk.shutdown(sd)
 
 		# Compute the jones matrix on the CPU
-		jones_cpu = self.compute_bk_jones(sd)
+		jones_cpu = sd.compute_bk_jones()
 
 		# Get the jones matrices calculated by the GPU
 		jones_gpu = sd.jones_gpu.get()
@@ -78,7 +78,7 @@ class TestRimes(unittest.TestCase):
 		# Invoke the BK kernel
 		rime_bk.execute(sd)
 
-		jones_cpu = sd.jones_gpu.get()
+		jones_gpu = sd.jones_gpu.get()
 
 		rime_ebk.execute(sd)
 
@@ -96,7 +96,7 @@ class TestRimes(unittest.TestCase):
 
 		# Compute the jones matrix on the CPU, and sum over
 		# the sources (axis 4)
-		vis_cpu = self.compute_bk_vis(sd)
+		vis_cpu = sd.compute_bk_vis()
 
 		# Get the visibilities calculated by the GPU
 		vis_gpu = sd.vis_gpu.get()
@@ -352,49 +352,6 @@ class TestRimes(unittest.TestCase):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32)
 		log = logging.getLogger('TestRimes.test_predict_float')
 		self.do_predict_test(sd, log)
-
-	def compute_bk_jones(self, shared_data):
-		sd = shared_data
-		# Repeat the wavelengths along the timesteps for now
-		# dim nchan x ntime. 
-		w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
-
-		# n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
-		n = np.sqrt(1. - sd.lm[0]**2 - sd.lm[1]**2) - 1.
-
-		# u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
-		phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
-		    np.outer(sd.uvw[1], sd.lm[1]) + \
-		    np.outer(sd.uvw[2],n))\
-		        .reshape(sd.nbl, sd.ntime, sd.nsrc)
-
-		# 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
-		phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
-		# Dim nchan x ntime x nsrcs 
-		power = np.power(1e6/w[:,:,np.newaxis], sd.brightness[4])
-		# This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
-		phase_term = power*np.exp(phase)
-
-		# Create the brightness matrix. Dim 4 x nsrcs
-		brightness = sd.ct([
-		    sd.brightness[0]+sd.brightness[1] + 0j,     # fI+fQ + 0j
-		    sd.brightness[2] + 1j*sd.brightness[3],     # fU + fV*1j
-		    sd.brightness[2] - 1j*sd.brightness[3],     # fU - fV*1j
-		    sd.brightness[0]-sd.brightness[1] + 0j])        # fI-fQ + 0j
-
-		# This works due to broadcast! Multiplies along
-		# srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
-		# Also reshape the combined nchan and ntime axis into
-		# two separate axes
-		jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
-		    brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
-		    .reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
-
-		return jones_cpu
-
-	def compute_bk_vis(self, shared_data):
-		return np.add.reduce(self.compute_bk_jones(shared_data), axis=4)
-
 
 if __name__ == '__main__':
 	logging.basicConfig(stream=sys.stderr)
