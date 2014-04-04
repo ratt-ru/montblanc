@@ -29,8 +29,8 @@ void rime_jones_EBK_sum_float(
     #define COS3_CONST 65*1e-9
 
     // Baseline, Channel and Time indices
-    int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
-    int TIME = blockIdx.y*blockDim.y + threadIdx.y;
+    int TIME = blockIdx.x*blockDim.x + threadIdx.x;
+    int CHAN = blockIdx.y*blockDim.y + threadIdx.y;
     int BL = blockIdx.z*blockDim.z + threadIdx.z;
 
     if(BL >= nbl || CHAN >= nchan || TIME >= ntime)
@@ -51,31 +51,31 @@ void rime_jones_EBK_sum_float(
 
     float * wave = &fU[nsrc]; // wave is at the end of fU
 
-    float * ld_p = &wave[blockDim.x]; // Number of CHANS
-    float * md_p = &ld_p[blockDim.z*blockDim.y]; // BL*TIME
-    float * ld_q = &md_p[blockDim.z*blockDim.y]; // BL*TIME
-    float * md_q = &ld_q[blockDim.z*blockDim.y]; // BL*TIME
+    float * ld_p = &wave[blockDim.y]; // Number of CHANS
+    float * md_p = &ld_p[blockDim.z*blockDim.x]; // BL*TIME
+    float * ld_q = &md_p[blockDim.z*blockDim.x]; // BL*TIME
+    float * md_q = &ld_q[blockDim.z*blockDim.x]; // BL*TIME
 
     int i;
 
-    // Keep our x (CHAN) dimension constant.
+    // Keep our y (CHAN) dimension constant.
     // Then we can load in stuff required by our changing
-    // y (TIME) and z (BL) dimensions. Specifically, pointing errors
-    if(threadIdx.x == 0) 
+    // x (TIME) and z (BL) dimensions. Specifically, pointing errors
+    if(threadIdx.y == 0) 
     {
-        int j = threadIdx.z*blockDim.y+threadIdx.y;
+        int j = threadIdx.z*blockDim.x+threadIdx.x;
         i = ANT1*ntime + TIME; ld_p[j] = point_error[i];
         i += na*ntime;         md_p[j] = point_error[i];
         i = ANT2*ntime + TIME; ld_q[j] = point_error[i];
         i += na*ntime;         md_q[j] = point_error[i];
     }
 
-    // Keep our y (TIME) and z (BL) dimensions constant
+    // Keep our x (TIME) and z (BL) dimensions constant
     // Then we can load in stuff required by our changing
-    // x (CHAN) dimension. Specifically, wavelengths
-    if(threadIdx.y == 0 && threadIdx.z == 0)
+    // y (CHAN) dimension. Specifically, wavelengths
+    if(threadIdx.x == 0 && threadIdx.z == 0)
     {
-        i = CHAN; wave[threadIdx.x] = wavelength[i];
+        i = CHAN; wave[threadIdx.y] = wavelength[i];
     }
 
     // Shouldn't need this because of __synchthreads() in loop
@@ -109,16 +109,16 @@ void rime_jones_EBK_sum_float(
         i -= nbl*ntime;             phase += UVW[i]*m[SRC]; // v*m
         i -= nbl*ntime;             phase += UVW[i]*l[SRC]; // u*l
 
-        // Multiply by 2*pi/wave[threadIdx.x]
+        // Multiply by 2*pi/wave[threadIdx.y]
         phase *= (2. * CUDART_PI);
-        phase /= wave[threadIdx.x];
+        phase /= wave[threadIdx.y];
 
         // Calculate the complex exponential from the phase
         float real, imag;
         __sincosf(phase, &imag, &real);
 
         // Multiply by the wavelength to the power of alpha
-        i = SRC+nsrc*4; phase = __powf(REFWAVE/wave[threadIdx.x], brightness[i]);
+        i = SRC+nsrc*4; phase = __powf(REFWAVE/wave[threadIdx.y], brightness[i]);
         real *= phase; imag *= phase;        
 
         jones_1_sum.x += (fI[SRC]+fQ[SRC])*real - 0.0*imag;
@@ -168,17 +168,17 @@ class RimeEBKSumFloat(Node):
     def get_kernel_params(self, shared_data):
         sd = shared_data
 
-        chans_per_block = 4 if sd.nchan > 2 else sd.nchan
         times_per_block = 4 if sd.ntime > 2 else sd.ntime
+        chans_per_block = 4 if sd.nchan > 2 else sd.nchan
         baselines_per_block = 16 if sd.nbl > 16 else sd.nbl
 
-        chan_blocks = (sd.nchan + chans_per_block - 1) / chans_per_block
         time_blocks = (sd.ntime + times_per_block - 1) / times_per_block
+        chan_blocks = (sd.nchan + chans_per_block - 1) / chans_per_block
         baseline_blocks = (sd.nbl + baselines_per_block - 1)/ baselines_per_block
 
         return {
-            'block' : (chans_per_block,times_per_block,baselines_per_block),
-            'grid'  : (chan_blocks,time_blocks,baseline_blocks),
+            'block' : (times_per_block,chans_per_block,baselines_per_block),
+            'grid'  : (time_blocks,chan_blocks,baseline_blocks),
             'shared' : (1*chans_per_block +
                 6*sd.nsrc +
                 4*baselines_per_block*times_per_block)*
