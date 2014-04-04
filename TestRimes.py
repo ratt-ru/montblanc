@@ -94,14 +94,15 @@ class TestRimes(unittest.TestCase):
 		rime_ebk_sum.execute(sd)
 		rime_ebk_sum.shutdown(sd)
 
-		# Compute the jones matrix on the CPU
-		jones_cpu = self.compute_bk_jones(sd)
+		# Compute the jones matrix on the CPU, and sum over
+		# the sources (axis 4)
+		vis_cpu = np.add.reduce(self.compute_bk_jones(sd),axis=4)
 
-		# Get the jones matrices calculated by the GPU
-		jones_gpu = sd.jones_gpu.get()
+		# Get the visibilities calculated by the GPU
+		vis_gpu = sd.vis_gpu.get()
 
-		# Test that the jones CPU calculation matches that of the GPU calculation
-		self.assertTrue(np.allclose(jones_cpu, jones_gpu))
+		# Test that the CPU calculation matches that of the GPU calculation
+		self.assertTrue(np.allclose(vis_cpu, vis_gpu))
 
 	def test_EBK_float(self):
 		sd = TestRimeSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)		

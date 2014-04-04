@@ -20,7 +20,7 @@ void rime_jones_EBK_sum_float(
     float * brightness,
     float * wavelength,
     float * point_error,
-    float2 * jones,
+    float2 * visibilities,
     int nsrc, int nbl, int nchan, int ntime, int na)
 {
     // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
@@ -81,6 +81,11 @@ void rime_jones_EBK_sum_float(
     // Shouldn't need this because of __synchthreads() in loop
     // __syncthreads();
 
+    float2 jones_1_sum = make_float2(0.0f,0.0f);
+    float2 jones_2_sum = make_float2(0.0f,0.0f);
+    float2 jones_3_sum = make_float2(0.0f,0.0f);
+    float2 jones_4_sum = make_float2(0.0f,0.0f);
+
     for(int SRC=0; SRC<nsrc; ++SRC)
     {
         // Load point source data into shared memory using one thread.
@@ -116,33 +121,31 @@ void rime_jones_EBK_sum_float(
         i = SRC+nsrc*4; phase = __powf(REFWAVE/wave[threadIdx.x], brightness[i]);
         real *= phase; imag *= phase;        
 
-        // Index into the jones matrices
-        i = (BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc + SRC);
+        jones_1_sum.x += (fI[SRC]+fQ[SRC])*real - 0.0*imag;
+        jones_1_sum.y += (fI[SRC]+fQ[SRC])*imag + 0.0*real;
 
-        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        // a = fI+fQ, b=0.0, c=real, d = imag
-        jones[i]=make_float2(
-            (fI[SRC]+fQ[SRC])*real - 0.0*imag,
-            (fI[SRC]+fQ[SRC])*imag + 0.0*real);
+        jones_2_sum.x += fU[SRC]*real - fV[SRC]*imag;
+        jones_2_sum.y += fU[SRC]*imag + fV[SRC]*real;
 
-        // a=fU, b=fV, c=real, d = imag 
-        i += nbl*nsrc*nchan*ntime;
-        jones[i]=make_float2(
-            fU[SRC]*real - fV[SRC]*imag,
-            fU[SRC]*imag + fV[SRC]*real);
+        jones_3_sum.x += fU[SRC]*real - -fV[SRC]*imag;
+        jones_3_sum.y += fU[SRC]*imag + -fV[SRC]*real;
 
-        // a=fU, b=-fV, c=real, d = imag 
-        i += nbl*nsrc*nchan*ntime;
-        jones[i]=make_float2(
-            fU[SRC]*real - -fV[SRC]*imag,
-            fU[SRC]*imag + -fV[SRC]*real);
-
-        // a=fI-fQ, b=0.0, c=real, d = imag 
-        i += nbl*nsrc*nchan*ntime;
-        jones[i]=make_float2(
-            (fI[SRC]-fQ[SRC])*real - 0.0*imag,
-            (fI[SRC]-fQ[SRC])*imag + 0.0*real);
+        jones_4_sum.x += (fI[SRC]-fQ[SRC])*real - 0.0*imag;
+        jones_4_sum.y += (fI[SRC]-fQ[SRC])*imag + 0.0*real;
     }
+
+    // Index into the complex visibilities
+    i = BL*nchan*ntime + CHAN*ntime + TIME;
+    visibilities[i] = jones_1_sum;
+
+    i += nbl*nchan*ntime;
+    visibilities[i] = jones_2_sum;
+
+    i += nbl*nchan*ntime;
+    visibilities[i] = jones_3_sum;
+
+    i += nbl*nchan*ntime;
+    visibilities[i] = jones_4_sum;
 
     #undef REFWAVE
 }
@@ -185,7 +188,7 @@ class RimeEBKSumFloat(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.vis_gpu,
             np.int32(sd.nsrc), np.int32(sd.nbl),
             np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.na),
             **self.get_kernel_params(sd))       
