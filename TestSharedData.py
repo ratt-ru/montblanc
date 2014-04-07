@@ -95,8 +95,6 @@ class TestSharedData(GPUSharedData):
 
         # This works due to broadcast! Multiplies along
         # srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
-        # Also reshape the combined nchan and ntime axis into
-        # two separate axes
         jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
             brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
             .reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
