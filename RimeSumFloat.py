@@ -46,7 +46,7 @@ void rime_jones_sum_float(
     visibilities[V] = sum;
 
     J += nbl*nchan*ntime*nsrc; V += nbl*nchan*ntime;
-    sum = make_float(0.0f, 0.0f);
+    sum = make_float2(0.0f, 0.0f);
     c = make_float2(0.0f, 0.0f);
 
     for(int SRC=0; SRC<nsrc; ++SRC)
@@ -60,7 +60,7 @@ void rime_jones_sum_float(
     visibilities[V] = sum;
 
     J += nbl*nchan*ntime*nsrc; V += nbl*nchan*ntime;
-    sum = make_float(0.0f, 0.0f);
+    sum = make_float2(0.0f, 0.0f);
     c = make_float2(0.0f, 0.0f);
 
     for(int SRC=0; SRC<nsrc; ++SRC)
@@ -74,7 +74,7 @@ void rime_jones_sum_float(
     visibilities[V] = sum;
 
     J += nbl*nchan*ntime*nsrc; V += nbl*nchan*ntime;
-    sum = make_float(0.0f, 0.0f);
+    sum = make_float2(0.0f, 0.0f);
     c = make_float2(0.0f, 0.0f);
 
     for(int SRC=0; SRC<nsrc; ++SRC)
@@ -124,7 +124,7 @@ class RimeSumFloat(Node):
     def execute(self, shared_data):
         sd = shared_data
 
-        self.kernel(sd.jones_gpu, sd.vis_gpu
+        self.kernel(sd.jones_gpu, sd.vis_gpu,
             np.int32(sd.nsrc), np.int32(sd.nbl),
             np.int32(sd.nchan), np.int32(sd.ntime),
             **self.get_kernel_params(sd))       

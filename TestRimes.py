@@ -9,6 +9,7 @@ from RimeBKFloat import RimeBKFloat
 from RimeEBK import RimeEBK
 from RimeEBKFloat import RimeEBKFloat
 from RimeEBKSumFloat import RimeEBKSumFloat
+from RimeSumFloat import RimeSumFloat
 from RimeReduce import RimeReduce
 from RimeMultiply import RimeMultiply
 from RimeChiSquaredFloat import RimeChiSquaredFloat
@@ -84,6 +85,24 @@ class TestRimes(unittest.TestCase):
 
 		rime_ebk.shutdown(sd)
 		rime_bk.shutdown(sd)
+
+	def test_sum_float(self):
+		sd = TestSharedData(na=14,nchan=32,ntime=36,nsrc=100,dtype=np.float32)
+		jones_cpu = (np.random.random(np.product(sd.jones_shape)) + \
+			np.random.random(np.product(sd.jones_shape))*1j)\
+			.reshape(sd.jones_shape).astype(sd.ct)
+		sd.jones_gpu.set(jones_cpu)
+		
+		rime_sum = RimeSumFloat()
+		rime_sum.initialise(sd)
+
+		rime_sum.execute(sd)
+
+		vis_cpu = np.add.reduce(jones_cpu,axis=4)
+
+		self.assertTrue(np.allclose(vis_cpu, sd.vis_gpu.get()))
+
+		rime_sum.shutdown(sd)
 
 	def test_EBK_sum_float(self):
 		sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32)		
