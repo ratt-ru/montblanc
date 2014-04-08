@@ -17,7 +17,7 @@ __global__
 void rime_jones_sum_float(
     float2 * jones,
     float2 * visibilities,
-    int nsrc, int nbl, int nchan, int ntime)
+    int nbl, int nchan, int ntime, int nsrc)
 {
     // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
 
@@ -113,8 +113,7 @@ class RimeSumFloat(Node):
         sd = shared_data
 
         self.kernel(sd.jones_gpu, sd.vis_gpu,
-            np.int32(sd.nsrc), np.int32(sd.nbl),
-            np.int32(sd.nchan), np.int32(sd.ntime),
+            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             **self.get_kernel_params(sd))       
 
     def post_execution(self, shared_data):
