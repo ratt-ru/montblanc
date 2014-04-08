@@ -9,7 +9,7 @@ from node import *
 FLOAT_KERNEL = """
 #include \"math_constants.h\"
 
-extern __shared__ float smem_f[];
+extern __shared__ float2 smem_f[];
 
 // Based on OSKAR's implementation of the RIME K term.
 // Baseline on the x dimension, source on the y dimension
@@ -17,20 +17,16 @@ __global__
 void rime_jones_sum_float(
     float2 * jones,
     float2 * visibilities,
-    int nbl, int nchan, int ntime, int nsrc)
+    int nvis, int nsrc)
 {
     // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
+    // V is the visibility
+    int V = blockIdx.x*blockDim.x + threadIdx.x;
 
-    // Baseline, Channel and Time indices
-    int TIME = blockIdx.x*blockDim.x + threadIdx.x;
-    int CHAN = blockIdx.y*blockDim.y + threadIdx.y;
-    int BL = blockIdx.z*blockDim.z + threadIdx.z;
-
-    if(BL >= nbl || CHAN >= nchan || TIME >= ntime)
+    if(V >= nvis)
         return;
 
-    int J = BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc;
-    int V = BL*nchan*ntime + CHAN*ntime + TIME;
+    int J = V*nsrc;
 
     float2 sum = make_float2(0.0f, 0.0f);
 	    
@@ -42,7 +38,7 @@ void rime_jones_sum_float(
 
     visibilities[V] = sum;
 
-    J += nbl*nchan*ntime*nsrc; V += nbl*nchan*ntime;
+    J += nvis*nsrc; V += nvis;
     sum = make_float2(0.0f, 0.0f);
 
     for(int SRC=0; SRC<nsrc; ++SRC)
@@ -53,7 +49,7 @@ void rime_jones_sum_float(
 
     visibilities[V] = sum;
 
-    J += nbl*nchan*ntime*nsrc; V += nbl*nchan*ntime;
+    J += nvis*nsrc; V += nvis;
     sum = make_float2(0.0f, 0.0f);
 
     for(int SRC=0; SRC<nsrc; ++SRC)
@@ -64,7 +60,7 @@ void rime_jones_sum_float(
 
     visibilities[V] = sum;
 
-    J += nbl*nchan*ntime*nsrc; V += nbl*nchan*ntime;
+    J += nvis*nsrc; V += nvis;
     sum = make_float2(0.0f, 0.0f);
 
     for(int SRC=0; SRC<nsrc; ++SRC)
@@ -96,24 +92,21 @@ class RimeSumFloat(Node):
     def get_kernel_params(self, shared_data):
         sd = shared_data
 
-        times_per_block = 16 if sd.ntime > 2 else sd.ntime
-        chans_per_block = 8 if sd.nchan > 2 else sd.nchan
-        baselines_per_block = 1 if sd.nbl > 16 else sd.nbl
+        nvis = sd.nbl*sd.nchan*sd.ntime
 
-        time_blocks = (sd.ntime + times_per_block - 1) / times_per_block
-        chan_blocks = (sd.nchan + chans_per_block - 1) / chans_per_block
-        baseline_blocks = (sd.nbl + baselines_per_block - 1)/ baselines_per_block
+        vis_per_block = 128 if nvis > 128 else nvis
+        vis_blocks = (nvis + vis_per_block - 1) / vis_per_block
 
         return {
-            'block' : (times_per_block,chans_per_block,baselines_per_block),
-            'grid'  : (time_blocks,chan_blocks,baseline_blocks)} #,
-#            'shared' : 0 }
+            'block' : (vis_per_block,1,1),
+            'grid'  : (vis_blocks,1,1),
+            'shared' : 16*vis_per_block*np.dtype(sd.ct).itemsize }
 
     def execute(self, shared_data):
         sd = shared_data
 
         self.kernel(sd.jones_gpu, sd.vis_gpu,
-            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
+            np.int32(sd.nbl*sd.nchan*sd.ntime), np.int32(sd.nsrc),
             **self.get_kernel_params(sd))       
 
     def post_execution(self, shared_data):
