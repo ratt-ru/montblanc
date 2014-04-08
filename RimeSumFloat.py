@@ -33,56 +33,44 @@ void rime_jones_sum_float(
     int V = BL*nchan*ntime + CHAN*ntime + TIME;
 
     float2 sum = make_float2(0.0f, 0.0f);
-    float2 c = make_float2(0.0f, 0.0f);
 	    
     for(int SRC=0; SRC<nsrc; ++SRC)
     {
-        float2 y = jones[J+SRC];
-        y.x -= c.x; y.y -= c.y;
-        float2 t = make_float2(sum.x + y.x,sum.y + y.y);
-        sum = t;
+    	float2 value = jones[J+SRC];
+    	sum.x += value.x; sum.y += value.y;
     }
 
     visibilities[V] = sum;
 
     J += nbl*nchan*ntime*nsrc; V += nbl*nchan*ntime;
     sum = make_float2(0.0f, 0.0f);
-    c = make_float2(0.0f, 0.0f);
 
     for(int SRC=0; SRC<nsrc; ++SRC)
     {
-        float2 y = jones[J+SRC];
-        y.x -= c.x; y.y -= c.y;
-        float2 t = make_float2(sum.x + y.x,sum.y + y.y);
-        sum = t;
+    	float2 value = jones[J+SRC];
+    	sum.x += value.x; sum.y += value.y;
     }
 
     visibilities[V] = sum;
 
     J += nbl*nchan*ntime*nsrc; V += nbl*nchan*ntime;
     sum = make_float2(0.0f, 0.0f);
-    c = make_float2(0.0f, 0.0f);
 
     for(int SRC=0; SRC<nsrc; ++SRC)
     {
-        float2 y = jones[J+SRC];
-        y.x -= c.x; y.y -= c.y;
-        float2 t = make_float2(sum.x + y.x,sum.y + y.y);
-        sum = t;
+    	float2 value = jones[J+SRC];
+    	sum.x += value.x; sum.y += value.y;
     }
 
     visibilities[V] = sum;
 
     J += nbl*nchan*ntime*nsrc; V += nbl*nchan*ntime;
     sum = make_float2(0.0f, 0.0f);
-    c = make_float2(0.0f, 0.0f);
 
     for(int SRC=0; SRC<nsrc; ++SRC)
     {
-        float2 y = jones[J+SRC];
-        y.x -= c.x; y.y -= c.y;
-        float2 t = make_float2(sum.x + y.x,sum.y + y.y);
-        sum = t;
+    	float2 value = jones[J+SRC];
+    	sum.x += value.x; sum.y += value.y;
     }
 
     visibilities[V] = sum;
