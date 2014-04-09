@@ -11,6 +11,14 @@ Pre-requisites must be installed and dependent C libraries built.
 You'll need to install the **python-pycuda** package on ubuntu
     # sudo apt-get install python-pycuda
 
+### Setting up Submodules
+
+You'll need to run
+    # git submodule init
+    # git submodule update
+
+This should clone the **moderngpu** and **cub** CUDA libraries which are needed by pipedrimes.
+
 ### Building Libraries
 
 Run **make** to compile the **predict.so** and **crimes.so** libraries.
