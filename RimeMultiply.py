@@ -6,10 +6,7 @@ from pycuda.compiler import SourceModule
 
 from node import *
 
-class RimeMultiply(Node):
-    def __init__(self):
-        super(RimeMultiply, self).__init__()
-        self.mod = SourceModule("""
+KERNEL = """
 #include <pycuda-complex.hpp>
 #include \"math_constants.h\"
 
@@ -81,14 +78,19 @@ void rime_jones_multiply(
     i += njones;
     out_jones[i] = result[threadIdx.x];
 }
-""",
-options=['-lineinfo'])
-        self.kernel = self.mod.get_function('rime_jones_multiply')
+"""
+
+class RimeMultiply(Node):
+    def __init__(self):
+        super(RimeMultiply, self).__init__()
 
     def initialise(self, shared_data):
-        pass
+        self.mod = SourceModule(KERNEL, options=['-lineinfo'])
+        self.kernel = self.mod.get_function('rime_jones_multiply')
+
     def shutdown(self, shared_data):
         pass
+
     def pre_execution(self, shared_data):
         pass
 

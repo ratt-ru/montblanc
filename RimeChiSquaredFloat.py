@@ -6,10 +6,7 @@ from pycuda.compiler import SourceModule
 
 from node import *
 
-class RimeChiSquaredFloat(Node):
-    def __init__(self):
-        super(RimeChiSquaredFloat, self).__init__()
-        self.mod = SourceModule("""
+KERNEL = """
 // Shared memory pointers used by the kernels.
 
 __global__
@@ -54,14 +51,19 @@ void rime_chi_squared_diff(
 
     output[j] = (sum.x + sum.y)/sigma_squared;
 }
-""",
-options=['-lineinfo'])
+"""
+
+class RimeChiSquaredFloat(Node):
+    def __init__(self):
+        super(RimeChiSquaredFloat, self).__init__()
+ 
+    def initialise(self, shared_data):
+        self.mod = SourceModule(KERNEL,options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_chi_squared_diff')
 
-    def initialise(self, shared_data):
-        pass
     def shutdown(self, shared_data):
         pass
+
     def pre_execution(self, shared_data):
         pass
 

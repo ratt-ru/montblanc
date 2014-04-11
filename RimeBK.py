@@ -147,13 +147,14 @@ void rime_jones_BK(
 class RimeBK(Node):
     def __init__(self):
         super(RimeBK, self).__init__()
+
+    def initialise(self, shared_data):
         self.mod = SourceModule(DOUBLE_KERNEL, options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_BK')
 
-    def initialise(self, shared_data):
-        pass
     def shutdown(self, shared_data):
         pass
+
     def pre_execution(self, shared_data):
         pass
 

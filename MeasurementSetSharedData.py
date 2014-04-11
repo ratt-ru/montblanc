@@ -81,8 +81,12 @@ if __name__ == '__main__':
 
     # Create a shared data object from the Measurement Set file
     sd = MeasurementSetSharedData(args.msfile, nsrc=args.nsrc, dtype=np.float32)    
-    # Create a pipeline consisting of an EBK kernel, followed by a reduction
+    # Create a pipeline consisting of an EBK kernel, followed by a reduction,
+	# a chi squared difference between the Bayesian Model and the Visibilities
+	# and a further reduction to produce the Chi Squared Value
     pipeline = PipedRimes([RimeEBKFloat(), RimeJonesReduceFloat(), RimeChiSquaredFloat(), RimeChiSquaredReduceFloat()])
+	# Initialise the pipeline
+    pipeline.initialise(sd)
 
     # Random point source coordinates in the l,m,n (brightness image) domain
     l=sd.ft(np.random.random(sd.nsrc)*0.1)
@@ -135,3 +139,5 @@ if __name__ == '__main__':
     print sd
     print 'kernels: elapsed time: %gms' %\
         (time_sum / args.count)
+
+    pipeline.shutdown(sd)

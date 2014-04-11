@@ -76,11 +76,10 @@ void rime_jones_sum_float(
 class RimeSumFloat(Node):
     def __init__(self):
         super(RimeSumFloat, self).__init__()
-        self.mod = SourceModule(FLOAT_KERNEL, options=['-lineinfo'])
-        self.kernel = self.mod.get_function('rime_jones_sum_float')
 
     def initialise(self, shared_data):
-		pass	
+        self.mod = SourceModule(FLOAT_KERNEL, options=['-lineinfo'])
+        self.kernel = self.mod.get_function('rime_jones_sum_float')
 
     def shutdown(self, shared_data):
         pass

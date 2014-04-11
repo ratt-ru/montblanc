@@ -29,32 +29,20 @@ class PipedRimes:
             raise ValueError, 'node_list argument is not a list'
 
         self.pipeline = node_list
+        self.initialised = False
 
-    def execute(self, shared_data=None):
-        """ Iterates over the pipeline of nodes, executing the functionality contained
-        in each.
+    def initialise(self, shared_data):
+        """
+        Iterates over each node in the pipeline,
+        calling the initialise() method on each one.
 
-        Returns a shared data object that is passed amongst the pipeline
-        components. The intention here is that components will create some
-        sort of result member variable that is accessible after the pipeline
-        execution is complete.
-
-        >>> pipeline = PipeRimes([InitNode(), \\
-            ProcessingNode1(), ProcessingNode2(), CleanupNode()])
-        >>> data = pipe.execute()
-        >>> print data.result # result member created by one of the nodes
+        >>> sd = SharedData()
+        >>> pipeline = PipedRimes([Node1(), Node2(), Node3()])
+        >>> pipeline.initialise(sd)
+        >>> pipeline.execute(sd)
+        >>> pipeline.shutdown(sd)
         """
 
-        if shared_data is None:
-            shared_data = SharedData()
-
-        if self.__init_pipeline(shared_data) is True:
-            self.__execute_pipeline(shared_data)
-        self.__shutdown_pipeline(shared_data)
-
-        return shared_data
-
-    def __init_pipeline(self, shared_data):
         print 'Initialising pipeline'
 
         try:
@@ -65,17 +53,36 @@ class PipedRimes:
         except PipeLineError as e:
             print
             print 'Pipeline Error occurred during RIME pipeline initialisation', e
-            return False
+            self.initialised = False
+            return self.initialised
 #        except Exception, e:
 #            print
 #            print 'Unexpected exception occurred duri8\ng RIME pipeline initialisation', e
-#            return False
+#            self.initialised = False
+#            return self.initialised
 
         print 'Initialisation of pipeline complete'
-        return True
 
-    def __execute_pipeline(self, shared_data):
+        self.initialised = True
+        return self.initialised
+
+    def execute(self, shared_data):
+        """
+        Iterates over each node in the pipeline,
+        calling the execute() method on each one.
+
+        >>> sd = SharedData()
+        >>> pipeline = PipedRimes([Node1(), Node2(), Node3()])
+        >>> pipeline.initialise(sd)
+        >>> pipeline.execute(sd)
+        >>> pipeline.shutdown(sd)
+        """
+
         print 'Executing pipeline'
+
+        if not self.initialised:
+            print '\t Pipeline was not initialised!'
+            return False
 
         try:
             for node in self.pipeline:
@@ -98,7 +105,18 @@ class PipedRimes:
         print 'Execution of pipeline complete'
         return False
 
-    def __shutdown_pipeline(self, shared_data):
+    def shutdown(self, shared_data):
+        """
+        Iterates over each node in the pipeline,
+        calling the shutdown() method on each one.
+
+        >>> sd = SharedData()
+        >>> pipeline = PipedRimes([Node1(), Node2(), Node3()])
+        >>> pipeline.initialise(sd)
+        >>> pipeline.execute(sd)
+        >>> pipeline.shutdown(sd)
+        """
+
         print 'Shutting down pipeline'
 
         success = True
@@ -157,11 +175,13 @@ def main(argv=None):
     sp = PipedRimes([RimeEBK(), RimeJonesReduce()])
 
     sd = TestSharedData(na=7,nchan=32,ntime=10,nsrc=200)
-    print 'Using', sd.gpu_mem()/(1024*1024), 'MB of GPU memory.'
 
+    sp.initialise(sd)
     sp.execute(sd)
+    sp.shutdown(sd)
 
     print sp
+    print sd
 
 if __name__ == "__main__":
     sys.exit(main())
