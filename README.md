@@ -45,6 +45,6 @@ If you're running on an ubuntu laptop with optimus technology, you may have to i
 
 You could also try run
 
-    # python MeasurementSetSharedData.py
+    # python MeasurementSetSharedData.py /home/user/data/WSRT.MS -n 17 -c 100
 
-which sets up things based on the Westerbork measurement set. However, a path to the measurement set must be correctly configured.
+which sets up things based on the Westerbork Measurement Set, with 17 sources. It performs 100 iterations of the pipeline.
