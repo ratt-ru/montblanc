@@ -7,6 +7,8 @@ from pyrap.tables import table
 
 from RimeEBKFloat import *
 from RimeJonesReduce import *
+from RimeChiSquaredFloat import *
+from RimeChiSquaredReduceFloat import *
 
 from pipedrimes import PipedRimes
 
@@ -76,7 +78,7 @@ if __name__ == '__main__':
     # Create a shared data object from the Measurement Set file
     sd = MeasurementSetSharedData(args.msfile, nsrc=args.nsrc, dtype=np.float32)    
     # Create a pipeline consisting of an EBK kernel, followed by a reduction
-    pipeline = PipedRimes([RimeEBKFloat(), RimeJonesReduceFloat()])
+    pipeline = PipedRimes([RimeEBKFloat(), RimeJonesReduceFloat(), RimeChiSquaredFloat(), RimeChiSquaredReduceFloat()])
     print sd
 
     # Random point source coordinates in the l,m,n (brightness image) domain

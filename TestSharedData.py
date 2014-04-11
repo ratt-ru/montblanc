@@ -62,7 +62,7 @@ class TestSharedData(GPUSharedData):
         self.bayes_model = (np.random.random(nbayes) + np.random.random(nbayes)*1j)\
             .astype(ct).reshape(self.bayes_model_shape)
         self.transfer_bayes_model(self.bayes_model)
-        self.sigma_sqrd = (np.random.random(1)**2).astype(ft)[0]
+        self.set_sigma_sqrd((np.random.random(1)**2).astype(ft)[0])
 
     def compute_bk_jones(self):
         sd = self

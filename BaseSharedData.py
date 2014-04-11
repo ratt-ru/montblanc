@@ -52,6 +52,17 @@ class BaseSharedData(SharedData):
         self.vis_shape = self.bayes_model_shape
         self.chi_sqrd_result_shape = (nbl,nchan,ntime)
 
+        # Initialise sigma squared term and X2 result
+        # with default values
+        self.set_sigma_sqrd(1.0)
+        self.set_X2(0.0)
+
+    def set_sigma_sqrd(self, sigma_sqrd):
+        self.sigma_sqrd = self.ft(sigma_sqrd)
+
+    def set_X2(self, X2):
+        self.X2 = self.ft(X2)
+
     def __str__(self):
         return "RIME Simulation Dimensions" + \
             "\nAntenna:       " + str(self.na) + \
@@ -88,6 +99,7 @@ class GPUSharedData(BaseSharedData):
         self.vis_gpu = gpuarray.empty(shape=self.vis_shape,dtype=self.ct)
         self.chi_sqrd_result_gpu = gpuarray.empty(shape=self.chi_sqrd_result_shape,dtype=self.ft)
 
+        # Create a list of the GPU arrays
         self.gpu_data = [
             self.uvw_gpu,
             self.lm_gpu,
