@@ -2,6 +2,11 @@
 
 A PyCUDA implementation of the Radio Interferometry Measurement Equation
 
+## Requirements
+
+- PyCUDA 2013.1
+- A Kepler NVIDIA GPU (probably)
+
 ## Installation
 
 Pre-requisites must be installed and dependent C libraries built.
@@ -11,6 +16,8 @@ Pre-requisites must be installed and dependent C libraries built.
 You'll need to install the **python-pycuda** package on ubuntu
 
     # sudo apt-get install python-pycuda
+
+You'll also need to install the **pyrap** library, which is dependent on **casacore**. It may be easier to add the **ska-sa** PPA and get the binary from there.
 
 ### Setting up Submodules
 
@@ -26,7 +33,6 @@ This should clone the **moderngpu** and **cub** CUDA libraries which are needed 
 Run **make** to compile the **predict.so** and **crimes.so** libraries.
 
 You may need to configure the numpy include and library directories which are somewhat hardcoded at present. You also need to point your linker at the correct location of **libcuda.so**
-
 
 ## Running Tests
 
