@@ -44,7 +44,7 @@ void rime_jones_EBK_float(
     // Cache input and output data from global memory.
 
     // Pointing errors for antenna one (p) and two (q)
-    float * ld_p = &smem_f[blockDim.z];
+    float * ld_p = smem_f;
     float * md_p = &ld_p[blockDim.z];
     float * ld_q = &md_p[blockDim.z];
     float * md_q = &ld_q[blockDim.z];
@@ -66,10 +66,10 @@ void rime_jones_EBK_float(
 
     if(threadIdx.x == 0)
     {
-        i = ANT1;      ld_p[threadIdx.z] = point_error[i];
-        i += na*ntime; md_p[threadIdx.z] = point_error[i];
-        i = ANT2;      ld_q[threadIdx.z] = point_error[i];
-        i += na*ntime; md_q[threadIdx.z] = point_error[i];
+        i = ANT1*ntime + TIME; ld_p[threadIdx.z] = point_error[i];
+        i += na*ntime;         md_p[threadIdx.z] = point_error[i];
+        i = ANT2*ntime + TIME; ld_q[threadIdx.z] = point_error[i];
+        i += na*ntime;         md_q[threadIdx.z] = point_error[i];
     }
 
     if(threadIdx.z == 0)
@@ -199,8 +199,8 @@ class RimeEBKFloat(Node):
         return {
             'block' : (baselines_per_block,srcs_per_block,1), \
             'grid'  : (baseline_blocks,src_blocks,time_chan_blocks), \
-            'shared' : (7*baselines_per_block + \
-                        7*srcs_per_block + \
+            'shared' : (4*baselines_per_block + \
+                        6*srcs_per_block + \
                         1*time_chans_per_block)*\
                             np.dtype(sd.ft).itemsize }
 
