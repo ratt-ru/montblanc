@@ -52,6 +52,14 @@ class BaseSharedData(SharedData):
         self.vis_shape = self.bayes_model_shape
         self.chi_sqrd_result_shape = (nbl,nchan,ntime)
 
+    def __str__(self):
+        return "RIME Simulation Dimensions" + \
+            "\nAntenna:       " + str(self.na) + \
+            "\nBaselines:     " + str(self.nbl) + \
+            "\nChannels:      " + str(self.nchan) + \
+            "\nTimesteps:     " + str(self.ntime) + \
+            "\nSources:       " + str(self.nsrc)
+
 class GPUSharedData(BaseSharedData):
     uvw_gpu = ArrayData()
     lm_gpu = ArrayData()
@@ -118,3 +126,7 @@ class GPUSharedData(BaseSharedData):
 
     def transfer_bayes_model(self,bayes_model):
         self.bayes_model_gpu.set(bayes_model)
+
+    def __str__(self):
+        return super(GPUSharedData, self).__str__() + \
+            "\nGPU Memory:    " + str(self.gpu_mem() / (1024**2)) + " MB"
