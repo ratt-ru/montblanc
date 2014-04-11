@@ -241,7 +241,8 @@ class TestRimes(unittest.TestCase):
         # Do the chi squared sum on the CPU, and divide by the sigma squared term
         X2_cpu = chi_sqrd_cpu.sum() / sd.sigma_sqrd
 
-        # Check that the result returned by the CPU and GPU are the same
+        # Check that the result returned by the CPU and GPU are the same,
+        # with a reduced tolerance, because float32's are imprecise
         assert np.allclose(np.array([X2_cpu]), np.array([sd.X2]), rtol=1e-3)
 
         rime_X2.shutdown(sd)

@@ -51,8 +51,8 @@ class TestSharedData(GPUSharedData):
 
         # Output visibility matrix
         assert np.product(self.vis_shape) == np.product(self.keys.shape)
-        nvis = np.product(self.vis_shape)
-        self.vis = (np.random.random(nvis) + np.random.random(nvis)*1j)\
+        nviselements = np.product(self.vis_shape)
+        self.vis = (np.random.random(nviselements) + np.random.random(nviselements)*1j)\
             .astype(ct).reshape(self.vis_shape)
         self.transfer_vis(self.vis)
 

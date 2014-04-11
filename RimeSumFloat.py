@@ -92,10 +92,8 @@ class RimeSumFloat(Node):
     def get_kernel_params(self, shared_data):
         sd = shared_data
 
-        nvis = sd.nbl*sd.nchan*sd.ntime
-
-        vis_per_block = 128 if nvis > 128 else nvis
-        vis_blocks = (nvis + vis_per_block - 1) / vis_per_block
+        vis_per_block = 128 if sd.nvis > 128 else sd.nvis
+        vis_blocks = (sd.nvis + vis_per_block - 1) / vis_per_block
 
         return {
             'block' : (vis_per_block,1,1),

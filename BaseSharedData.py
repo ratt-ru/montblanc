@@ -11,6 +11,7 @@ class BaseSharedData(SharedData):
     nchan = Parameter(8)
     ntime = Parameter(5)
     nsrc = Parameter(10)
+    nvis = Parameter(1)
 
     def __init__(self, na=7, nchan=8, ntime=5, nsrc=10, dtype=np.float32):
         super(BaseSharedData, self).__init__()
@@ -28,6 +29,7 @@ class BaseSharedData(SharedData):
         self.nchan = nchan
         self.ntime = ntime
         self.nsrc = nsrc
+        self.nvis = nbl*nchan*ntime
 
         # Configure our floating point and complex types
         if dtype == np.float32:

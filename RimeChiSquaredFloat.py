@@ -68,9 +68,8 @@ options=['-lineinfo'])
     def get_kernel_params(self, shared_data):
         sd = shared_data
 
-        nvis = sd.nbl*sd.nchan*sd.ntime
-        vis_per_block = 256 if nvis > 256 else nvis
-        vis_blocks = (nvis + vis_per_block - 1) / vis_per_block
+        vis_per_block = 256 if sd.nvis > 256 else sd.nvis
+        vis_blocks = (sd.nvis + vis_per_block - 1) / vis_per_block
 
         return {
             'block'  : (vis_per_block,1,1), \

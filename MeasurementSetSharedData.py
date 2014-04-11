@@ -94,11 +94,15 @@ if __name__ == '__main__':
     alpha=sd.ft(np.random.random(sd.nsrc)*0.1)
     brightness = np.array([fI,fQ,fU,fV,alpha], dtype=sd.ft)
 
+    # Create a bayesian model and upload it to the GPU
+    nviselements = np.product(sd.vis_shape)
+    bayes_model = (np.random.random(nviselements) + np.random.random(nviselements)*1j)\
+        .astype(sd.ct).reshape(sd.vis_shape)
+    sd.transfer_bayes_model(bayes_model)
+
     # Generate random antenna pointing errors
     point_errors = np.random.random(2*sd.na*sd.ntime)\
         .astype(sd.ft).reshape((2, sd.na, sd.ntime))
-
-    # Set data on the shared data object. Uploads to GPU
 
     kernels_start, kernels_end = cuda.Event(), cuda.Event()
     time_sum = 0.0
@@ -107,17 +111,23 @@ if __name__ == '__main__':
     # Execute the pipeline
     for i in range(args.count):
         kernels_start.record()
-        # Change parameters for this run
+        # Set data on the shared data object. Uploads to GPU
         sd.transfer_lm(lm)
         sd.transfer_brightness(brightness)
         sd.transfer_point_errors(point_errors)
+        # Change parameters for this run
+        sd.set_sigma_sqrd((np.random.random(1)**2)[0])
         # Execute the pipeline
         pipeline.execute(sd)
         kernels_end.record()
         kernels_end.synchronize()
-        # Obtain the Jones matrices (slow)
         time_sum += kernels_start.time_till(kernels_end)
 
+        # The chi squared result is set on the shared data object
+        print sd.X2
+
+        # Obtain the visibilities  (slow)
         #V = sd.get_visibilities()
+
     print 'kernels: elapsed time: %gms' %\
         (time_sum / args.count)
