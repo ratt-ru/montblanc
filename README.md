@@ -33,8 +33,9 @@ You may need to configure the numpy include and library directories which are so
 Once the libraries have been compiled you should be able to run
 
     # python TestRimes.py
+    # python -m unittest TestRimes.TestRimes.test_predict_float
 
-which will run the current test suite. The reported times are for the entire test case with numpy code, and not just the CUDA kernels.
+which will run the current test suite or only the particular test case specified. The reported times are for the entire test case with numpy code, and not just the CUDA kernels.
 
 If you're running on an ubuntu laptop with optimus technology, you may have to install bumblebee and run
 
