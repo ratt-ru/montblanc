@@ -9,7 +9,7 @@ from node import *
 from RimeBK import *
 from RimeEBK import *
 from RimeMultiply import *
-from RimeReduce import *
+from RimeJonesReduce import *
 from TestSharedData import TestSharedData
 
 class PipedRimes:
@@ -154,7 +154,7 @@ def main(argv=None):
     # Set up various thing that aren't possible in PyCUDA
     crimes.setup_cuda()
 
-    sp = PipedRimes([RimeEBK(), RimeReduce()])
+    sp = PipedRimes([RimeEBK(), RimeJonesReduce()])
 
     sd = TestSharedData(na=7,nchan=32,ntime=10,nsrc=200)
     print 'Using', sd.gpu_mem()/(1024*1024), 'MB of GPU memory.'

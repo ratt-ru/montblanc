@@ -6,7 +6,7 @@ import pycuda.gpuarray as gpuarray
 from pyrap.tables import table
 
 from RimeEBKFloat import *
-from RimeReduce import *
+from RimeJonesReduce import *
 
 from pipedrimes import PipedRimes
 
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     # Create a shared data object from the Measurement Set file
     sd = MeasurementSetSharedData('/home/simon/data/WSRT.MS', nsrc=17, dtype=np.float32)    
     # Create a pipeline consisting of an EBK kernel, followed by a reduction
-    pipeline = PipedRimes([RimeEBKFloat(), RimeReduceFloat()])
+    pipeline = PipedRimes([RimeEBKFloat(), RimeJonesReduceFloat()])
     print sd
 
 

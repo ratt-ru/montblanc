@@ -10,7 +10,7 @@ from RimeEBK import RimeEBK
 from RimeEBKFloat import RimeEBKFloat
 from RimeEBKSumFloat import RimeEBKSumFloat
 from RimeSumFloat import RimeSumFloat
-from RimeReduce import RimeReduce
+from RimeJonesReduce import RimeJonesReduce
 from RimeMultiply import RimeMultiply
 from RimeChiSquaredFloat import RimeChiSquaredFloat
 from TestSharedData import TestSharedData
@@ -237,7 +237,7 @@ class TestRimes(unittest.TestCase):
 
 	def test_reduce(self):
 		sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200)		
-		rime_reduce = RimeReduce()
+		rime_reduce = RimeJonesReduce()
 
 		rime_reduce.initialise(sd)
 
