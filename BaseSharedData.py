@@ -6,6 +6,7 @@ import pycuda.gpuarray as gpuarray
 from node import SharedData,ArrayData,Parameter
 
 class BaseSharedData(SharedData):
+    """ Class defining the RIME Simulation Parameters. """
     na = Parameter(7)
     nbl = Parameter((7**2 + 7)/2)
     nchan = Parameter(8)
@@ -59,10 +60,17 @@ class BaseSharedData(SharedData):
         self.set_sigma_sqrd(1.0)
         self.set_X2(0.0)
 
+    def set_refwave(self, refwave):
+        """ Set the reference wavelength """
+        self.refwave = self.ft(refwave)
+
     def set_sigma_sqrd(self, sigma_sqrd):
+        """ Set the sigma squared term, used
+        for chi squared """
         self.sigma_sqrd = self.ft(sigma_sqrd)
 
     def set_X2(self, X2):
+        """ Set the chi squared result. Useful for sensibly initialising it """
         self.X2 = self.ft(X2)
 
     def __str__(self):
@@ -74,6 +82,10 @@ class BaseSharedData(SharedData):
             "\nSources:       " + str(self.nsrc)
 
 class GPUSharedData(BaseSharedData):
+    """
+    Class extending BaseSharedData to add GPU arrays
+    for holding simulation input and output.
+    """
     uvw_gpu = ArrayData()
     lm_gpu = ArrayData()
     brightness_gpu = ArrayData()

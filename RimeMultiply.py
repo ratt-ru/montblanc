@@ -17,7 +17,6 @@ class RimeMultiply(Node):
 extern __shared__ float smem_f[];
 extern __shared__ double2 smem_d2[];
 
-// Based on OSKAR cuda code
 __device__ void
 complex_multiply_double2(const double2 * lhs, const double2 * rhs, double2 * result)
 {
@@ -37,7 +36,6 @@ complex_multiply_add_double2(const double2 * lhs, const double2 * rhs, double2 *
 }
 
 __global__
-//__launch_bounds__( 256, 2 )
 void rime_jones_multiply(
     double2 * lhs,
     double2 * rhs,

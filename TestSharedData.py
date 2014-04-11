@@ -30,7 +30,11 @@ class TestSharedData(GPUSharedData):
         self.brightness = np.array([fI,fQ,fU,fV,alpha], dtype=ft)
 
         # Generate nchan frequencies/wavelengths
-        self.wavelength = 3e8/ft(np.linspace(1e6,2e6,nchan))
+    	frequencies = ft(np.linspace(1e6,2e6,nchan))
+        self.wavelength = 3e8/frequencies
+    	# TODO: Setting the reference wavelength to a frequency
+    	# makes no sense, but the numbers match Cyril's predict
+        self.set_refwave(frequencies[nchan/2])
 
         # Generate the antenna pointing errors
         self.point_errors = np.random.random(2*na*ntime)\
@@ -82,7 +86,7 @@ class TestSharedData(GPUSharedData):
         # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
         phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
         # Dim nchan x ntime x nsrcs 
-        power = np.power(1e6/w[:,:,np.newaxis], sd.brightness[4])
+        power = np.power(sd.refwave/w[:,:,np.newaxis], sd.brightness[4])
         # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
         phase_term = power*np.exp(phase)
 

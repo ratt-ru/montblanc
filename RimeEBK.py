@@ -11,8 +11,6 @@ DOUBLE_KERNEL = """
 
 extern __shared__ double smem_d[];
 
-// Based on OSKAR's implementation of the RIME K term.
-// Baseline on the x dimension, source on the y dimension
 __global__
 void rime_jones_EBK(
     double * UVW,
@@ -21,11 +19,10 @@ void rime_jones_EBK(
     double * wavelength,
     double * point_error,
     double2 * jones,
-    int nsrc, int nbl, int nchan, int ntime, int na)
+    double refwave, 
+    int nbl, int nchan, int ntime, int nsrc, int na)
 {
     // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
-
-    #define REFWAVE 1e6
     #define COS3_CONST 65*1e-9
 
     // Baseline, Source, Channel and Time indices
@@ -111,7 +108,7 @@ void rime_jones_EBK(
     sincos(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    i = SRC+nsrc*4; phase = pow(REFWAVE/wave[threadIdx.y], brightness[i]);
+    i = SRC+nsrc*4; phase = pow(refwave/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
 
     double E_p = (l[threadIdx.z]+ld_p[threadIdx.z])*(l[threadIdx.z]*ld_p[threadIdx.z]);
@@ -166,8 +163,6 @@ void rime_jones_EBK(
         (fI[threadIdx.x]-fQ[threadIdx.x])*real - 0.0*imag,
         (fI[threadIdx.x]-fQ[threadIdx.x])*imag + 0.0*real);
 #endif
-
-    #undef REFWAVE
 }
 """
 
@@ -208,8 +203,9 @@ class RimeEBK(Node):
         params = self.get_kernel_params(sd)
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu,
-            np.int32(sd.nsrc), np.int32(sd.nbl), np.int32(sd.na), **params)
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu, sd.refwave,
+            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
+		    np.int32(sd.na), **params)
 
     def post_execution(self, shared_data):
         pass

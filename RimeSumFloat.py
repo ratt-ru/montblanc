@@ -11,8 +11,6 @@ FLOAT_KERNEL = """
 
 extern __shared__ float2 smem_f[];
 
-// Based on OSKAR's implementation of the RIME K term.
-// Baseline on the x dimension, source on the y dimension
 __global__
 void rime_jones_sum_float(
     float2 * jones,

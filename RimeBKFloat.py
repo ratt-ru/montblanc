@@ -11,8 +11,6 @@ FLOAT_KERNEL = """
 
 extern __shared__ float smem_d[];
 
-// Based on OSKAR's implementation of the RIME K term.
-// Baseline on the x dimension, source on the y dimension
 __global__
 void rime_jones_BK_float(
     float * UVW,
@@ -20,12 +18,10 @@ void rime_jones_BK_float(
     float * brightness,
     float * wavelength,
     float2 * jones,
-    int nsrc, int nbl,
-    int nchan, int ntime)
+    float refwave,
+    int nbl, int nchan, int ntime, int nsrc)
 {
     // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
-
-    #define REFWAVE 1e6
 
     // Baseline, Source, Channel and Time indices
     int SRC = blockIdx.x*blockDim.x + threadIdx.x;
@@ -103,7 +99,7 @@ void rime_jones_BK_float(
     __sincosf(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    phase = __powf(REFWAVE/wave[threadIdx.y], a[threadIdx.x]);
+    phase = __powf(refwave/wave[threadIdx.y], a[threadIdx.x]);
     real *= phase; imag *= phase;
 
 #if 0
@@ -145,8 +141,6 @@ void rime_jones_BK_float(
         (fI[threadIdx.x]-fQ[threadIdx.x])*real - 0.0*imag,
         (fI[threadIdx.x]-fQ[threadIdx.x])*imag + 0.0*real);
 #endif
-
-    #undef REFWAVE
 }
 """
 
@@ -185,9 +179,8 @@ class RimeBKFloat(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu,  sd.jones_gpu,
-            np.int32(sd.nsrc), np.int32(sd.nbl),
-            np.int32(sd.nchan), np.int32(sd.ntime),
+            sd.wavelength_gpu,  sd.jones_gpu, sd.refwave,
+            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             **self.get_kernel_params(sd))
 
     def post_execution(self, shared_data):
