@@ -22,7 +22,7 @@ class MeasurementSetSharedData(GPUSharedData):
             raise TypeError, 'ms_file is not a string'
 
         if not os.path.isdir(ms_file):
-            raise ValueError, '%s does not appear to be a valid path' % ms_file
+            raise ValueError, '%s does not appear to be a valid measurement set' % ms_file
 
         # Store the measurement set filename
         self.ms_file = ms_file
@@ -63,12 +63,21 @@ class MeasurementSetSharedData(GPUSharedData):
         return self.vis_gpu.get()
 
 if __name__ == '__main__':
+    import sys
+    import argparse
+
+    parser = argparse.ArgumentParser(description='RIME MS test script')
+    parser.add_argument('msfile', help='Measurement Set File')
+    parser.add_argument('-n','--nsrc',dest='nsrc', type=int, default=17, help='Number of Sources')
+    parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
+
+    args = parser.parse_args(sys.argv[1:])
+
     # Create a shared data object from the Measurement Set file
-    sd = MeasurementSetSharedData('/home/simon/data/WSRT.MS', nsrc=17, dtype=np.float32)    
+    sd = MeasurementSetSharedData(args.msfile, nsrc=args.nsrc, dtype=np.float32)    
     # Create a pipeline consisting of an EBK kernel, followed by a reduction
     pipeline = PipedRimes([RimeEBKFloat(), RimeJonesReduceFloat()])
     print sd
-
 
     # Random point source coordinates in the l,m,n (brightness image) domain
     l=sd.ft(np.random.random(sd.nsrc)*0.1)
@@ -94,7 +103,7 @@ if __name__ == '__main__':
     count = 10
 
     # Execute the pipeline
-    for i in range(count):
+    for i in range(args.count):
         kernels_start.record()
         # Change parameters for this run
         sd.transfer_lm(lm)
@@ -109,4 +118,4 @@ if __name__ == '__main__':
 
         #V = sd.get_visibilities()
     print 'kernels: elapsed time: %gms' %\
-        (time_sum / count)
+        (time_sum / args.count)
