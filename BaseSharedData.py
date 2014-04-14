@@ -44,6 +44,7 @@ class BaseSharedData(SharedData):
 
         # Set up input data shapes
         self.uvw_shape = (3, nbl, ntime)
+        self.ant_pairs_shape = (2, nbl, ntime)
         self.lm_shape = (2, nsrc)
         self.brightness_shape = (5, nsrc)
         self.wavelength_shape = (nchan)

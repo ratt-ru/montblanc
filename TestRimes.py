@@ -105,6 +105,49 @@ class TestRimes(unittest.TestCase):
 
         rime_sum.shutdown(sd)
 
+    def test_EBK_float(self):
+        sd = TestSharedData(na=2,nchan=2,ntime=2,nsrc=2,dtype=np.float32)      
+        rime_ebk = RimeEBKFloat()
+        rime_bk = RimeBKFloat()
+
+        rime_ebk.initialise(sd)
+        rime_bk.initialise(sd)
+
+        print 'point_errors', sd.point_errors
+
+        # Invoke the BK kernel
+        rime_bk.execute(sd)
+        jones_gpu = sd.jones_gpu.get()
+        print 'BK float', jones_gpu
+
+        for bl in range(sd.nbl):
+            ANT1 = int(np.floor((np.sqrt(1+8*bl)-1)/2))
+            ANT2 = ANT1*(ANT1-1)/2
+            ANT1 += 1;
+
+        """
+        for bl in range(sd.nbl):
+            ANT1 = int(np.floor((np.sqrt(1+8*bl)-1)/2))
+            ANT2 = ANT1*(ANT1-1)/2
+            ANT1 += 1;
+
+            for chan in range(sd.nchan):
+                wave = sd.wavelength[chan]
+                for time in range(sd.ntime):
+                    for src in range(sd.nsrc):
+                        l, m = sd.lm[0][src]
+
+                        jones[4:,bl,chan,time,src]
+        """        
+
+        rime_ebk.execute(sd)        
+        jones_gpu = sd.jones_gpu.get()
+        print 'EBK float', jones_gpu
+
+        rime_ebk.shutdown(sd)
+        rime_bk.shutdown(sd)
+
+
     def test_EBK_sum_float(self):
         sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32)      
         rime_ebk_sum = RimeEBKSumFloat()
@@ -126,46 +169,6 @@ class TestRimes(unittest.TestCase):
         # and GPU seem to make a difference here, so we relax the tolerance
         # somewhat.
         self.assertTrue(np.allclose(vis_cpu, vis_gpu, rtol=1e-4))
-
-    def test_EBK_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)      
-        rime_ebk = RimeEBKFloat()
-        rime_bk = RimeBKFloat()
-
-        rime_ebk.initialise(sd)
-        rime_bk.initialise(sd)
-
-        # Invoke the BK kernel
-        rime_bk.execute(sd)
-
-        jones_cpu = sd.jones_gpu.get()
-
-        for bl in range(sd.nbl):
-            ANT1 = int(np.floor((np.sqrt(1+8*bl)-1)/2))
-            ANT2 = ANT1*(ANT1-1)/2
-            ANT1 += 1;
-
-        """
-        for bl in range(sd.nbl):
-            ANT1 = int(np.floor((np.sqrt(1+8*bl)-1)/2))
-            ANT2 = ANT1*(ANT1-1)/2
-            ANT1 += 1;
-
-            for chan in range(sd.nchan):
-                wave = sd.wavelength[chan]
-                for time in range(sd.ntime):
-                    for src in range(sd.nsrc):
-                        l, m = sd.lm[0][src]
-
-                        jones[4:,bl,chan,time,src]
-        """
-
-        
-
-        rime_ebk.execute(sd)        
-
-        rime_ebk.shutdown(sd)
-        rime_bk.shutdown(sd)
 
     @unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
     def test_multiply(self):

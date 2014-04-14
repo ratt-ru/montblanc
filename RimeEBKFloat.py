@@ -62,15 +62,21 @@ void rime_jones_EBK_float(
     // Index
     int i;
 
+    // Varies by time (y) and antenna (baseline) (z) 
     if(threadIdx.x == 0)
     {
         i = ANT1*ntime + TIME; ld_p[threadIdx.z] = point_error[i];
         i += na*ntime;         md_p[threadIdx.z] = point_error[i];
         i = ANT2*ntime + TIME; ld_q[threadIdx.z] = point_error[i];
         i += na*ntime;         md_q[threadIdx.z] = point_error[i];
+
+#if __CUDA_ARCH__ >= 200
+        printf(\"%f %f %f %f\\n\", ld_p[threadIdx.z], md_p[threadIdx.z], ld_q[threadIdx.z], md_q[threadIdx.z]);
+#endif
     }
 
-    if(threadIdx.z == 0)
+    // Varies by source (x)
+    if(threadIdx.y == 0 && threadIdx.z == 0)
     {
         i = SRC;   l[threadIdx.x] = LM[i]; fI[threadIdx.x] = brightness[i];
         i += nsrc; m[threadIdx.x] = LM[i]; fQ[threadIdx.x] = brightness[i];
@@ -78,11 +84,12 @@ void rime_jones_EBK_float(
         i += nsrc; fV[threadIdx.x] = brightness[i];        
     }
 
-   if(threadIdx.y == 0)
+    // Varies by channel (y)
+    if(threadIdx.x == 0 && threadIdx.z == 0)
     {
         i = CHAN; wave[threadIdx.y] = wavelength[i];
     }
-
+    
     __syncthreads();
 
     // Calculate the n term first
