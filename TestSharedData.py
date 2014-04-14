@@ -38,7 +38,7 @@ class TestSharedData(GPUSharedData):
 
         # Generate the antenna pointing errors
         self.point_errors = np.random.random(2*na*ntime)\
-            .astype(ft).reshape((2, na, ntime))
+            .astype(ft).reshape(self.point_errors_shape)
 
         # Copy the uvw, lm and brightness data to the gpu
         self.transfer_uvw(self.uvw)
