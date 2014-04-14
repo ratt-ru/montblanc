@@ -5,7 +5,7 @@ from BaseSharedData import *
 import pycuda.gpuarray as gpuarray
 from pyrap.tables import table
 
-from RimeEBKFloat import *
+from RimeBKFloat import *
 from RimeJonesReduce import *
 from RimeChiSquaredFloat import *
 from RimeChiSquaredReduceFloat import *
@@ -50,10 +50,10 @@ class MeasurementSetSharedData(GPUSharedData):
             na=na,nchan=nchan,ntime=ntime,nsrc=nsrc,dtype=dtype)
 
         self.wavelength = 3e8/f
-	# TODO: Setting the reference wavelength to a frequency makes no sense,
-	# but this matches Cyril's predict...
-	# First dimension also seems to be of size 1 here...
-	self.set_refwave(f[0][nchan/2])
+    	# TODO: Setting the reference wavelength to a frequency makes no sense,
+    	# but this matches Cyril's predict...
+    	# First dimension also seems to be of size 1 here...
+    	self.set_refwave(f[0][nchan/2])
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)
@@ -84,7 +84,7 @@ if __name__ == '__main__':
     # Create a pipeline consisting of an EBK kernel, followed by a reduction,
 	# a chi squared difference between the Bayesian Model and the Visibilities
 	# and a further reduction to produce the Chi Squared Value
-    pipeline = PipedRimes([RimeEBKFloat(), RimeJonesReduceFloat(), RimeChiSquaredFloat(), RimeChiSquaredReduceFloat()])
+    pipeline = PipedRimes([RimeBKFloat(), RimeJonesReduceFloat(), RimeChiSquaredFloat(), RimeChiSquaredReduceFloat()])
 	# Initialise the pipeline
     pipeline.initialise(sd)
 
