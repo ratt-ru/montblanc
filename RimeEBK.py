@@ -111,15 +111,15 @@ void rime_jones_EBK(
     i = SRC+nsrc*4; phase = pow(refwave/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
 
-    double E_p = (l[threadIdx.z]+ld_p[threadIdx.z])*(l[threadIdx.z]*ld_p[threadIdx.z]);
-    E_p += (m[threadIdx.z]+md_p[threadIdx.z])*(m[threadIdx.z]*md_p[threadIdx.z]);
+    double E_p = (l[threadIdx.x]+ld_p[threadIdx.z])*(l[threadIdx.x]*ld_p[threadIdx.z]);
+    E_p += (m[threadIdx.x]+md_p[threadIdx.z])*(m[threadIdx.x]*md_p[threadIdx.z]);
     E_p = sqrt(E_p);
     E_p = cos(COS3_CONST*wave[threadIdx.y]*E_p);
     E_p = E_p*E_p*E_p;
     real *= E_p; imag *= E_p;
 
-    double E_q = (l[threadIdx.z]+ld_q[threadIdx.z])*(l[threadIdx.z]*ld_q[threadIdx.z]);
-    E_q += (m[threadIdx.z]+md_q[threadIdx.z])*(m[threadIdx.z]*md_q[threadIdx.z]);
+    double E_q = (l[threadIdx.x]+ld_q[threadIdx.z])*(l[threadIdx.x]*ld_q[threadIdx.z]);
+    E_q += (m[threadIdx.x]+md_q[threadIdx.z])*(m[threadIdx.x]*md_q[threadIdx.z]);
     E_q = sqrt(E_q);
     E_q = cos(COS3_CONST*wave[threadIdx.y]*E_q);
     E_q = E_q*E_q*E_q;
