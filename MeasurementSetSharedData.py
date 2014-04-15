@@ -6,6 +6,7 @@ import pycuda.gpuarray as gpuarray
 from pyrap.tables import table
 
 from RimeBKFloat import *
+from RimeEBKFloat import *
 from RimeJonesReduce import *
 from RimeChiSquaredFloat import *
 from RimeChiSquaredReduceFloat import *
@@ -33,7 +34,7 @@ class MeasurementSetSharedData(GPUSharedData):
         t = table(self.ms_file, ack=False)
 
         # Get the UVW coordinates
-        self.uvw=t.getcol("UVW").T.astype(dtype)
+        uvw=t.getcol("UVW").T.astype(dtype)
 
         # Open the antenna table
         ta=table(self.ms_file + os.sep + MeasurementSetSharedData.ANTENNA_TABLE, ack=False)
@@ -42,18 +43,14 @@ class MeasurementSetSharedData(GPUSharedData):
         f=tf.getcol("CHAN_FREQ").astype(dtype)
 
         na = len(ta.getcol("NAME"))
-        nbl = (na**2+na)/2
+        nbl = (na*(na-1))/2
         nchan = f.size
-        ntime = self.uvw.shape[1] / nbl
+        ntime = uvw.shape[1] / nbl
 
         super(MeasurementSetSharedData, self).__init__(\
             na=na,nchan=nchan,ntime=ntime,nsrc=nsrc,dtype=dtype)
 
         self.wavelength = 3e8/f
-    	# TODO: Setting the reference wavelength to a frequency makes no sense,
-    	# but this matches Cyril's predict...
-    	# First dimension also seems to be of size 1 here...
-    	self.set_refwave(f[0][nchan/2])
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)
@@ -61,12 +58,22 @@ class MeasurementSetSharedData(GPUSharedData):
             *self.jones_shape[-1]).astype(np.int32)
         self.keys_gpu = gpuarray.to_gpu(self.keys)
 
+        self.uvw = uvw.reshape(self.uvw_shape).copy()
+
+		# Transfer the uvw coordinates 
+        # and antenna pairs to the GPU
+        self.transfer_uvw(uvw)
+        self.transfer_ant_pairs(self.get_default_ant_pairs())
+        self.transfer_wavelength(self.wavelength)
+
+        # TODO: Setting the reference wavelength to a frequency makes no sense,
+        # but this matches Cyril's predict...
+        # First dimension also seems to be of size 1 here...
+        self.set_refwave(f[0][nchan/2])
+
         t.close()
         ta.close()
         tf.close()
-
-    def get_visibilities(self):
-        return self.vis_gpu.get()
 
 if __name__ == '__main__':
     import sys
@@ -84,7 +91,7 @@ if __name__ == '__main__':
     # Create a pipeline consisting of an EBK kernel, followed by a reduction,
 	# a chi squared difference between the Bayesian Model and the Visibilities
 	# and a further reduction to produce the Chi Squared Value
-    pipeline = PipedRimes([RimeBKFloat(), RimeJonesReduceFloat(), RimeChiSquaredFloat(), RimeChiSquaredReduceFloat()])
+    pipeline = PipedRimes([RimeEBKFloat(), RimeJonesReduceFloat(), RimeChiSquaredFloat(), RimeChiSquaredReduceFloat()])
 	# Initialise the pipeline
     pipeline.initialise(sd)
 
@@ -113,7 +120,6 @@ if __name__ == '__main__':
 
     kernels_start, kernels_end = cuda.Event(), cuda.Event()
     time_sum = 0.0
-    count = 10
 
     # Execute the pipeline
     for i in range(args.count):
@@ -131,12 +137,11 @@ if __name__ == '__main__':
         time_sum += kernels_start.time_till(kernels_end)
 
         # The chi squared result is set on the shared data object
-        print sd.X2
+        print 'Chi Squared Value', sd.X2
 
         # Obtain the visibilities  (slow)
-        #V = sd.get_visibilities()
+        #V = sd.vis_gpu.get()
 
-    print sd
     print 'kernels: elapsed time: %gms' %\
         (time_sum / args.count)
 

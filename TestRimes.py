@@ -106,19 +106,16 @@ class TestRimes(unittest.TestCase):
         rime_sum.shutdown(sd)
 
     def test_EBK_float(self):
-        sd = TestSharedData(na=2,nchan=2,ntime=2,nsrc=2,dtype=np.float32)      
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)       
         rime_ebk = RimeEBKFloat()
         rime_bk = RimeBKFloat()
 
         rime_ebk.initialise(sd)
         rime_bk.initialise(sd)
 
-        print 'point_errors', sd.point_errors
-
         # Invoke the BK kernel
         rime_bk.execute(sd)
         jones_gpu = sd.jones_gpu.get()
-        print 'BK float', jones_gpu
 
         for bl in range(sd.nbl):
             ANT1 = int(np.floor((np.sqrt(1+8*bl)-1)/2))
@@ -142,7 +139,7 @@ class TestRimes(unittest.TestCase):
 
         rime_ebk.execute(sd)        
         jones_gpu = sd.jones_gpu.get()
-        print 'EBK float', jones_gpu
+        self.assertTrue(np.isnan(jones_gpu).any() == False)
 
         rime_ebk.shutdown(sd)
         rime_bk.shutdown(sd)
@@ -274,6 +271,41 @@ class TestRimes(unittest.TestCase):
         vis_gpu = gpuarray.empty(shape=keys.shape, dtype=jones.dtype.type)
 
         crimes.segmented_reduce_complex128_sum(
+            data=jones_gpu, seg_starts=keys_gpu, seg_sums=vis_gpu,
+            device_id=0)
+
+        # Shutdown the rime node, we don't need it any more
+        rime_reduce.shutdown(sd)
+
+        # Add everything along the last axis (time)
+        vis_cpu = np.sum(jones,axis=len(sd.jones_shape)-1)
+
+        # Confirm similar results
+        self.assertTrue(np.allclose(vis_cpu.flatten(), vis_gpu.get()))
+
+    def test_reduce_float(self):
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)       
+        rime_reduce = RimeJonesReduce()
+
+        rime_reduce.initialise(sd)
+
+        # Create the jones matrices
+        jsize = np.product(sd.jones_shape)
+        jones = (np.random.random(jsize) + 1j*np.random.random(jsize))\
+            .astype(sd.ct).reshape(sd.jones_shape)
+
+        # Create the key positions. This snippet creates an array
+        # equal to the list of positions of the last array element timestep)
+        keys = (np.arange(np.product(sd.jones_shape[:-1]))*sd.jones_shape[-1])\
+            .astype(np.int32)
+        
+        # Send the jones and keys to the gpu, and create the output array for
+        # the visibilities.
+        jones_gpu = gpuarray.to_gpu(jones.flatten())
+        keys_gpu = gpuarray.to_gpu(keys)
+        vis_gpu = gpuarray.empty(shape=keys.shape, dtype=jones.dtype.type)
+
+        crimes.segmented_reduce_complex64_sum(
             data=jones_gpu, seg_starts=keys_gpu, seg_sums=vis_gpu,
             device_id=0)
 

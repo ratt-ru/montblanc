@@ -26,7 +26,7 @@ class BaseSharedData(SharedData):
         # - timesteps
         # - sources
         self.na = na
-        self.nbl = nbl = (self.na**2 + self.na)/2
+        self.nbl = nbl = (na*(na-1))/2
         self.nchan = nchan
         self.ntime = ntime
         self.nsrc = nsrc
@@ -44,7 +44,7 @@ class BaseSharedData(SharedData):
 
         # Set up input data shapes
         self.uvw_shape = (3, nbl, ntime)
-        self.ant_pairs_shape = (2, nbl, ntime)
+        self.ant_pairs_shape = (2, nbl)
         self.lm_shape = (2, nsrc)
         self.brightness_shape = (5, nsrc)
         self.wavelength_shape = (nchan)
@@ -74,6 +74,17 @@ class BaseSharedData(SharedData):
         """ Set the chi squared result. Useful for sensibly initialising it """
         self.X2 = self.ft(X2)
 
+    def get_default_ant_pairs(self):
+        """
+        Return an np.array(shape=(2, nbl), dtype=np.int32]) containing the
+        default antenna pairs for each baseline.
+        """
+        # Create the antenna pair mapping, from upper triangle indices
+        # based on the number of antenna. 
+        ant_pairs = np.array(np.triu_indices(self.na,1)).astype(np.int32)
+        assert ant_pairs.shape == self.ant_pairs_shape
+        return ant_pairs
+
     def __str__(self):
         return "RIME Simulation Dimensions" + \
             "\nAntenna:       " + str(self.na) + \
@@ -88,6 +99,7 @@ class GPUSharedData(BaseSharedData):
     for holding simulation input and output.
     """
     uvw_gpu = ArrayData()
+    ant_pairs_gpu = ArrayData()
     lm_gpu = ArrayData()
     brightness_gpu = ArrayData()
     wavelength_gpu = ArrayData()
@@ -102,21 +114,23 @@ class GPUSharedData(BaseSharedData):
         super(GPUSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
 
         # Create the input data arrays on the GPU
-        self.uvw_gpu = gpuarray.empty(shape=self.uvw_shape,dtype=self.ft)
-        self.lm_gpu = gpuarray.empty(shape=self.lm_shape,dtype=self.ft)
-        self.brightness_gpu = gpuarray.empty(shape=self.brightness_shape,dtype=self.ft)
-        self.wavelength_gpu = gpuarray.empty(shape=self.wavelength_shape,dtype=self.ft)
-        self.point_errors_gpu = gpuarray.empty(shape=self.point_errors_shape,dtype=self.ft)
-        self.bayes_model_gpu = gpuarray.empty(shape=self.bayes_model_shape,dtype=self.ct)
+        self.uvw_gpu = gpuarray.zeros(shape=self.uvw_shape,dtype=self.ft)
+        self.ant_pairs_gpu = gpuarray.zeros(shape=self.ant_pairs_shape,dtype=np.int32)
+        self.lm_gpu = gpuarray.zeros(shape=self.lm_shape,dtype=self.ft)
+        self.brightness_gpu = gpuarray.zeros(shape=self.brightness_shape,dtype=self.ft)
+        self.wavelength_gpu = gpuarray.zeros(shape=self.wavelength_shape,dtype=self.ft)
+        self.point_errors_gpu = gpuarray.zeros(shape=self.point_errors_shape,dtype=self.ft)
+        self.bayes_model_gpu = gpuarray.zeros(shape=self.bayes_model_shape,dtype=self.ct)
 
         # Create the output data arrays on the GPU
-        self.jones_gpu = gpuarray.empty(shape=self.jones_shape,dtype=self.ct)
-        self.vis_gpu = gpuarray.empty(shape=self.vis_shape,dtype=self.ct)
-        self.chi_sqrd_result_gpu = gpuarray.empty(shape=self.chi_sqrd_result_shape,dtype=self.ft)
+        self.jones_gpu = gpuarray.zeros(shape=self.jones_shape,dtype=self.ct)
+        self.vis_gpu = gpuarray.zeros(shape=self.vis_shape,dtype=self.ct)
+        self.chi_sqrd_result_gpu = gpuarray.zeros(shape=self.chi_sqrd_result_shape,dtype=self.ft)
 
         # Create a list of the GPU arrays
         self.gpu_data = [
             self.uvw_gpu,
+            self.ant_pairs_gpu,
             self.lm_gpu,
             self.brightness_gpu,
             self.wavelength_gpu,
@@ -132,6 +146,9 @@ class GPUSharedData(BaseSharedData):
 
     def transfer_uvw(self,uvw):
         self.uvw_gpu.set(uvw)
+
+    def transfer_ant_pairs(self, ant_pairs):
+        self.ant_pairs_gpu.set(ant_pairs)
 
     def transfer_lm(self,lm):
         self.lm_gpu.set(lm)

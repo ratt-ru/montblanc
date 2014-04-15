@@ -18,6 +18,7 @@ void rime_jones_EBK_float(
     float * brightness,
     float * wavelength,
     float * point_error,
+    int * ant_pairs,
     float2 * jones,
     float refwave,
     int nbl, int nchan, int ntime, int nsrc, int na)
@@ -31,10 +32,6 @@ void rime_jones_EBK_float(
     int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / ntime;
     int TIME = (blockIdx.y*blockDim.y + threadIdx.y) % ntime;
     int BL = blockIdx.z*blockDim.z + threadIdx.z;
-    // Calculates the antenna pairs from the baseline!
-    int ANT1 = int(floor((sqrtf(1+8*BL)-1)/2));
-    int ANT2 = BL - (ANT1*ANT1+ANT1)/2;
-    ANT1 += 1;
 
     if(BL >= nbl || SRC >= nsrc || CHAN >= nchan || TIME >= ntime)
         return;
@@ -63,16 +60,13 @@ void rime_jones_EBK_float(
     int i;
 
     // Varies by time (y) and antenna (baseline) (z) 
-    if(threadIdx.x == 0)
+    //if(threadIdx.x == 0)
     {
-        i = ANT1*ntime + TIME; ld_p[threadIdx.z] = point_error[i];
-        i += na*ntime;         md_p[threadIdx.z] = point_error[i];
-        i = ANT2*ntime + TIME; ld_q[threadIdx.z] = point_error[i];
-        i += na*ntime;         md_q[threadIdx.z] = point_error[i];
-
-#if __CUDA_ARCH__ >= 200
-        printf(\"%f %f %f %f\\n\", ld_p[threadIdx.z], md_p[threadIdx.z], ld_q[threadIdx.z], md_q[threadIdx.z]);
-#endif
+        int ANT1 = ant_pairs[BL]; int ANT2 = ant_pairs[BL+nbl];
+        i = ANT1*ntime + TIME;     ld_p[threadIdx.z] = point_error[i];
+        i += na*ntime;             md_p[threadIdx.z] = point_error[i];
+        i = ANT2*ntime + TIME;     ld_q[threadIdx.z] = point_error[i];
+        i += na*ntime;             md_q[threadIdx.z] = point_error[i];
     }
 
     // Varies by source (x)
@@ -190,17 +184,17 @@ class RimeEBKFloat(Node):
     def get_kernel_params(self, shared_data):
         sd = shared_data
 
-        baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
         srcs_per_block = 32 if sd.nsrc > 32 else sd.nsrc
         time_chans_per_block = 1
+        baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
 
-        baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
         src_blocks = (sd.nsrc + srcs_per_block - 1) / srcs_per_block
         time_chan_blocks = sd.ntime*sd.nchan
+        baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
 
         return {
-            'block' : (baselines_per_block,srcs_per_block,1), \
-            'grid'  : (baseline_blocks,src_blocks,time_chan_blocks), \
+            'block' : (srcs_per_block,time_chans_per_block,baselines_per_block), \
+            'grid'  : (src_blocks,time_chan_blocks,baseline_blocks), \
             'shared' : (4*baselines_per_block + \
                         6*srcs_per_block + \
                         1*time_chans_per_block)*\
@@ -210,7 +204,7 @@ class RimeEBKFloat(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_gpu, sd.refwave,
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu, sd.refwave,
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             np.int32(sd.na), **self.get_kernel_params(sd))       
 

@@ -42,6 +42,7 @@ class TestSharedData(GPUSharedData):
 
         # Copy the uvw, lm and brightness data to the gpu
         self.transfer_uvw(self.uvw)
+        self.transfer_ant_pairs(self.get_default_ant_pairs())
         self.transfer_lm(self.lm)
         self.transfer_brightness(self.brightness)
         self.transfer_wavelength(self.wavelength)
