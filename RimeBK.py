@@ -161,16 +161,16 @@ class RimeBK(Node):
     def get_kernel_params(self, shared_data):
         sd = shared_data
 
-        baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
         srcs_per_block = 32 if sd.nsrc > 32 else sd.nsrc
         time_chans_per_block = 1
+        baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
 
-        baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
         src_blocks = (sd.nsrc + srcs_per_block - 1) / srcs_per_block
+        baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
         time_chan_blocks = sd.ntime*sd.nchan
 
         return {
-            'block' : (srcs_per_block,1,baselines_per_block), \
+            'block' : (srcs_per_block,time_chans_per_block,baselines_per_block), \
             'grid'  : (src_blocks,time_chan_blocks,baseline_blocks), \
             'shared' : (3*baselines_per_block + \
                         7*srcs_per_block + \
