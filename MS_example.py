@@ -7,7 +7,7 @@ from RimeChiSquaredFloat import *
 from RimeChiSquaredReduceFloat import *
 from MeasurementSetSharedData import *
 
-from pipedrimes import PipedRimes
+from pipeline import Pipeline
 
 if __name__ == '__main__':
     import sys
@@ -25,7 +25,7 @@ if __name__ == '__main__':
     # Create a pipeline consisting of an EBK kernel, followed by a reduction,
 	# a chi squared difference between the Bayesian Model and the Visibilities
 	# and a further reduction to produce the Chi Squared Value
-    pipeline = PipedRimes([RimeEBKFloat(), RimeJonesReduceFloat(), RimeChiSquaredFloat(), RimeChiSquaredReduceFloat()])
+    pipeline = Pipeline([RimeEBKFloat(), RimeJonesReduceFloat(), RimeChiSquaredFloat(), RimeChiSquaredReduceFloat()])
 	# Initialise the pipeline
     pipeline.initialise(sd)
 

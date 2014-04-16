@@ -12,7 +12,7 @@ from RimeMultiply import *
 from RimeJonesReduce import *
 from TestSharedData import TestSharedData
 
-class PipedRimes:
+class Pipeline:
     """ Class describing a pipeline of RIME equations """
     def __init__(self, node_list=None):
         """ Initialise the pipeline with a list of nodes
@@ -37,7 +37,7 @@ class PipedRimes:
         calling the initialise() method on each one.
 
         >>> sd = SharedData()
-        >>> pipeline = PipedRimes([Node1(), Node2(), Node3()])
+        >>> pipeline = PipeLine([Node1(), Node2(), Node3()])
         >>> pipeline.initialise(sd)
         >>> pipeline.execute(sd)
         >>> pipeline.shutdown(sd)
@@ -72,7 +72,7 @@ class PipedRimes:
         calling the execute() method on each one.
 
         >>> sd = SharedData()
-        >>> pipeline = PipedRimes([Node1(), Node2(), Node3()])
+        >>> pipeline = PipeLine([Node1(), Node2(), Node3()])
         >>> pipeline.initialise(sd)
         >>> pipeline.execute(sd)
         >>> pipeline.shutdown(sd)
@@ -111,7 +111,7 @@ class PipedRimes:
         calling the shutdown() method on each one.
 
         >>> sd = SharedData()
-        >>> pipeline = PipedRimes([Node1(), Node2(), Node3()])
+        >>> pipeline = PipeLine([Node1(), Node2(), Node3()])
         >>> pipeline.initialise(sd)
         >>> pipeline.execute(sd)
         >>> pipeline.shutdown(sd)
@@ -172,7 +172,7 @@ def main(argv=None):
     # Set up various thing that aren't possible in PyCUDA
     crimes.setup_cuda()
 
-    sp = PipedRimes([RimeEBK(), RimeJonesReduce()])
+    sp = Pipeline([RimeEBK(), RimeJonesReduce()])
 
     sd = TestSharedData(na=7,nchan=32,ntime=10,nsrc=200)
 

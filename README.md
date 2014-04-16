@@ -1,4 +1,4 @@
-# PipedRimes
+# Montblanc
 
 A PyCUDA implementation of the Radio Interferometry Measurement Equation
 
@@ -26,7 +26,7 @@ You'll need to run
     # git submodule init
     # git submodule update
 
-This should clone the **moderngpu** and **cub** CUDA libraries which are needed by pipedrimes.
+This should clone the **moderngpu** and **cub** CUDA libraries which are needed by montblanc.
 
 ### Building Libraries
 
