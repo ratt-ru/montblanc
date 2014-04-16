@@ -1,6 +1,6 @@
 # Montblanc
 
-A PyCUDA implementation of the Radio Interferometry Measurement Equation
+A PyCUDA implementation of the Radio Interferometry Measurement Equation, and a foothill of Mount Exaflop.
 
 ## Requirements
 
