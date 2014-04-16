@@ -39,7 +39,10 @@ void seg_reduce_csr_expand(InputIt data_global, CsrIt csr_global, int count,
 
 	// SegReduceInner (segreducecsr.cuh) STARTS
 	// TODO: pass the PTX in from PyCUDA somehow
-	int2 launch = Tuning::GetLaunchParams(__CUDA_ARCH__);
+	// __CUDA_ARCH__ sets the up properly for code
+	// compiled for the device, but not the host,
+	// Hard code for Kepler for the moment.
+	int2 launch = Tuning::GetLaunchParams(350);
 	int NV = launch.x * launch.y;
 	int numBlocks = MGPU_DIV_UP(count, NV);
 	const int * sources_global = (const int *) 0;
