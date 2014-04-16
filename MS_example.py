@@ -79,5 +79,7 @@ if __name__ == '__main__':
 
     print 'kernels: elapsed time: %gms' %\
         (time_sum / args.count)
+    # Print information about the simulation
+    print sd
 
     pipeline.shutdown(sd)
