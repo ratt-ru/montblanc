@@ -21,7 +21,8 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     # Create a shared data object from the Measurement Set file
-    sd = MeasurementSetSharedData(args.msfile, nsrc=args.nsrc, dtype=np.float32)    
+    sd = MeasurementSetSharedData(args.msfile, nsrc=args.nsrc, dtype=np.float32,
+        device=pycuda.autoinit.device)    
     # Create a pipeline consisting of an EBK kernel, followed by a reduction,
 	# a chi squared difference between the Bayesian Model and the Visibilities
 	# and a further reduction to produce the Chi Squared Value

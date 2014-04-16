@@ -8,7 +8,7 @@ class MeasurementSetSharedData(GPUSharedData):
     ANTENNA_TABLE = "ANTENNA"
     SPECTRAL_WINDOW = "SPECTRAL_WINDOW"
 
-    def __init__(self, ms_file, nsrc, dtype=np.float64):
+    def __init__(self, ms_file, nsrc, dtype=np.float64,device=None):
         # Do some checks on the supplied filename
         if not isinstance(ms_file, str):
             raise TypeError, 'ms_file is not a string'

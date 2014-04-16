@@ -22,7 +22,7 @@ class RimeJonesReduce(Node):
 
         crimes.segmented_reduce_complex128_sum(
             data=sd.jones_gpu, seg_starts=sd.keys_gpu,
-            seg_sums=sd.vis_gpu, device_id=0)
+            seg_sums=sd.vis_gpu, cc=sd.cc, device_id=0)
 
     def post_execution(self, shared_data):
         pass
@@ -41,7 +41,7 @@ class RimeJonesReduceFloat(Node):
 
         crimes.segmented_reduce_complex64_sum(
             data=sd.jones_gpu, seg_starts=sd.keys_gpu,
-            seg_sums=sd.vis_gpu, device_id=0)
+            seg_sums=sd.vis_gpu, cc=sd.cc, device_id=0)
 
     def post_execution(self, shared_data):
         pass        

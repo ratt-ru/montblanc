@@ -114,8 +114,19 @@ class GPUSharedData(BaseSharedData):
     vis_gpu = ArrayData()
     chi_sqrd_result_gpu = ArrayData()
 
-    def __init__(self, na=7, nchan=8, ntime=5, nsrc=10, dtype=np.float32):
+    def __init__(self, na=7, nchan=8, ntime=5, nsrc=10, dtype=np.float32, device=None):
         super(GPUSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
+
+        if device is None:
+            import pycuda.autoinit
+            self.device = pycuda.autoinit.device
+        else:
+            self.device = device
+
+        # Figure out the integer compute cability of the device
+        cc_tuple = self.device.compute_capability()
+        # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
+        self.cc = np.int32(np.dot(cc_tuple, (100,10)))
 
         # Create the input data arrays on the GPU
         self.uvw_gpu = gpuarray.zeros(shape=self.uvw_shape,dtype=self.ft)

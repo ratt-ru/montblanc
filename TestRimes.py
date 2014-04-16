@@ -34,7 +34,8 @@ class TestRimes(unittest.TestCase):
         pass
 
     def test_BK_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)      
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
+            device=pycuda.autoinit.device)      
         rime_bk = RimeBKFloat()
 
         # Initialise the BK float kernel
@@ -52,7 +53,8 @@ class TestRimes(unittest.TestCase):
         self.assertTrue(np.allclose(jones_cpu, jones_gpu))
 
     def test_BK(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200)       
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
+            device=pycuda.autoinit.device)
         rime_bk = RimeBK()
 
         # Initialise the BK kernel
@@ -70,7 +72,8 @@ class TestRimes(unittest.TestCase):
         self.assertTrue(np.allclose(jones_cpu, jones_gpu))
 
     def test_EBK(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200)       
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
+            device=pycuda.autoinit.device)
         rime_ebk = RimeEBK()
         rime_bk = RimeBK()
 
@@ -88,7 +91,8 @@ class TestRimes(unittest.TestCase):
         rime_bk.shutdown(sd)
 
     def test_sum_float(self):
-        sd = TestSharedData(na=14,nchan=32,ntime=36,nsrc=100,dtype=np.float32)
+        sd = TestSharedData(na=14,nchan=32,ntime=36,nsrc=100,dtype=np.float32,
+            device=pycuda.autoinit.device)
         jones_cpu = (np.random.random(np.product(sd.jones_shape)) + \
             np.random.random(np.product(sd.jones_shape))*1j)\
             .reshape(sd.jones_shape).astype(sd.ct)
@@ -106,7 +110,8 @@ class TestRimes(unittest.TestCase):
         rime_sum.shutdown(sd)
 
     def test_EBK_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)       
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
+            device=pycuda.autoinit.device)
         rime_ebk = RimeEBKFloat()
         rime_bk = RimeBKFloat()
 
@@ -125,7 +130,8 @@ class TestRimes(unittest.TestCase):
 
 
     def test_EBK_sum_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32)      
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32,
+            device=pycuda.autoinit.device)
         rime_ebk_sum = RimeEBKSumFloat()
 
         # Initialise the BK float kernel
@@ -149,7 +155,9 @@ class TestRimes(unittest.TestCase):
     @unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
     def test_multiply(self):
         # Make the problem size smaller, due to slow numpy code later on
-        sd = TestSharedData(na=5,nchan=4,ntime=2,nsrc=10)
+        sd = TestSharedData(na=5,nchan=4,ntime=2,nsrc=10,
+            device=pycuda.autoinit.device)
+        
         rime_multiply = RimeMultiply()
 
         rime_multiply.initialise(sd)
@@ -195,7 +203,8 @@ class TestRimes(unittest.TestCase):
         self.assertTrue(np.allclose(jones_output_gpu, jones_output_cpu))
 
     def test_chi_squared_float(self):
-        sd = TestSharedData(na=100,nchan=64,ntime=20,nsrc=1,dtype=np.float32)
+        sd = TestSharedData(na=100,nchan=64,ntime=20,nsrc=1,dtype=np.float32,
+            device=pycuda.autoinit.device)
 
         rime_X2 = RimeChiSquaredFloat()
         rime_X2_reduce = RimeChiSquaredReduceFloat()
@@ -228,7 +237,8 @@ class TestRimes(unittest.TestCase):
         rime_X2_reduce.shutdown(sd)
 
     def test_reduce(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200)       
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
+            device=pycuda.autoinit.device)
         rime_reduce = RimeJonesReduce()
 
         rime_reduce.initialise(sd)
@@ -258,7 +268,8 @@ class TestRimes(unittest.TestCase):
         self.assertTrue(np.allclose(vis_cpu, vis_gpu))
 
     def test_reduce_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)       
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
+            device=pycuda.autoinit.device)
         rime_reduce = RimeJonesReduceFloat()
 
         rime_reduce.initialise(sd)
@@ -330,42 +341,21 @@ class TestRimes(unittest.TestCase):
         sd = shared_data        
         # Choose between the double and float kernel
         rime_bk = RimeBK() if sd.ft == np.float64 else RimeBKFloat()
+        rime_reduce = RimeJonesReduce() if sd.ft == np.float64 else RimeJonesReduceFloat()
 
         # Initialise the node
         rime_bk.initialise(sd)
 
-        vis_predict = self.time_predict(sd, log)
+        vis_predict_cpu = self.time_predict(sd, log)
 
-        log.debug('jones_gpu size: %.2f MB', sd.jones_gpu.nbytes/(1024*1024))
-
-        # Set up the segmented reduction
-        # Create the key positions. This snippet creates an array
-        # equal to the list of positions of the last array element timestep)
-        keys = (np.arange(np.product(sd.jones_shape[:-1]))*sd.jones_shape[-1])\
-            .astype(np.int32).reshape(sd.jones_shape[:-2])
-        
-        # Send the keys to the gpu, and create the output array for
-        # the visibilities.
-        keys_gpu = gpuarray.to_gpu(keys)
-        vis_gpu = gpuarray.empty(shape=keys.shape, dtype=sd.jones_gpu.dtype.type)
-
-        bk_params = rime_bk.get_kernel_params(sd)
+        log.debug(sd)
 
         kernels_start, kernels_end = cuda.Event(), cuda.Event()
         kernels_start.record()
 
         # Invoke the kernel
         rime_bk.execute(sd)
-
-        # Choose between the double and float kernel
-        if sd.ft == np.float64:
-            crimes.segmented_reduce_complex128_sum(
-                data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=vis_gpu,
-                device_id=0)
-        else:
-            crimes.segmented_reduce_complex64_sum(
-                data=sd.jones_gpu, seg_starts=keys_gpu, seg_sums=vis_gpu,
-                device_id=0)
+        rime_reduce.execute(sd)
 
         kernels_end.record()
         kernels_end.synchronize()
@@ -377,18 +367,20 @@ class TestRimes(unittest.TestCase):
         rime_bk.shutdown(sd)
 
         # Shift the gpu jones matrices so they are on the last axis
-        vis_cpu = np.rollaxis(vis_gpu.get(),0,len(sd.jones_shape)-2)
+        vis_gpu = np.rollaxis(sd.vis_gpu.get(),0,len(sd.jones_shape)-2).squeeze()
 
         # Compare the GPU solution with Cyril's predict code
-        self.assertTrue(np.allclose(vis_cpu, vis_predict))
+        self.assertTrue(np.allclose(vis_gpu, vis_predict_cpu))
 
     def test_predict_double(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000)
+        sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,
+            device=pycuda.autoinit.device)
         log = logging.getLogger('TestRimes.test_predict_double')
         self.do_predict_test(sd, log)
 
     def test_predict_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32)
+        sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32,
+            device=pycuda.autoinit.device)
         log = logging.getLogger('TestRimes.test_predict_float')
         self.do_predict_test(sd, log)
 

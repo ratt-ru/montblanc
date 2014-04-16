@@ -32,17 +32,13 @@ __global__ void dumb_kernel(int * data, int N)
 
 template <typename InputIt, typename CsrIt, typename OutputIt, typename T, typename Op>
 void seg_reduce_csr_expand(InputIt data_global, CsrIt csr_global, int count,
-	int numSegments, OutputIt dest_global, T identity, Op op, CUstream stream)
+	int numSegments, OutputIt dest_global, T identity, Op op, CUstream stream, int cc)
 {
 	// SegReduceHost (segreducecsr.cuh) STARTS
 	typedef typename mgpu::SegReduceNormalTuning<sizeof(T)>::Tuning Tuning;
 
 	// SegReduceInner (segreducecsr.cuh) STARTS
-	// TODO: pass the PTX in from PyCUDA somehow
-	// __CUDA_ARCH__ sets the up properly for code
-	// compiled for the device, but not the host,
-	// Hard code for Kepler for the moment.
-	int2 launch = Tuning::GetLaunchParams(350);
+	int2 launch = Tuning::GetLaunchParams(cc);
 	int NV = launch.x * launch.y;
 	int numBlocks = MGPU_DIV_UP(count, NV);
 	const int * sources_global = (const int *) 0;
@@ -120,6 +116,7 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	PyObject * value_array = NULL;		// pycuda.gpuarray
 	PyObject * segment_starts = NULL;	// pycuda.gpuarray
 	PyObject * segment_sums = NULL;		// pycuda.gpuarray
+	int cc = -1;						// int
 	int device_id = -1;					// int
 	PyObject * stream_obj  = NULL;		// pycuda.driver.Stream
 
@@ -127,14 +124,16 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
     	"data",
     	"seg_starts",
     	"seg_sums",
+    	"cc",
     	"device_id",
     	"stream",
     	NULL };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|iO", kwlist,
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOOi|iO", kwlist,
 		&value_array,
 		&segment_starts,
 		&segment_sums,
+		&cc,
 		&device_id,
 		&stream_obj)) return NULL;
 
@@ -168,9 +167,10 @@ PyObject * extract_and_segment(PyObject * self, PyObject * args, PyObject * kw,
 	//printf("segments address=%p size=%ld\n", segment_ptr, n_segments);
 	//printf("segment sums address=%p\n", segment_sums_ptr);
 	//printf("device_id=%ld stream=%ld\n", device_id, stream);
+	//printf("Compute Capability: %d\n", cc);
 
 	seg_reduce_csr_expand(value_ptr, segment_ptr, n_values,
-		n_segments, segment_sums_ptr, identity, op, stream);
+		n_segments, segment_sums_ptr, identity, op, stream, cc);
 
 	Py_DECREF(value_gpu);
 	Py_DECREF(value_size);
