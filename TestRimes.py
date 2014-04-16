@@ -10,7 +10,7 @@ from RimeEBK import RimeEBK
 from RimeEBKFloat import RimeEBKFloat
 from RimeEBKSumFloat import RimeEBKSumFloat
 from RimeSumFloat import RimeSumFloat
-from RimeJonesReduce import RimeJonesReduce
+from RimeJonesReduce import *
 from RimeMultiply import RimeMultiply
 from RimeChiSquaredFloat import RimeChiSquaredFloat
 from RimeChiSquaredReduceFloat import RimeChiSquaredReduceFloat
@@ -116,6 +116,8 @@ class TestRimes(unittest.TestCase):
         # Invoke the BK kernel
         rime_bk.execute(sd)
         rime_ebk.execute(sd)        
+
+
 
 
         rime_ebk.shutdown(sd)
@@ -233,67 +235,57 @@ class TestRimes(unittest.TestCase):
 
         # Create the jones matrices
         jsize = np.product(sd.jones_shape)
-        jones = (np.random.random(jsize) + 1j*np.random.random(jsize))\
+        jones_cpu = (np.random.random(jsize) + 1j*np.random.random(jsize))\
             .astype(sd.ct).reshape(sd.jones_shape)
-
-        # Create the key positions. This snippet creates an array
-        # equal to the list of positions of the last array element timestep)
-        keys = (np.arange(np.product(sd.jones_shape[:-1]))*sd.jones_shape[-1])\
-            .astype(np.int32)
-        
+    
         # Send the jones and keys to the gpu, and create the output array for
         # the visibilities.
-        jones_gpu = gpuarray.to_gpu(jones.flatten())
-        keys_gpu = gpuarray.to_gpu(keys)
-        vis_gpu = gpuarray.empty(shape=keys.shape, dtype=jones.dtype.type)
+        sd.transfer_jones(jones_cpu)
 
-        crimes.segmented_reduce_complex128_sum(
-            data=jones_gpu, seg_starts=keys_gpu, seg_sums=vis_gpu,
-            device_id=0)
+        # Compute the reduction
+        rime_reduce.execute(sd)
 
         # Shutdown the rime node, we don't need it any more
         rime_reduce.shutdown(sd)
 
         # Add everything along the last axis (time)
-        vis_cpu = np.sum(jones,axis=len(sd.jones_shape)-1)
+        vis_cpu = np.sum(jones_cpu,axis=len(sd.jones_shape)-1)
+
+        # Get the visibilities off the GPU
+        vis_gpu = sd.vis_gpu.get()
 
         # Confirm similar results
-        self.assertTrue(np.allclose(vis_cpu.flatten(), vis_gpu.get()))
+        self.assertTrue(np.allclose(vis_cpu, vis_gpu))
 
     def test_reduce_float(self):
         sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32)       
-        rime_reduce = RimeJonesReduce()
+        rime_reduce = RimeJonesReduceFloat()
 
         rime_reduce.initialise(sd)
 
         # Create the jones matrices
         jsize = np.product(sd.jones_shape)
-        jones = (np.random.random(jsize) + 1j*np.random.random(jsize))\
+        jones_cpu = (np.random.random(jsize) + 1j*np.random.random(jsize))\
             .astype(sd.ct).reshape(sd.jones_shape)
-
-        # Create the key positions. This snippet creates an array
-        # equal to the list of positions of the last array element timestep)
-        keys = (np.arange(np.product(sd.jones_shape[:-1]))*sd.jones_shape[-1])\
-            .astype(np.int32)
-        
+    
         # Send the jones and keys to the gpu, and create the output array for
         # the visibilities.
-        jones_gpu = gpuarray.to_gpu(jones.flatten())
-        keys_gpu = gpuarray.to_gpu(keys)
-        vis_gpu = gpuarray.empty(shape=keys.shape, dtype=jones.dtype.type)
+        sd.transfer_jones(jones_cpu)
 
-        crimes.segmented_reduce_complex64_sum(
-            data=jones_gpu, seg_starts=keys_gpu, seg_sums=vis_gpu,
-            device_id=0)
+        # Compute the reduction
+        rime_reduce.execute(sd)
 
         # Shutdown the rime node, we don't need it any more
         rime_reduce.shutdown(sd)
 
         # Add everything along the last axis (time)
-        vis_cpu = np.sum(jones,axis=len(sd.jones_shape)-1)
+        vis_cpu = np.sum(jones_cpu,axis=len(sd.jones_shape)-1)
+
+        # Get the visibilities off the GPU
+        vis_gpu = sd.vis_gpu.get()
 
         # Confirm similar results
-        self.assertTrue(np.allclose(vis_cpu.flatten(), vis_gpu.get()))
+        self.assertTrue(np.allclose(vis_cpu, vis_gpu))
 
     def time_predict(self, sd, log):
         na=sd.na          # Number of antenna
