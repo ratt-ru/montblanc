@@ -62,7 +62,10 @@ void rime_jones_EBK_float(
     // Varies by time (y) and antenna (baseline) (z) 
     //if(threadIdx.x == 0)
     {
-        int ANT1 = ant_pairs[BL]; int ANT2 = ant_pairs[BL+nbl];
+        // Determine antenna pairs for this baseline
+        i = BL*ntime + TIME; int ANT1 = ant_pairs[i];
+        i += nbl*ntime;      int ANT2 = ant_pairs[i];
+        // Load in the pointing errors
         i = ANT1*ntime + TIME;     ld_p[threadIdx.z] = point_error[i];
         i += na*ntime;             md_p[threadIdx.z] = point_error[i];
         i = ANT2*ntime + TIME;     ld_q[threadIdx.z] = point_error[i];

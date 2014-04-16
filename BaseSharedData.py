@@ -44,7 +44,7 @@ class BaseSharedData(SharedData):
 
         # Set up input data shapes
         self.uvw_shape = (3, nbl, ntime)
-        self.ant_pairs_shape = (2, nbl)
+        self.ant_pairs_shape = (2, nbl, ntime)
         self.lm_shape = (2, nsrc)
         self.brightness_shape = (5, nsrc)
         self.wavelength_shape = (nchan)
@@ -76,14 +76,18 @@ class BaseSharedData(SharedData):
 
     def get_default_ant_pairs(self):
         """
-        Return an np.array(shape=(2, nbl), dtype=np.int32]) containing the
-        default antenna pairs for each baseline.
+        Return an np.array(shape=(2, nbl, ntime), dtype=np.int32]) containing the
+        default antenna pairs for each baseline at each timestep.
         """
         # Create the antenna pair mapping, from upper triangle indices
         # based on the number of antenna. 
-        ant_pairs = np.array(np.triu_indices(self.na,1)).astype(np.int32)
-        assert ant_pairs.shape == self.ant_pairs_shape
-        return ant_pairs
+        sd = self
+
+        tmp = np.int32(np.triu_indices(sd.na,1))
+        tmp = np.tile(tmp,sd.ntime).reshape(2,sd.ntime,sd.nbl)
+        tmp = np.rollaxis(tmp, axis=2, start=1)
+        assert tmp.shape == sd.ant_pairs_shape
+        return tmp.copy()
 
     def __str__(self):
         return "RIME Simulation Dimensions" + \
