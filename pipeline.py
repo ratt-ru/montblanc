@@ -2,16 +2,6 @@ import argparse
 import os.path
 import sys
 
-import numpy as np
-import pycuda.autoinit
-
-from node import *
-from RimeBK import *
-from RimeEBK import *
-from RimeMultiply import *
-from RimeJonesReduce import *
-from TestSharedData import TestSharedData
-
 class Pipeline:
     """ Class describing a pipeline of RIME equations """
     def __init__(self, node_list=None):
@@ -153,7 +143,18 @@ def is_valid_file(parser, arg):
     else:
         return open(arg, 'r')
 
+
 def main(argv=None):
+    from TestSharedData import TestSharedData
+    from RimeBK import RimeBK
+    from RimeEBK import RimeEBK
+    from RimeJonesReduce import RimeJonesReduce
+
+    import pycuda.autoinit
+    import crimes
+    import numpy as np
+
+
     """
     'Main entry point for the RIME Pipeline script'
     """
