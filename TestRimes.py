@@ -115,31 +115,8 @@ class TestRimes(unittest.TestCase):
 
         # Invoke the BK kernel
         rime_bk.execute(sd)
-        jones_gpu = sd.jones_gpu.get()
-
-        for bl in range(sd.nbl):
-            ANT1 = int(np.floor((np.sqrt(1+8*bl)-1)/2))
-            ANT2 = ANT1*(ANT1-1)/2
-            ANT1 += 1;
-
-        """
-        for bl in range(sd.nbl):
-            ANT1 = int(np.floor((np.sqrt(1+8*bl)-1)/2))
-            ANT2 = ANT1*(ANT1-1)/2
-            ANT1 += 1;
-
-            for chan in range(sd.nchan):
-                wave = sd.wavelength[chan]
-                for time in range(sd.ntime):
-                    for src in range(sd.nsrc):
-                        l, m = sd.lm[0][src]
-
-                        jones[4:,bl,chan,time,src]
-        """        
-
         rime_ebk.execute(sd)        
-        jones_gpu = sd.jones_gpu.get()
-        self.assertTrue(np.isnan(jones_gpu).any() == False)
+
 
         rime_ebk.shutdown(sd)
         rime_bk.shutdown(sd)
