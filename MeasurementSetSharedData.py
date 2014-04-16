@@ -73,9 +73,8 @@ class MeasurementSetSharedData(GPUSharedData):
         self.transfer_ant_pairs(ant_pairs)
         self.transfer_wavelength(wavelength)
 
-        # TODO: Setting reference wavelength equal to frequency makes no sense
         # First dimension also seems to be of size 1 here...
-        self.set_refwave(tf.getcol('REF_FREQUENCY')[0])
+        self.set_reffreq(tf.getcol('REF_FREQUENCY')[0])
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)
