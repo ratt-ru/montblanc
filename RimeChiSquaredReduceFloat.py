@@ -20,7 +20,7 @@ class RimeChiSquaredReduceFloat(Node):
 
     def execute(self, shared_data):
         sd = shared_data
-	sd.set_X2(gpuarray.sum(sd.chi_sqrd_result_gpu).get()/sd.sigma_sqrd)
+        sd.set_X2(gpuarray.sum(sd.chi_sqrd_result_gpu).get()/sd.sigma_sqrd)
 
     def post_execution(self, shared_data):
         pass
