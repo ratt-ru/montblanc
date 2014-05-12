@@ -82,13 +82,38 @@ class TestRimes(unittest.TestCase):
 
         # Invoke the BK kernel
         rime_bk.execute(sd)
-
-        jones_gpu = sd.jones_gpu.get()
-
-        rime_ebk.execute(sd)
+        rime_ebk.execute(sd)        
 
         rime_ebk.shutdown(sd)
         rime_bk.shutdown(sd)
+
+        jones_gpu = sd.jones_gpu.get()
+        jones_cpu = sd.compute_ebk_jones()
+
+        self.assertTrue(np.allclose(jones_gpu, jones_cpu))
+
+    def test_EBK_float(self):
+#        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
+#            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=4,nchan=4,ntime=2,nsrc=5,dtype=np.float32,
+            device=pycuda.autoinit.device)
+        rime_ebk = RimeEBKFloat()
+        rime_bk = RimeBKFloat()
+
+        rime_ebk.initialise(sd)
+        rime_bk.initialise(sd)
+
+        # Invoke the BK kernel
+        rime_bk.execute(sd)
+        rime_ebk.execute(sd)        
+
+        rime_ebk.shutdown(sd)
+        rime_bk.shutdown(sd)
+
+        jones_gpu = sd.jones_gpu.get()
+        jones_cpu = sd.compute_ebk_jones()
+
+        self.assertTrue(np.allclose(jones_gpu, jones_cpu))
 
     def test_sum_float(self):
         sd = TestSharedData(na=14,nchan=32,ntime=36,nsrc=100,dtype=np.float32,
@@ -108,26 +133,6 @@ class TestRimes(unittest.TestCase):
         self.assertTrue(np.allclose(vis_cpu, sd.vis_gpu.get()))
 
         rime_sum.shutdown(sd)
-
-    def test_EBK_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
-            device=pycuda.autoinit.device)
-        rime_ebk = RimeEBKFloat()
-        rime_bk = RimeBKFloat()
-
-        rime_ebk.initialise(sd)
-        rime_bk.initialise(sd)
-
-        # Invoke the BK kernel
-        rime_bk.execute(sd)
-        rime_ebk.execute(sd)        
-
-
-
-
-        rime_ebk.shutdown(sd)
-        rime_bk.shutdown(sd)
-
 
     def test_EBK_sum_float(self):
         sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32,

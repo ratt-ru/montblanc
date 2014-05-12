@@ -78,16 +78,22 @@ class TestSharedData(GPUSharedData):
 
         # u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
         phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
-            np.outer(sd.uvw[1], sd.lm[1]) + \
+        	np.outer(sd.uvw[1], sd.lm[1]) + \
             np.outer(sd.uvw[2],n))\
                 .reshape(sd.nbl, sd.ntime, sd.nsrc)
+        assert phase.shape == (sd.nbl, sd.ntime, sd.nsrc)        	
 
         # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
         phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
+        assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)        	
+
         # Dim nchan x ntime x nsrcs 
         power = np.power(sd.ref_freq/w[:,:,np.newaxis], sd.brightness[4])
+        assert power.shape == (sd.nchan, sd.ntime, sd.nsrc)        	
+
         # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
         phase_term = power*np.exp(phase)
+        assert phase_term.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)        	
 
         # Create the brightness matrix. Dim 4 x nsrcs
         brightness = sd.ct([
@@ -95,14 +101,102 @@ class TestSharedData(GPUSharedData):
             sd.brightness[2] + 1j*sd.brightness[3],     # fU + fV*1j
             sd.brightness[2] - 1j*sd.brightness[3],     # fU - fV*1j
             sd.brightness[0]-sd.brightness[1] + 0j])        # fI-fQ + 0j
+        assert brightness.shape == (4, sd.nsrc)
 
         # This works due to broadcast! Multiplies along
         # srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
         jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
             brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
             .reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
+        assert jones_cpu.shape == sd.jones_shape
 
         return jones_cpu
 
     def compute_bk_vis(self):
         return np.add.reduce(self.compute_bk_jones(), axis=4)        
+
+    def compute_ebk_jones(self):
+    	sd = self
+
+#    	print sd
+
+        ap = sd.get_default_ant_pairs().view()
+        pe = sd.point_errors.view()
+
+        ap.shape = (2,sd.nbl*sd.ntime)
+        pe.shape = (2,sd.na*sd.ntime)
+
+        ant0,ant1 = ap[0], ap[1]
+
+#        print ap.shape
+#
+#        print 'antenna_pairs', ap
+#        print 'point_errors', pe
+#        print 'point_errors', pe.shape
+
+#        print pe[0,:].shape
+#        print pe[1,:].shape
+#
+#        print pe[0,ant0].shape
+#        print pe[1,ant1].shape
+#
+#        print pe[0,ant0]
+#        print pe[1,ant0]
+#
+#        print pe[0,ant1]
+#        print pe[1,ant1]
+
+        # Pointing errors for the first antenna
+        ld_p = pe[0,ant0].reshape(sd.nbl,sd.ntime)
+        md_p = pe[1,ant0].reshape(sd.nbl,sd.ntime)
+
+        d_p = pe[:,ant0].reshape(2,sd.nbl,sd.ntime)
+
+        assert(d_p[0] == ld_p).all()
+        assert(d_p[1] == md_p).all()
+
+        # Pointing errors for the second antenna
+        ld_q = pe[0,ant1].reshape(sd.nbl,sd.ntime)
+        md_q = pe[1,ant1].reshape(sd.nbl,sd.ntime)
+
+        d_q = pe[:,ant1].reshape(2,sd.nbl,sd.ntime)
+
+        assert(d_q[0] == ld_q).all()
+        assert(d_q[1] == md_q).all()
+
+#        print sd.lm.shape, d_p.shape
+
+        # Broadcasting here produces, nbl x ntime x nsrc
+        l_off = sd.lm[0] - d_p[0,:,:,np.newaxis]
+        m_off = sd.lm[1] - d_p[1,:,:,np.newaxis]
+        #print 'l_off', l_off
+        #print 'm_off', m_off
+        E_p = np.sqrt(l_off**2 + m_off**2)
+
+        assert E_p.shape == (sd.nbl, sd.ntime, sd.nsrc)
+
+        # Broadcasting here produces, nbl x nchan x ntime x nsrc
+        E_p = E_p[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
+        E_p = np.cos(sd.cos3_constant*E_p)**3
+        print 'E_p', E_p
+
+        assert E_p.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
+
+        # Broadcasting here produces, nbl x ntime x nsrc
+        l_off = sd.lm[0] - d_p[0,:,:,np.newaxis]
+        m_off = sd.lm[1] - d_p[1,:,:,np.newaxis]
+        E_q = np.sqrt(l_off**2 + m_off**2)
+
+        assert E_q.shape == (sd.nbl, sd.ntime, sd.nsrc)
+
+        # Broadcasting here produces, nbl x nchan x ntime x nsrc
+        E_q = E_q[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
+        E_q = np.cos(sd.cos3_constant*E_q)**3
+
+        assert E_q.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
+
+        #print 'E_p', E_p
+        #print 'E_q', E_q
+
+        return self.compute_bk_jones() * E_p * E_q
+

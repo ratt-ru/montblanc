@@ -20,12 +20,11 @@ void rime_jones_EBK(
     double * point_error,
 	int * ant_pairs,
     double2 * jones,
-    double ref_freq, 
+    double ref_freq,
+    double cos3_constant, 
     int nbl, int nchan, int ntime, int nsrc, int na)
 {
     // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
-    #define COS3_CONST 65*1e-9
-
     // Baseline, Source, Channel and Time indices
     int SRC = blockIdx.x*blockDim.x + threadIdx.x;
     int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / ntime;
@@ -115,17 +114,17 @@ void rime_jones_EBK(
     i = SRC+nsrc*4; phase = pow(ref_freq/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
 
-    double E_p = (l[threadIdx.x]+ld_p[threadIdx.z])*(l[threadIdx.x]*ld_p[threadIdx.z]);
-    E_p += (m[threadIdx.x]+md_p[threadIdx.z])*(m[threadIdx.x]*md_p[threadIdx.z]);
+    double E_p = (l[threadIdx.x]-ld_p[threadIdx.z])*(l[threadIdx.x]-ld_p[threadIdx.z]);
+    E_p += (m[threadIdx.x]-md_p[threadIdx.z])*(m[threadIdx.x]-md_p[threadIdx.z]);
     E_p = sqrt(E_p);
-    E_p = cos(COS3_CONST*wave[threadIdx.y]*E_p);
+    E_p = cos(cos3_constant*wave[threadIdx.y]*E_p);
     E_p = E_p*E_p*E_p;
     real *= E_p; imag *= E_p;
 
-    double E_q = (l[threadIdx.x]+ld_q[threadIdx.z])*(l[threadIdx.x]*ld_q[threadIdx.z]);
-    E_q += (m[threadIdx.x]+md_q[threadIdx.z])*(m[threadIdx.x]*md_q[threadIdx.z]);
+    double E_q = (l[threadIdx.x]-ld_q[threadIdx.z])*(l[threadIdx.x]-ld_q[threadIdx.z]);
+    E_q += (m[threadIdx.x]-md_q[threadIdx.z])*(m[threadIdx.x]-md_q[threadIdx.z]);
     E_q = sqrt(E_q);
-    E_q = cos(COS3_CONST*wave[threadIdx.y]*E_q);
+    E_q = cos(cos3_constant*wave[threadIdx.y]*E_q);
     E_q = E_q*E_q*E_q;
     real *= E_q; imag *= E_q;
 
@@ -207,7 +206,8 @@ class RimeEBK(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu , sd.ref_freq,
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
+            sd.ref_freq, sd.cos3_constant,
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             np.int32(sd.na), **self.get_kernel_params(sd))       
 

@@ -61,6 +61,13 @@ class BaseSharedData(SharedData):
         self.set_sigma_sqrd(1.0)
         self.set_X2(0.0)
 
+        # Initialise the cos3 constant
+        self.set_cos3_constant(65)
+
+    def set_cos3_constant(self, constant):
+        """ Set the constant used in the analytic E term """
+        self.cos3_constant = self.ft(constant*1e-9)
+
     def set_ref_freq(self, ref_freq):
         """ Set the reference frequency """
         self.ref_freq = self.ft(ref_freq)

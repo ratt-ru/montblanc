@@ -21,12 +21,10 @@ void rime_jones_EBK_float(
     int * ant_pairs,
     float2 * jones,
     float ref_freq,
+    float cos3_constant,
     int nbl, int nchan, int ntime, int nsrc, int na)
 {
     // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
-
-    #define COS3_CONST 65*1e-9
-
     // Baseline, Source, Channel and Time indices
     int SRC = blockIdx.x*blockDim.x + threadIdx.x;
     int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / ntime;
@@ -93,7 +91,7 @@ void rime_jones_EBK_float(
     // n = sqrt(1.0 - l*l - m*m) - 1.0
     float phase = 1.0 - l[threadIdx.x]*l[threadIdx.x];
     phase -= m[threadIdx.x]*m[threadIdx.x];
-    phase = sqrt(phase) - 1.0;
+    phase = sqrtf(phase) - 1.0;
     // TODO: remove this superfluous variable
     // It only exists for debugging purposes
     // float n = phase;
@@ -116,17 +114,17 @@ void rime_jones_EBK_float(
     i = SRC+nsrc*4; phase = __powf(ref_freq/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
 
-    float E_p = (l[threadIdx.x]+ld_p[threadIdx.z])*(l[threadIdx.x]*ld_p[threadIdx.z]);
-    E_p += (m[threadIdx.x]+md_p[threadIdx.z])*(m[threadIdx.x]*md_p[threadIdx.z]);
-    E_p = sqrt(E_p);
-    E_p = __cosf(COS3_CONST*wave[threadIdx.y]*E_p);
+    float E_p = (l[threadIdx.x]-ld_p[threadIdx.z])*(l[threadIdx.x]-ld_p[threadIdx.z]);
+    E_p += (m[threadIdx.x]-md_p[threadIdx.z])*(m[threadIdx.x]-md_p[threadIdx.z]);
+    E_p = sqrtf(E_p);
+    E_p = __cosf(cos3_constant*wave[threadIdx.y]*E_p);
     E_p = E_p*E_p*E_p;
     real *= E_p; imag *= E_p;
 
-    float E_q = (l[threadIdx.x]+ld_q[threadIdx.z])*(l[threadIdx.x]*ld_q[threadIdx.z]);
-    E_q += (m[threadIdx.x]+md_q[threadIdx.z])*(m[threadIdx.x]*md_q[threadIdx.z]);
-    E_q = sqrt(E_q);
-    E_q = __cosf(COS3_CONST*wave[threadIdx.y]*E_q);
+    float E_q = (l[threadIdx.x]-ld_q[threadIdx.z])*(l[threadIdx.x]-ld_q[threadIdx.z]);
+    E_q += (m[threadIdx.x]-md_q[threadIdx.z])*(m[threadIdx.x]-md_q[threadIdx.z]);
+    E_q = sqrtf(E_q);
+    E_q = __cosf(cos3_constant*wave[threadIdx.y]*E_q);
     E_q = E_q*E_q*E_q;
     real *= E_q; imag *= E_q;
 
@@ -207,7 +205,8 @@ class RimeEBKFloat(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu, sd.ref_freq,
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
+            sd.ref_freq, sd.cos3_constant,
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             np.int32(sd.na), **self.get_kernel_params(sd))       
 

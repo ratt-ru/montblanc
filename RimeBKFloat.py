@@ -77,10 +77,10 @@ void rime_jones_BK_float(
     __syncthreads();
 
     // Calculate the n term first
-    // n = sqrt(1.0 - l*l - m*m) - 1.0
+    // n = sqrtf(1.0 - l*l - m*m) - 1.0
     float phase = 1.0 - l[threadIdx.x]*l[threadIdx.x];
     phase -= m[threadIdx.x]*m[threadIdx.x];
-    phase = sqrt(phase) - 1.0;
+    phase = sqrtf(phase) - 1.0;
     // TODO: remove this superfluous variable
     // It only exists for debugging purposes
     // float n = phase;
