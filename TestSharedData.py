@@ -32,7 +32,7 @@ class TestSharedData(GPUSharedData):
         # Generate nchan frequencies/wavelengths
     	frequencies = ft(np.linspace(1e6,2e6,nchan))
         self.wavelength = 3e8/frequencies
-        self.set_reffreq(frequencies[nchan/2])
+        self.set_ref_freq(frequencies[nchan/2])
 
         # Generate the antenna pointing errors
         self.point_errors = np.random.random(np.product(self.point_errors_shape))\

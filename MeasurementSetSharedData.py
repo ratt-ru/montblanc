@@ -74,7 +74,7 @@ class MeasurementSetSharedData(GPUSharedData):
         self.transfer_wavelength(wavelength)
 
         # First dimension also seems to be of size 1 here...
-        self.set_reffreq(tf.getcol('REF_FREQUENCY')[0])
+        self.set_ref_freq(tf.getcol('REF_FREQUENCY')[0])
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)

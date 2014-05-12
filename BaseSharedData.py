@@ -61,7 +61,7 @@ class BaseSharedData(SharedData):
         self.set_sigma_sqrd(1.0)
         self.set_X2(0.0)
 
-    def set_reffreq(self, reffreq):
+    def set_ref_freq(self, reffreq):
         """ Set the reference frequency """
         self.refwave = self.ft(reffreq)
 
