@@ -85,7 +85,7 @@ class TestSharedData(GPUSharedData):
         # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
         phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
         # Dim nchan x ntime x nsrcs 
-        power = np.power(sd.refwave/w[:,:,np.newaxis], sd.brightness[4])
+        power = np.power(sd.ref_freq/w[:,:,np.newaxis], sd.brightness[4])
         # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
         phase_term = power*np.exp(phase)
 

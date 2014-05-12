@@ -19,7 +19,7 @@ void rime_jones_EBK_sum_float(
     float * wavelength,
     float * point_error,
     float2 * visibilities,
-    float refwave,
+    float ref_freq,
     int nbl, int nchan, int ntime, int nsrc, int na)
 {
     // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
@@ -116,7 +116,7 @@ void rime_jones_EBK_sum_float(
         __sincosf(phase, &imag, &real);
 
         // Multiply by the wavelength to the power of alpha
-        i = SRC+nsrc*4; phase = __powf(refwave/wave[threadIdx.y], brightness[i]);
+        i = SRC+nsrc*4; phase = __powf(ref_freq/wave[threadIdx.y], brightness[i]);
         real *= phase; imag *= phase;        
 
         jones_1_sum.x += (fI[SRC]+fQ[SRC])*real - 0.0*imag;
@@ -184,7 +184,7 @@ class RimeEBKSumFloat(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.vis_gpu, sd.refwave,
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.vis_gpu, sd.ref_freq,
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             np.int32(sd.na), **self.get_kernel_params(sd))       
 

@@ -20,7 +20,7 @@ void rime_jones_EBK(
     double * point_error,
 	int * ant_pairs,
     double2 * jones,
-    double refwave, 
+    double ref_freq, 
     int nbl, int nchan, int ntime, int nsrc, int na)
 {
     // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
@@ -112,7 +112,7 @@ void rime_jones_EBK(
     sincos(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    i = SRC+nsrc*4; phase = pow(refwave/wave[threadIdx.y], brightness[i]);
+    i = SRC+nsrc*4; phase = pow(ref_freq/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
 
     double E_p = (l[threadIdx.x]+ld_p[threadIdx.z])*(l[threadIdx.x]*ld_p[threadIdx.z]);
@@ -207,7 +207,7 @@ class RimeEBK(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu , sd.refwave,
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu , sd.ref_freq,
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             np.int32(sd.na), **self.get_kernel_params(sd))       
 
