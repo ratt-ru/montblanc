@@ -118,16 +118,33 @@ class TestSharedData(GPUSharedData):
     def compute_ebk_jones(self):
     	sd = self
 
+        # Here we obtain our antenna pairs and pointing errors
+        # TODO: The last dimensions are flattened to make indexing easier
+        # later. There may be a more numpy way to do this but YOLO.
         ap = sd.get_default_ant_pairs().reshape(2,sd.nbl*sd.ntime)
-        ant0, ant1 = ap[0], ap[1]
         pe = sd.point_errors.reshape(2,sd.na*sd.ntime)
 
-        ant0 = ant0*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
-        ant1 = ant1*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
+        # The flattened antenna pair array will look something like this.
+        # It is based on 2 x nbl x ntime. Here we have 3 baselines and
+        # 4 timesteps.
+        #
+        #            timestep
+        #       0 1 2 3 0 1 2 3 0 1 2 3
+        #
+        # ant0: 0 0 0 0 0 0 0 0 1 1 1 1
+        # ant1: 1 1 1 1 2 2 2 2 2 2 2 2
 
+        # Create indexes into the pointing errors from the antenna pairs.
+        # Pointing errors is 2 x na x ntime, thus each index will be
+        # i = ANT*ntime + TIME. The TIME additions need to be padded by nbl.
+        ant0 = ap[0]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
+        ant1 = ap[1]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
+
+        # Get the pointing errors for antenna p and q.
         d_p = pe[:,ant0].reshape(2,sd.nbl,sd.ntime)
         d_q = pe[:,ant1].reshape(2,sd.nbl,sd.ntime)
 
+        # Compute the offsets for antenna 0 or p
         # Broadcasting here produces, nbl x ntime x nsrc
         l_off = sd.lm[0] - d_p[0,:,:,np.newaxis]
         m_off = sd.lm[1] - d_p[1,:,:,np.newaxis]
@@ -141,6 +158,7 @@ class TestSharedData(GPUSharedData):
 
         assert E_p.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
 
+        # Compute the offsets for antenna 1 or q
         # Broadcasting here produces, nbl x ntime x nsrc
         l_off = sd.lm[0] - d_q[0,:,:,np.newaxis]
         m_off = sd.lm[1] - d_q[1,:,:,np.newaxis]
