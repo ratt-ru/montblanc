@@ -74,18 +74,15 @@ class TestRimes(unittest.TestCase):
     def test_EBK(self):
         sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
             device=pycuda.autoinit.device)
-        rime_ebk = RimeEBK()
-        rime_bk = RimeBK()
 
-        rime_ebk.initialise(sd)
-        rime_bk.initialise(sd)
+        sd.set_cos3_constant(65*1e9)
+
+        rime_ebk = RimeEBK()
 
         # Invoke the BK kernel
-        rime_bk.execute(sd)
+        rime_ebk.initialise(sd)
         rime_ebk.execute(sd)        
-
         rime_ebk.shutdown(sd)
-        rime_bk.shutdown(sd)
 
         jones_gpu = sd.jones_gpu.get()
         jones_cpu = sd.compute_ebk_jones()
@@ -93,27 +90,22 @@ class TestRimes(unittest.TestCase):
         self.assertTrue(np.allclose(jones_gpu, jones_cpu))
 
     def test_EBK_float(self):
-#        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
-#            device=pycuda.autoinit.device)
-        sd = TestSharedData(na=4,nchan=4,ntime=2,nsrc=5,dtype=np.float32,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
             device=pycuda.autoinit.device)
-        rime_ebk = RimeEBKFloat()
-        rime_bk = RimeBKFloat()
 
-        rime_ebk.initialise(sd)
-        rime_bk.initialise(sd)
+        sd.set_cos3_constant(65*1e9)
+
+        rime_ebk = RimeEBKFloat()
 
         # Invoke the BK kernel
-        rime_bk.execute(sd)
-        rime_ebk.execute(sd)        
-
+        rime_ebk.initialise(sd)
+        rime_ebk.execute(sd)
         rime_ebk.shutdown(sd)
-        rime_bk.shutdown(sd)
 
         jones_gpu = sd.jones_gpu.get()
         jones_cpu = sd.compute_ebk_jones()
 
-        self.assertTrue(np.allclose(jones_gpu, jones_cpu))
+        self.assertTrue(np.allclose(jones_cpu, jones_gpu,rtol=1e-2,atol=1e-2))
 
     def test_sum_float(self):
         sd = TestSharedData(na=14,nchan=32,ntime=36,nsrc=100,dtype=np.float32,

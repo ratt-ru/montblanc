@@ -7,6 +7,7 @@ from pycuda.compiler import SourceModule
 from node import *
 
 FLOAT_KERNEL = """
+#include <cstdio>
 #include \"math_constants.h\"
 
 extern __shared__ float smem_f[];
@@ -24,7 +25,7 @@ void rime_jones_EBK_float(
     float cos3_constant,
     int nbl, int nchan, int ntime, int nsrc, int na)
 {
-    // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
+    // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
     // Baseline, Source, Channel and Time indices
     int SRC = blockIdx.x*blockDim.x + threadIdx.x;
     int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / ntime;
@@ -63,11 +64,18 @@ void rime_jones_EBK_float(
         // Determine antenna pairs for this baseline
         i = BL*ntime + TIME; int ANT1 = ant_pairs[i];
         i += nbl*ntime;      int ANT2 = ant_pairs[i];
+
         // Load in the pointing errors
         i = ANT1*ntime + TIME;     ld_p[threadIdx.z] = point_error[i];
         i += na*ntime;             md_p[threadIdx.z] = point_error[i];
         i = ANT2*ntime + TIME;     ld_q[threadIdx.z] = point_error[i];
         i += na*ntime;             md_q[threadIdx.z] = point_error[i];
+
+//        printf(\"[%d:%d:%d:%d] ANT1: %d ld_p: %f md_p: %f ANT2: %d ld_q: %f md_q: %f \\n\",
+//            BL, CHAN, TIME, SRC,
+//            ANT1, ld_p[threadIdx.z], md_p[threadIdx.z],
+//            ANT2, ld_q[threadIdx.z], md_q[threadIdx.z]);
+
     }
 
     // Varies by source (x)
@@ -108,7 +116,7 @@ void rime_jones_EBK_float(
 
     // Calculate the complex exponential from the phase
     float real, imag;
-    __sincosf(phase, &imag, &real);
+    sincosf(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
     i = SRC+nsrc*4; phase = __powf(ref_freq/wave[threadIdx.y], brightness[i]);
@@ -117,15 +125,17 @@ void rime_jones_EBK_float(
     float E_p = (l[threadIdx.x]-ld_p[threadIdx.z])*(l[threadIdx.x]-ld_p[threadIdx.z]);
     E_p += (m[threadIdx.x]-md_p[threadIdx.z])*(m[threadIdx.x]-md_p[threadIdx.z]);
     E_p = sqrtf(E_p);
-    E_p = __cosf(cos3_constant*wave[threadIdx.y]*E_p);
+    E_p = cosf(cos3_constant*wave[threadIdx.y]*E_p);
     E_p = E_p*E_p*E_p;
+//    printf(\"[%d:%d:%d:%d] E_p: %f \\n\", BL, CHAN, TIME, SRC, E_p);
     real *= E_p; imag *= E_p;
 
     float E_q = (l[threadIdx.x]-ld_q[threadIdx.z])*(l[threadIdx.x]-ld_q[threadIdx.z]);
     E_q += (m[threadIdx.x]-md_q[threadIdx.z])*(m[threadIdx.x]-md_q[threadIdx.z]);
     E_q = sqrtf(E_q);
-    E_q = __cosf(cos3_constant*wave[threadIdx.y]*E_q);
+    E_q = cosf(cos3_constant*wave[threadIdx.y]*E_q);
     E_q = E_q*E_q*E_q;
+//    printf(\"[%d:%d:%d:%d] E_q: %f \\n\", BL, CHAN, TIME, SRC, E_q);
     real *= E_q; imag *= E_q;
 
 #if 0
@@ -179,6 +189,7 @@ class RimeEBKFloat(Node):
 
     def shutdown(self, shared_data):
         pass
+
     def pre_execution(self, shared_data):
         pass
 
