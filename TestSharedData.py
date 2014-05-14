@@ -32,7 +32,7 @@ class TestSharedData(GPUSharedData):
         # Generate nchan frequencies/wavelengths
     	frequencies = ft(np.linspace(1e6,2e6,nchan))
         sd.wavelength = 3e8/frequencies
-        sd.set_ref_freq(frequencies[nchan/2])
+        sd.set_ref_freq(frequencies[nchan//2])
 
         # Generate the antenna pointing errors
         sd.point_errors = np.random.random(np.product(sd.point_errors_shape))\
@@ -118,59 +118,19 @@ class TestSharedData(GPUSharedData):
     def compute_ebk_jones(self):
     	sd = self
 
-#    	print sd
+        ap = sd.get_default_ant_pairs().reshape(2,sd.nbl*sd.ntime)
+        ant0, ant1 = ap[0], ap[1]
+        pe = sd.point_errors.reshape(2,sd.na*sd.ntime)
 
-        ap = sd.get_default_ant_pairs().view()
-        pe = sd.point_errors.view()
-
-        ap.shape = (2,sd.nbl*sd.ntime)
-        pe.shape = (2,sd.na*sd.ntime)
-
-        ant0,ant1 = ap[0], ap[1]
-
-#        print ap.shape
-#
-#        print 'antenna_pairs', ap
-#        print 'point_errors', pe
-#        print 'point_errors', pe.shape
-
-#        print pe[0,:].shape
-#        print pe[1,:].shape
-#
-#        print pe[0,ant0].shape
-#        print pe[1,ant1].shape
-#
-#        print pe[0,ant0]
-#        print pe[1,ant0]
-#
-#        print pe[0,ant1]
-#        print pe[1,ant1]
-
-        # Pointing errors for the first antenna
-        ld_p = pe[0,ant0].reshape(sd.nbl,sd.ntime)
-        md_p = pe[1,ant0].reshape(sd.nbl,sd.ntime)
+        ant0 = ant0*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
+        ant1 = ant1*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
 
         d_p = pe[:,ant0].reshape(2,sd.nbl,sd.ntime)
-
-        assert(d_p[0] == ld_p).all()
-        assert(d_p[1] == md_p).all()
-
-        # Pointing errors for the second antenna
-        ld_q = pe[0,ant1].reshape(sd.nbl,sd.ntime)
-        md_q = pe[1,ant1].reshape(sd.nbl,sd.ntime)
-
         d_q = pe[:,ant1].reshape(2,sd.nbl,sd.ntime)
-
-        assert(d_q[0] == ld_q).all()
-        assert(d_q[1] == md_q).all()
-
-#        print sd.lm.shape, d_p.shape
 
         # Broadcasting here produces, nbl x ntime x nsrc
         l_off = sd.lm[0] - d_p[0,:,:,np.newaxis]
         m_off = sd.lm[1] - d_p[1,:,:,np.newaxis]
-        #print 'l_off', l_off
-        #print 'm_off', m_off
         E_p = np.sqrt(l_off**2 + m_off**2)
 
         assert E_p.shape == (sd.nbl, sd.ntime, sd.nsrc)
@@ -178,13 +138,12 @@ class TestSharedData(GPUSharedData):
         # Broadcasting here produces, nbl x nchan x ntime x nsrc
         E_p = E_p[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
         E_p = np.cos(sd.cos3_constant*E_p)**3
-        print 'E_p', E_p
 
         assert E_p.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
 
         # Broadcasting here produces, nbl x ntime x nsrc
-        l_off = sd.lm[0] - d_p[0,:,:,np.newaxis]
-        m_off = sd.lm[1] - d_p[1,:,:,np.newaxis]
+        l_off = sd.lm[0] - d_q[0,:,:,np.newaxis]
+        m_off = sd.lm[1] - d_q[1,:,:,np.newaxis]
         E_q = np.sqrt(l_off**2 + m_off**2)
 
         assert E_q.shape == (sd.nbl, sd.ntime, sd.nsrc)
@@ -195,8 +154,5 @@ class TestSharedData(GPUSharedData):
 
         assert E_q.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
 
-        #print 'E_p', E_p
-        #print 'E_q', E_q
-
-        return self.compute_bk_jones() * E_p * E_q
+        return self.compute_bk_jones()*E_p*E_q
 

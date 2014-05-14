@@ -7,6 +7,7 @@ from pycuda.compiler import SourceModule
 from node import *
 
 DOUBLE_KERNEL = """
+#include <cstdio>
 #include \"math_constants.h\"
 
 extern __shared__ double smem_d[];
@@ -68,6 +69,12 @@ void rime_jones_EBK(
         i += na*ntime;             md_p[threadIdx.z] = point_error[i];
         i = ANT2*ntime + TIME;     ld_q[threadIdx.z] = point_error[i];
         i += na*ntime;             md_q[threadIdx.z] = point_error[i];
+
+//        printf(\"[%d:%d:%d:%d] ANT1: %d ld_p: %f md_p: %f ANT2: %d ld_q: %f md_q: %f \\n\",
+//            BL, CHAN, TIME, SRC,
+//            ANT1, ld_p[threadIdx.z], md_p[threadIdx.z],
+//            ANT2, ld_q[threadIdx.z], md_q[threadIdx.z]);
+
     }
 
     // Varies by source (x)
@@ -119,6 +126,7 @@ void rime_jones_EBK(
     E_p = sqrt(E_p);
     E_p = cos(cos3_constant*wave[threadIdx.y]*E_p);
     E_p = E_p*E_p*E_p;
+//    printf(\"[%d:%d:%d:%d] E_p: %f \\n\", BL, CHAN, TIME, SRC, E_p);
     real *= E_p; imag *= E_p;
 
     double E_q = (l[threadIdx.x]-ld_q[threadIdx.z])*(l[threadIdx.x]-ld_q[threadIdx.z]);
@@ -126,6 +134,7 @@ void rime_jones_EBK(
     E_q = sqrt(E_q);
     E_q = cos(cos3_constant*wave[threadIdx.y]*E_q);
     E_q = E_q*E_q*E_q;
+//    printf(\"[%d:%d:%d:%d] E_q: %f \\n\", BL, CHAN, TIME, SRC, E_q);
     real *= E_q; imag *= E_q;
 
 #if 0
