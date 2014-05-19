@@ -1,4 +1,4 @@
-# This setup script is based on Rober McGibbon's stackoverflow
+# This setup script is based on Robert McGibbon's stackoverflow
 # answer here: http://stackoverflow.com/a/13300714
 
 import os
@@ -136,7 +136,6 @@ def customize_compiler_for_nvcc(self):
     # inject our redefined _compile method into the class
     self._compile = _compile
 
-
 # run the customize_compiler
 class custom_build_ext(build_ext):
     def build_extensions(self):
@@ -157,6 +156,7 @@ setup(name='montblanc',
       license='MIT',
       packages=['montblanc'],
       install_requires=[
+      	'numpy',
       	'pycuda',
       	'pyrap',
       ],
