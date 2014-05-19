@@ -28,11 +28,17 @@ You'll need to run
 
 This should clone the **moderngpu** and **cub** CUDA libraries which are needed by montblanc.
 
-### Building Libraries
+### Building the package
 
-Run **make** to compile the **predict.so** and **crimes.so** libraries.
+Run
+     
+    # python setup.py build
 
-You may need to configure the numpy include and library directories which are somewhat hardcoded at present. You also need to point your linker at the correct location of **libcuda.so**
+to build the package. This should automatically find your CUDA compiler and compile the necessary C extensions. The following:
+
+    # python setup.py install
+
+should install the package.
 
 ## Running Tests
 
