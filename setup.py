@@ -18,7 +18,6 @@ def find_in_path(name, path):
             return os.path.abspath(binpath)
     return None
 
-
 def locate_cuda():
     """Locate the CUDA environment on the system
 
@@ -52,51 +51,53 @@ def locate_cuda():
 
 CUDA = locate_cuda()
 
-
 # Obtain the numpy include directory.  This logic works across numpy versions.
 try:
     numpy_include = numpy.get_include()
 except AttributeError:
     numpy_include = numpy.get_numpy_include()
 
-mgpu_include = 'montblanc/moderngpu/include'
+predict_ext = Extension('predict',
+	sources=['montblanc/predict.c'],
+	include_dirs=[numpy_include],
+	extra_compile_args={
+		'gcc': ['-fopenmp']}
+)
 
-ext = Extension('crimes',
-                sources=[
-                	'montblanc/moderngpu/src/mgpuutil.cpp',
-                	'montblanc/moderngpu/src/mgpucontext.cu',
-                	'montblanc/crimes.cu',
-                ],
-                library_dirs=[CUDA['lib64']],
-                libraries=['cudart'],
-                runtime_library_dirs=[CUDA['lib64']],
-                # this syntax is specific to this build system
-                # we're only going to use certain compiler args with nvcc and not with gcc
-                # the implementation of this trick is in customize_compiler() below
-                extra_compile_args={'gcc': [],
-                                    'nvcc':
-                                    	[
-                                    	 '-c',
-                                    	 '--compiler-options',
-                                    	 '-fPIC',                                    	
-                                    	 '--ptxas-options=-v',
-                                    	 '-gencode',
-                                    	 'arch=compute_20,code=sm_20',
-                                    	 '-gencode',
-                                    	 'arch=compute_30,code=sm_30',
-                                    	 '-gencode',
-                                    	 'arch=compute_35,code=sm_35',
-                                    	 ]},
-                include_dirs = [
-                	numpy_include,
-                	mgpu_include,
-                	CUDA['include']])
-
-# check for swig
-#if find_in_path('swig', os.environ['PATH']):
-#    subprocess.check_call('swig -python -c++ -o src/swig_wrap.cpp src/swig.i', shell=True)
-#else:
-#    raise EnvironmentError('the swig executable was not found in your PATH')
+crimes_ext = Extension('crimes',
+	sources=[
+		'montblanc/moderngpu/src/mgpuutil.cpp',
+		'montblanc/moderngpu/src/mgpucontext.cu',
+		'montblanc/crimes.cu',
+	],
+	library_dirs=[CUDA['lib64']],
+	libraries=['cudart'],
+	runtime_library_dirs=[CUDA['lib64']],
+	# this syntax is specific to this build system
+	# we're only going to use certain compiler args
+	# with nvcc and not with gcc
+	# the implementation of this trick is in
+	# customize_compiler() below
+	extra_compile_args={
+		'gcc': [],
+	    'nvcc':
+	    	[
+	    	 '-c',
+	    	 '--compiler-options',
+	    	 "'-fPIC'",                                    	
+	    	 '--ptxas-options=-v',
+	    	 '-gencode',
+	    	 'arch=compute_20,code=sm_20',
+	    	 '-gencode',
+	    	 'arch=compute_30,code=sm_30',
+	    	 '-gencode',
+	    	 'arch=compute_35,code=sm_35',
+	    	 ]},
+	include_dirs = [
+		numpy_include,
+		'montblanc/moderngpu/include',
+		CUDA['include']]
+)
 
 def customize_compiler_for_nvcc(self):
     """inject deep into distutils to customize how the dispatch
@@ -156,14 +157,11 @@ setup(name='montblanc',
       license='MIT',
       packages=['montblanc'],
       install_requires=[
+      	'pycuda',
       	'pyrap',
       ],
 
-      # this is necessary so that the swigged python file gets picked up
-      py_modules=['crimes', ''],
-      package_dir={'': ''},
-
-      ext_modules = [ext],
+      ext_modules = [crimes_ext, predict_ext],
 
       # inject our custom trigger
       cmdclass={'build_ext': custom_build_ext},      
