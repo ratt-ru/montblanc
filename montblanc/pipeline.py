@@ -2,6 +2,8 @@ import argparse
 import os.path
 import sys
 
+from node import NullNode
+
 class Pipeline:
     """ Class describing a pipeline of RIME equations """
     def __init__(self, node_list=None):
