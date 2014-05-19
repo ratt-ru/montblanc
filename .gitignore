@@ -1,4 +1,5 @@
 # Python cruft
+build/
 *.pyc
 
 # C++ Compiled Object files
