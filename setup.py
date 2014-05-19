@@ -60,8 +60,12 @@ except AttributeError:
 predict_ext = Extension('predict',
 	sources=['montblanc/predict.c'],
 	include_dirs=[numpy_include],
+	libraries=['gomp'],
 	extra_compile_args={
-		'gcc': ['-fopenmp']}
+		'gcc': [
+			'-fopenmp', '-fPIC'
+		]}
+
 )
 
 crimes_ext = Extension('crimes',
