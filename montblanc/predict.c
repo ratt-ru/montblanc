@@ -1,7 +1,7 @@
 /* A file to test imorting C modules for handling arrays to Python */
 
-#include "Python.h"
-#include "arrayobject.h"
+#include <Python.h>
+#include <numpy/arrayobject.h>
 #include <math.h>
 #include "complex.h"
 #include "predict.h"
