@@ -154,7 +154,9 @@ setup(name='montblanc',
       author='Simon Perkins',
       author_email='simon.perkins@gmail.com',
       license='MIT',
-      packages=['montblanc'],
+      packages=[
+      	'montblanc',
+      	'montblanc.examples'],
       install_requires=[
       	'numpy',
       	'pycuda',
