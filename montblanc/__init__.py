@@ -20,14 +20,24 @@ from MeasurementSetSharedData import MeasurementSetSharedData
 
 def get_biro_pipeline(msfile, nsrc, device=None):
 	"""
+	get_biro_pipeline(msfile, nsrc, device=None)
+
 	Returns a pipeline and shared data tuple defining a pipeline
 	suitable for BIRO.
 
-	msfile - Name of the measurement set file.
-	nsrc - Number of sources.
-	device - PyCUDA device. If left blank, the default device will be selected.
+	Parameters
+	----------
+	msfile : string
+		Name of the measurement set file.
+	nsrc : number
+		Number of point sources.
+	device - PyCUDA device.
+		The CUDA device to execute on If left blank, the default device
+		will be selected.
 
-	returns: a (pipeline, shared_data) tuple
+	Returns
+	-------
+	A (pipeline, shared_data) tuple
 	"""
 	if device is None:
 		import pycuda.autoinit
