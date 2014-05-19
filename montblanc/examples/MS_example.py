@@ -1,13 +1,7 @@
+import numpy as np
 import pycuda.autoinit
-
-from RimeBKFloat import *
-from RimeEBKFloat import *
-from RimeJonesReduce import *
-from RimeChiSquaredFloat import *
-from RimeChiSquaredReduceFloat import *
-from MeasurementSetSharedData import *
-
-from pipeline import Pipeline
+import pycuda.driver as cuda
+import montblanc
 
 if __name__ == '__main__':
     import sys
@@ -20,14 +14,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args(sys.argv[1:])
 
-    # Create a shared data object from the Measurement Set file
-    sd = MeasurementSetSharedData(args.msfile, nsrc=args.nsrc, dtype=np.float32,
-        device=pycuda.autoinit.device)    
-    # Create a pipeline consisting of an EBK kernel, followed by a reduction,
-	# a chi squared difference between the Bayesian Model and the Visibilities
-	# and a further reduction to produce the Chi Squared Value
-    pipeline = Pipeline([RimeEBKFloat(), RimeJonesReduceFloat(), RimeChiSquaredFloat(), RimeChiSquaredReduceFloat()])
-	# Initialise the pipeline
+    pipeline, sd = montblanc.get_biro_pipeline(args.msfile, nsrc=args.nsrc,
+        device=pycuda.autoinit.device)
+
+    # Initialise the pipeline
     pipeline.initialise(sd)
 
     # Random point source coordinates in the l,m,n (brightness image) domain
