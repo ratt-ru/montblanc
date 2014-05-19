@@ -165,6 +165,7 @@ setup(name='montblanc',
       	'numpy',
       	'pycuda',
       	'pyrap',
+      	'pytools',
       ],
 
       ext_modules = [crimes_ext, predict_ext],
