@@ -13,9 +13,9 @@ Pre-requisites must be installed and dependent C libraries built.
 
 ### Pre-requisites
 
-You'll need to install the [PyCUDA][pycuda] package on ubuntu
+You'll need to install the [PyCUDA][pycuda] and [pytools][pytools] packages. On ubuntu one can run the following:
 
-    # sudo apt-get install python-pycuda
+    # sudo apt-get install python-pycuda python-pytools
 
 You'll also need to install the [pyrap][pyrap] library, which is dependent on [casacore][casacore]. It may be easier to add the [SKA PPA][ska-ppa]  and get the binaries from there.
 
@@ -28,13 +28,23 @@ You'll need to run
 
 This should clone the [moderngpu][moderngpu] and [cub][cub] CUDA libraries which are needed by montblanc.
 
+### Setting up the CUDA path
+
+Montblanc is dependent on PyCUDA, which in turn depends on CUDA. It needs to know where CUDA is installed. This is usually somewhere like `/usr/local/cuda-5.5`. It is useful to create the following environment variables.
+
+    # export CUDAHOME=/usr/local/cuda-5.5
+    # export PATH=$PATH:$CUDAHOME/bin
+    # export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CUDAHOME/lib64
+
+**CUDAHOME** will inform the installer about CUDA's install location, **PATH** points at the **nvcc** CUDA compiler and **LD_LIBRARY_PATH** points at the CUDA libraries.
+
 ### Building the package
 
 Run
      
     # python setup.py build
 
-to build the package. This should automatically find your CUDA compiler and compile the necessary C extensions. The following:
+to build the package. With the CUDA environment variables set, it should be able to find the CUDA compiler and compile the C extensions. The following:
 
     # python setup.py install
 
@@ -62,6 +72,7 @@ You could also try run
 which sets up things based on the Westerbork Measurement Set, with 17 sources. It performs 100 iterations of the pipeline.
 
 [pycuda]:http://mathema.tician.de/software/pycuda/
+[pytools]:https://pypi.python.org/pypi/pytools
 [moderngpu]:https://github.com/nvlabs/moderngpu
 [cub]:https://github.com/nvlabs/cub
 [pyrap]:https://code.google.com/p/pyrap/
