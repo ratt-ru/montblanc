@@ -172,5 +172,5 @@ class TestSharedData(GPUSharedData):
 
         assert E_q.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
 
-        return self.compute_bk_jones()*E_p*E_q
+        return E_p*self.compute_bk_jones()*E_q
 
