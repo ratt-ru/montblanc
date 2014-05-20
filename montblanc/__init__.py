@@ -18,6 +18,40 @@ from RimeJonesReduce import RimeJonesReduce
 
 from MeasurementSetSharedData import MeasurementSetSharedData
 
+def get_bk_pipeline(msfile, nsrc, device=None):
+	"""
+	get_bk_pipeline(msfile, nsrc, device=None)
+
+	Returns a pipeline composed of simple brightness and phase terms.
+
+	Parameters
+	----------
+	msfile : string
+		Name of the measurement set file.
+	nsrc : number
+		Number of point sources.
+	device - PyCUDA device.
+		The CUDA device to execute on If left blank, the default device
+		will be selected.
+
+	Returns
+	-------
+	A (pipeline, shared_data) tuple
+	"""
+	if device is None:
+		import pycuda.autoinit
+		device=pycuda.autoinit.device
+
+	# Create a shared data object from the Measurement Set file
+	sd = MeasurementSetSharedData(msfile, nsrc=nsrc, dtype=np.float32,
+		device=device)
+	# Create a pipeline consisting of an BK kernel, followed by a reduction.
+	pipeline = Pipeline([
+		RimeBKFloat(),
+		RimeJonesReduceFloat()])
+
+	return pipeline, sd
+
 def get_biro_pipeline(msfile, nsrc, device=None):
 	"""
 	get_biro_pipeline(msfile, nsrc, device=None)
