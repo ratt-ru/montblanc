@@ -81,7 +81,7 @@ class RimeChiSquaredFloat(Node):
     def execute(self, shared_data):
         sd = shared_data
 
-        self.kernel(sd.vis_gpu, sd.bayes_model_gpu, \
+        self.kernel(sd.vis_gpu, sd.bayes_data_gpu, \
             sd.chi_sqrd_result_gpu, sd.sigma_sqrd, \
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), \
             **self.get_kernel_params(sd))

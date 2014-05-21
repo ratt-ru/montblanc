@@ -49,11 +49,11 @@ class BaseSharedData(SharedData):
         self.brightness_shape = (5, nsrc)
         self.wavelength_shape = (nchan)
         self.point_errors_shape = (2, na, ntime)
-        self.bayes_model_shape = (4,nbl,nchan,ntime)
+        self.bayes_data_shape = (4,nbl,nchan,ntime)
 
         # Set up output data shapes
         self.jones_shape = (4,nbl,nchan,ntime,nsrc)
-        self.vis_shape = self.bayes_model_shape
+        self.vis_shape = self.bayes_data_shape
         self.chi_sqrd_result_shape = (nbl,nchan,ntime)
 
         # Initialise sigma squared term and X2 result
@@ -122,7 +122,7 @@ class GPUSharedData(BaseSharedData):
     brightness_gpu = ArrayData()
     wavelength_gpu = ArrayData()
     point_errors_gpu = ArrayData()
-    bayes_model_gpu = ArrayData()
+    bayes_data_gpu = ArrayData()
 
     jones_gpu = ArrayData()
     vis_gpu = ArrayData()
@@ -149,7 +149,7 @@ class GPUSharedData(BaseSharedData):
         self.brightness_gpu = gpuarray.zeros(shape=self.brightness_shape,dtype=self.ft)
         self.wavelength_gpu = gpuarray.zeros(shape=self.wavelength_shape,dtype=self.ft)
         self.point_errors_gpu = gpuarray.zeros(shape=self.point_errors_shape,dtype=self.ft)
-        self.bayes_model_gpu = gpuarray.zeros(shape=self.bayes_model_shape,dtype=self.ct)
+        self.bayes_data_gpu = gpuarray.zeros(shape=self.bayes_data_shape,dtype=self.ct)
 
         # Create the output data arrays on the GPU
         self.jones_gpu = gpuarray.zeros(shape=self.jones_shape,dtype=self.ct)
@@ -164,7 +164,7 @@ class GPUSharedData(BaseSharedData):
             self.brightness_gpu,
             self.wavelength_gpu,
             self.point_errors_gpu,
-            self.bayes_model_gpu,
+            self.bayes_data_gpu,
             self.jones_gpu,
             self.vis_gpu,
             self.chi_sqrd_result_gpu]
@@ -197,8 +197,8 @@ class GPUSharedData(BaseSharedData):
     def transfer_vis(self,vis):
         self.vis_gpu.set(vis)        
 
-    def transfer_bayes_model(self,bayes_model):
-        self.bayes_model_gpu.set(bayes_model)
+    def transfer_bayes_data(self,bayes_data):
+        self.bayes_data_gpu.set(bayes_data)
 
     def __str__(self):
         return super(GPUSharedData, self).__str__() + \

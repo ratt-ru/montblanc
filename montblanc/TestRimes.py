@@ -215,7 +215,7 @@ class TestRimes(unittest.TestCase):
 
         # Take the difference between the visibilities and the model
         # (4,nbl,nchan,ntime)
-        d = sd.vis - sd.bayes_model
+        d = sd.vis - sd.bayes_data
         # Reduces a dimension so that we have (nbl,nchan,ntime)
         # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
         chi_sqrd_cpu = (np.add.reduce(d.real**2,axis=0) + np.add.reduce(d.imag**2,axis=0))/sd.sigma_sqrd

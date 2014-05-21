@@ -60,11 +60,11 @@ class TestSharedData(GPUSharedData):
         sd.transfer_vis(sd.vis)
 
         # The bayesian model
-        assert np.product(sd.bayes_model_shape) == np.product(sd.keys.shape)
-        nbayes = np.product(sd.bayes_model_shape)
-        sd.bayes_model = (np.random.random(nbayes) + np.random.random(nbayes)*1j)\
-            .astype(ct).reshape(sd.bayes_model_shape)
-        sd.transfer_bayes_model(sd.bayes_model)
+        assert np.product(sd.bayes_data_shape) == np.product(sd.keys.shape)
+        nbayes = np.product(sd.bayes_data_shape)
+        sd.bayes_data = (np.random.random(nbayes) + np.random.random(nbayes)*1j)\
+            .astype(ct).reshape(sd.bayes_data_shape)
+        sd.transfer_bayes_data(sd.bayes_data)
         sd.set_sigma_sqrd((np.random.random(1)**2).astype(ft)[0])
 
     def compute_bk_jones(self):
