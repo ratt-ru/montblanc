@@ -153,8 +153,9 @@ class TestSharedData(GPUSharedData):
         assert E_p.shape == (sd.nbl, sd.ntime, sd.nsrc)
 
         # Broadcasting here produces, nbl x nchan x ntime x nsrc
-        E_p = E_p[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
-        E_p = np.cos(sd.cos3_constant*E_p)**3
+        E_p = sd.cos3_constant*E_p[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
+        np.clip(E_p, np.finfo(sd.ft).min, sd.E_beam_clip, E_p)
+        E_p = np.cos(E_p)**3
 
         assert E_p.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
 
@@ -167,8 +168,9 @@ class TestSharedData(GPUSharedData):
         assert E_q.shape == (sd.nbl, sd.ntime, sd.nsrc)
 
         # Broadcasting here produces, nbl x nchan x ntime x nsrc
-        E_q = E_q[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
-        E_q = np.cos(sd.cos3_constant*E_q)**3
+        E_q = sd.cos3_constant*E_q[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
+        np.clip(E_q, np.finfo(sd.ft).min, sd.E_beam_clip, E_q)
+        E_q = np.cos(E_q)**3
 
         assert E_q.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
 

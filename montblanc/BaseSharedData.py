@@ -64,9 +64,16 @@ class BaseSharedData(SharedData):
         # Initialise the cos3 constant
         self.set_cos3_constant(65)
 
+        # Initialise the beam clipping paramter
+        self.set_beam_clip(1.0881)
+
     def set_cos3_constant(self, constant):
         """ Set the constant used in the analytic E term """
         self.cos3_constant = self.ft(constant*1e-9)
+
+    def set_beam_clip(self, clip):
+        """ Set the beam clipping parameter used in the analytic E term """
+        self.E_beam_clip = self.ft(clip)
 
     def set_ref_freq(self, ref_freq):
         """ Set the reference frequency """
