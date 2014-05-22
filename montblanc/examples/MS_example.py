@@ -36,9 +36,9 @@ if __name__ == '__main__':
 
     # Create a bayesian model and upload it to the GPU
     nviselements = np.product(sd.vis_shape)
-    bayes_model = (np.random.random(nviselements) + np.random.random(nviselements)*1j)\
+    bayes_data = (np.random.random(nviselements) + np.random.random(nviselements)*1j)\
         .astype(sd.ct).reshape(sd.vis_shape)
-    sd.transfer_bayes_model(bayes_model)
+    sd.transfer_bayes_data(bayes_data)
 
     # Generate random antenna pointing errors
     point_errors = np.random.random(2*sd.na*sd.ntime)\
