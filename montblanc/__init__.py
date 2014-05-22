@@ -1,4 +1,10 @@
 import numpy as np
+import os
+import inspect
+
+# Import ourself. How is this... I don't even...
+# Hooray for python
+import montblanc
 
 from montblanc.node import Node, NullNode
 from montblanc.pipeline import Pipeline
@@ -17,6 +23,10 @@ from montblanc.RimeJonesReduce import RimeJonesReduce
 #from montblanc.RimeChiSquaredReduce import RimeChiSquaredReduce
 
 from montblanc.MeasurementSetSharedData import MeasurementSetSharedData
+
+def get_montblanc_path():
+	""" Return the current path in which montblanc is installed """
+	return os.path.dirname(inspect.getfile(montblanc))
 
 def get_bk_pipeline(msfile, nsrc, device=None):
 	"""
