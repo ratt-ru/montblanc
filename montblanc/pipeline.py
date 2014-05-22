@@ -2,7 +2,7 @@ import argparse
 import os.path
 import sys
 
-from node import NullNode
+from montblanc.node import NullNode
 
 class Pipeline:
     """ Class describing a pipeline of RIME equations """

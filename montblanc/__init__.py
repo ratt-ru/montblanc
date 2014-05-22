@@ -1,22 +1,22 @@
 import numpy as np
 
-from node import Node, NullNode
-from pipeline import Pipeline
-from BaseSharedData import GPUSharedData
+from montblanc.node import Node, NullNode
+from montblanc.pipeline import Pipeline
+from montblanc.BaseSharedData import GPUSharedData
 
-from RimeBKFloat import RimeBKFloat
-from RimeEBKFloat import RimeEBKFloat
-from RimeJonesReduce import RimeJonesReduceFloat
-from RimeChiSquaredFloat import RimeChiSquaredFloat
-from RimeChiSquaredReduceFloat import RimeChiSquaredReduceFloat
+from montblanc.RimeBKFloat import RimeBKFloat
+from montblanc.RimeEBKFloat import RimeEBKFloat
+from montblanc.RimeJonesReduce import RimeJonesReduceFloat
+from montblanc.RimeChiSquaredFloat import RimeChiSquaredFloat
+from montblanc.RimeChiSquaredReduceFloat import RimeChiSquaredReduceFloat
 
-from RimeBK import RimeBK
-from RimeEBK import RimeEBK
-from RimeJonesReduce import RimeJonesReduce
-#from RimeChiSquared import RimeChiSquared
-#from RimeChiSquaredReduce import RimeChiSquaredReduce
+from montblanc.RimeBK import RimeBK
+from montblanc.RimeEBK import RimeEBK
+from montblanc.RimeJonesReduce import RimeJonesReduce
+#from montblanc.RimeChiSquared import RimeChiSquared
+#from montblanc.RimeChiSquaredReduce import RimeChiSquaredReduce
 
-from MeasurementSetSharedData import MeasurementSetSharedData
+from montblanc.MeasurementSetSharedData import MeasurementSetSharedData
 
 def get_bk_pipeline(msfile, nsrc, device=None):
 	"""

@@ -4,7 +4,7 @@ import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 
-from node import *
+from montblanc.node import Node
 
 FLOAT_KERNEL = """
 #include \"math_constants.h\"

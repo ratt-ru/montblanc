@@ -4,7 +4,7 @@ import pycuda.curandom
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
-from node import *
+from montblanc.node import Node
 
 import crimes
 

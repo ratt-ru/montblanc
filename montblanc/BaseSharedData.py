@@ -3,7 +3,7 @@ import numpy as np
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
-from node import SharedData,ArrayData,Parameter
+from montblanc.node import SharedData,ArrayData,Parameter
 
 class BaseSharedData(SharedData):
     """ Class defining the RIME Simulation Parameters. """

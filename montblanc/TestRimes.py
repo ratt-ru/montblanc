@@ -4,17 +4,17 @@ import numpy as np
 import time
 import sys
 
-from RimeBK import RimeBK
-from RimeBKFloat import RimeBKFloat
-from RimeEBK import RimeEBK
-from RimeEBKFloat import RimeEBKFloat
-from RimeEBKSumFloat import RimeEBKSumFloat
-from RimeSumFloat import RimeSumFloat
-from RimeJonesReduce import *
-from RimeMultiply import RimeMultiply
-from RimeChiSquaredFloat import RimeChiSquaredFloat
-from RimeChiSquaredReduceFloat import RimeChiSquaredReduceFloat
-from TestSharedData import TestSharedData
+from montblanc.RimeBK import RimeBK
+from montblanc.RimeBKFloat import RimeBKFloat
+from montblanc.RimeEBK import RimeEBK
+from montblanc.RimeEBKFloat import RimeEBKFloat
+from montblanc.RimeEBKSumFloat import RimeEBKSumFloat
+from montblanc.RimeSumFloat import RimeSumFloat
+from montblanc.RimeJonesReduce import *
+from montblanc.RimeMultiply import RimeMultiply
+from montblanc.RimeChiSquaredFloat import RimeChiSquaredFloat
+from montblanc.RimeChiSquaredReduceFloat import RimeChiSquaredReduceFloat
+from montblanc.TestSharedData import TestSharedData
 
 import pycuda.autoinit
 import pycuda.driver as cuda

@@ -1,5 +1,7 @@
 import numpy as np
-from BaseSharedData import *
+import pycuda.gpuarray as gpuarray
+
+from montblanc.BaseSharedData import GPUSharedData
 
 class TestSharedData(GPUSharedData):
     def __init__(self, na=7, nsrc=10, nchan=8, ntime=5, dtype=np.float64, device=None):

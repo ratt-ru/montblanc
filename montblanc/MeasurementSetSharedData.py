@@ -1,8 +1,10 @@
 import os.path
 import numpy as np
-from BaseSharedData import *
+import pycuda.gpuarray as gpuarray
 
 from pyrap.tables import table
+
+from montblanc.BaseSharedData import GPUSharedData
 
 class MeasurementSetSharedData(GPUSharedData):
     ANTENNA_TABLE = "ANTENNA"
