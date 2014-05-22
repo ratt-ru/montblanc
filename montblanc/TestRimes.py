@@ -20,15 +20,15 @@ import pycuda.autoinit
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
-import predict
-import crimes
+import montblanc.predict
+import montblanc.crimes
 
 
 class TestRimes(unittest.TestCase):
     def setUp(self):
         np.random.seed(int(time.time()*100))
         # Set up various things that aren't possible in PyCUDA
-        crimes.setup_cuda()
+        montblanc.crimes.setup_cuda()
 
     def tearDown(self):
         pass
@@ -326,7 +326,7 @@ class TestRimes(unittest.TestCase):
 
         # Call Cyrils' predict code
         predict_start = time.time()
-        P1=predict.predictSolsPol(Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
+        P1=montblanc.predict.predictSolsPol(Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
         predict_end = time.time()
 
         log.debug('predict start: %fs end: %fs elapsed time: %fs',

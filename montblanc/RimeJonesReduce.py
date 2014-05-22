@@ -6,7 +6,7 @@ import pycuda.gpuarray as gpuarray
 
 from montblanc.node import Node
 
-import crimes
+import montblanc.crimes
 
 class RimeJonesReduce(Node):
     def __init__(self):
@@ -20,7 +20,7 @@ class RimeJonesReduce(Node):
     def execute(self, shared_data):
         sd = shared_data
 
-        crimes.segmented_reduce_complex128_sum(
+        montblanc.crimes.segmented_reduce_complex128_sum(
             data=sd.jones_gpu, seg_starts=sd.keys_gpu,
             seg_sums=sd.vis_gpu, cc=sd.cc, device_id=0)
 
@@ -39,7 +39,7 @@ class RimeJonesReduceFloat(Node):
     def execute(self, shared_data):
         sd = shared_data
 
-        crimes.segmented_reduce_complex64_sum(
+        montblanc.crimes.segmented_reduce_complex64_sum(
             data=sd.jones_gpu, seg_starts=sd.keys_gpu,
             seg_sums=sd.vis_gpu, cc=sd.cc, device_id=0)
 

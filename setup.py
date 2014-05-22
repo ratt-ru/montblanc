@@ -57,7 +57,7 @@ try:
 except AttributeError:
     numpy_include = numpy.get_numpy_include()
 
-predict_ext = Extension('predict',
+predict_ext = Extension('montblanc.predict',
 	sources=['montblanc/predict.c'],
 	include_dirs=[numpy_include],
 	libraries=['gomp'],
@@ -68,7 +68,7 @@ predict_ext = Extension('predict',
 
 )
 
-crimes_ext = Extension('crimes',
+crimes_ext = Extension('montblanc.crimes',
 	sources=[
 		'montblanc/moderngpu/src/mgpuutil.cpp',
 		'montblanc/moderngpu/src/mgpucontext.cu',
