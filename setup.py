@@ -57,7 +57,7 @@ try:
 except AttributeError:
     numpy_include = numpy.get_numpy_include()
 
-predict_ext = Extension('montblanc.predict',
+predict_ext = Extension('montblanc.ext.predict',
 	sources=['montblanc/predict/predict.c'],
 	include_dirs=[
     numpy_include,
@@ -70,7 +70,7 @@ predict_ext = Extension('montblanc.predict',
 
 )
 
-crimes_ext = Extension('montblanc.crimes',
+crimes_ext = Extension('montblanc.ext.crimes',
 	sources=[
 		'montblanc/moderngpu/src/mgpuutil.cpp',
 		'montblanc/moderngpu/src/mgpucontext.cu',
@@ -172,7 +172,8 @@ setup(name='montblanc',
       license='MIT',
       packages=[
       	'montblanc',
-      	'montblanc.examples'],
+      	'montblanc.examples',
+        'montblanc.ext'],
       install_requires=[
       	'numpy',
       	'pycuda',
