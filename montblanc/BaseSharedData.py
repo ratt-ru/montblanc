@@ -3,7 +3,45 @@ import numpy as np
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
-from montblanc.node import SharedData,ArrayData,Parameter
+class Parameter(object):
+    """ Unused Descriptor Class. For gpuarrays """
+    def __init__(self, value=None):
+#        if value is None:
+#            value = []
+
+        self.value = value
+
+    def __get__(self, instance, owner):
+        return self.value
+
+    def __set__(self, instance, value):
+        if value < 0:
+            raise ValueError('Negative parameter value: %s' % value )
+        self.value = value
+
+
+class ArrayData(object):
+    """ Unused Descriptor Class. For gpuarrays """
+    def __init__(self, value=None):
+#        if value is None:
+#            value = []
+
+        self.value = value
+
+    def __get__(self, instance, owner):
+        return self.value
+
+    def __set__(self, instance, value):
+        self.value = value
+
+class SharedData(object):
+    """ Base class for data shared amongst pipeline nodes.
+
+    In practice, nodes will be responsible for creating,
+    updating and deleting members of this class.
+    Its not a complicated beast.
+    """
+    pass
 
 class BaseSharedData(SharedData):
     """ Class defining the RIME Simulation Parameters. """

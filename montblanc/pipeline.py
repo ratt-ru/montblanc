@@ -4,6 +4,10 @@ import sys
 
 from montblanc.node import NullNode
 
+class PipeLineError(Exception):
+    """ Pipeline Exception base class """
+    pass
+
 class Pipeline:
     """ Class describing a pipeline of RIME equations """
     def __init__(self, node_list=None):
