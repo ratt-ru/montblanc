@@ -58,8 +58,10 @@ except AttributeError:
     numpy_include = numpy.get_numpy_include()
 
 predict_ext = Extension('montblanc.predict',
-	sources=['montblanc/predict.c'],
-	include_dirs=[numpy_include],
+	sources=['montblanc/predict/predict.c'],
+	include_dirs=[
+    numpy_include,
+    'montblanc/predict'],
 	libraries=['gomp'],
 	extra_compile_args={
 		'gcc': [
@@ -72,7 +74,7 @@ crimes_ext = Extension('montblanc.crimes',
 	sources=[
 		'montblanc/moderngpu/src/mgpuutil.cpp',
 		'montblanc/moderngpu/src/mgpucontext.cu',
-		'montblanc/crimes.cu',
+		'montblanc/crimes/crimes.cu',
 	],
 	library_dirs=[CUDA['lib64']],
 	libraries=['cudart'],
@@ -100,6 +102,7 @@ crimes_ext = Extension('montblanc.crimes',
 	include_dirs = [
 		numpy_include,
 		'montblanc/moderngpu/include',
+    'montblanc/crimes',
 		CUDA['include']]
 )
 
