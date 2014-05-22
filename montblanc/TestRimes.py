@@ -10,7 +10,7 @@ from montblanc.RimeEBK import RimeEBK
 from montblanc.RimeEBKFloat import RimeEBKFloat
 from montblanc.RimeEBKSumFloat import RimeEBKSumFloat
 from montblanc.RimeSumFloat import RimeSumFloat
-from montblanc.RimeJonesReduce import *
+from montblanc.RimeJonesReduce import RimeJonesReduce, RimeJonesReduceFloat
 from montblanc.RimeMultiply import RimeMultiply
 from montblanc.RimeChiSquaredFloat import RimeChiSquaredFloat
 from montblanc.RimeChiSquaredReduceFloat import RimeChiSquaredReduceFloat
