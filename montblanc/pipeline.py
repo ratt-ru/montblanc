@@ -2,6 +2,8 @@ import argparse
 import os.path
 import sys
 
+import montblanc
+
 from montblanc.node import NullNode
 
 class PipeLineError(Exception):
@@ -10,7 +12,7 @@ class PipeLineError(Exception):
 
 class Pipeline:
     """ Class describing a pipeline of RIME equations """
-    def __init__(self, node_list=None):
+    def __init__(self, node_list=None, user_options=None):
         """ Initialise the pipeline with a list of nodes
 
         Keyword arguments:
@@ -19,10 +21,20 @@ class Pipeline:
         >>> pipeline = PipeRimes([InitNode(), \\
             ProcessingNode1(), ProcessingNode2(), CleanupNode()])
         """
-        if node_list is None: node_list = [NullNode()]
+        if node_list is None:
+        	node_list = [NullNode()]
 
-        if type(node_list) != list:
-            raise ValueError, 'node_list argument is not a list'
+        if type(node_list) is not list:
+            raise TypeError, 'node_list argument is not a list'
+
+        if user_options is None:
+            user_options = {}
+
+        if type(user_options) is not dict:
+            raise TypeError, 'user_options argument is not a dict'
+
+        self.options = montblanc.default_pipeline_options()
+        self.options.update(user_options)
 
         self.pipeline = node_list
         self.initialised = False
