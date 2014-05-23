@@ -90,3 +90,8 @@ def get_biro_pipeline(msfile, nsrc, device=None):
 		RimeChiSquaredReduceFloat()])
 
 	return pipeline, sd
+
+def default_pipeline_options():
+	return {
+		'verbosity' : 0
+	}
