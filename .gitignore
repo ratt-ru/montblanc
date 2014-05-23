@@ -2,6 +2,9 @@
 build/
 *.pyc
 
+# log files
+*.log
+
 # C++ Compiled Object files
 *.slo
 *.lo
