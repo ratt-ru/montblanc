@@ -9,7 +9,7 @@ A PyCUDA implementation of the Radio Interferometry Measurement Equation, and a 
 
 ## Installation
 
-Pre-requisites must be installed and dependent C libraries built.
+Pre-requisites must be installed and dependant C libraries built.
 
 ### Pre-requisites
 
@@ -17,7 +17,7 @@ You'll need to install the [PyCUDA][pycuda] and [pytools][pytools] packages. On 
 
     # sudo apt-get install python-pycuda python-pytools
 
-You'll also need to install the [pyrap][pyrap] library, which is dependent on [casacore][casacore]. It may be easier to add the [SKA PPA][ska-ppa]  and get the binaries from there.
+You'll also need to install the [pyrap][pyrap] library, which is dependant on [casacore][casacore]. It may be easier to add the [SKA PPA][ska-ppa]  and get the binaries from there.
 
 ### Setting up Submodules
 
@@ -30,7 +30,7 @@ This should clone the [moderngpu][moderngpu] and [cub][cub] CUDA libraries which
 
 ### Setting up the CUDA path
 
-Montblanc is dependent on PyCUDA, which in turn depends on CUDA. It needs to know where CUDA is installed. This is usually somewhere like `/usr/local/cuda-5.5`. It is useful to create the following environment variables.
+Montblanc is dependant on PyCUDA, which in turn depends on CUDA. It needs to know where CUDA is installed. This is usually somewhere like `/usr/local/cuda-5.5`. It is useful to create the following environment variables.
 
     # export CUDAHOME=/usr/local/cuda-5.5
     # export PATH=$PATH:$CUDAHOME/bin
