@@ -1,6 +1,8 @@
+import inspect
+import logging
+import logging.config
 import numpy as np
 import os
-import inspect
 
 # Import ourself. How is this... I don't even...
 # Hooray for python
@@ -105,3 +107,11 @@ def default_pipeline_options():
 	return {
 		'verbosity' : 0
 	}
+
+
+logging.config.fileConfig(
+	os.path.join(
+		montblanc.get_montblanc_path(),
+		'log.json'))
+
+log = logging.getLogger('montblanc')
