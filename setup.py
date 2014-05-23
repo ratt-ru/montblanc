@@ -180,7 +180,8 @@ setup(name='montblanc',
       	'pyrap',
       	'pytools',
       ],
-
+      package_data={'montblanc': ['log/*.json']},
+      include_package_data=True,
       ext_modules = [crimes_ext, predict_ext],
 
       # inject our custom trigger

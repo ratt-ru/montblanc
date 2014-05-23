@@ -1,4 +1,13 @@
+import inspect
+import json
+import logging
+import logging.config
 import numpy as np
+import os
+
+# Import ourself. How is this... I don't even...
+# Hooray for python
+import montblanc
 
 from montblanc.node import Node, NullNode
 from montblanc.pipeline import Pipeline
@@ -17,6 +26,10 @@ from montblanc.RimeJonesReduce import RimeJonesReduce
 #from montblanc.RimeChiSquaredReduce import RimeChiSquaredReduce
 
 from montblanc.MeasurementSetSharedData import MeasurementSetSharedData
+
+def get_montblanc_path():
+	""" Return the current path in which montblanc is installed """
+	return os.path.dirname(inspect.getfile(montblanc))
 
 def get_bk_pipeline(msfile, nsrc, device=None):
 	"""
@@ -90,3 +103,34 @@ def get_biro_pipeline(msfile, nsrc, device=None):
 		RimeChiSquaredReduceFloat()])
 
 	return pipeline, sd
+
+def default_pipeline_options():
+	return {
+		'verbosity' : 0
+	}
+
+def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
+    """ Setup logging configuration """
+
+    path = os.path.join(get_montblanc_path(), 'log', 'log.json')
+    value = os.getenv(env_key, None)
+
+    if value:
+        path = value
+
+    if os.path.exists(path):
+        with open(path, 'rt') as f:
+            config = json.load(f)
+        logging.config.dictConfig(config)
+    else:
+        logging.basicConfig(level=default_level)
+
+def set_log_level(level=None):
+	if level is None:
+		level = logging.INFO
+
+	logging.getLogger('montblanc').setLevel(level)
+
+setup_logging()
+log = logging.getLogger('montblanc')
+
