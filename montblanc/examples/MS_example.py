@@ -1,4 +1,6 @@
+import logging
 import numpy as np
+
 import pycuda.autoinit
 import pycuda.driver as cuda
 import montblanc
@@ -13,6 +15,9 @@ if __name__ == '__main__':
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
 
     args = parser.parse_args(sys.argv[1:])
+
+    # Set the logging level
+    montblanc.set_log_level(logging.WARN)
 
     # Get the BIRO pipeline and shared data.
     pipeline, sd = montblanc.get_biro_pipeline(args.msfile, nsrc=args.nsrc,
