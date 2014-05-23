@@ -4,6 +4,14 @@ import numpy as np
 import time
 import sys
 
+import pycuda.autoinit
+import pycuda.driver as cuda
+import pycuda.gpuarray as gpuarray
+
+import montblanc
+import montblanc.ext.predict
+import montblanc.ext.crimes
+
 from montblanc.RimeBK import RimeBK
 from montblanc.RimeBKFloat import RimeBKFloat
 from montblanc.RimeEBK import RimeEBK
@@ -16,19 +24,18 @@ from montblanc.RimeChiSquaredFloat import RimeChiSquaredFloat
 from montblanc.RimeChiSquaredReduceFloat import RimeChiSquaredReduceFloat
 from montblanc.TestSharedData import TestSharedData
 
-import pycuda.autoinit
-import pycuda.driver as cuda
-import pycuda.gpuarray as gpuarray
-
-import montblanc.ext.predict
-import montblanc.ext.crimes
-
-
 class TestRimes(unittest.TestCase):
     def setUp(self):
         np.random.seed(int(time.time()*100))
         # Set up various things that aren't possible in PyCUDA
         montblanc.ext.crimes.setup_cuda()
+
+        # Add a handler that outputs DEBUG level logging
+        fh = logging.FileHandler('test.log')
+        fh.setLevel(logging.DEBUG)
+
+        montblanc.log.addHandler(fh)
+        montblanc.log.setLevel(logging.DEBUG)
 
     def tearDown(self):
         pass
@@ -295,7 +302,7 @@ class TestRimes(unittest.TestCase):
         # Confirm similar results
         self.assertTrue(np.allclose(vis_cpu, vis_gpu))
 
-    def time_predict(self, sd, log):
+    def time_predict(self, sd):
         na=sd.na          # Number of antenna
         nbl=sd.nbl        # Number of baselines
         nchan=sd.nchan    # Number of channels
@@ -330,12 +337,12 @@ class TestRimes(unittest.TestCase):
             Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
         predict_end = time.time()
 
-        log.debug('predict start: %fs end: %fs elapsed time: %fs',
+        montblanc.log.debug('predict start: %fs end: %fs elapsed time: %fs',
             predict_start, predict_end, predict_end - predict_start)
 
         return Vis
     
-    def do_predict_test(self, shared_data, log):
+    def do_predict_test(self, shared_data):
         sd = shared_data        
         # Choose between the double and float kernel
         rime_bk = RimeBK() if sd.ft == np.float64 else RimeBKFloat()
@@ -344,9 +351,9 @@ class TestRimes(unittest.TestCase):
         # Initialise the node
         rime_bk.initialise(sd)
 
-        vis_predict_cpu = self.time_predict(sd, log)
+        vis_predict_cpu = self.time_predict(sd)
 
-        log.debug(sd)
+        montblanc.log.debug(sd)
 
         kernels_start, kernels_end = cuda.Event(), cuda.Event()
         kernels_start.record()
@@ -358,7 +365,7 @@ class TestRimes(unittest.TestCase):
         kernels_end.record()
         kernels_end.synchronize()
 
-        log.debug('kernels: elapsed time: %fs',
+        montblanc.log.debug('kernels: elapsed time: %fs',
             kernels_start.time_till(kernels_end)*1e-3)
 
         # Shutdown the rime node, we don't need it any more
@@ -373,19 +380,13 @@ class TestRimes(unittest.TestCase):
     def test_predict_double(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,
             device=pycuda.autoinit.device)
-        log = logging.getLogger('TestRimes.test_predict_double')
-        self.do_predict_test(sd, log)
+        self.do_predict_test(sd)
 
     def test_predict_float(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32,
             device=pycuda.autoinit.device)
-        log = logging.getLogger('TestRimes.test_predict_float')
-        self.do_predict_test(sd, log)
+        self.do_predict_test(sd)
 
 if __name__ == '__main__':
-    logging.basicConfig(stream=sys.stderr)
-    logging.getLogger('TestRimes.test_predict_double').setLevel(logging.DEBUG)
-    logging.getLogger('TestRimes.test_predict_float').setLevel(logging.DEBUG)
-
     suite = unittest.TestLoader().loadTestsFromTestCase(TestRimes)
     unittest.TextTestRunner(verbosity=2).run(suite)
