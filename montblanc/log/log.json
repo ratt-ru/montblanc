@@ -38,7 +38,7 @@
 
     "loggers": {
         "montblanc": {
-            "level": "ERROR",
+            "level": "WARN",
             "handlers": ["console"],
             "propagate": "no"
         }

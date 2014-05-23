@@ -1,4 +1,5 @@
 import inspect
+import json
 import logging
 import logging.config
 import numpy as np
@@ -108,10 +109,28 @@ def default_pipeline_options():
 		'verbosity' : 0
 	}
 
+def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
+    """ Setup logging configuration """
 
-logging.config.fileConfig(
-	os.path.join(
-		montblanc.get_montblanc_path(),
-		'log.json'))
+    path = os.path.join(get_montblanc_path(), 'log', 'log.json')
+    value = os.getenv(env_key, None)
 
+    if value:
+        path = value
+
+    if os.path.exists(path):
+        with open(path, 'rt') as f:
+            config = json.load(f)
+        logging.config.dictConfig(config)
+    else:
+        logging.basicConfig(level=default_level)
+
+def set_log_level(level=None):
+	if level is None:
+		level = logging.INFO
+
+	logging.getLogger('montblanc').setLevel(level)
+
+setup_logging()
 log = logging.getLogger('montblanc')
+
