@@ -17,7 +17,7 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     # Set the logging level
-    montblanc.set_log_level(logging.WARN)
+    montblanc.log.setLevel(logging.WARN)
 
     # Get the BIRO pipeline and shared data.
     pipeline, sd = montblanc.get_biro_pipeline(args.msfile, nsrc=args.nsrc,

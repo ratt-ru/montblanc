@@ -125,12 +125,6 @@ def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     else:
         logging.basicConfig(level=default_level)
 
-def set_log_level(level=None):
-	if level is None:
-		level = logging.INFO
-
-	logging.getLogger('montblanc').setLevel(level)
-
 setup_logging()
 log = logging.getLogger('montblanc')
 
