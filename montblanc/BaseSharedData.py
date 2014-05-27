@@ -34,6 +34,11 @@ class ArrayData(object):
     def __set__(self, instance, value):
         self.value = value
 
+def get_nr_of_baselines(na):
+    """ Compute the number of baselines for the 
+    given number of antenna """
+    return (na*(na-1))//2
+
 class SharedData(object):
     """ Base class for data shared amongst pipeline nodes.
 
@@ -46,7 +51,7 @@ class SharedData(object):
 class BaseSharedData(SharedData):
     """ Class defining the RIME Simulation Parameters. """
     na = Parameter(7)
-    nbl = Parameter((7**2 + 7)/2)
+    nbl = Parameter(BaseSharedData.get_nr_of_baselines(7))
     nchan = Parameter(8)
     ntime = Parameter(5)
     nsrc = Parameter(10)
@@ -64,7 +69,7 @@ class BaseSharedData(SharedData):
         # - timesteps
         # - sources
         self.na = na
-        self.nbl = nbl = (na*(na-1))/2
+        self.nbl = nbl = get_nr_of_baselines(na)
         self.nchan = nchan
         self.ntime = ntime
         self.nsrc = nsrc

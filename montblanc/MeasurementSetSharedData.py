@@ -4,6 +4,7 @@ import pycuda.gpuarray as gpuarray
 
 from pyrap.tables import table
 
+import montblanc.BaseSharedData as BaseSharedData
 from montblanc.BaseSharedData import GPUSharedData
 
 class MeasurementSetSharedData(GPUSharedData):
@@ -39,7 +40,7 @@ class MeasurementSetSharedData(GPUSharedData):
 
         # Determine the problem dimensions
         na = len(ta.getcol("NAME"))
-        nbl = (na*(na-1))//2
+        nbl = BaseSharedData.get_nr_of_baselines(na)
         nchan = f.size
         ntime = uvw.shape[1] // nbl
 
@@ -52,6 +53,9 @@ class MeasurementSetSharedData(GPUSharedData):
         super(MeasurementSetSharedData, self).__init__(\
             na=na,nchan=nchan,ntime=ntime,nsrc=nsrc,dtype=dtype)
 
+        # Check that nbl agrees with version from constructor
+        assert nbl == self.nbl
+
         # Reshape the flatten array
         uvw = uvw.reshape(self.uvw_shape).copy()
 
@@ -61,6 +65,21 @@ class MeasurementSetSharedData(GPUSharedData):
         # Get the baseline antenna pairs
         ant1 = t.getcol('ANTENNA1')
         ant2 = t.getcol('ANTENNA2')
+
+        # Load in visibility data, if it exists.
+        if t.colnames().count('DATA') > 0:
+            # Obtain visibilities stored in the DATA column
+            # This comes in as (nbl*ntime,nchan,4)
+            vis_data = t.getcol('DATA')
+
+            # Shift the dim 4 axis to the front,
+            # reshape to separate nbl and ntime, and then
+            # swap channel and time
+            vis_data=np.rollaxis(
+                np.rollaxis(vis_data,axis=2,start=0).reshape(
+                    4,nbl,ntime,nchan),
+                axis=3,start=2).astype(self.ct).copy()
+            self.transfer_bayes_data(vis_data)
 
         expected_ant_shape = (nbl*ntime,)
         
