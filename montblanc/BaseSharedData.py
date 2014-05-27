@@ -261,4 +261,4 @@ class GPUSharedData(BaseSharedData):
 
     def __str__(self):
         return super(GPUSharedData, self).__str__() + \
-            "\nGPU Memory:    " + str(self.gpu_mem() / (1024**2)) + " MB"
+            "\nGPU Memory:    %.3f MB" % (self.gpu_mem() / (1024.**2))
