@@ -29,10 +29,12 @@ class MeasurementSetSharedData(GPUSharedData):
         # Get the UVW coordinates
         uvw=t.getcol("UVW").T.astype(dtype)
 
+        ant_path = os.path.join(self.ms_file, MeasurementSetSharedData.ANTENNA_TABLE)
+        freq_path = os.path.join(self.ms_file, MeasurementSetSharedData.SPECTRAL_WINDOW)
         # Open the antenna table
-        ta=table(self.ms_file + os.sep + MeasurementSetSharedData.ANTENNA_TABLE, ack=False)
+        ta=table(ant_path, ack=False)
         # Open the spectral window table
-        tf=table(self.ms_file + os.sep + MeasurementSetSharedData.SPECTRAL_WINDOW, ack=False)
+        tf=table(freq_path, ack=False)
         f=tf.getcol("CHAN_FREQ").astype(dtype)
 
         # Determine the problem dimensions
