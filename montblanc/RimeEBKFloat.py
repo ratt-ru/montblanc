@@ -21,7 +21,7 @@ void rime_jones_EBK_float(
     float * point_error,
     int * ant_pairs,
     float2 * jones,
-    float ref_freq,
+    float ref_wave,
     float cos3_constant,
 	float E_beam_clip,
     int nbl, int nchan, int ntime, int nsrc, int na)
@@ -114,7 +114,7 @@ void rime_jones_EBK_float(
     sincosf(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    i = SRC+nsrc*4; phase = __powf(ref_freq/wave[threadIdx.y], brightness[i]);
+    i = SRC+nsrc*4; phase = __powf(ref_wave/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
 
     float E_p = (l[threadIdx.x]-ld_p[threadIdx.z])*(l[threadIdx.x]-ld_p[threadIdx.z]);
@@ -214,7 +214,7 @@ class RimeEBKFloat(Node):
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
             sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
-            sd.ref_freq, sd.cos3_constant, sd.E_beam_clip,
+            sd.ref_wave, sd.cos3_constant, sd.E_beam_clip,
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             np.int32(sd.na), **self.get_kernel_params(sd))       
 

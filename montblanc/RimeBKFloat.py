@@ -18,7 +18,7 @@ void rime_jones_BK_float(
     float * brightness,
     float * wavelength,
     float2 * jones,
-    float ref_freq,
+    float ref_wave,
     int nbl, int nchan, int ntime, int nsrc)
 {
     // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
@@ -99,7 +99,7 @@ void rime_jones_BK_float(
     __sincosf(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    phase = __powf(ref_freq/wave[threadIdx.y], a[threadIdx.x]);
+    phase = __powf(ref_wave/wave[threadIdx.y], a[threadIdx.x]);
     real *= phase; imag *= phase;
 
 #if 0
@@ -181,7 +181,7 @@ class RimeBKFloat(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu,  sd.jones_gpu, sd.ref_freq,
+            sd.wavelength_gpu,  sd.jones_gpu, sd.ref_wave,
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             **self.get_kernel_params(sd))
 

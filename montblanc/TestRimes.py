@@ -329,7 +329,7 @@ class TestRimes(unittest.TestCase):
 
         # Matrix containing information, here just the reference frequency
         # to estimate the flux from spectral index
-        Info=np.array([sd.ref_freq],np.float64)
+        Info=np.array([sd.ref_wave],np.float64)
 
         # Call Cyrils' predict code
         predict_start = time.time()

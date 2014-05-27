@@ -4,6 +4,7 @@ import pycuda.gpuarray as gpuarray
 
 from pyrap.tables import table
 
+import montblanc
 import montblanc.BaseSharedData as BaseSharedData
 from montblanc.BaseSharedData import GPUSharedData
 
@@ -60,7 +61,7 @@ class MeasurementSetSharedData(GPUSharedData):
         uvw = uvw.reshape(self.uvw_shape).copy()
 
         # Determine the wavelengths
-        wavelength = 3e8/f[0]
+        wavelength = (montblanc.constants.C/f[0]).astype(self.ft)
 
         # Get the baseline antenna pairs
         ant1 = t.getcol('ANTENNA1')
@@ -97,7 +98,8 @@ class MeasurementSetSharedData(GPUSharedData):
         self.transfer_wavelength(wavelength)
 
         # First dimension also seems to be of size 1 here...
-        self.set_ref_freq(tf.getcol('REF_FREQUENCY')[0])
+        # Divide speed of light by frequency to get the wavelength here.
+        self.set_ref_wave(montblanc.constants.C/tf.getcol('REF_FREQUENCY')[0])
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)

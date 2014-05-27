@@ -118,9 +118,9 @@ class BaseSharedData(SharedData):
         """ Set the beam clipping parameter used in the analytic E term """
         self.E_beam_clip = self.ft(clip)
 
-    def set_ref_freq(self, ref_freq):
-        """ Set the reference frequency """
-        self.ref_freq = self.ft(ref_freq)
+    def set_ref_wave(self, ref_wave):
+        """ Set the reference wavelength """
+        self.ref_wave = self.ft(ref_wave)
 
     def set_sigma_sqrd(self, sigma_sqrd):
         """ Set the sigma squared term, used
@@ -217,7 +217,7 @@ class GPUSharedData(BaseSharedData):
             raise ValueError, '%s\'s shape %s is different from the expected shape %s.' % (name, npary.shape, gpuary.shape)
 
         if npary.dtype.type != gpuary.dtype.type:
-            raise TypeError, 'Type of %s, \'%s\' is different from the expected type %s.' % (name, npary.dtype.type, gpuarry.dtype.type)          
+            raise TypeError, 'Type of %s, \'%s\' is different from the expected type %s.' % (name, npary.dtype.type, gpuary.dtype.type)          
 
     def gpu_mem(self):
         """ Returns the amount of GPU memory used, in bytes """

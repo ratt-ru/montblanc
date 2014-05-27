@@ -1,6 +1,8 @@
 import numpy as np
 import pycuda.gpuarray as gpuarray
 
+import montblanc
+
 from montblanc.BaseSharedData import GPUSharedData
 
 class TestSharedData(GPUSharedData):
@@ -33,8 +35,8 @@ class TestSharedData(GPUSharedData):
 
         # Generate nchan frequencies/wavelengths
     	frequencies = ft(np.linspace(1e6,2e6,nchan))
-        sd.wavelength = 3e8/frequencies
-        sd.set_ref_freq(frequencies[nchan//2])
+        sd.wavelength = ft(montblanc.constants.C/frequencies)
+        sd.set_ref_wave(sd.wavelength[nchan//2])
 
         # Generate the antenna pointing errors
         sd.point_errors = np.random.random(np.product(sd.point_errors_shape))\
@@ -90,7 +92,7 @@ class TestSharedData(GPUSharedData):
         assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)        	
 
         # Dim nchan x ntime x nsrcs 
-        power = np.power(sd.ref_freq/w[:,:,np.newaxis], sd.brightness[4])
+        power = np.power(sd.ref_wave/w[:,:,np.newaxis], sd.brightness[4])
         assert power.shape == (sd.nchan, sd.ntime, sd.nsrc)        	
 
         # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs

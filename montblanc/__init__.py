@@ -128,3 +128,23 @@ def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
 setup_logging()
 log = logging.getLogger('montblanc')
 
+# This solution for constants based on
+# http://stackoverflow.com/a/2688086
+# Create a property that throws when
+# you try and set it
+def constant(f):
+    def fset(self, value):
+        raise SyntaxError, 'Foolish Mortal! You would dare change a universal constant?'
+    def fget(self):
+        return f()
+
+    return property(fget, fset)
+
+class MontblancConstants(object):
+    # The speed of light, in metres
+    @constant
+    def C():
+        return 299792458
+
+# Create a constants object
+constants = MontblancConstants()
