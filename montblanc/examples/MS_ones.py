@@ -45,5 +45,5 @@ if __name__ == '__main__':
 
     print 'lm', lm
     print 'brightness', brightness
-    print sd.ref_freq
+    print sd.ref_wave
     print sd
