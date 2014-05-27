@@ -207,48 +207,51 @@ class GPUSharedData(BaseSharedData):
             self.vis_gpu,
             self.chi_sqrd_result_gpu]
 
-    def check_shape(self, name, npary, gpuary):
+    def check_array(self, name, npary, gpuary):
         if npary.shape != gpuary.shape:
             raise ValueError, '%s\'s shape %s is different from the expected shape %s.' % (name, npary.shape, gpuary.shape)
+
+        if npary.dtype.type != gpuary.dtype.type:
+            raise TypeError, 'Type of %s, \'%s\' is different from the expected type %s.' % (name, npary.dtype.type, gpuarry.dtype.type)          
 
     def gpu_mem(self):
         """ Returns the amount of GPU memory used, in bytes """
         return np.array([a.nbytes for a in self.gpu_data]).sum()
 
     def transfer_uvw(self,uvw):
-        self.check_shape('uvw', uvw, self.uvw_gpu)
+        self.check_array('uvw', uvw, self.uvw_gpu)
         self.uvw_gpu.set(uvw)
 
     def transfer_ant_pairs(self, ant_pairs):
-        self.check_shape('ant_pairs', ant_pairs, self.ant_pairs_gpu)
+        self.check_array('ant_pairs', ant_pairs, self.ant_pairs_gpu)
         self.ant_pairs_gpu.set(ant_pairs)
 
     def transfer_lm(self,lm):
-        self.check_shape('lm', lm, self.lm_gpu)
+        self.check_array('lm', lm, self.lm_gpu)
         self.lm_gpu.set(lm)
 
     def transfer_brightness(self,brightness):
-        self.check_shape('brightness', brightness, self.brightness_gpu)
+        self.check_array('brightness', brightness, self.brightness_gpu)
         self.brightness_gpu.set(brightness)
 
     def transfer_wavelength(self, wavelength):
-        self.check_shape('wavelength', wavelength, self.wavelength_gpu)
+        self.check_array('wavelength', wavelength, self.wavelength_gpu)
         self.wavelength_gpu.set(wavelength)
 
     def transfer_point_errors(self,point_errors):
-        self.check_shape('point_errors', point_errors, self.point_errors_gpu)
+        self.check_array('point_errors', point_errors, self.point_errors_gpu)
         self.point_errors_gpu.set(point_errors)
 
     def transfer_jones(self,jones):
-        self.check_shape('jones', jones, self.jones_gpu)
+        self.check_array('jones', jones, self.jones_gpu)
         self.jones_gpu.set(jones)
 
     def transfer_vis(self,vis):
-        self.check_shape('vis', vis, self.vis_gpu)
+        self.check_array('vis', vis, self.vis_gpu)
         self.vis_gpu.set(vis)        
 
     def transfer_bayes_data(self,bayes_data):
-        self.check_shape('bayes_data', bayes_data, self.bayes_data_gpu)
+        self.check_array('bayes_data', bayes_data, self.bayes_data_gpu)
         self.bayes_data_gpu.set(bayes_data)
 
     def __str__(self):
