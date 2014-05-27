@@ -51,7 +51,7 @@ class SharedData(object):
 class BaseSharedData(SharedData):
     """ Class defining the RIME Simulation Parameters. """
     na = Parameter(7)
-    nbl = Parameter(BaseSharedData.get_nr_of_baselines(7))
+    nbl = Parameter(get_nr_of_baselines(7))
     nchan = Parameter(8)
     ntime = Parameter(5)
     nsrc = Parameter(10)
