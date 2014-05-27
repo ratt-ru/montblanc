@@ -104,11 +104,6 @@ def get_biro_pipeline(msfile, nsrc, device=None):
 
 	return pipeline, sd
 
-def default_pipeline_options():
-	return {
-		'verbosity' : 0
-	}
-
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """
 
