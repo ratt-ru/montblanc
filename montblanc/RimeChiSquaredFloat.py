@@ -14,7 +14,6 @@ void rime_chi_squared_diff(
     float2 * data_vis,
     float2 * model_vis,
     float * output,
-    float sigma_squared,
     int nbl, int nchan, int ntime)
 {
     // data_vis and model_vis matrix have dimensions
@@ -49,7 +48,7 @@ void rime_chi_squared_diff(
     delta.x -= model.x; delta.y -= model.y;
     sum.x += delta.x*delta.x; sum.y += delta.y*delta.y;
 
-    output[j] = (sum.x + sum.y)/sigma_squared;
+    output[j] = (sum.x + sum.y);
 }
 """
 
@@ -82,7 +81,7 @@ class RimeChiSquaredFloat(Node):
         sd = shared_data
 
         self.kernel(sd.vis_gpu, sd.bayes_data_gpu, \
-            sd.chi_sqrd_result_gpu, sd.sigma_sqrd, \
+            sd.chi_sqrd_result_gpu, \
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), \
             **self.get_kernel_params(sd))
             
