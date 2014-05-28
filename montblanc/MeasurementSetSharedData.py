@@ -30,13 +30,19 @@ class MeasurementSetSharedData(GPUSharedData):
 
         # Get the UVW coordinates
         uvw=t.getcol("UVW").T.astype(dtype)
+        # Check that we're getting the correct shape...
+        expected_uvw_shape = (3, nbl*ntime)
 
-        ant_path = os.path.join(self.ms_file, MeasurementSetSharedData.ANTENNA_TABLE)
-        freq_path = os.path.join(self.ms_file, MeasurementSetSharedData.SPECTRAL_WINDOW)
+        if expected_uvw_shape != uvw.shape:
+            raise ValueError, 'uvw.shape %s != expected %s' % (uvw.shape,expected_uvw_shape)
+
         # Open the antenna table
+        ant_path = os.path.join(self.ms_file, MeasurementSetSharedData.ANTENNA_TABLE)
         ta=table(ant_path, ack=False)
+
         # Open the spectral window table
         tf=table(freq_path, ack=False)
+        freq_path = os.path.join(self.ms_file, MeasurementSetSharedData.SPECTRAL_WINDOW)
         f=tf.getcol("CHAN_FREQ").astype(dtype)
 
         # Determine the problem dimensions
@@ -44,12 +50,6 @@ class MeasurementSetSharedData(GPUSharedData):
         nbl = BaseSharedData.get_nr_of_baselines(na)
         nchan = f.size
         ntime = uvw.shape[1] // nbl
-
-        # Check that we're getting the correct shape...
-        expected_uvw_shape = (3, nbl*ntime)
-
-        if expected_uvw_shape != uvw.shape:
-            raise ValueError, 'uvw.shape %s != expected %s' % (uvw.shape,expected_uvw_shape)
 
         super(MeasurementSetSharedData, self).__init__(\
             na=na,nchan=nchan,ntime=ntime,nsrc=nsrc,dtype=dtype)
