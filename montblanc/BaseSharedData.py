@@ -105,14 +105,21 @@ class BaseSharedData(SharedData):
         self.set_X2(0.0)
 
         # Initialise the cos3 constant
-        self.set_cos3_constant(65)
+        self.set_beam_width(65)
 
         # Initialise the beam clipping paramter
         self.set_beam_clip(1.0881)
 
-    def set_cos3_constant(self, constant):
-        """ Set the constant used in the analytic E term """
-        self.cos3_constant = self.ft(constant*1e-9)
+    def set_beam_width(self, constant):
+        """
+        Set the beam width used in the analytic E term.
+
+        Should be set in metres.
+
+        >>> sd.set_beam_width(65)
+
+        """
+        self.beam_width = self.ft(constant*1e-9)
 
     def set_beam_clip(self, clip):
         """ Set the beam clipping parameter used in the analytic E term """

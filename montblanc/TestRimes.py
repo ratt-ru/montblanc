@@ -82,7 +82,7 @@ class TestRimes(unittest.TestCase):
         sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
             device=pycuda.autoinit.device)
 
-        sd.set_cos3_constant(65*1e9)
+        sd.set_beam_width(65*1e9)
 
         rime_ebk = RimeEBK()
 
@@ -100,7 +100,7 @@ class TestRimes(unittest.TestCase):
         sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
             device=pycuda.autoinit.device)
 
-        sd.set_cos3_constant(65*1e9)
+        sd.set_beam_width(65*1e9)
 
         rime_ebk = RimeEBKFloat()
 

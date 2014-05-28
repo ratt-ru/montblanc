@@ -22,7 +22,7 @@ void rime_jones_EBK_float(
     int * ant_pairs,
     float2 * jones,
     float ref_wave,
-    float cos3_constant,
+    float E_beam_width,
 	float E_beam_clip,
     int nbl, int nchan, int ntime, int nsrc, int na)
 {
@@ -120,7 +120,7 @@ void rime_jones_EBK_float(
     float E_p = (l[threadIdx.x]-ld_p[threadIdx.z])*(l[threadIdx.x]-ld_p[threadIdx.z]);
     E_p += (m[threadIdx.x]-md_p[threadIdx.z])*(m[threadIdx.x]-md_p[threadIdx.z]);
     E_p = sqrtf(E_p);
-    E_p *= cos3_constant*wave[threadIdx.y];
+    E_p *= E_beam_width*wave[threadIdx.y];
     E_p = fminf(E_p, E_beam_clip);
     E_p = cosf(E_p);
     E_p = E_p*E_p*E_p;
@@ -129,7 +129,7 @@ void rime_jones_EBK_float(
     float E_q = (l[threadIdx.x]-ld_q[threadIdx.z])*(l[threadIdx.x]-ld_q[threadIdx.z]);
     E_q += (m[threadIdx.x]-md_q[threadIdx.z])*(m[threadIdx.x]-md_q[threadIdx.z]);
     E_q = sqrtf(E_q);
-    E_q *= cos3_constant*wave[threadIdx.y];
+    E_q *= E_beam_width*wave[threadIdx.y];
     E_q = fminf(E_q, E_beam_clip);
     E_q = cosf(E_q);
     E_q = E_q*E_q*E_q;
@@ -214,7 +214,7 @@ class RimeEBKFloat(Node):
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
             sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
-            sd.ref_wave, sd.cos3_constant, sd.E_beam_clip,
+            sd.ref_wave, sd.beam_width, sd.E_beam_clip,
             np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             np.int32(sd.na), **self.get_kernel_params(sd))       
 
