@@ -120,7 +120,7 @@ void rime_jones_EBK_float(
     float E_p = (l[threadIdx.x]-ld_p[threadIdx.z])*(l[threadIdx.x]-ld_p[threadIdx.z]);
     E_p += (m[threadIdx.x]-md_p[threadIdx.z])*(m[threadIdx.x]-md_p[threadIdx.z]);
     E_p = sqrtf(E_p);
-    E_p *= E_beam_width*wave[threadIdx.y];
+    E_p *= E_beam_width*1e-9*wave[threadIdx.y];
     E_p = fminf(E_p, E_beam_clip);
     E_p = cosf(E_p);
     E_p = E_p*E_p*E_p;
@@ -129,7 +129,7 @@ void rime_jones_EBK_float(
     float E_q = (l[threadIdx.x]-ld_q[threadIdx.z])*(l[threadIdx.x]-ld_q[threadIdx.z]);
     E_q += (m[threadIdx.x]-md_q[threadIdx.z])*(m[threadIdx.x]-md_q[threadIdx.z]);
     E_q = sqrtf(E_q);
-    E_q *= E_beam_width*wave[threadIdx.y];
+    E_q *= E_beam_width*1e-9*wave[threadIdx.y];
     E_q = fminf(E_q, E_beam_clip);
     E_q = cosf(E_q);
     E_q = E_q*E_q*E_q;

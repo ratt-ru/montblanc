@@ -110,7 +110,7 @@ class BaseSharedData(SharedData):
         # Initialise the beam clipping paramter
         self.set_beam_clip(1.0881)
 
-    def set_beam_width(self, constant):
+    def set_beam_width(self, beam_width):
         """
         Set the beam width used in the analytic E term.
 
@@ -119,7 +119,7 @@ class BaseSharedData(SharedData):
         >>> sd.set_beam_width(65)
 
         """
-        self.beam_width = self.ft(constant*1e-9)
+        self.beam_width = self.ft(beam_width)
 
     def set_beam_clip(self, clip):
         """ Set the beam clipping parameter used in the analytic E term """
