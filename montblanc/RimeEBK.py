@@ -7,15 +7,15 @@ import montblanc
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
-    'BLOCKDIMX' : 32,
-    'BLOCKDIMY' : 1,
-    'BLOCKDIMZ' : 8
+    'BLOCKDIMX' : 4,
+    'BLOCKDIMY' : 8,
+    'BLOCKDIMZ' : 4
 }
 
 DOUBLE_PARAMS = {
-    'BLOCKDIMX' : 32,
-    'BLOCKDIMY' : 1,
-    'BLOCKDIMZ' : 8
+    'BLOCKDIMX' : 4,
+    'BLOCKDIMY' : 8,
+    'BLOCKDIMZ' : 4
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -27,7 +27,11 @@ KERNEL_TEMPLATE = string.Template("""
 #define NBL ${nbl}
 #define NCHAN ${nchan}
 #define NTIME ${ntime}
+#define NPSRC ${npsrc}
+#define NGSRC ${ngsrc}
 #define NSRC ${nsrc}
+
+#define GAUSS_SCALE ${gauss_scale}
 
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
@@ -35,13 +39,16 @@ KERNEL_TEMPLATE = string.Template("""
 
 template <
     typename T,
+    unsigned int NISRC,
+    bool gaussian=false,
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
 void rime_jones_EBK_impl(
-    T * UVW,
+    typename Tr::ft * UVW,
     typename Tr::ft * LM,
     typename Tr::ft * brightness,
+    typename Tr::ft * gauss_shape,
     typename Tr::ft * wavelength,
     typename Tr::ft * point_error,
     int * ant_pairs,
@@ -57,15 +64,20 @@ void rime_jones_EBK_impl(
     int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / NTIME;
     int BL = blockIdx.z*blockDim.z + threadIdx.z;
 
-    if(BL >= NBL || SRC >= NSRC || CHAN >= NCHAN || TIME >= NTIME)
+    if(BL >= NBL || SRC >= NISRC || CHAN >= NCHAN || TIME >= NTIME)
         return;
 
     // Cache input and output data from global memory.
 
+    // UVW coordinates and
     // Pointing errors for antenna one (p) and two (q)
-    // This is technically bl x time, but since
+    // These are technically bl x time, but since
     // our Y block dimension (time) is only 1 unit,
     // this works
+    __shared__ typename Tr::ft u[BLOCKDIMZ*BLOCKDIMY];
+    __shared__ typename Tr::ft v[BLOCKDIMZ*BLOCKDIMY];
+    __shared__ typename Tr::ft w[BLOCKDIMZ*BLOCKDIMY];
+
     __shared__ typename Tr::ft ld_p[BLOCKDIMZ*BLOCKDIMY];
     __shared__ typename Tr::ft md_p[BLOCKDIMZ*BLOCKDIMY];
     __shared__ typename Tr::ft ld_q[BLOCKDIMZ*BLOCKDIMY];
@@ -90,14 +102,15 @@ void rime_jones_EBK_impl(
     // Varies by time (y) and antenna (baseline) (z) 
     if(threadIdx.x == 0)
     {
-        // Determine antenna pairs for this baseline
-        i = BL*NTIME + TIME; int ANT1 = ant_pairs[i];
-        i += NBL*NTIME;      int ANT2 = ant_pairs[i];
-
-        // Pointing error index
+        // UVW and Pointing error indices
         // baseline x BLOCKDIMY + TIME;
         // At present BLOCKDIMY should be 1 and threadIdx.y 0.
         int j = threadIdx.z*BLOCKDIMY + threadIdx.y;
+
+        // Load in UVW coordinates and antenna pairs for this baseline
+        i = BL*NTIME + TIME; u[j] = UVW[i]; int ANT1 = ant_pairs[i];
+        i += NBL*NTIME;      v[j] = UVW[i]; int ANT2 = ant_pairs[i];
+        i += NBL*NTIME;      w[j] = UVW[i];
 
         // Load in the pointing errors
         i = ANT1*NTIME + TIME; ld_p[j] = point_error[i];
@@ -132,11 +145,11 @@ void rime_jones_EBK_impl(
     // It only exists for debugging purposes
     // typename Tr::ft n = phase;
 
-    // UVW is 3 x NBL x NTIME matrix
     // u*l + v*m + w*n, in the wrong order :)
-    i = BL*NTIME + TIME + 2*NBL*NTIME;         phase *= UVW[i]; // w*n
-    i -= NBL*NTIME;             phase += UVW[i]*m[threadIdx.x]; // v*m
-    i -= NBL*NTIME;             phase += UVW[i]*l[threadIdx.x]; // u*l
+    int j = threadIdx.z*BLOCKDIMY + threadIdx.y;
+    phase *= w[j]; // w*n
+    phase += v[j]*m[threadIdx.x]; // v*m
+    phase += u[j]*l[threadIdx.x]; // u*l
 
     // Multiply by 2*pi/wave[threadIdx.y]
     phase *= (2. * Tr::cuda_pi);
@@ -150,10 +163,41 @@ void rime_jones_EBK_impl(
     i = SRC+NSRC*4; phase = Po::pow(ref_wave/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
 
+    if(gaussian)
     {
-        typename Tr::ft diff = l[threadIdx.x]-ld_p[threadIdx.z];
+        // Load in the el and em parameters of the gaussian shape
+        i = SRC;    typename Tr::ft el = gauss_shape[i];
+        i += NGSRC; typename Tr::ft em = gauss_shape[i];
+
+        // Calculate the inverse fwhm term
+        typename Tr::ft fwhm_inv = 1.0/Po::sqrt(el*el + em*em);
+        typename Tr::ft cos_pa = el*fwhm_inv;
+        typename Tr::ft sin_pa = em*fwhm_inv;
+
+        int j = threadIdx.z*BLOCKDIMY + threadIdx.y;
+
+        typename Tr::ft u1 = u[j]*cos_pa - v[j]*sin_pa;
+        typename Tr::ft v1 = u[j]*sin_pa + v[j]*cos_pa;
+
+        // Work out the scaling factor.
+        typename Tr::ft scale_uv = GAUSS_SCALE/(fwhm_inv*wave[threadIdx.y]);
+
+        // Load in the ratio parameter of the gaussian shape
+        i += NGSRC; typename Tr::ft R = gauss_shape[i];
+
+        // Scale u1 and u2
+        u1 *= R*scale_uv;
+        v1 *= scale_uv;
+
+        typename Tr::ft exp = Po::exp(-(u1*u1 + v1*v1));
+        real *= exp; imag *= exp;
+    }
+
+    {
+        int j = threadIdx.z*BLOCKDIMY + threadIdx.y;
+        typename Tr::ft diff = l[threadIdx.x]-ld_p[j];
         typename Tr::ft E_p = diff*diff;
-        diff = m[threadIdx.x]-md_p[threadIdx.z];
+        diff = m[threadIdx.x]-md_p[j];
         E_p += diff*diff;
         E_p = Po::sqrt(E_p);
         E_p *= E_beam_width*1e-9*wave[threadIdx.y];
@@ -164,9 +208,10 @@ void rime_jones_EBK_impl(
     }
 
     {
-        typename Tr::ft diff = l[threadIdx.x]-ld_q[threadIdx.z];
+        int j = threadIdx.z*BLOCKDIMY + threadIdx.y;
+        typename Tr::ft diff = l[threadIdx.x]-ld_q[j];
         typename Tr::ft E_q = diff*diff;
-        diff = m[threadIdx.x]-md_q[threadIdx.z];
+        diff = m[threadIdx.x]-md_q[j];
         E_q += diff*diff;
         E_q = Po::sqrt(E_q);
         E_q *= E_beam_width*1e-9*wave[threadIdx.y];
@@ -186,19 +231,19 @@ void rime_jones_EBK_impl(
         (fI[threadIdx.x]+fQ[threadIdx.x])*imag + 0.0*real);
 
     // a=fU, b=fV, c=real, d = imag 
-    i += NBL*NSRC*NCHAN*NTIME;
+    i += NBL*NCHAN*NTIME*NSRC;
     jones[i]=Po::make_ct(
         fU[threadIdx.x]*real - fV[threadIdx.x]*imag,
         fU[threadIdx.x]*imag + fV[threadIdx.x]*real);
 
     // a=fU, b=-fV, c=real, d = imag 
-    i += NBL*NSRC*NCHAN*NTIME;
+    i += NBL*NCHAN*NTIME*NSRC;
     jones[i]=Po::make_ct(
         fU[threadIdx.x]*real - -fV[threadIdx.x]*imag,
         fU[threadIdx.x]*imag + -fV[threadIdx.x]*real);
 
     // a=fI-fQ, b=0.0, c=real, d = imag 
-    i += NBL*NSRC*NCHAN*NTIME;
+    i += NBL*NCHAN*NTIME*NSRC;
     jones[i]=Po::make_ct(
         (fI[threadIdx.x]-fQ[threadIdx.x])*real - 0.0*imag,
         (fI[threadIdx.x]-fQ[threadIdx.x])*imag + 0.0*real);
@@ -206,48 +251,57 @@ void rime_jones_EBK_impl(
 
 extern "C" {
 
-__global__
-void rime_jones_EBK_float(
-    float * UVW,
-    float * LM,
-    float * brightness,
-    float * wavelength,
-    float * point_error,
-    int * ant_pairs,
-    float2 * jones,
-    float ref_wave,
-    float E_beam_width,
-    float E_beam_clip)
-{
-    rime_jones_EBK_impl(UVW, LM, brightness, wavelength,
-        point_error, ant_pairs, jones,
-        ref_wave, E_beam_width, E_beam_clip);
-}    
-
-__global__
-void rime_jones_EBK_double(
-    double * UVW,
-    double * LM,
-    double * brightness,
-    double * wavelength,
-    double * point_error,
-    int * ant_pairs,
-    double2 * jones,
-    double ref_wave,
-    double E_beam_width,
-    double E_beam_clip)
-{
-    rime_jones_EBK_impl(UVW, LM, brightness, wavelength,
-        point_error, ant_pairs, jones,
-        ref_wave, E_beam_width, E_beam_clip);
+// Macro that stamps out different kernels, depending on
+// - whether we're handling floats or doubles
+// - point sources or gaussian sources
+// Arguments
+// - ft: The floating point type. Should be float/double.
+// - ct: The complex type. Should be float2/double2.
+// - gaussian: boolean indicating whether we're handling gaussians or point sources
+// - symbol: p or g depending on whether we're handling point or gaussian sources.
+// - NISRC: Number of internal sources that the kernel operates on.
+//          Set to NPSRC or NGSRC depending on point/gaussian sources.
+// - src_offset: Number of sources to offset within the,
+//          LM, brightness and jones matrices. Generally 0 for
+//          point sources and NPSRC for gaussian sources.
+//            
+#define stamp_EBK_fn(ft, ct, gaussian, symbol, NISRC, SRC_OFFSET) \
+__global__ void \
+rime_jones_ ## symbol ## EBK_ ## ft( \
+    ft * UVW, \
+    ft * LM, \
+    ft * brightness, \
+    ft * gauss_shape, \
+    ft * wavelength, \
+    ft * point_error, \
+    int * ant_pairs, \
+    ct * jones, \
+    ft ref_wave, \
+    ft E_beam_width, \
+    ft E_beam_clip) \
+{ \
+    rime_jones_EBK_impl<ft,NISRC,gaussian>( \
+        UVW, \
+        LM + SRC_OFFSET, \
+        brightness + SRC_OFFSET, \
+        gauss_shape, wavelength, \
+        point_error, ant_pairs, \
+        jones + SRC_OFFSET, \
+        ref_wave, E_beam_width, E_beam_clip); \
 }
+
+stamp_EBK_fn(float,float2,false, p, NPSRC, 0)
+stamp_EBK_fn(double,double2,false, p, NPSRC, 0)
+stamp_EBK_fn(float,float2,true, g, NGSRC, NPSRC)
+stamp_EBK_fn(double,double2,true, g, NGSRC, NPSRC)
 
 } // extern "C" {
 """)
 
 class RimeEBK(Node):
-    def __init__(self):
+    def __init__(self, gaussian=False):
         super(RimeEBK, self).__init__()
+        self.gaussian = gaussian
 
     def initialise(self, shared_data):
         sd = shared_data
@@ -261,9 +315,18 @@ class RimeEBK(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
-        kname = 'rime_jones_EBK_float' \
-            if sd.is_float() is True else \
-            'rime_jones_EBK_double'
+        # Choose our kernel form a 2x2 matrix
+        # of choices.
+        # - float or double
+        # - point or gaussian sources?
+        if sd.is_float() is True:
+            kname = 'rime_jones_pEBK_float' \
+                if not self.gaussian \
+                else 'rime_jones_gEBK_float'
+        else:
+            kname = 'rime_jones_pEBK_double' \
+                if not self.gaussian \
+                else 'rime_jones_gEBK_double'
 
         self.kernel = self.mod.get_function(kname)
 
@@ -277,11 +340,14 @@ class RimeEBK(Node):
         sd = shared_data
         D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
 
-        srcs_per_block = D['BLOCKDIMX'] if sd.nsrc > D['BLOCKDIMX'] else sd.nsrc
+        # Are we dealing with point sources or gaussian sources?
+        nisrc = sd.ngsrc if self.gaussian else sd.npsrc
+
+        srcs_per_block = D['BLOCKDIMX'] if nisrc > D['BLOCKDIMX'] else nisrc
         time_chans_per_block = D['BLOCKDIMY']
         baselines_per_block = D['BLOCKDIMZ'] if sd.nbl > D['BLOCKDIMZ'] else sd.nbl
 
-        src_blocks = self.blocks_required(sd.nsrc,srcs_per_block)
+        src_blocks = self.blocks_required(nisrc,srcs_per_block)
         time_chan_blocks = sd.ntime*sd.nchan
         baseline_blocks = self.blocks_required(sd.nbl,baselines_per_block)
 
@@ -293,10 +359,20 @@ class RimeEBK(Node):
     def execute(self, shared_data):
         sd = shared_data
 
-        self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
-            sd.ref_wave, sd.beam_width, sd.E_beam_clip,
-			**self.get_kernel_params(sd))
+        # Setup our kernel call, depending on whether we're
+        # doing point or gaussian sources, and whether there
+        # are indeed sources for us to compute!
+        if not self.gaussian and sd.npsrc > 0:
+            # Note the null pointer passed for gauss_shape here.
+            self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu, np.intp(0),
+                sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
+                sd.ref_wave, sd.beam_width, sd.E_beam_clip,
+    			**self.get_kernel_params(sd))
+        elif self.gaussian and sd.ngsrc > 0:
+            self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu, sd.gauss_shape_gpu,
+                sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
+                sd.ref_wave, sd.beam_width, sd.E_beam_clip,
+                **self.get_kernel_params(sd))
 
     def post_execution(self, shared_data):
         pass

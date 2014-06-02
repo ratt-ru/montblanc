@@ -5,6 +5,8 @@ import pycuda
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
+import montblanc
+
 class Parameter(object):
     """ Unused Descriptor Class. For gpuarrays """
     def __init__(self, value=None):
@@ -56,26 +58,34 @@ class BaseSharedData(SharedData):
     nbl = Parameter(get_nr_of_baselines(7))
     nchan = Parameter(8)
     ntime = Parameter(5)
-    nsrc = Parameter(10)
+    npsrc = Parameter(10)
+    ngsrc = Parameter(10)
+    nsrc = Parameter(20)
     nvis = Parameter(1)
 
-    def __init__(self, na=7, nchan=8, ntime=5, nsrc=10, dtype=np.float32):
+    def __init__(self, na=7, nchan=8, ntime=5, npsrc=10, ngsrc=10, dtype=np.float64):
         super(BaseSharedData, self).__init__()
-        self.set_params(na,nchan,ntime,nsrc,dtype)
+        self.set_params(na,nchan,ntime,npsrc,ngsrc,dtype)
 
-    def set_params(self, na, nchan, ntime, nsrc, dtype=np.float32):
+    def set_params(self, na, nchan, ntime, npsrc, ngsrc, dtype=np.float32):
         # Configure our problem dimensions. Number of
         # - antenna
         # - baselines
         # - channels
         # - timesteps
-        # - sources
+        # - point sources
+        # - gaussian sources
         self.na = na
         self.nbl = nbl = get_nr_of_baselines(na)
         self.nchan = nchan
         self.ntime = ntime
-        self.nsrc = nsrc
+        self.npsrc = npsrc
+        self.ngsrc = ngsrc
+        self.nsrc = nsrc = npsrc + ngsrc
         self.nvis = nbl*nchan*ntime
+
+        if nsrc == 0:
+            raise ValueError, 'The number of sources, or, the sum of npsrc and ngsrc, must be greater than zero'
 
         # Configure our floating point and complex types
         if dtype == np.float32:
@@ -87,11 +97,18 @@ class BaseSharedData(SharedData):
 
         self.ft = dtype
 
-        # Set up input data shapes
+        # UVW coordinates per baseline, changing over time
         self.uvw_shape = (3, nbl, ntime)
+        # Antenna Pairs per baseline, changing over time
         self.ant_pairs_shape = (2, nbl, ntime)
+
+        # Point Sources
         self.lm_shape = (2, nsrc)
         self.brightness_shape = (5, nsrc)
+
+        # Gaussian Shapes
+        self.gauss_shape_shape = (3, ngsrc)
+
         self.wavelength_shape = (nchan)
         self.point_errors_shape = (2, na, ntime)
         self.bayes_data_shape = (4,nbl,nchan,ntime)
@@ -101,6 +118,14 @@ class BaseSharedData(SharedData):
         self.vis_shape = self.bayes_data_shape
         self.chi_sqrd_result_shape = (nbl,nchan,ntime)
         self.noise_vector_shape = (nbl,nchan,ntime)
+
+        # Set up gaussian scaling parameters
+        # Derived from https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L493
+        # and https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L602
+        self.fwhm2int = 1.0/np.sqrt(np.log(256))
+        # Note that we don't divide by speed of light here. meqtrees code operates
+        # on frequency, while we're dealing with wavelengths.
+        self.gauss_scale = self.fwhm2int*np.sqrt(2)*np.pi
 
         # Initialise sigma squared term and X2 result
         # with default values
@@ -121,11 +146,14 @@ class BaseSharedData(SharedData):
             'nbl' : sd.nbl,
             'nchan' : sd.nchan,
             'ntime' : sd.ntime,
-            'nsrc' : sd.nsrc,
+            'npsrc' : sd.npsrc,
+            'ngsrc' : sd.ngsrc,
+            'nsrc'  : sd.nsrc,
             'nvis' : sd.nvis,
             'beam_width': sd.beam_width,
             'beam_clip' : sd.E_beam_clip,
-            'sigma_sqrd' : sd.sigma_sqrd
+            'sigma_sqrd' : sd.sigma_sqrd,
+            'gauss_scale' : sd.gauss_scale
         }
 
     def is_float(self):
@@ -179,11 +207,13 @@ class BaseSharedData(SharedData):
 
     def __str__(self):
         return "RIME Simulation Dimensions" + \
-            "\nAntenna:       " + str(self.na) + \
-            "\nBaselines:     " + str(self.nbl) + \
-            "\nChannels:      " + str(self.nchan) + \
-            "\nTimesteps:     " + str(self.ntime) + \
-            "\nSources:       " + str(self.nsrc)
+            "\nAntenna:          " + str(self.na) + \
+            "\nBaselines:        " + str(self.nbl) + \
+            "\nChannels:         " + str(self.nchan) + \
+            "\nTimesteps:        " + str(self.ntime) + \
+            "\nPoint Sources:    " + str(self.npsrc) + \
+            "\nGaussian Sources: " + str(self.ngsrc) + \
+            "\nTotal Sources:    " + str(self.nsrc)
 
 class GPUSharedData(BaseSharedData):
     """
@@ -194,6 +224,7 @@ class GPUSharedData(BaseSharedData):
     ant_pairs_gpu = ArrayData()
     lm_gpu = ArrayData()
     brightness_gpu = ArrayData()
+    gauss_shape_gpu = ArrayData()
     wavelength_gpu = ArrayData()
     point_errors_gpu = ArrayData()
     bayes_data_gpu = ArrayData()
@@ -203,7 +234,7 @@ class GPUSharedData(BaseSharedData):
     chi_sqrd_result_gpu = ArrayData()
     noise_vector_gpu = ArrayData()
 
-    def __init__(self, na=7, nchan=8, ntime=5, nsrc=10, dtype=np.float32, **kwargs):
+    def __init__(self, na=7, nchan=8, ntime=5, npsrc=10, ngsrc=10, dtype=np.float32, **kwargs):
         """
         GPUSharedData constructor
 
@@ -214,8 +245,10 @@ class GPUSharedData(BaseSharedData):
                 Number of channels.
             ntime : integer
                 Number of timesteps.
-            nsrc : integer
-                Number of sources.
+            npsrc : integer
+                Number of point sources.
+            ngsrc : integer
+                Number of gaussian sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
         Keyword Arguments:
@@ -224,8 +257,9 @@ class GPUSharedData(BaseSharedData):
             store_cpu: boolean
                 if True, store cpu versions of the kernel arrays
                 within the GPUSharedData object.
-        """
-        super(GPUSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
+    """
+        super(GPUSharedData, self).__init__(na=na,nchan=nchan,ntime=ntime, \
+            npsrc=npsrc,ngsrc=ngsrc,dtype=dtype)
 
         # Store the device, choosing the default if not specified
         self.device = kwargs.get('device',pycuda.autoinit.device)
@@ -241,8 +275,17 @@ class GPUSharedData(BaseSharedData):
         # Create the input data arrays on the GPU
         self.uvw_gpu = gpuarray.zeros(shape=self.uvw_shape,dtype=self.ft)
         self.ant_pairs_gpu = gpuarray.zeros(shape=self.ant_pairs_shape,dtype=np.int32)
+
         self.lm_gpu = gpuarray.zeros(shape=self.lm_shape,dtype=self.ft)
         self.brightness_gpu = gpuarray.zeros(shape=self.brightness_shape,dtype=self.ft)
+
+        # We could have zero gaussian sources, in which case PyCUDA falls over trying
+        # to fill a zero length array.
+        if np.product(self.gauss_shape_shape) > 0:
+            self.gauss_shape_gpu = gpuarray.zeros(shape=self.gauss_shape_shape,dtype=self.ft)
+        else:
+            self.gauss_shape_gpu = gpuarray.empty(shape=self.gauss_shape_shape,dtype=self.ft)
+
         self.wavelength_gpu = gpuarray.zeros(shape=self.wavelength_shape,dtype=self.ft)
         self.point_errors_gpu = gpuarray.zeros(shape=self.point_errors_shape,dtype=self.ft)
         self.noise_vector_gpu = gpuarray.zeros(shape=self.noise_vector_shape,dtype=self.ft)
@@ -259,6 +302,7 @@ class GPUSharedData(BaseSharedData):
             self.ant_pairs_gpu,
             self.lm_gpu,
             self.brightness_gpu,
+            self.gauss_shape_gpu,
             self.wavelength_gpu,
             self.point_errors_gpu,
             self.noise_vector_gpu,
@@ -297,6 +341,11 @@ class GPUSharedData(BaseSharedData):
         self.check_array('brightness', brightness, self.brightness_gpu)
         if self.store_cpu is True: self.brightness = brightness
         self.brightness_gpu.set(brightness)
+
+    def transfer_gauss_shape(self,gauss_shape):
+        self.check_array('gauss_shape', gauss_shape, self.gauss_shape_gpu)
+        if self.store_cpu is True: self.gauss_shape = gauss_shape
+        self.gauss_shape_gpu.set(gauss_shape)
 
     def transfer_wavelength(self, wavelength):
         self.check_array('wavelength', wavelength, self.wavelength_gpu)
@@ -338,6 +387,48 @@ class GPUSharedData(BaseSharedData):
             'store_cpu=True on your shared data object ' \
             'as well as call the transfer_* method for this to work.' % e
 
+    def compute_gaussian_shape(self):
+        """
+        Compute the shape values for the gaussian sources.
+
+        Returns a (nbl, nchan, ntime, ngsrc) matrix of floating point scalars.
+        """
+        sd = self
+
+        # 1.0/sqrt(e_l^2 + e_m^2).
+        fwhm_inv = 1.0/np.sqrt(sd.gauss_shape[0]**2 + sd.gauss_shape[1]**2)
+        # Vector of ngsrc
+        assert fwhm_inv.shape == (sd.ngsrc,)
+
+        cos_pa = sd.gauss_shape[0]*fwhm_inv
+        sin_pa = sd.gauss_shape[1]*fwhm_inv
+
+        # u1 = u*cos_pa - v*sin_pa
+        # v1 = u*sin_pa + v*cos_pa
+        u1 = (np.outer(sd.uvw[0],cos_pa) - np.outer(sd.uvw[1],sin_pa)).reshape(sd.nbl,sd.ntime,sd.ngsrc)
+        v1 = (np.outer(sd.uvw[0],sin_pa) + np.outer(sd.uvw[1],cos_pa)).reshape(sd.nbl,sd.ntime,sd.ngsrc)
+
+        # Obvious given the above reshape
+        assert u1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
+        assert v1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
+
+        # Construct the scaling factor, this includes the wavelength/frequency
+        # into the mix.
+        scale_uv = self.gauss_scale/(sd.wavelength[:,np.newaxis]*fwhm_inv)
+        # Should produce nchan x ngsrc
+        assert scale_uv.shape == (sd.nchan, sd.ngsrc)
+
+        # u1 *= R, the ratio of the gaussian axis
+        u1 *= sd.gauss_shape[2][np.newaxis,np.newaxis,:]
+        # Multiply u1 and v1 by the scaling factor
+        u1 = u1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
+        v1 = v1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
+
+        assert u1.shape == (sd.nbl, sd.nchan, sd.ntime, sd.ngsrc)
+        assert v1.shape == (sd.nbl, sd.nchan, sd.ntime, sd.ngsrc)
+
+        return np.exp(-(u1**2 + v1**2))
+
     def compute_k_jones_scalar(self):
         """
         Computes the scalar K (phase) term of the RIME using numpy.
@@ -347,6 +438,7 @@ class GPUSharedData(BaseSharedData):
         sd = self
 
         try:
+            sd = self
             # Repeat the wavelengths along the timesteps for now
             # dim nchan x ntime. 
             w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
@@ -359,25 +451,28 @@ class GPUSharedData(BaseSharedData):
                 np.outer(sd.uvw[1], sd.lm[1]) + \
                 np.outer(sd.uvw[2],n))\
                     .reshape(sd.nbl, sd.ntime, sd.nsrc)
-            assert phase.shape == (sd.nbl, sd.ntime, sd.nsrc)           
+            assert phase.shape == (sd.nbl, sd.ntime, sd.nsrc)            
 
             # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
             phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
-            assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)         
+            assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
 
             # Dim nchan x ntime x nsrcs 
             power = np.power(sd.ref_wave/w[:,:,np.newaxis], sd.brightness[4])
-            assert power.shape == (sd.nchan, sd.ntime, sd.nsrc)         
+            assert power.shape == (sd.nchan, sd.ntime, sd.nsrc)            
 
             # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
             phase_term = power*np.exp(phase)
             assert phase_term.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
 
+            # Multiply the gaussian sources by their shape terms.
+            if sd.ngsrc > 0:
+                phase_term[:,:,:,sd.npsrc:sd.nsrc] *= self.compute_gaussian_shape()
+
             return phase_term
 
         except AttributeError as e:
             self.rethrow_attribute_exception(e)
-
 
     def compute_e_jones_scalar(self):
         """

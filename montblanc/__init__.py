@@ -28,9 +28,9 @@ def get_montblanc_path():
 def get_source_path():
 	return os.path.join(get_montblanc_path(), 'src')
 
-def get_bk_pipeline(msfile, nsrc, device=None):
+def get_bk_pipeline(msfile, npsrc, ngsrc, device=None):
 	"""
-	get_bk_pipeline(msfile, nsrc, device=None)
+	get_bk_pipeline(msfile, npsrc, device=None)
 
 	Returns a pipeline composed of simple brightness and phase terms.
 
@@ -38,8 +38,10 @@ def get_bk_pipeline(msfile, nsrc, device=None):
 	----------
 	msfile : string
 		Name of the measurement set file.
-	nsrc : number
+	npsrc : number
 		Number of point sources.
+	ngsrc : number
+		Number of gaussian sources.
 	device - PyCUDA device.
 		The CUDA device to execute on If left blank, the default device
 		will be selected.
@@ -53,7 +55,7 @@ def get_bk_pipeline(msfile, nsrc, device=None):
 		device=pycuda.autoinit.device
 
 	# Create a shared data object from the Measurement Set file
-	sd = MeasurementSetSharedData(msfile, nsrc=nsrc, dtype=np.float32,
+	sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=np.float32,
 		device=device)
 	# Create a pipeline consisting of an BK kernel, followed by a reduction.
 	pipeline = Pipeline([
@@ -62,9 +64,9 @@ def get_bk_pipeline(msfile, nsrc, device=None):
 
 	return pipeline, sd
 
-def get_biro_pipeline(msfile, nsrc, **kwargs):
+def get_biro_pipeline(msfile, npsrc, ngsrc, **kwargs):
 	"""
-	get_biro_pipeline(msfile, nsrc)
+	get_biro_pipeline(msfile, npsrc, ngsrc, **kwargs)
 
 	Returns a pipeline and shared data tuple defining a pipeline
 	suitable for BIRO.
@@ -73,8 +75,10 @@ def get_biro_pipeline(msfile, nsrc, **kwargs):
 	----------
 	msfile : string
 		Name of the measurement set file.
-	nsrc : number
+	npsrc : number
 		Number of point sources.
+	ngsrc : number
+		Number of gaussian sources.
 
 	Keyword Arguments
 	-----------------
@@ -97,18 +101,29 @@ def get_biro_pipeline(msfile, nsrc, **kwargs):
 		kwargs['device']=pycuda.autoinit.device
 
 	# Create a shared data object from the Measurement Set file
-	sd = MeasurementSetSharedData(msfile, nsrc=nsrc, dtype=np.float32,
+
+	sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=np.float32,
 		**kwargs)
 	# Create a pipeline consisting of an EBK kernel, followed by a reduction,
+
+	nodes = []
+
+	# Add a node handling point sources, if any
+	if sd.npsrc > 0:
+		nodes.append(RimeEBK(gaussian=False))
+
+	# Add a node handling gaussian sources, if any
+	if sd.ngsrc > 0:
+		nodes.append(RimeEBK(gaussian=True))
+
+	# Followed by a reduction,
 	# a chi squared difference between the Bayesian Model and the Visibilities
 	# and a further reduction to produce the Chi Squared Value
-	pipeline = Pipeline([
-		RimeEBK(),
-		RimeJonesReduce(),
+	nodes.extend([RimeJonesReduce(),
 		RimeChiSquared(),
 		RimeChiSquaredReduce(noise_vector=kwargs.get('noise_vector', False))])
 
-	return pipeline, sd
+	return Pipeline(nodes), sd
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """
