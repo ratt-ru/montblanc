@@ -1,15 +1,12 @@
-import numpy as np
-import pycuda
-import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 
 from montblanc.node import Node
 
 """ Simplest kernel ever! """
-class RimeChiSquaredReduceFloat(Node):
+class RimeChiSquaredReduce(Node):
     def __init__(self):
-        super(RimeChiSquaredReduceFloat, self).__init__()
+        super(RimeChiSquaredReduce, self).__init__()
 
     def initialise(self, shared_data):
         pass

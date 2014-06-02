@@ -67,7 +67,6 @@ predict_ext = Extension('montblanc.ext.predict',
 		'gcc': [
 			'-fopenmp', '-fPIC'
 		]}
-
 )
 
 crimes_ext = Extension('montblanc.ext.crimes',
@@ -153,6 +152,33 @@ def readme():
 	with open('README.md') as f:
 		return f.read()
 
+def src_pkg_dirs():
+  """
+  Recursively provide package_data directories for
+  directories in montblanc/src.
+  """
+  pkg_dirs = []
+
+  mbdir = 'montblanc'
+  l = len(mbdir) + len(os.sep)
+  path = os.path.join(mbdir, 'src')
+  # Ignore 
+  exclude = ['docs', '.git', '.svn']
+
+  # Walk 'montblanc/src'
+  for root, dirs, files in os.walk(path,topdown=True):
+    # Prune out everything we're not interested in
+    # from os.walk's next yield.
+    dirs[:] = [d for d in dirs if d not in exclude]
+
+    for d in dirs:
+      # OK, so everything starts with 'montblanc/'
+      # Take everything after that ('src...') and
+      # append a '/*.*' to it
+      pkg_dirs.append(os.path.join(root[l:],d,'*.*'))
+
+  return pkg_dirs
+
 setup(name='montblanc',
       version='0.1',
       description='GPU-accelerated RIME implementations.',
@@ -180,7 +206,9 @@ setup(name='montblanc',
       	'pyrap',
       	'pytools',
       ],
-      package_data={'montblanc': ['log/*.json']},
+      package_data={
+        'montblanc' : ['log/*.json'],
+        'montblanc' : src_pkg_dirs() },
       include_package_data=True,
       ext_modules = [crimes_ext, predict_ext],
 

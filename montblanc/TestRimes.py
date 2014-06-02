@@ -13,19 +13,22 @@ import montblanc.ext.predict
 import montblanc.ext.crimes
 
 from montblanc.RimeBK import RimeBK
-from montblanc.RimeBKFloat import RimeBKFloat
 from montblanc.RimeEBK import RimeEBK
-from montblanc.RimeEBKFloat import RimeEBKFloat
 from montblanc.RimeEBKSumFloat import RimeEBKSumFloat
 from montblanc.RimeSumFloat import RimeSumFloat
-from montblanc.RimeJonesReduce import RimeJonesReduce, RimeJonesReduceFloat
+from montblanc.RimeJonesReduce import RimeJonesReduce
 from montblanc.RimeMultiply import RimeMultiply
-from montblanc.RimeChiSquaredFloat import RimeChiSquaredFloat
-from montblanc.RimeChiSquaredReduceFloat import RimeChiSquaredReduceFloat
+from montblanc.RimeChiSquared import RimeChiSquared
+from montblanc.RimeChiSquaredReduce import RimeChiSquaredReduce
 from montblanc.TestSharedData import TestSharedData
 
 class TestRimes(unittest.TestCase):
+    """
+    TestRimes class defining the unit test cases for montblanc
+    """
+
     def setUp(self):
+        """ Set up each test case """
         np.random.seed(int(time.time()*100))
         # Set up various things that aren't possible in PyCUDA
         montblanc.ext.crimes.setup_cuda()
@@ -38,12 +41,14 @@ class TestRimes(unittest.TestCase):
         montblanc.log.setLevel(logging.DEBUG)
 
     def tearDown(self):
+        """ Tear down each test case """
         pass
 
-    def test_BK_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
-            device=pycuda.autoinit.device)      
-        rime_bk = RimeBKFloat()
+    def BK_test_impl(self, sd, cmp=None):
+        """ Type independent implementation of the BK test """
+        if cmp is None: cmp = {}
+
+        rime_bk = RimeBK()
 
         # Initialise the BK float kernel
         rime_bk.initialise(sd)
@@ -57,36 +62,31 @@ class TestRimes(unittest.TestCase):
         jones_gpu = sd.jones_gpu.get()
 
         # Test that the jones CPU calculation matches that of the GPU calculation
-        self.assertTrue(np.allclose(jones_cpu, jones_gpu))
+        self.assertTrue(np.allclose(jones_cpu, jones_gpu,**cmp))
 
-    def test_BK(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
-            device=pycuda.autoinit.device)
-        rime_bk = RimeBK()
+    def test_BK_float(self):
+        """ single precision BK test """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
+            device=pycuda.autoinit.device)      
 
-        # Initialise the BK kernel
-        rime_bk.initialise(sd)
-        rime_bk.execute(sd)
-        rime_bk.shutdown(sd)
+        self.BK_test_impl(sd)
 
-        # Compute the jones matrix on the CPU
-        jones_cpu = sd.compute_bk_jones()
-
-        # Get the jones matrices calculated by the GPU
-        jones_gpu = sd.jones_gpu.get()
-
-        # Test that the jones CPU calculation matches that of the GPU calculation
-        self.assertTrue(np.allclose(jones_cpu, jones_gpu))
-
-    def test_EBK(self):
+    def test_BK_double(self):
+        """ double precision BK test """
         sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
             device=pycuda.autoinit.device)
 
-        sd.set_beam_width(65*1e9)
+        self.BK_test_impl(sd)
+
+    def EBK_test_impl(self,sd,cmp=None):
+        """ Type independent implementation of the EBK test """
+        if cmp is None: cmp = {}
+
+        sd.set_beam_width(65*1e5)
 
         rime_ebk = RimeEBK()
 
-        # Invoke the BK kernel
+        # Invoke the EBK kernel
         rime_ebk.initialise(sd)
         rime_ebk.execute(sd)        
         rime_ebk.shutdown(sd)
@@ -94,74 +94,28 @@ class TestRimes(unittest.TestCase):
         jones_gpu = sd.jones_gpu.get()
         jones_cpu = sd.compute_ebk_jones()
 
-        self.assertTrue(np.allclose(jones_gpu, jones_cpu))
+        self.assertTrue(np.allclose(jones_gpu, jones_cpu,**cmp))
+
+    def test_EBK_double(self):
+        """ double precision EBK test """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
+            device=pycuda.autoinit.device)
+
+        self.EBK_test_impl(sd)
 
     def test_EBK_float(self):
+        """ single precision EBK test """
         sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
             device=pycuda.autoinit.device)
 
-        sd.set_beam_width(65*1e9)
+        # Hmmm, we don't need this tolerance now? I wonder why it's working...
+        #self.EBK_test_impl(sd, cmp={'rtol' : 1e-2,'atol' : 1e-2})
+        self.EBK_test_impl(sd)
 
-        rime_ebk = RimeEBKFloat()
+    def multiply_test_impl(self, sd, cmp=None):
+        """ Type independent implementation of the multiply test """
+        if cmp is None: cmp = {}
 
-        # Invoke the BK kernel
-        rime_ebk.initialise(sd)
-        rime_ebk.execute(sd)
-        rime_ebk.shutdown(sd)
-
-        jones_gpu = sd.jones_gpu.get()
-        jones_cpu = sd.compute_ebk_jones()
-
-        self.assertTrue(np.allclose(jones_cpu, jones_gpu,rtol=1e-2,atol=1e-2))
-
-    def test_sum_float(self):
-        sd = TestSharedData(na=14,nchan=32,ntime=36,nsrc=100,dtype=np.float32,
-            device=pycuda.autoinit.device)
-        jones_cpu = (np.random.random(np.product(sd.jones_shape)) + \
-            np.random.random(np.product(sd.jones_shape))*1j)\
-            .reshape(sd.jones_shape).astype(sd.ct)
-        sd.jones_gpu.set(jones_cpu)
-        
-        rime_sum = RimeSumFloat()
-        rime_sum.initialise(sd)
-
-        rime_sum.execute(sd)
-
-        vis_cpu = np.add.reduce(jones_cpu,axis=4)
-
-        self.assertTrue(np.allclose(vis_cpu, sd.vis_gpu.get()))
-
-        rime_sum.shutdown(sd)
-
-    def test_EBK_sum_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32,
-            device=pycuda.autoinit.device)
-        rime_ebk_sum = RimeEBKSumFloat()
-
-        # Initialise the BK float kernel
-        rime_ebk_sum.initialise(sd)
-        rime_ebk_sum.execute(sd)
-        rime_ebk_sum.shutdown(sd)
-
-        # Compute the jones matrix on the CPU, and sum over
-        # the sources (axis 4)
-        vis_cpu = sd.compute_bk_vis()
-
-        # Get the visibilities calculated by the GPU
-        vis_gpu = sd.vis_gpu.get()
-
-        # Test that the CPU calculation matches that of the GPU calculation
-        # By default, rtol=1e-5. The different summation orders on the CPU
-        # and GPU seem to make a difference here, so we relax the tolerance
-        # somewhat.
-        self.assertTrue(np.allclose(vis_cpu, vis_gpu, rtol=1e-4))
-
-    @unittest.skipIf(False, 'test_multiply numpy code is somewhat inefficient')
-    def test_multiply(self):
-        # Make the problem size smaller, due to slow numpy code later on
-        sd = TestSharedData(na=5,nchan=4,ntime=2,nsrc=10,
-            device=pycuda.autoinit.device)
-        
         rime_multiply = RimeMultiply()
 
         rime_multiply.initialise(sd)
@@ -204,14 +158,32 @@ class TestRimes(unittest.TestCase):
                         jones_rhs[:,bl,ch,t,src].reshape(2,2)).reshape(4)
 
         # Confirm similar results
-        self.assertTrue(np.allclose(jones_output_gpu, jones_output_cpu))
+        self.assertTrue(np.allclose(jones_output_gpu, jones_output_cpu,**cmp))
 
-    def test_chi_squared_float(self):
-        sd = TestSharedData(na=100,nchan=64,ntime=20,nsrc=1,dtype=np.float32,
+    @unittest.skipIf(False, 'test_multiply_double numpy code is somewhat inefficient')
+    def test_multiply_double(self):
+        """ double precision multiplication test """
+        # Make the problem size smaller, due to slow numpy code in multiply_test_impl
+        sd = TestSharedData(na=5,nchan=4,ntime=2,nsrc=10,
             device=pycuda.autoinit.device)
+        
+        self.multiply_test_impl(sd)
 
-        rime_X2 = RimeChiSquaredFloat()
-        rime_X2_reduce = RimeChiSquaredReduceFloat()
+    @unittest.skipIf(False, 'test_multiply_float numpy code is somewhat inefficient')
+    def test_multiply_float(self):
+        """ single precision multiplication test """
+        # Make the problem size smaller, due to slow numpy code in multiply_test_impl
+        sd = TestSharedData(na=5,nchan=4,ntime=2,nsrc=10,
+            device=pycuda.autoinit.device)
+        
+        self.multiply_test_impl(sd)
+
+    def chi_squared_test_impl(self, sd, cmp=None):
+        """ Type independent implementation of the chi squared test """
+        if cmp is None: cmp = {}
+
+        rime_X2 = RimeChiSquared()
+        rime_X2_reduce = RimeChiSquaredReduce()
 
         rime_X2.initialise(sd)
         rime_X2_reduce.initialise(sd)
@@ -228,21 +200,36 @@ class TestRimes(unittest.TestCase):
         chi_sqrd_cpu = (np.add.reduce(d.real**2,axis=0) + np.add.reduce(d.imag**2,axis=0))
         chi_sqrd_gpu = sd.chi_sqrd_result_gpu.get()
 
-        assert np.allclose(chi_sqrd_cpu, chi_sqrd_gpu)
+        self.assertTrue(np.allclose(chi_sqrd_cpu, chi_sqrd_gpu), **cmp)
 
         # Do the chi squared sum on the CPU, and divide by the sigma squared term
         X2_cpu = chi_sqrd_cpu.sum() / sd.sigma_sqrd
 
         # Check that the result returned by the CPU and GPU are the same,
         # with a reduced tolerance, because float32's are imprecise
-        assert np.allclose(np.array([X2_cpu]), np.array([sd.X2]), rtol=1e-3)
+        self.assertTrue(np.allclose(np.array([X2_cpu]), np.array([sd.X2]), **cmp))
 
         rime_X2.shutdown(sd)
         rime_X2_reduce.shutdown(sd)
 
-    def test_reduce(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
+    def test_chi_squared_double(self):
+        """ double precision chi squared test """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=2,
             device=pycuda.autoinit.device)
+
+        self.chi_squared_test_impl(sd)
+
+    def test_chi_squared_float(self):
+        """ single precision chi squared test """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=2,dtype=np.float32,
+            device=pycuda.autoinit.device)
+
+        self.chi_squared_test_impl(sd)
+
+    def reduce_test_impl(self, sd, cmp=None):
+        """ Type independent implementation of the reduction tests """
+        if cmp is None: cmp = {}
+
         rime_reduce = RimeJonesReduce()
 
         rime_reduce.initialise(sd)
@@ -269,38 +256,21 @@ class TestRimes(unittest.TestCase):
         vis_gpu = sd.vis_gpu.get()
 
         # Confirm similar results
-        self.assertTrue(np.allclose(vis_cpu, vis_gpu))
+        self.assertTrue(np.allclose(vis_cpu, vis_gpu, **cmp))
+
+    def test_reduce_double(self):
+        """ double precision reduction test """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
+            device=pycuda.autoinit.device)
+
+        self.reduce_test_impl(sd)
 
     def test_reduce_float(self):
+        """ single precision reduction test """
         sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
             device=pycuda.autoinit.device)
-        rime_reduce = RimeJonesReduceFloat()
 
-        rime_reduce.initialise(sd)
-
-        # Create the jones matrices
-        jsize = np.product(sd.jones_shape)
-        jones_cpu = (np.random.random(jsize) + 1j*np.random.random(jsize))\
-            .astype(sd.ct).reshape(sd.jones_shape)
-    
-        # Send the jones and keys to the gpu, and create the output array for
-        # the visibilities.
-        sd.transfer_jones(jones_cpu)
-
-        # Compute the reduction
-        rime_reduce.execute(sd)
-
-        # Shutdown the rime node, we don't need it any more
-        rime_reduce.shutdown(sd)
-
-        # Add everything along the last axis (time)
-        vis_cpu = np.sum(jones_cpu,axis=len(sd.jones_shape)-1)
-
-        # Get the visibilities off the GPU
-        vis_gpu = sd.vis_gpu.get()
-
-        # Confirm similar results
-        self.assertTrue(np.allclose(vis_cpu, vis_gpu))
+        self.reduce_test_impl(sd)
 
     def time_predict(self, sd):
         na=sd.na          # Number of antenna
@@ -344,9 +314,8 @@ class TestRimes(unittest.TestCase):
     
     def do_predict_test(self, shared_data):
         sd = shared_data        
-        # Choose between the double and float kernel
-        rime_bk = RimeBK() if sd.ft == np.float64 else RimeBKFloat()
-        rime_reduce = RimeJonesReduce() if sd.ft == np.float64 else RimeJonesReduceFloat()
+        rime_bk = RimeBK()
+        rime_reduce = RimeJonesReduce()
 
         # Initialise the node
         rime_bk.initialise(sd)
@@ -380,12 +349,56 @@ class TestRimes(unittest.TestCase):
     def test_predict_double(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,
             device=pycuda.autoinit.device)
+
         self.do_predict_test(sd)
 
     def test_predict_float(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32,
             device=pycuda.autoinit.device)
+
         self.do_predict_test(sd)
+
+    def test_sum_float(self):
+        sd = TestSharedData(na=14,nchan=32,ntime=36,nsrc=100,dtype=np.float32,
+            device=pycuda.autoinit.device)
+        jones_cpu = (np.random.random(np.product(sd.jones_shape)) + \
+            np.random.random(np.product(sd.jones_shape))*1j)\
+            .reshape(sd.jones_shape).astype(sd.ct)
+        sd.jones_gpu.set(jones_cpu)
+        
+        rime_sum = RimeSumFloat()
+        rime_sum.initialise(sd)
+
+        rime_sum.execute(sd)
+
+        vis_cpu = np.add.reduce(jones_cpu,axis=4)
+
+        self.assertTrue(np.allclose(vis_cpu, sd.vis_gpu.get()))
+
+        rime_sum.shutdown(sd)
+
+    def test_EBK_sum_float(self):
+        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32,
+            device=pycuda.autoinit.device)
+        rime_ebk_sum = RimeEBKSumFloat()
+
+        # Initialise the BK float kernel
+        rime_ebk_sum.initialise(sd)
+        rime_ebk_sum.execute(sd)
+        rime_ebk_sum.shutdown(sd)
+
+        # Compute the jones matrix on the CPU, and sum over
+        # the sources (axis 4)
+        vis_cpu = sd.compute_bk_vis()
+
+        # Get the visibilities calculated by the GPU
+        vis_gpu = sd.vis_gpu.get()
+
+        # Test that the CPU calculation matches that of the GPU calculation
+        # By default, rtol=1e-5. The different summation orders on the CPU
+        # and GPU seem to make a difference here, so we relax the tolerance
+        # somewhat.
+        self.assertTrue(np.allclose(vis_cpu, vis_gpu, rtol=1e-4))
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestRimes)

@@ -110,6 +110,27 @@ class BaseSharedData(SharedData):
         # Initialise the beam clipping paramter
         self.set_beam_clip(1.0881)
 
+    def get_params(self):
+        sd = self
+        
+        return {
+            'na' : sd.na,
+            'nbl' : sd.nbl,
+            'nchan' : sd.nchan,
+            'ntime' : sd.ntime,
+            'nsrc' : sd.nsrc,
+            'nvis' : sd.nvis,
+            'beam_width': sd.beam_width,
+            'beam_clip' : sd.E_beam_clip,
+            'sigma_sqrd' : sd.sigma_sqrd
+        }
+
+    def is_float(self):
+        return self.ft == np.float32
+
+    def is_double(self):
+        return self.ft == np.float64
+
     def set_beam_width(self, beam_width):
         """
         Set the beam width used in the analytic E term.

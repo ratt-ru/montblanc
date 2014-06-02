@@ -13,23 +13,20 @@ from montblanc.node import Node, NullNode
 from montblanc.pipeline import Pipeline
 from montblanc.BaseSharedData import GPUSharedData
 
-from montblanc.RimeBKFloat import RimeBKFloat
-from montblanc.RimeEBKFloat import RimeEBKFloat
-from montblanc.RimeJonesReduce import RimeJonesReduceFloat
-from montblanc.RimeChiSquaredFloat import RimeChiSquaredFloat
-from montblanc.RimeChiSquaredReduceFloat import RimeChiSquaredReduceFloat
-
 from montblanc.RimeBK import RimeBK
 from montblanc.RimeEBK import RimeEBK
 from montblanc.RimeJonesReduce import RimeJonesReduce
-#from montblanc.RimeChiSquared import RimeChiSquared
-#from montblanc.RimeChiSquaredReduce import RimeChiSquaredReduce
+from montblanc.RimeChiSquared import RimeChiSquared
+from montblanc.RimeChiSquaredReduce import RimeChiSquaredReduce
 
 from montblanc.MeasurementSetSharedData import MeasurementSetSharedData
 
 def get_montblanc_path():
 	""" Return the current path in which montblanc is installed """
 	return os.path.dirname(inspect.getfile(montblanc))
+
+def get_source_path():
+	return os.path.join(get_montblanc_path(), 'src')
 
 def get_bk_pipeline(msfile, nsrc, device=None):
 	"""
@@ -60,8 +57,8 @@ def get_bk_pipeline(msfile, nsrc, device=None):
 		device=device)
 	# Create a pipeline consisting of an BK kernel, followed by a reduction.
 	pipeline = Pipeline([
-		RimeBKFloat(),
-		RimeJonesReduceFloat()])
+		RimeBK(),
+		RimeJonesReduce()])
 
 	return pipeline, sd
 
@@ -97,10 +94,10 @@ def get_biro_pipeline(msfile, nsrc, device=None):
 	# a chi squared difference between the Bayesian Model and the Visibilities
 	# and a further reduction to produce the Chi Squared Value
 	pipeline = Pipeline([
-		RimeEBKFloat(),
-		RimeJonesReduceFloat(),
-		RimeChiSquaredFloat(),
-		RimeChiSquaredReduceFloat()])
+		RimeEBK(),
+		RimeJonesReduce(),
+		RimeChiSquared(),
+		RimeChiSquaredReduce()])
 
 	return pipeline, sd
 

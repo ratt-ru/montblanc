@@ -7,15 +7,15 @@ import montblanc
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
-    'BLOCKDIMX' : 32,
-    'BLOCKDIMY' : 1,
-    'BLOCKDIMZ' : 8
+    'BLOCKX' : 32,
+    'BLOCKY' : 1,
+    'BLOCKZ' : 8
 }
 
 DOUBLE_PARAMS = {
-    'BLOCKDIMX' : 32,
-    'BLOCKDIMY' : 1,
-    'BLOCKDIMZ' : 8
+    'BLOCKX' : 32,
+    'BLOCKY' : 1,
+    'BLOCKZ' : 8
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -29,23 +29,23 @@ KERNEL_TEMPLATE = string.Template("""
 #define NTIME ${ntime}
 #define NSRC ${nsrc}
 
-#define BLOCKDIMX ${BLOCKDIMX}
-#define BLOCKDIMY ${BLOCKDIMY}
-#define BLOCKDIMZ ${BLOCKDIMZ}
+#define BLOCKDIMX ${BLOCKX}
+#define BLOCKDIMY ${BLOCKY}
+#define BLOCKDIMZ ${BLOCKZ}
 
 template <
     typename T,
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
-void rime_jones_EBK_impl(
-    T * UVW,
-    typename Tr::ft * LM,
-    typename Tr::ft * brightness,
-    typename Tr::ft * wavelength,
-    typename Tr::ft * point_error,
-    int * ant_pairs,
-    typename Tr::ct * jones,
+void rime_jones_EK_impl(
+    const T * __restrict__ UVW,
+    const typename Tr::ft * __restrict__ LM,
+    const typename Tr::ft * __restrict__ brightness,
+    const typename Tr::ft * __restrict__ wavelength,
+    const typename Tr::ft * __restrict__ point_error,
+    const int * __restrict__ ant_pairs,
+    typename Tr::ct * __restrict__ jones_scalar,
     typename Tr::ft ref_wave,
     typename Tr::ft E_beam_width,
     typename Tr::ft E_beam_clip)
@@ -71,14 +71,9 @@ void rime_jones_EBK_impl(
     __shared__ typename Tr::ft ld_q[BLOCKDIMZ*BLOCKDIMY];
     __shared__ typename Tr::ft md_q[BLOCKDIMZ*BLOCKDIMY];
 
-    // Point source coordinates, their flux
-    // and brightness matrix
+    // Point source coordinates
     __shared__ typename Tr::ft l[BLOCKDIMX];
     __shared__ typename Tr::ft m[BLOCKDIMX];
-    __shared__ typename Tr::ft fI[BLOCKDIMX];
-    __shared__ typename Tr::ft fQ[BLOCKDIMX];
-    __shared__ typename Tr::ft fV[BLOCKDIMX];
-    __shared__ typename Tr::ft fU[BLOCKDIMX];
 
     // Wavelengths
     // Should only have one here
@@ -109,10 +104,8 @@ void rime_jones_EBK_impl(
     // Varies by source (x)
     if(threadIdx.y == 0 && threadIdx.z == 0)
     {
-        i = SRC;   l[threadIdx.x] = LM[i]; fI[threadIdx.x] = brightness[i];
-        i += NSRC; m[threadIdx.x] = LM[i]; fQ[threadIdx.x] = brightness[i];
-        i += NSRC; fU[threadIdx.x] = brightness[i];
-        i += NSRC; fV[threadIdx.x] = brightness[i];
+        i = SRC;    l[threadIdx.x] = LM[i];
+        i += NSRC;  m[threadIdx.x] = LM[i];
     }
 
     // Varies by channel (y)
@@ -130,13 +123,13 @@ void rime_jones_EBK_impl(
     phase = Po::sqrt(phase) - 1.0;
     // TODO: remove this superfluous variable
     // It only exists for debugging purposes
-    // typename Tr::ft n = phase;
+    // Tr::ft n = phase;
 
     // UVW is 3 x NBL x NTIME matrix
     // u*l + v*m + w*n, in the wrong order :)
-    i = BL*NTIME + TIME + 2*NBL*NTIME;         phase *= UVW[i]; // w*n
-    i -= NBL*NTIME;             phase += UVW[i]*m[threadIdx.x]; // v*m
-    i -= NBL*NTIME;             phase += UVW[i]*l[threadIdx.x]; // u*l
+    i = BL*NTIME + TIME + 2*NBL*NTIME;  phase *= UVW[i]; // w*n
+    i -= NBL*NTIME;      phase += UVW[i]*m[threadIdx.x]; // v*m
+    i -= NBL*NTIME;      phase += UVW[i]*l[threadIdx.x]; // u*l
 
     // Multiply by 2*pi/wave[threadIdx.y]
     phase *= (2. * Tr::cuda_pi);
@@ -179,75 +172,51 @@ void rime_jones_EBK_impl(
     // Index into the jones matrices
     i = (BL*NCHAN*NTIME + CHAN*NTIME + TIME)*NSRC + SRC;
 
-    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    // a = fI+fQ, b=0.0, c=real, d = imag
-    jones[i]=Po::make_ct(
-        (fI[threadIdx.x]+fQ[threadIdx.x])*real - 0.0*imag,
-        (fI[threadIdx.x]+fQ[threadIdx.x])*imag + 0.0*real);
-
-    // a=fU, b=fV, c=real, d = imag 
-    i += NBL*NSRC*NCHAN*NTIME;
-    jones[i]=Po::make_ct(
-        fU[threadIdx.x]*real - fV[threadIdx.x]*imag,
-        fU[threadIdx.x]*imag + fV[threadIdx.x]*real);
-
-    // a=fU, b=-fV, c=real, d = imag 
-    i += NBL*NSRC*NCHAN*NTIME;
-    jones[i]=Po::make_ct(
-        fU[threadIdx.x]*real - -fV[threadIdx.x]*imag,
-        fU[threadIdx.x]*imag + -fV[threadIdx.x]*real);
-
-    // a=fI-fQ, b=0.0, c=real, d = imag 
-    i += NBL*NSRC*NCHAN*NTIME;
-    jones[i]=Po::make_ct(
-        (fI[threadIdx.x]-fQ[threadIdx.x])*real - 0.0*imag,
-        (fI[threadIdx.x]-fQ[threadIdx.x])*imag + 0.0*real);
+    jones_scalar[i]=Po::make_ct(real, imag);
 }
 
 extern "C" {
 
 __global__
-void rime_jones_EBK_float(
-    float * UVW,
-    float * LM,
-    float * brightness,
-    float * wavelength,
-    float * point_error,
-    int * ant_pairs,
-    float2 * jones,
+void rime_jones_EK_float(
+    const float *  __restrict__ UVW,
+    const float *  __restrict__ LM,
+    const float  *  __restrict__ brightness,
+    const float  *  __restrict__ wavelength,
+    const float  *  __restrict__ point_error,
+    const int  *  __restrict__ ant_pairs,
+    float2 * __restrict__ jones_scalar,
     float ref_wave,
     float E_beam_width,
     float E_beam_clip)
 {
-    rime_jones_EBK_impl(UVW, LM, brightness, wavelength,
-        point_error, ant_pairs, jones,
-        ref_wave, E_beam_width, E_beam_clip);
-}    
+    rime_jones_EK_impl(UVW, LM, brightness, wavelength, point_error,
+        ant_pairs, jones_scalar, ref_wave, E_beam_width, E_beam_clip);
+}
 
 __global__
-void rime_jones_EBK_double(
-    double * UVW,
-    double * LM,
-    double * brightness,
-    double * wavelength,
-    double * point_error,
-    int * ant_pairs,
-    double2 * jones,
+void rime_jones_EK_double(
+    const double *  __restrict__ UVW,
+    const double *  __restrict__ LM,
+    const double *  __restrict__ brightness,
+    const double *  __restrict__ wavelength,
+    const double *  __restrict__ point_error,
+    const int * __restrict__ ant_pairs,
+    double2 *  __restrict__ jones_scalar,
     double ref_wave,
     double E_beam_width,
     double E_beam_clip)
 {
-    rime_jones_EBK_impl(UVW, LM, brightness, wavelength,
-        point_error, ant_pairs, jones,
-        ref_wave, E_beam_width, E_beam_clip);
+    rime_jones_EK_impl(UVW, LM, brightness, wavelength, point_error,
+        ant_pairs, jones_scalar, ref_wave, E_beam_width, E_beam_clip);
 }
 
 } // extern "C" {
 """)
 
-class RimeEBK(Node):
+class RimeEK(Node):
     def __init__(self):
-        super(RimeEBK, self).__init__()
+        super(RimeEK, self).__init__()
 
     def initialise(self, shared_data):
         sd = shared_data
@@ -261,9 +230,9 @@ class RimeEBK(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
-        kname = 'rime_jones_EBK_float' \
+        kname = 'rime_jones_EK_float' \
             if sd.is_float() is True else \
-            'rime_jones_EBK_double'
+            'rime_jones_EK_double'
 
         self.kernel = self.mod.get_function(kname)
 
@@ -277,16 +246,16 @@ class RimeEBK(Node):
         sd = shared_data
         D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
 
-        srcs_per_block = D['BLOCKDIMX'] if sd.nsrc > D['BLOCKDIMX'] else sd.nsrc
-        time_chans_per_block = D['BLOCKDIMY']
-        baselines_per_block = D['BLOCKDIMZ'] if sd.nbl > D['BLOCKDIMZ'] else sd.nbl
+        srcs_per_block = D['BLOCKX'] if sd.nsrc > D['BLOCKX'] else sd.nsrc
+        time_chans_per_block = D['BLOCKY']
+        baselines_per_block = D['BLOCKZ'] if sd.nbl > D['BLOCKZ'] else sd.nbl
 
         src_blocks = self.blocks_required(sd.nsrc,srcs_per_block)
         time_chan_blocks = sd.ntime*sd.nchan
-        baseline_blocks = self.blocks_required(sd.nbl,baselines_per_block)
+        baseline_blocks = self.blocks_required(sd.nbl, baselines_per_block)
 
         return {
-            'block' : (srcs_per_block,time_chans_per_block,baselines_per_block),
+            'block' : (srcs_per_block,time_chans_per_block,baselines_per_block), \
             'grid'  : (src_blocks,time_chan_blocks,baseline_blocks)
         }
 
@@ -294,9 +263,9 @@ class RimeEBK(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
-            sd.ref_wave, sd.beam_width, sd.E_beam_clip,
-			**self.get_kernel_params(sd))
+            sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_scalar_gpu,
+            sd.ref_wave, sd.beam_width, sd.E_beam_clip ,
+            **self.get_kernel_params(sd))       
 
     def post_execution(self, shared_data):
         pass

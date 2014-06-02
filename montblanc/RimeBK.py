@@ -1,72 +1,98 @@
 import numpy as np
-import pycuda
-import pycuda.driver as cuda
-import pycuda.gpuarray as gpuarray
+import string
+
 from pycuda.compiler import SourceModule
 
+import montblanc
 from montblanc.node import Node
 
-DOUBLE_KERNEL = """
+FLOAT_PARAMS = {
+    'BLOCKDIMX' : 32,
+    'BLOCKDIMY' : 1,
+    'BLOCKDIMZ' : 8
+}
+
+DOUBLE_PARAMS = {
+    'BLOCKDIMX' : 32,
+    'BLOCKDIMY' : 1,
+    'BLOCKDIMZ' : 8
+}
+
+KERNEL_TEMPLATE = string.Template("""
 #include \"math_constants.h\"
+#include <montblanc/include/abstraction.cuh>
 
-extern __shared__ double smem_d[];
+#define NA ${na}
+#define NBL ${nbl}
+#define NCHAN ${nchan}
+#define NTIME ${ntime}
+#define NSRC ${nsrc}
 
-__global__
-void rime_jones_BK(
-    double * UVW,
-    double * LM,
-    double * brightness,
-    double * wavelength,
-    double2 * jones,
-    double ref_wave,
-    int nbl, int nchan, int ntime, int nsrc)
+#define BLOCKDIMX ${BLOCKDIMX}
+#define BLOCKDIMY ${BLOCKDIMY}
+#define BLOCKDIMZ ${BLOCKDIMZ}
+
+template <
+    typename T,
+    typename Tr=montblanc::kernel_traits<T>,
+    typename Po=montblanc::kernel_policies<T> >
+__device__
+void rime_jones_BK_impl(
+    T * UVW,
+    typename Tr::ft * LM,
+    typename Tr::ft * brightness,
+    typename Tr::ft * wavelength,
+    typename Tr::ct * jones,
+    typename Tr::ft ref_wave)
 {
     // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
 
     // Baseline, Source, Channel and Time indices
     int SRC = blockIdx.x*blockDim.x + threadIdx.x;
-    int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / ntime;
-    int TIME = (blockIdx.y*blockDim.y + threadIdx.y) % ntime;
+    int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / NTIME;
+    int TIME = (blockIdx.y*blockDim.y + threadIdx.y) % NTIME;
     int BL = blockIdx.z*blockDim.z + threadIdx.z;
-
-    if(BL >= nbl || SRC >= nsrc || CHAN >= nchan || TIME >= ntime)
+    if(BL >= NBL || SRC >= NSRC || CHAN >= NCHAN || TIME >= NTIME)
         return;
 
     /* Cache input and output data from global memory. */
-    double * u = smem_d;
-    double * v = &u[blockDim.z];
-    double * w = &v[blockDim.z];
-    double * l = &w[blockDim.z];
-    double * m = &l[blockDim.x];
-    double * a = &m[blockDim.x];
-    double * fI = &a[blockDim.x];
-    double * fV = &fI[blockDim.x];
-    double * fU = &fV[blockDim.x];
-    double * fQ = &fU[blockDim.x];
-    double * wave = &fQ[blockDim.x];
+
+    __shared__ typename Tr::ft u[BLOCKDIMZ];
+    __shared__ typename Tr::ft v[BLOCKDIMZ];
+    __shared__ typename Tr::ft w[BLOCKDIMZ];
+
+    __shared__ typename Tr::ft l[BLOCKDIMX];
+    __shared__ typename Tr::ft m[BLOCKDIMX];
+    __shared__ typename Tr::ft fI[BLOCKDIMX];
+    __shared__ typename Tr::ft fQ[BLOCKDIMX];
+    __shared__ typename Tr::ft fV[BLOCKDIMX];
+    __shared__ typename Tr::ft fU[BLOCKDIMX];
+    __shared__ typename Tr::ft a[BLOCKDIMX];
+
+    __shared__ typename Tr::ft wave[BLOCKDIMY];
 
     // Index
     int i;
 
     if(threadIdx.x == 0)
     {
-        // UVW is a 3 x nbl x ntime matrix
-        i = BL*ntime + TIME; u[threadIdx.z] = UVW[i];
-        i += nbl*ntime;      v[threadIdx.z] = UVW[i];
-        i += nbl*ntime;      w[threadIdx.z] = UVW[i];
+        // UVW is a 3 x NBL x NTIME matrix
+        i = BL*NTIME + TIME; u[threadIdx.z] = UVW[i];
+        i += NBL*NTIME;      v[threadIdx.z] = UVW[i];
+        i += NBL*NTIME;      w[threadIdx.z] = UVW[i];
     }
 
     if(threadIdx.z == 0)
     {
-		// LM and brightness are 2 x nsrc and 5 x nsrc matrices
+		// LM and brightness are 2 x NSRC and 5 x NSRC matrices
         i = SRC;   l[threadIdx.x] = LM[i];
-        i += nsrc; m[threadIdx.x] = LM[i];
+        i += NSRC; m[threadIdx.x] = LM[i];
 
         i = SRC;   fI[threadIdx.x] = brightness[i];
-        i += nsrc; fQ[threadIdx.x] = brightness[i];
-        i += nsrc; fU[threadIdx.x] = brightness[i];
-        i += nsrc; fV[threadIdx.x] = brightness[i];
-        i += nsrc; a[threadIdx.x] = brightness[i];
+        i += NSRC; fQ[threadIdx.x] = brightness[i];
+        i += NSRC; fU[threadIdx.x] = brightness[i];
+        i += NSRC; fV[threadIdx.x] = brightness[i];
+        i += NSRC; a[threadIdx.x] = brightness[i];
     }
 
     if(threadIdx.y == 0)
@@ -78,12 +104,12 @@ void rime_jones_BK(
 
     // Calculate the n term first
     // n = sqrt(1.0 - l*l - m*m) - 1.0
-    double phase = 1.0 - l[threadIdx.x]*l[threadIdx.x];
+    typename Tr::ft phase = 1.0 - l[threadIdx.x]*l[threadIdx.x];
     phase -= m[threadIdx.x]*m[threadIdx.x];
-    phase = sqrt(phase) - 1.0;
+    phase = Po::sqrt(phase) - 1.0;
     // TODO: remove this superfluous variable
     // It only exists for debugging purposes
-    // double n = phase;
+    //  typename Tr::ft n = phase;
 
     // u*l + v*m + w*n, in the wrong order :)
     phase *= w[threadIdx.z];                  // w*n
@@ -91,66 +117,96 @@ void rime_jones_BK(
     phase += u[threadIdx.z]*l[threadIdx.x];   // u*l
 
     // Multiply by 2*pi/wave[threadIdx.y]
-    phase *= (2. * CUDART_PI);
+    phase *= (2. * Tr::cuda_pi);
     phase /= wave[threadIdx.y];
 
     // Calculate the complex exponential from the phase
-    double real, imag;
-    sincos(phase, &imag, &real);
+    typename Tr::ft real, imag;
+    Po::sincos(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    phase = pow(ref_wave/wave[threadIdx.y], a[threadIdx.x]);
+    phase = Po::pow(ref_wave/wave[threadIdx.y], a[threadIdx.x]);
     real *= phase; imag *= phase;
 
-#if 0
-    // Index into the jones array
-    i = (BL*nsrc + SRC)*4;
-    // Coalesced store of the computation
-    jones[i+0]=make_double2(l[threadIdx.x],u[threadIdx.z]);
-    jones[i+1]=make_double2(m[threadIdx.x],v[threadIdx.z]);
-    jones[i+2]=make_double2(n,w[threadIdx.z]);
-    jones[i+3]=result;
-#endif
-
-
-#if 1
     // Index into the jones matrices
-    i = BL*nchan*ntime*nsrc + CHAN*ntime*nsrc + TIME*nsrc + SRC;
+    i = BL*NCHAN*NTIME*NSRC + CHAN*NTIME*NSRC + TIME*NSRC + SRC;
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = fI+fQ, b=0.0, c=real, d = imag
-    jones[i]=make_double2(
+    jones[i]=Po::make_ct(
         (fI[threadIdx.x]+fQ[threadIdx.x])*real - 0.0*imag,
         (fI[threadIdx.x]+fQ[threadIdx.x])*imag + 0.0*real);
 
     // a=fU, b=fV, c=real, d = imag 
-    i += nbl*nsrc*nchan*ntime;
-    jones[i]=make_double2(
+    i += NBL*NSRC*NCHAN*NTIME;
+    jones[i]=Po::make_ct(
         fU[threadIdx.x]*real - fV[threadIdx.x]*imag,
         fU[threadIdx.x]*imag + fV[threadIdx.x]*real);
 
     // a=fU, b=-fV, c=real, d = imag 
-    i += nbl*nsrc*nchan*ntime;
-    jones[i]=make_double2(
+    i += NBL*NSRC*NCHAN*NTIME;
+    jones[i]=Po::make_ct(
         fU[threadIdx.x]*real - -fV[threadIdx.x]*imag,
         fU[threadIdx.x]*imag + -fV[threadIdx.x]*real);
 
     // a=fI-fQ, b=0.0, c=real, d = imag 
-    i += nbl*nsrc*nchan*ntime;
-    jones[i]=make_double2(
+    i += NBL*NSRC*NCHAN*NTIME;
+    jones[i]=Po::make_ct(
         (fI[threadIdx.x]-fQ[threadIdx.x])*real - 0.0*imag,
         (fI[threadIdx.x]-fQ[threadIdx.x])*imag + 0.0*real);
-#endif
 }
-"""
+
+extern "C" {
+
+__global__ void rime_jones_BK_float(
+    float * UVW,
+    float * LM,
+    float * brightness,
+    float * wavelength,
+    float2 * jones,
+    float ref_wave)
+{
+    rime_jones_BK_impl(UVW, LM, brightness, wavelength,
+        jones, ref_wave);
+}
+
+
+__global__ void rime_jones_BK_double(
+    double * UVW,
+    double * LM,
+    double * brightness,
+    double * wavelength,
+    double2 * jones,
+    double ref_wave)
+{
+    rime_jones_BK_impl(UVW, LM, brightness, wavelength,
+        jones, ref_wave);
+}
+
+} // extern "C" {}
+""")
 
 class RimeBK(Node):
     def __init__(self):
         super(RimeBK, self).__init__()
 
     def initialise(self, shared_data):
-        self.mod = SourceModule(DOUBLE_KERNEL, options=['-lineinfo'])
-        self.kernel = self.mod.get_function('rime_jones_BK')
+        sd = shared_data
+
+        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
+        D.update(sd.get_params())
+
+        self.mod = SourceModule(
+            KERNEL_TEMPLATE.substitute(**D),
+            options=['-lineinfo'],
+            include_dirs=[montblanc.get_source_path()],
+            no_extern_c=True)
+
+        kname = 'rime_jones_BK_float' \
+            if sd.is_float() is True else \
+            'rime_jones_BK_double'
+
+        self.kernel = self.mod.get_function(kname)
 
     def shutdown(self, shared_data):
         pass
@@ -161,28 +217,26 @@ class RimeBK(Node):
     def get_kernel_params(self, shared_data):
         sd = shared_data
 
-        srcs_per_block = 32 if sd.nsrc > 32 else sd.nsrc
-        time_chans_per_block = 1
-        baselines_per_block = 8 if sd.nbl > 8 else sd.nbl
+        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
 
-        src_blocks = (sd.nsrc + srcs_per_block - 1) / srcs_per_block
-        baseline_blocks = (sd.nbl + baselines_per_block - 1) / baselines_per_block
+        srcs_per_block = D['BLOCKDIMX'] if sd.nsrc > D['BLOCKDIMX'] else sd.nsrc
+        time_chans_per_block = D['BLOCKDIMY']
+        baselines_per_block = D['BLOCKDIMZ'] if sd.nbl > D['BLOCKDIMZ'] else sd.nbl
+
+        src_blocks = self.blocks_required(sd.nsrc,srcs_per_block)
+        baseline_blocks = self.blocks_required(sd.nbl,baselines_per_block)
         time_chan_blocks = sd.ntime*sd.nchan
 
         return {
-            'block' : (srcs_per_block,time_chans_per_block,baselines_per_block), \
-            'grid'  : (src_blocks,time_chan_blocks,baseline_blocks), \
-            'shared' : (3*baselines_per_block + \
-                        7*srcs_per_block + \
-                        1*time_chans_per_block)*\
-                            np.dtype(sd.ft).itemsize }
+            'block' : (srcs_per_block,time_chans_per_block,baselines_per_block),
+            'grid'  : (src_blocks,time_chan_blocks,baseline_blocks), 
+        }
 
     def execute(self, shared_data):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
             sd.wavelength_gpu,  sd.jones_gpu, sd.ref_wave,
-            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
             **self.get_kernel_params(sd))
 
     def post_execution(self, shared_data):

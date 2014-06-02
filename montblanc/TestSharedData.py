@@ -71,7 +71,12 @@ class TestSharedData(GPUSharedData):
         sd.transfer_bayes_data(sd.bayes_data)
         sd.set_sigma_sqrd((np.random.random(1)**2).astype(ft)[0])
 
-    def compute_bk_jones(self):
+    def compute_k_jones_scalar(self):
+        """
+        Computes the scalar K (phase) term of the RIME using numpy.
+
+        Returns a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
         sd = self
         # Repeat the wavelengths along the timesteps for now
         # dim nchan x ntime. 
@@ -99,28 +104,16 @@ class TestSharedData(GPUSharedData):
         phase_term = power*np.exp(phase)
         assert phase_term.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)        	
 
-        # Create the brightness matrix. Dim 4 x nsrcs
-        brightness = sd.ct([
-            sd.brightness[0]+sd.brightness[1] + 0j,     # fI+fQ + 0j
-            sd.brightness[2] + 1j*sd.brightness[3],     # fU + fV*1j
-            sd.brightness[2] - 1j*sd.brightness[3],     # fU - fV*1j
-            sd.brightness[0]-sd.brightness[1] + 0j])        # fI-fQ + 0j
-        assert brightness.shape == (4, sd.nsrc)
 
-        # This works due to broadcast! Multiplies along
-        # srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
-        jones_cpu = (phase_term[np.newaxis,:,:,:,:]* \
-            brightness[:,np.newaxis, np.newaxis, np.newaxis,:])\
-            .reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
-        assert jones_cpu.shape == sd.jones_shape
+        return phase_term
 
-        return jones_cpu
+    def compute_e_jones_scalar(self):
+        """
+        Computes the scalar E (analytic cos^3) term of the RIME
 
-    def compute_bk_vis(self):
-        return np.add.reduce(self.compute_bk_jones(), axis=4)        
-
-    def compute_ebk_jones(self):
-    	sd = self
+        returns a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        sd = self
 
         # Here we obtain our antenna pairs and pointing errors
         # TODO: The last dimensions are flattened to make indexing easier
@@ -178,5 +171,67 @@ class TestSharedData(GPUSharedData):
 
         assert E_q.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
 
-        return E_p*self.compute_bk_jones()*E_q
+        return E_p*E_q
 
+    def compute_ek_jones_scalar(self):
+        """
+        Computes the scalar EK (phase*cos^3) term of the RIME.
+
+        Return a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        return self.compute_k_jones_scalar()*\
+            self.compute_e_jones_scalar()
+
+    def compute_b_jones(self):
+        """
+        Computes the B term of the RIME.
+
+        Returns a (4,nsrc) matrix of complex scalars.
+        """
+        sd = self
+        # Create the brightness matrix. Dim 4 x nsrcs
+        B = sd.ct([
+            sd.brightness[0]+sd.brightness[1] + 0j,     # fI+fQ + 0j
+            sd.brightness[2] + 1j*sd.brightness[3],     # fU + fV*1j
+            sd.brightness[2] - 1j*sd.brightness[3],     # fU - fV*1j
+            sd.brightness[0]-sd.brightness[1] + 0j])    # fI-fQ + 0j
+        assert B.shape == (4, sd.nsrc)
+
+        return B
+
+    def compute_bk_jones(self):
+        """
+        Computes the BK term of the RIME.
+
+        Returns a (4,nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        sd = self
+        # Compute the K and B terms
+        scalar_K = self.compute_k_jones_scalar()
+        B = self.compute_b_jones()
+
+        # This works due to broadcast! Multiplies phase and brightness along
+        # srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
+        jones_cpu = (scalar_K[np.newaxis,:,:,:,:]* \
+            B[:,np.newaxis, np.newaxis, np.newaxis,:])#\
+            #.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
+        assert jones_cpu.shape == sd.jones_shape
+
+        return jones_cpu 
+
+    def compute_ebk_jones(self):
+        """
+        Computes the BK term of the RIME.
+
+        Returns a (4,nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        return self.compute_bk_jones()*self.compute_e_jones_scalar()
+
+    def compute_bk_vis(self):
+        """
+        Computes the complex visibilities based on the
+        scalar K term and the 2x2 B term.
+
+        Returns a (4,nbl,nchan,ntime) matrix of complex scalars.
+        """
+        return np.add.reduce(self.compute_bk_jones(), axis=4)        
