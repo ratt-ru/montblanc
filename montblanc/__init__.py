@@ -64,9 +64,9 @@ def get_bk_pipeline(msfile, npsrc, ngsrc, device=None):
 
 	return pipeline, sd
 
-def get_biro_pipeline(msfile, npsrc, ngsrc, **kwargs):
+def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
 	"""
-	get_biro_pipeline(msfile, npsrc, ngsrc, **kwargs)
+	get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs)
 
 	Returns a pipeline and shared data tuple defining a pipeline
 	suitable for BIRO.
@@ -79,6 +79,7 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, **kwargs):
 		Number of point sources.
 	ngsrc : number
 		Number of gaussian sources.
+	dtype : The floating point data type. Should be np.float32 or np.float64.
 
 	Keyword Arguments
 	-----------------
@@ -101,8 +102,7 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, **kwargs):
 		kwargs['device']=pycuda.autoinit.device
 
 	# Create a shared data object from the Measurement Set file
-
-	sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=np.float32,
+	sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=dtype,
 		**kwargs)
 	# Create a pipeline consisting of an EBK kernel, followed by a reduction,
 
