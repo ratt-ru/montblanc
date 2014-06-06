@@ -42,6 +42,10 @@ class TestSharedData(GPUSharedData):
         sd.point_errors = np.random.random(np.product(sd.point_errors_shape))\
             .astype(ft).reshape(sd.point_errors_shape)
 
+        # Generate the noise vector
+        sd.noise_vector = np.random.random(np.product(sd.noise_vector_shape))\
+            .astype(ft).reshape(sd.noise_vector_shape)
+
         # Copy the uvw, lm and brightness data to the gpu
         sd.transfer_uvw(sd.uvw)
         sd.transfer_ant_pairs(sd.get_default_ant_pairs())
@@ -49,6 +53,7 @@ class TestSharedData(GPUSharedData):
         sd.transfer_brightness(sd.brightness)
         sd.transfer_wavelength(sd.wavelength)
         sd.transfer_point_errors(sd.point_errors)
+        sd.transfer_noise_vector(sd.noise_vector)
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)

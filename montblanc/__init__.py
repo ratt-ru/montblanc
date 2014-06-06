@@ -62,7 +62,7 @@ def get_bk_pipeline(msfile, nsrc, device=None):
 
 	return pipeline, sd
 
-def get_biro_pipeline(msfile, nsrc, device=None):
+def get_biro_pipeline(msfile, nsrc, noise_vector=False, device=None):
 	"""
 	get_biro_pipeline(msfile, nsrc, device=None)
 
@@ -75,6 +75,9 @@ def get_biro_pipeline(msfile, nsrc, device=None):
 		Name of the measurement set file.
 	nsrc : number
 		Number of point sources.
+	noise_vector : boolean
+		True if the chi squared should be computed with a noise vector.
+		False if it should be computed with a single sigma squared value.
 	device - PyCUDA device.
 		The CUDA device to execute on If left blank, the default device
 		will be selected.
@@ -97,7 +100,7 @@ def get_biro_pipeline(msfile, nsrc, device=None):
 		RimeEBK(),
 		RimeJonesReduce(),
 		RimeChiSquared(),
-		RimeChiSquaredReduce()])
+		RimeChiSquaredReduce(noise_vector=noise_vector)])
 
 	return pipeline, sd
 

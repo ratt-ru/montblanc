@@ -46,8 +46,7 @@ void rime_chi_squared_diff_impl(
     // We're computing (D - M)^2/sigma^2
     // output has dimension BASELINE x CHAN x TIME
 
-    int i = (blockIdx.x*blockDim.x + threadIdx.x);
-    int j = i;
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
 
     // Quit if we're outside the problem range
     if(i >= NBL*NCHAN*NTIME)
@@ -73,7 +72,7 @@ void rime_chi_squared_diff_impl(
     delta.x -= model.x; delta.y -= model.y;
     sum.x += delta.x*delta.x; sum.y += delta.y*delta.y;
 
-    output[j] = (sum.x + sum.y);
+    output[blockIdx.x*blockDim.x + threadIdx.x] = sum.x + sum.y;
 }
 
 extern "C" {

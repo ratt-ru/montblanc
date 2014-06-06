@@ -98,6 +98,7 @@ class BaseSharedData(SharedData):
         self.jones_shape = (4,nbl,nchan,ntime,nsrc)
         self.vis_shape = self.bayes_data_shape
         self.chi_sqrd_result_shape = (nbl,nchan,ntime)
+        self.noise_vector_shape = (nbl,nchan,ntime)
 
         # Initialise sigma squared term and X2 result
         # with default values
@@ -198,6 +199,7 @@ class GPUSharedData(BaseSharedData):
     jones_gpu = ArrayData()
     vis_gpu = ArrayData()
     chi_sqrd_result_gpu = ArrayData()
+    noise_vector_gpu = ArrayData()
 
     def __init__(self, na=7, nchan=8, ntime=5, nsrc=10, dtype=np.float32, device=None):
         super(GPUSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
@@ -220,6 +222,7 @@ class GPUSharedData(BaseSharedData):
         self.brightness_gpu = gpuarray.zeros(shape=self.brightness_shape,dtype=self.ft)
         self.wavelength_gpu = gpuarray.zeros(shape=self.wavelength_shape,dtype=self.ft)
         self.point_errors_gpu = gpuarray.zeros(shape=self.point_errors_shape,dtype=self.ft)
+        self.noise_vector_gpu = gpuarray.zeros(shape=self.noise_vector_shape,dtype=self.ft)
         self.bayes_data_gpu = gpuarray.zeros(shape=self.bayes_data_shape,dtype=self.ct)
 
         # Create the output data arrays on the GPU
@@ -235,6 +238,7 @@ class GPUSharedData(BaseSharedData):
             self.brightness_gpu,
             self.wavelength_gpu,
             self.point_errors_gpu,
+            self.noise_vector_gpu,
             self.bayes_data_gpu,
             self.jones_gpu,
             self.vis_gpu,
@@ -286,6 +290,10 @@ class GPUSharedData(BaseSharedData):
     def transfer_bayes_data(self,bayes_data):
         self.check_array('bayes_data', bayes_data, self.bayes_data_gpu)
         self.bayes_data_gpu.set(bayes_data)
+
+    def transfer_noise_vector(self, noise_vector):
+        self.check_array('noise_vector', noise_vector, self.noise_vector_gpu)
+        self.noise_vector_gpu.set(noise_vector)
 
     def __str__(self):
         return super(GPUSharedData, self).__str__() + \

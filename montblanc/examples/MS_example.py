@@ -20,8 +20,11 @@ if __name__ == '__main__':
     montblanc.log.setLevel(logging.WARN)
 
     # Get the BIRO pipeline and shared data.
+    # nsrc : number of point sources
+    # noise_vector : indicates whether a noise vector should be used to
+    #   compute the chi squared or a single sigma squared value
     pipeline, sd = montblanc.get_biro_pipeline(args.msfile, nsrc=args.nsrc,
-        device=pycuda.autoinit.device)
+        noise_vector = True, device=pycuda.autoinit.device)
 
     # Initialise the pipeline
     pipeline.initialise(sd)
@@ -46,8 +49,11 @@ if __name__ == '__main__':
     sd.transfer_bayes_data(bayes_data)
 
     # Generate random antenna pointing errors
-    point_errors = np.random.random(2*sd.na*sd.ntime)\
-        .astype(sd.ft).reshape((2, sd.na, sd.ntime))
+    point_errors = np.random.random(np.product(sd.point_errors_shape))\
+        .astype(sd.ft).reshape((sd.point_errors_shape))
+
+    noise_vector = np.random.random(np.product(sd.noise_vector_shape))\
+        .astype(sd.ft).reshape((sd.noise_vector_shape))
 
     kernels_start, kernels_end = cuda.Event(), cuda.Event()
     time_sum = 0.0
@@ -59,6 +65,7 @@ if __name__ == '__main__':
         sd.transfer_lm(lm)
         sd.transfer_brightness(brightness)
         sd.transfer_point_errors(point_errors)
+        sd.transfer_noise_vector(noise_vector)
         # Change parameters for this run
         sd.set_sigma_sqrd((np.random.random(1)**2)[0])
         # Execute the pipeline
