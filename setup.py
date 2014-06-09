@@ -31,6 +31,11 @@ def locate_cuda():
     if 'CUDAHOME' in os.environ:
         home = os.environ['CUDAHOME']
         nvcc = os.path.join(home, 'bin', 'nvcc')
+
+        cudaconfig = {'home':home, 'nvcc':nvcc,
+           'include': os.path.join(home, 'include'),
+           'lib64': os.path.join(home, 'lib64')}
+
     else:
         # otherwise, search the PATH for NVCC
         nvcc = find_in_path('nvcc', os.environ['PATH'])
@@ -39,9 +44,10 @@ def locate_cuda():
                 'located in your $PATH. Either add it to your path, or set $CUDAHOME')
         home = os.path.dirname(os.path.dirname(nvcc))
 
-    cudaconfig = {'home':home, 'nvcc':nvcc,
-                  'include': os.path.join(home, 'include'),
-                  'lib64': os.path.join(home, 'lib64')}
+        # Guess that things are in their default locations
+        cudaconfig = {'home':home, 'nvcc':nvcc,
+            'include' : '/usr/include',
+            'lib64' : '/usr/lib' }
                   
     for k, v in cudaconfig.iteritems():
         if not os.path.exists(v):
@@ -101,7 +107,7 @@ crimes_ext = Extension('montblanc.ext.crimes',
 	include_dirs = [
 		numpy_include,
 		'montblanc/moderngpu/include',
-    'montblanc/crimes',
+    	'montblanc/crimes',
 		CUDA['include']]
 )
 
