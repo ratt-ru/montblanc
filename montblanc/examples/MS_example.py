@@ -57,12 +57,8 @@ if __name__ == '__main__':
         .astype(sd.ft).reshape((sd.noise_vector_shape))
     sd.transfer_noise_vector(noise_vector)
 
-    kernels_start, kernels_end = cuda.Event(), cuda.Event()
-    time_sum = 0.0
-
     # Execute the pipeline
     for i in range(args.count):
-        kernels_start.record()
         # Set data on the shared data object. Uploads to GPU
         sd.transfer_lm(lm)
         sd.transfer_brightness(brightness)
@@ -71,9 +67,6 @@ if __name__ == '__main__':
         sd.set_sigma_sqrd((np.random.random(1)**2)[0])
         # Execute the pipeline
         pipeline.execute(sd)
-        kernels_end.record()
-        kernels_end.synchronize()
-        time_sum += kernels_start.time_till(kernels_end)
 
         # The chi squared result is set on the shared data object
         print 'Chi Squared Value', sd.X2
@@ -81,9 +74,9 @@ if __name__ == '__main__':
         # Obtain the visibilities  (slow)
         #V = sd.vis_gpu.get()
 
-    print 'kernels: elapsed time: %gms' %\
-        (time_sum / args.count)
     # Print information about the simulation
     print sd
+    print 'Pipeline: avg execution time: %gms last execution time: %gms executions: %d. ' %\
+        (pipeline.avg_execution_time, pipeline.last_execution_time, pipeline.nr_of_executions)
 
     pipeline.shutdown(sd)

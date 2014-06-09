@@ -2,6 +2,8 @@ import argparse
 import os.path
 import sys
 
+import pycuda.driver as cuda
+
 import montblanc
 
 from montblanc.node import NullNode
@@ -29,6 +31,12 @@ class Pipeline:
 
         self.pipeline = node_list
         self.initialised = False
+
+        self.nr_of_executions = 0
+        self.sum_execution_time = 0.0
+        self.last_execution_time = 0.0
+        self.pipeline_start = cuda.Event()
+        self.pipeline_end = cuda.Event()
 
     def initialise(self, shared_data):
         """
@@ -83,7 +91,11 @@ class Pipeline:
             return False
 
         try:
+            # Record start of pipeline
+            self.pipeline_start.record()
+
             for node in self.pipeline:
+
                 montblanc.log.info('Executing node \'' + node.description() + '\'')
                 node.pre_execution(shared_data)
                 montblanc.log.info('pre')
@@ -91,6 +103,14 @@ class Pipeline:
                 montblanc.log.info('execute')
                 node.post_execution(shared_data)
                 montblanc.log.info('post Done')
+
+            # Record pipeline end
+            self.pipeline_end.record()
+            self.pipeline_end.synchronize()
+            self.nr_of_executions += 1
+            self.last_execution_time = self.pipeline_start.time_till(self.pipeline_end)
+            self.sum_execution_time += self.last_execution_time
+
         except PipeLineError as e:
             montblanc.log.error('Pipeline Error occurred during RIME pipeline execution', exc_info=True)
             return False
@@ -98,6 +118,8 @@ class Pipeline:
 #            print
 #            print 'Unexpected exception occurred during RIME pipeline execution', e
 #            return False
+
+        self.avg_execution_time = self.sum_execution_time / self.nr_of_executions
 
         montblanc.log.info('Execution of pipeline complete')
         return False
