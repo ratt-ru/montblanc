@@ -1,5 +1,7 @@
+import sys
 import numpy as np
 
+import pycuda
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
@@ -201,14 +203,35 @@ class GPUSharedData(BaseSharedData):
     chi_sqrd_result_gpu = ArrayData()
     noise_vector_gpu = ArrayData()
 
-    def __init__(self, na=7, nchan=8, ntime=5, nsrc=10, dtype=np.float32, device=None):
+    def __init__(self, na=7, nchan=8, ntime=5, nsrc=10, dtype=np.float32, **kwargs):
+        """
+        GPUSharedData constructor
+
+        Parameters:
+            na : integer
+                Number of antennae.
+            nchan : integer
+                Number of channels.
+            ntime : integer
+                Number of timesteps.
+            nsrc : integer
+                Number of sources.
+            dtype : np.float32 or np.float64
+                Specify single or double precision arithmetic.
+        Keyword Arguments:
+            device : pycuda.device.Device
+                CUDA device to operate on.
+            store_cpu: boolean
+                if True, store cpu versions of the kernel arrays
+                within the GPUSharedData object.
+        """
         super(GPUSharedData, self).__init__(na,nchan,ntime,nsrc,dtype)
 
-        if device is None:
-            import pycuda.autoinit
-            self.device = pycuda.autoinit.device
-        else:
-            self.device = device
+        # Store the device, choosing the default if not specified
+        self.device = kwargs.get('device',pycuda.autoinit.device)
+
+        # Should we store CPU versions of the GPU arrays
+        self.store_cpu = kwargs.get('store_cpu', False)
 
         # Figure out the integer compute cability of the device
         cc_tuple = self.device.compute_capability()
@@ -257,44 +280,299 @@ class GPUSharedData(BaseSharedData):
 
     def transfer_uvw(self,uvw):
         self.check_array('uvw', uvw, self.uvw_gpu)
+        if self.store_cpu is True: self.uvw=uvw
         self.uvw_gpu.set(uvw)
 
     def transfer_ant_pairs(self, ant_pairs):
         self.check_array('ant_pairs', ant_pairs, self.ant_pairs_gpu)
+        if self.store_cpu is True: self.ant_pairs=ant_pairs
         self.ant_pairs_gpu.set(ant_pairs)
 
     def transfer_lm(self,lm):
         self.check_array('lm', lm, self.lm_gpu)
+        if self.store_cpu is True: self.lm = lm
         self.lm_gpu.set(lm)
 
     def transfer_brightness(self,brightness):
         self.check_array('brightness', brightness, self.brightness_gpu)
+        if self.store_cpu is True: self.brightness = brightness
         self.brightness_gpu.set(brightness)
 
     def transfer_wavelength(self, wavelength):
         self.check_array('wavelength', wavelength, self.wavelength_gpu)
+        if self.store_cpu is True: self.wavelength = wavelength
         self.wavelength_gpu.set(wavelength)
 
     def transfer_point_errors(self,point_errors):
         self.check_array('point_errors', point_errors, self.point_errors_gpu)
+        if self.store_cpu is True: self.point_errors = point_errors
         self.point_errors_gpu.set(point_errors)
 
     def transfer_jones(self,jones):
         self.check_array('jones', jones, self.jones_gpu)
+        if self.store_cpu is True: self.jones = jones
         self.jones_gpu.set(jones)
 
     def transfer_vis(self,vis):
         self.check_array('vis', vis, self.vis_gpu)
+        if self.store_cpu is True: self.vis = vis
         self.vis_gpu.set(vis)        
 
     def transfer_bayes_data(self,bayes_data):
         self.check_array('bayes_data', bayes_data, self.bayes_data_gpu)
+        if self.store_cpu is True: self.bayes_data = bayes_data
         self.bayes_data_gpu.set(bayes_data)
 
     def transfer_noise_vector(self, noise_vector):
         self.check_array('noise_vector', noise_vector, self.noise_vector_gpu)
+        if self.store_cpu is True: self.noise_vector = noise_vector
         self.noise_vector_gpu.set(noise_vector)
 
     def __str__(self):
         return super(GPUSharedData, self).__str__() + \
             "\nGPU Memory:    %.3f MB" % (self.gpu_mem() / (1024.**2))
+
+    def rethrow_attribute_exception(self, e):
+        raise AttributeError, '%s. The appropriate numpy array has not ' \
+            'been set on the shared data object. You need to set ' \
+            'store_cpu=True on your shared data object ' \
+            'as well as call the transfer_* method for this to work.' % e
+
+    def compute_k_jones_scalar(self):
+        """
+        Computes the scalar K (phase) term of the RIME using numpy.
+
+        Returns a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        sd = self
+
+        try:
+            # Repeat the wavelengths along the timesteps for now
+            # dim nchan x ntime. 
+            w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
+
+            # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
+            n = np.sqrt(1. - sd.lm[0]**2 - sd.lm[1]**2) - 1.
+
+            # u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
+            phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
+                np.outer(sd.uvw[1], sd.lm[1]) + \
+                np.outer(sd.uvw[2],n))\
+                    .reshape(sd.nbl, sd.ntime, sd.nsrc)
+            assert phase.shape == (sd.nbl, sd.ntime, sd.nsrc)           
+
+            # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
+            phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
+            assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)         
+
+            # Dim nchan x ntime x nsrcs 
+            power = np.power(sd.ref_wave/w[:,:,np.newaxis], sd.brightness[4])
+            assert power.shape == (sd.nchan, sd.ntime, sd.nsrc)         
+
+            # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
+            phase_term = power*np.exp(phase)
+            assert phase_term.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
+
+            return phase_term
+
+        except AttributeError as e:
+            self.rethrow_attribute_exception(e)
+
+
+    def compute_e_jones_scalar(self):
+        """
+        Computes the scalar E (analytic cos^3) term of the RIME
+
+        returns a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        sd = self
+
+        try:
+            # Here we obtain our antenna pairs and pointing errors
+            # TODO: The last dimensions are flattened to make indexing easier
+            # later. There may be a more numpy way to do this but YOLO.
+            ap = sd.get_default_ant_pairs().reshape(2,sd.nbl*sd.ntime)
+            pe = sd.point_errors.reshape(2,sd.na*sd.ntime)
+
+            # The flattened antenna pair array will look something like this.
+            # It is based on 2 x nbl x ntime. Here we have 3 baselines and
+            # 4 timesteps.
+            #
+            #            timestep
+            #       0 1 2 3 0 1 2 3 0 1 2 3
+            #
+            # ant0: 0 0 0 0 0 0 0 0 1 1 1 1
+            # ant1: 1 1 1 1 2 2 2 2 2 2 2 2
+
+            # Create indexes into the pointing errors from the antenna pairs.
+            # Pointing errors is 2 x na x ntime, thus each index will be
+            # i = ANT*ntime + TIME. The TIME additions need to be padded by nbl.
+            ant0 = ap[0]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
+            ant1 = ap[1]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
+
+            # Get the pointing errors for antenna p and q.
+            d_p = pe[:,ant0].reshape(2,sd.nbl,sd.ntime)
+            d_q = pe[:,ant1].reshape(2,sd.nbl,sd.ntime)
+
+            # Compute the offsets for antenna 0 or p
+            # Broadcasting here produces, nbl x ntime x nsrc
+            l_off = sd.lm[0] - d_p[0,:,:,np.newaxis]
+            m_off = sd.lm[1] - d_p[1,:,:,np.newaxis]
+            E_p = np.sqrt(l_off**2 + m_off**2)
+
+            assert E_p.shape == (sd.nbl, sd.ntime, sd.nsrc)
+
+            # Broadcasting here produces, nbl x nchan x ntime x nsrc
+            E_p = sd.beam_width*1e-9*E_p[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
+            np.clip(E_p, np.finfo(sd.ft).min, sd.E_beam_clip, E_p)
+            E_p = np.cos(E_p)**3
+
+            assert E_p.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
+
+            # Compute the offsets for antenna 1 or q
+            # Broadcasting here produces, nbl x ntime x nsrc
+            l_off = sd.lm[0] - d_q[0,:,:,np.newaxis]
+            m_off = sd.lm[1] - d_q[1,:,:,np.newaxis]
+            E_q = np.sqrt(l_off**2 + m_off**2)
+
+            assert E_q.shape == (sd.nbl, sd.ntime, sd.nsrc)
+
+            # Broadcasting here produces, nbl x nchan x ntime x nsrc
+            E_q = sd.beam_width*1e-9*E_q[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
+            np.clip(E_q, np.finfo(sd.ft).min, sd.E_beam_clip, E_q)
+            E_q = np.cos(E_q)**3
+
+            assert E_q.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
+
+            return E_p*E_q
+        except AttributeError as e:
+            self.rethrow_attribute_exception(e)
+
+    def compute_ek_jones_scalar(self):
+        """
+        Computes the scalar EK (phase*cos^3) term of the RIME.
+
+        Return a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        return self.compute_k_jones_scalar()*\
+            self.compute_e_jones_scalar()
+
+    def compute_b_jones(self):
+        """
+        Computes the B term of the RIME.
+
+        Returns a (4,nsrc) matrix of complex scalars.
+        """
+        sd = self
+        try:
+            # Create the brightness matrix. Dim 4 x nsrcs
+            B = sd.ct([
+                sd.brightness[0]+sd.brightness[1] + 0j,     # fI+fQ + 0j
+                sd.brightness[2] + 1j*sd.brightness[3],     # fU + fV*1j
+                sd.brightness[2] - 1j*sd.brightness[3],     # fU - fV*1j
+                sd.brightness[0]-sd.brightness[1] + 0j])    # fI-fQ + 0j
+            assert B.shape == (4, sd.nsrc)
+
+            return B
+
+        except AttributeError as e:
+            self.rethrow_attribute_exception(e)
+
+    def compute_bk_jones(self):
+        """
+        Computes the BK term of the RIME.
+
+        Returns a (4,nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        sd = self
+
+        # Compute the K and B terms
+        scalar_K = self.compute_k_jones_scalar()
+        B = self.compute_b_jones()
+
+        # This works due to broadcast! Multiplies phase and brightness along
+        # srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
+        jones_cpu = (scalar_K[np.newaxis,:,:,:,:]* \
+            B[:,np.newaxis, np.newaxis, np.newaxis,:])#\
+            #.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
+        assert jones_cpu.shape == sd.jones_shape
+
+        return jones_cpu 
+
+    def compute_ebk_jones(self):
+        """
+        Computes the BK term of the RIME.
+
+        Returns a (4,nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        return self.compute_bk_jones()*self.compute_e_jones_scalar()
+
+    def compute_bk_vis(self):
+        """
+        Computes the complex visibilities based on the
+        scalar K term and the 2x2 B term.
+
+        Returns a (4,nbl,nchan,ntime) matrix of complex scalars.
+        """
+        return np.add.reduce(self.compute_bk_jones(), axis=4)        
+
+    def compute_ebk_vis(self):
+        """
+        Computes the complex visibilities based on the
+        scalar EK term and the 2x2 B term.
+
+        Returns a (4,nbl,nchan,ntime) matrix of complex scalars.
+        """
+        return np.add.reduce(self.compute_ebk_jones(), axis=4)        
+
+    def compute_chi_sqrd_sum_terms(self):
+        """
+        Computes the terms of the chi squared sum, but does not perform the sum itself.
+
+        Returns a (nbl,nchan,ntime) matrix of floating point scalars.
+        """
+        sd = self
+
+        try:
+            # Take the difference between the visibilities and the model
+            # (4,nbl,nchan,ntime)
+            d = sd.vis - sd.bayes_data
+            # Reduces a dimension so that we have (nbl,nchan,ntime)
+            # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
+            chi_sqrd_terms = (np.add.reduce(d.real**2,axis=0) + np.add.reduce(d.imag**2,axis=0))
+            assert chi_sqrd_terms.shape == (sd.nbl, sd.nchan, sd.ntime)
+
+            return chi_sqrd_terms
+
+        except AttributeError as e:
+            self.rethrow_attribute_exception(e)
+
+    def compute_chi_sqrd(self, noise_vector=False):
+        """ Computes the chi squared value.
+
+        Parameters:
+            noise_vector : boolean
+                True if the chi squared test should be computed with a noise vector
+
+        Returns a floating point scalar values
+        """
+        sd = self
+
+        # Do the chi squared sum on the CPU.
+        # If we're using the noise vector, sum and
+        # divide by the sigma squared.
+        # Otherwise, divide by the noise vector and
+        # then sum
+        chi_sqrd_sum_terms = self.compute_chi_sqrd_sum_terms()
+
+        try:
+            if not noise_vector:
+                return (chi_sqrd_sum_terms.sum() / sd.sigma_sqrd)
+            else:
+                return (chi_sqrd_sum_terms / sd.noise_vector).sum()
+        except AttributeError as e:
+            self.rethrow_attribute_exception(e)
+
+    def compute_biro_chi_sqrd(self, noise_vector=False):
+        self.vis = self.compute_ebk_vis()
+        return self.compute_chi_sqrd(noise_vector=noise_vector)

@@ -23,8 +23,10 @@ if __name__ == '__main__':
     # nsrc : number of point sources
     # noise_vector : indicates whether a noise vector should be used to
     #   compute the chi squared or a single sigma squared value
+    # store_cpu : indicates whether copies of the data passed into the
+    #   shared data transfer_* methods should be stored on the shared data object
     pipeline, sd = montblanc.get_biro_pipeline(args.msfile, nsrc=args.nsrc,
-        noise_vector=False, device=pycuda.autoinit.device)
+        noise_vector=False, store_cpu=False, device=pycuda.autoinit.device)
 
     # Initialise the pipeline
     pipeline.initialise(sd)
@@ -70,6 +72,11 @@ if __name__ == '__main__':
 
         # The chi squared result is set on the shared data object
         print 'Chi Squared Value', sd.X2
+
+        # Must use get_biro_pipeline(...,store_cpu=True)
+        # for the following to work
+        #X2_cpu = sd.compute_biro_chi_sqrd()
+        #print 'Chi Squared Value', sd.X2, X2_cpu, np.allclose(sd.X2,X2_cpu, rtol=1e-2)
 
         # Obtain the visibilities  (slow)
         #V = sd.vis_gpu.get()

@@ -189,26 +189,15 @@ class TestRimes(unittest.TestCase):
         for k in kernels: k.execute(sd)
         for k in kernels: k.shutdown(sd)
 
-        # Take the difference between the visibilities and the model
-        # (4,nbl,nchan,ntime)
-        d = sd.vis - sd.bayes_data
-        # Reduces a dimension so that we have (nbl,nchan,ntime)
-        # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
-        chi_sqrd_cpu = (np.add.reduce(d.real**2,axis=0) + np.add.reduce(d.imag**2,axis=0))
+        # Compute the chi squared sum values
+        chi_sqrd_cpu = sd.compute_chi_sqrd_sum_terms()
         chi_sqrd_gpu = sd.chi_sqrd_result_gpu.get()
 
         # Check the values inside the sum term of the Chi Squared
         self.assertTrue(np.allclose(chi_sqrd_cpu, chi_sqrd_gpu,**cmp))
 
-        # Do the chi squared sum on the CPU.
-        # If we're using the noise vector, sum and
-        # divide by the sigma squared.
-        # Otherwise, divide by the noise vector and
-        # then sum
-        if not noise_vector:
-            X2_cpu = chi_sqrd_cpu.sum() / sd.sigma_sqrd
-        else:
-            X2_cpu = (chi_sqrd_cpu / sd.noise_vector).sum()
+        # Compute the actual chi squared value
+        X2_cpu = sd.compute_chi_sqrd(noise_vector=noise_vector)
 
         # Check that the result returned by the CPU and GPU are the same,
         self.assertTrue(np.allclose(np.array([X2_cpu]), np.array([sd.X2]), **cmp))

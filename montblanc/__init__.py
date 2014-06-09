@@ -62,9 +62,9 @@ def get_bk_pipeline(msfile, nsrc, device=None):
 
 	return pipeline, sd
 
-def get_biro_pipeline(msfile, nsrc, noise_vector=False, device=None):
+def get_biro_pipeline(msfile, nsrc, **kwargs):
 	"""
-	get_biro_pipeline(msfile, nsrc, device=None)
+	get_biro_pipeline(msfile, nsrc)
 
 	Returns a pipeline and shared data tuple defining a pipeline
 	suitable for BIRO.
@@ -75,9 +75,15 @@ def get_biro_pipeline(msfile, nsrc, noise_vector=False, device=None):
 		Name of the measurement set file.
 	nsrc : number
 		Number of point sources.
+
+	Keyword Arguments
+	-----------------
 	noise_vector : boolean
 		True if the chi squared should be computed with a noise vector.
 		False if it should be computed with a single sigma squared value.
+	store_cpu : boolean
+		True if copies of the numpy arrays should be stored on the shared data object
+		when using the shared data object's transfer_* methods. Otherwise False.
 	device - PyCUDA device.
 		The CUDA device to execute on If left blank, the default device
 		will be selected.
@@ -86,13 +92,13 @@ def get_biro_pipeline(msfile, nsrc, noise_vector=False, device=None):
 	-------
 	A (pipeline, shared_data) tuple
 	"""
-	if device is None:
+	if kwargs.get('device') is None:
 		import pycuda.autoinit
-		device=pycuda.autoinit.device
+		kwargs['device']=pycuda.autoinit.device
 
 	# Create a shared data object from the Measurement Set file
 	sd = MeasurementSetSharedData(msfile, nsrc=nsrc, dtype=np.float32,
-		device=device)
+		**kwargs)
 	# Create a pipeline consisting of an EBK kernel, followed by a reduction,
 	# a chi squared difference between the Bayesian Model and the Visibilities
 	# and a further reduction to produce the Chi Squared Value
@@ -100,7 +106,7 @@ def get_biro_pipeline(msfile, nsrc, noise_vector=False, device=None):
 		RimeEBK(),
 		RimeJonesReduce(),
 		RimeChiSquared(),
-		RimeChiSquaredReduce(noise_vector=noise_vector)])
+		RimeChiSquaredReduce(noise_vector=kwargs.get('noise_vector', False))])
 
 	return pipeline, sd
 
