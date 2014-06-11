@@ -25,7 +25,7 @@ KERNEL_TEMPLATE = string.Template("""
 #define NBL ${nbl}
 #define NCHAN ${nchan}
 #define NTIME ${ntime}
-#define NSRC ${nsrc}
+#define NPSRC ${npsrc}
 
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}

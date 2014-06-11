@@ -25,9 +25,9 @@ KERNEL_TEMPLATE = string.Template("""
 #define NBL ${nbl}
 #define NCHAN ${nchan}
 #define NTIME ${ntime}
-#define NSRC ${nsrc}
+#define NPSRC ${npsrc}
 
-#define NJONES NBL*NCHAN*NTIME*NSRC
+#define NJONES NBL*NCHAN*NTIME*NPSRC
 
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
@@ -165,7 +165,7 @@ class RimeMultiply(Node):
         sd = shared_data
         D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
 
-        njones = sd.nbl*sd.nchan*sd.ntime*sd.nsrc
+        njones = sd.nbl*sd.nchan*sd.ntime*sd.npsrc
         jones_per_block = D['BLOCKDIMX'] if njones > D['BLOCKDIMX'] else njones
         jones_blocks = self.blocks_required(njones,jones_per_block)
 
@@ -178,7 +178,7 @@ class RimeMultiply(Node):
         sd = shared_data
 
         # Output jones matrix
-        njones = sd.nbl*sd.nchan*sd.ntime*sd.nsrc
+        njones = sd.nbl*sd.nchan*sd.ntime*sd.npsrc
         jsize = np.product(sd.jones_shape) # Number of complex  numbers
 
         # TODO: This is all wrong and should be replaced with actual gpuarray's

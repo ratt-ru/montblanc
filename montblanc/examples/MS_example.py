@@ -11,7 +11,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='RIME MS test script')
     parser.add_argument('msfile', help='Measurement Set File')
-    parser.add_argument('-n','--nsrc',dest='nsrc', type=int, default=17, help='Number of Sources')
+    parser.add_argument('-np','--npsrc',dest='npsrc', type=int, default=10, help='Number of Point Sources')
+    parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')    
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
 
     args = parser.parse_args(sys.argv[1:])
@@ -20,12 +21,13 @@ if __name__ == '__main__':
     montblanc.log.setLevel(logging.WARN)
 
     # Get the BIRO pipeline and shared data.
-    # nsrc : number of point sources
+    # npsrc : number of point sources
+    # ngsrc : number of gaussian sources
     # noise_vector : indicates whether a noise vector should be used to
     #   compute the chi squared or a single sigma squared value
     # store_cpu : indicates whether copies of the data passed into the
     #   shared data transfer_* methods should be stored on the shared data object
-    pipeline, sd = montblanc.get_biro_pipeline(args.msfile, nsrc=args.nsrc,
+    pipeline, sd = montblanc.get_biro_pipeline(args.msfile, npsrc=args.npsrc, ngsrc=args.ngsrc,
         noise_vector=False, store_cpu=False, device=pycuda.autoinit.device)
 
     # Initialise the pipeline
@@ -43,6 +45,15 @@ if __name__ == '__main__':
     fV=sd.ft(np.random.random(sd.nsrc)*0.5)
     alpha=sd.ft(np.random.random(sd.nsrc)*0.1)
     brightness = np.array([fI,fQ,fU,fV,alpha], dtype=sd.ft)
+
+    # If there are gaussian sources, create their
+    # shape matrix and transfer it.
+    if sd.ngsrc > 0:
+        el = sd.ft(np.random.random(sd.ngsrc)*0.1)
+        em = sd.ft(np.random.random(sd.ngsrc)*0.1)
+        R = sd.ft(np.random.random(sd.ngsrc))
+        gauss_shape = np.array([el,em,R],dtype=sd.ft)
+        sd.transfer_gauss_shape(gauss_shape)
 
     # Create a bayesian model and upload it to the GPU
     nviselements = np.product(sd.vis_shape)

@@ -20,7 +20,7 @@ void rime_jones_EBK_sum_float(
     float * point_error,
     float2 * visibilities,
     float ref_wave,
-    int nbl, int nchan, int ntime, int nsrc, int na)
+    int nbl, int nchan, int ntime, int npsrc, int na)
 {
     // Our data space is a 4D matrix of BL x SRC x CHAN x TIME
 
@@ -40,14 +40,14 @@ void rime_jones_EBK_sum_float(
     ANT1 += 1;
 
     float * l = smem_f;       // l is at beginning of shared mem
-    float * m = &l[nsrc];     // m is at the end of l
+    float * m = &l[npsrc];     // m is at the end of l
 
-    float * fI = &m[nsrc];    // fI is at the end of m
-    float * fQ = &fI[nsrc];   // fQ is at the end of fI
-    float * fV = &fQ[nsrc];   // fV is at the end of fQ
-    float * fU = &fV[nsrc];   // fU is at the end of fV
+    float * fI = &m[npsrc];    // fI is at the end of m
+    float * fQ = &fI[npsrc];   // fQ is at the end of fI
+    float * fV = &fQ[npsrc];   // fV is at the end of fQ
+    float * fU = &fV[npsrc];   // fU is at the end of fV
 
-    float * wave = &fU[nsrc]; // wave is at the end of fU
+    float * wave = &fU[npsrc]; // wave is at the end of fU
 
     float * ld_p = &wave[blockDim.y]; // Number of CHANS
     float * md_p = &ld_p[blockDim.z*blockDim.x]; // BL*TIME
@@ -84,15 +84,15 @@ void rime_jones_EBK_sum_float(
     float2 jones_3_sum = make_float2(0.0f,0.0f);
     float2 jones_4_sum = make_float2(0.0f,0.0f);
 
-    for(int SRC=0; SRC<nsrc; ++SRC)
+    for(int SRC=0; SRC<npsrc; ++SRC)
     {
         // Load point source data into shared memory using one thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
             i = SRC;   l[SRC] = LM[i]; fI[SRC] = brightness[i];
-            i += nsrc; m[SRC] = LM[i]; fQ[SRC] = brightness[i];
-            i += nsrc; fU[SRC] = brightness[i];
-            i += nsrc; fV[SRC] = brightness[i];
+            i += npsrc; m[SRC] = LM[i]; fQ[SRC] = brightness[i];
+            i += npsrc; fU[SRC] = brightness[i];
+            i += npsrc; fV[SRC] = brightness[i];
         }
 
         __syncthreads();
@@ -116,7 +116,7 @@ void rime_jones_EBK_sum_float(
         __sincosf(phase, &imag, &real);
 
         // Multiply by the wavelength to the power of alpha
-        i = SRC+nsrc*4; phase = __powf(ref_wave/wave[threadIdx.y], brightness[i]);
+        i = SRC+npsrc*4; phase = __powf(ref_wave/wave[threadIdx.y], brightness[i]);
         real *= phase; imag *= phase;        
 
         jones_1_sum.x += (fI[SRC]+fQ[SRC])*real - 0.0*imag;
@@ -176,7 +176,7 @@ class RimeEBKSumFloat(Node):
             'block' : (times_per_block,chans_per_block,baselines_per_block),
             'grid'  : (time_blocks,chan_blocks,baseline_blocks),
             'shared' : (1*chans_per_block +
-                6*sd.nsrc +
+                6*sd.npsrc +
                 4*baselines_per_block*times_per_block)*
                     np.dtype(sd.ft).itemsize }
 
@@ -185,7 +185,7 @@ class RimeEBKSumFloat(Node):
 
         self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
             sd.wavelength_gpu, sd.point_errors_gpu, sd.vis_gpu, sd.ref_wave,
-            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.nsrc),
+            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.npsrc),
             np.int32(sd.na), **self.get_kernel_params(sd))       
 
     def post_execution(self, shared_data):

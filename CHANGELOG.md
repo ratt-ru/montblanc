@@ -2,6 +2,11 @@
 
 API Changes
 
+  - On the BaseSharedData class
+    - The nsrc parameter changes to npsrc (Number of *Point* Sources).
+    - An ngsrc (Number of *Guassian* Sources has been added).
+    - nsrc now refers to the number of both gaussian and point sources.
+  - `transfer_gauss_shape` added to the `GPUSharedData` object.
   - `montblanc.get_biro_pipeline`
     - Added a *noise_vector* argument, indicating whether to use the noise_vector to calculate the chi squared value.
   - `transfer_noise_vector` added to the `GPUSharedData` object.

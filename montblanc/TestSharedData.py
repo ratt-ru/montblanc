@@ -6,12 +6,14 @@ import montblanc
 from montblanc.BaseSharedData import GPUSharedData
 
 class TestSharedData(GPUSharedData):
-    def __init__(self, na=7, nsrc=10, nchan=8, ntime=5, dtype=np.float64, **kwargs):
+    def __init__(self, na=7, npsrc=10, nchan=8, ntime=5, ngsrc=0, dtype=np.float64, **kwargs):
         kwargs['store_cpu'] = True
-        super(TestSharedData, self).__init__(na,nchan,ntime,nsrc,dtype,**kwargs)
+        super(TestSharedData, self).__init__(na=na,nchan=nchan,ntime=ntime,
+			npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
 
         sd = self
-        na,nbl,nchan,ntime,nsrc = sd.na,sd.nbl,sd.nchan,sd.ntime,sd.nsrc
+        na,nbl,nchan,ntime = sd.na,sd.nbl,sd.nchan,sd.ntime
+        npsrc, ngsrc, nsrc = sd.npsrc, sd.ngsrc, sd.nsrc
         ft,ct = sd.ft,sd.ct
 
         # Baseline coordinates in the u,v,w (frequency) domain
@@ -24,7 +26,8 @@ class TestSharedData(GPUSharedData):
         # Point source coordinates in the l,m,n (sky image) domain
         l=ft(np.random.random(nsrc)*0.1)
         m=ft(np.random.random(nsrc)*0.1)
-        lm=np.array([l,m], dtype=ft)
+        lm=np.array([l,m], dtype=ft)\
+            .reshape(sd.lm_shape)
 
         # Brightness matrix for the point sources
         fI=ft(np.ones((nsrc,)))
@@ -32,7 +35,15 @@ class TestSharedData(GPUSharedData):
         fU=ft(np.random.random(nsrc)*0.5)
         fV=ft(np.random.random(nsrc)*0.5)
         alpha=ft(np.random.random(nsrc)*0.1)
-        brightness = np.array([fI,fQ,fU,fV,alpha], dtype=ft)
+        brightness = np.array([fI,fQ,fU,fV,alpha], dtype=ft)\
+            .reshape(sd.brightness_shape)
+
+        # Gaussian shape matrix
+        el = ft(np.random.random(ngsrc)*0.5)
+        em = ft(np.random.random(ngsrc)*0.5)
+        R = ft(np.ones(ngsrc)*100)
+        gauss_shape = np.array([el,em,R], dtype=ft)\
+            .reshape(sd.gauss_shape_shape)
 
         # Generate nchan frequencies/wavelengths
     	frequencies = ft(np.linspace(1e6,2e6,nchan))
@@ -52,6 +63,7 @@ class TestSharedData(GPUSharedData):
         sd.transfer_ant_pairs(sd.get_default_ant_pairs())
         sd.transfer_lm(lm)
         sd.transfer_brightness(brightness)
+        if ngsrc > 0: sd.transfer_gauss_shape(gauss_shape)
         sd.transfer_wavelength(wavelength)
         sd.transfer_point_errors(point_errors)
         sd.transfer_noise_vector(noise_vector)

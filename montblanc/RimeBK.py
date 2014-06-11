@@ -26,7 +26,7 @@ KERNEL_TEMPLATE = string.Template("""
 #define NBL ${nbl}
 #define NCHAN ${nchan}
 #define NTIME ${ntime}
-#define NSRC ${nsrc}
+#define NPSRC ${npsrc}
 
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
@@ -52,7 +52,7 @@ void rime_jones_BK_impl(
     int CHAN = (blockIdx.y*blockDim.y + threadIdx.y) / NTIME;
     int TIME = (blockIdx.y*blockDim.y + threadIdx.y) % NTIME;
     int BL = blockIdx.z*blockDim.z + threadIdx.z;
-    if(BL >= NBL || SRC >= NSRC || CHAN >= NCHAN || TIME >= NTIME)
+    if(BL >= NBL || SRC >= NPSRC || CHAN >= NCHAN || TIME >= NTIME)
         return;
 
     /* Cache input and output data from global memory. */
@@ -84,15 +84,15 @@ void rime_jones_BK_impl(
 
     if(threadIdx.z == 0)
     {
-		// LM and brightness are 2 x NSRC and 5 x NSRC matrices
+		// LM and brightness are 2 x NPSRC and 5 x NPSRC matrices
         i = SRC;   l[threadIdx.x] = LM[i];
-        i += NSRC; m[threadIdx.x] = LM[i];
+        i += NPSRC; m[threadIdx.x] = LM[i];
 
         i = SRC;   fI[threadIdx.x] = brightness[i];
-        i += NSRC; fQ[threadIdx.x] = brightness[i];
-        i += NSRC; fU[threadIdx.x] = brightness[i];
-        i += NSRC; fV[threadIdx.x] = brightness[i];
-        i += NSRC; a[threadIdx.x] = brightness[i];
+        i += NPSRC; fQ[threadIdx.x] = brightness[i];
+        i += NPSRC; fU[threadIdx.x] = brightness[i];
+        i += NPSRC; fV[threadIdx.x] = brightness[i];
+        i += NPSRC; a[threadIdx.x] = brightness[i];
     }
 
     if(threadIdx.y == 0)
@@ -129,7 +129,7 @@ void rime_jones_BK_impl(
     real *= phase; imag *= phase;
 
     // Index into the jones matrices
-    i = BL*NCHAN*NTIME*NSRC + CHAN*NTIME*NSRC + TIME*NSRC + SRC;
+    i = BL*NCHAN*NTIME*NPSRC + CHAN*NTIME*NPSRC + TIME*NPSRC + SRC;
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = fI+fQ, b=0.0, c=real, d = imag
@@ -138,19 +138,19 @@ void rime_jones_BK_impl(
         (fI[threadIdx.x]+fQ[threadIdx.x])*imag + 0.0*real);
 
     // a=fU, b=fV, c=real, d = imag 
-    i += NBL*NSRC*NCHAN*NTIME;
+    i += NBL*NPSRC*NCHAN*NTIME;
     jones[i]=Po::make_ct(
         fU[threadIdx.x]*real - fV[threadIdx.x]*imag,
         fU[threadIdx.x]*imag + fV[threadIdx.x]*real);
 
     // a=fU, b=-fV, c=real, d = imag 
-    i += NBL*NSRC*NCHAN*NTIME;
+    i += NBL*NPSRC*NCHAN*NTIME;
     jones[i]=Po::make_ct(
         fU[threadIdx.x]*real - -fV[threadIdx.x]*imag,
         fU[threadIdx.x]*imag + -fV[threadIdx.x]*real);
 
     // a=fI-fQ, b=0.0, c=real, d = imag 
-    i += NBL*NSRC*NCHAN*NTIME;
+    i += NBL*NPSRC*NCHAN*NTIME;
     jones[i]=Po::make_ct(
         (fI[threadIdx.x]-fQ[threadIdx.x])*real - 0.0*imag,
         (fI[threadIdx.x]-fQ[threadIdx.x])*imag + 0.0*real);
@@ -219,17 +219,17 @@ class RimeBK(Node):
 
         D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
 
-        srcs_per_block = D['BLOCKDIMX'] if sd.nsrc > D['BLOCKDIMX'] else sd.nsrc
+        psrcs_per_block = D['BLOCKDIMX'] if sd.npsrc > D['BLOCKDIMX'] else sd.npsrc
         time_chans_per_block = D['BLOCKDIMY']
         baselines_per_block = D['BLOCKDIMZ'] if sd.nbl > D['BLOCKDIMZ'] else sd.nbl
 
-        src_blocks = self.blocks_required(sd.nsrc,srcs_per_block)
+        psrc_blocks = self.blocks_required(sd.npsrc,psrcs_per_block)
         baseline_blocks = self.blocks_required(sd.nbl,baselines_per_block)
         time_chan_blocks = sd.ntime*sd.nchan
 
         return {
-            'block' : (srcs_per_block,time_chans_per_block,baselines_per_block),
-            'grid'  : (src_blocks,time_chan_blocks,baseline_blocks), 
+            'block' : (psrcs_per_block,time_chans_per_block,baselines_per_block),
+            'grid'  : (psrc_blocks,time_chan_blocks,baseline_blocks), 
         }
 
     def execute(self, shared_data):

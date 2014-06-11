@@ -12,7 +12,7 @@ class MeasurementSetSharedData(GPUSharedData):
     ANTENNA_TABLE = "ANTENNA"
     SPECTRAL_WINDOW = "SPECTRAL_WINDOW"
 
-    def __init__(self, ms_file, nsrc, dtype=np.float64,**kwargs):
+    def __init__(self, ms_file, npsrc, ngsrc, dtype=np.float64,**kwargs):
         # Do some checks on the supplied filename
         if not isinstance(ms_file, str):
             raise TypeError, 'ms_file is not a string'
@@ -47,7 +47,7 @@ class MeasurementSetSharedData(GPUSharedData):
         ntime = uvw.shape[1] // nbl
 
         super(MeasurementSetSharedData, self).__init__(\
-            na=na,nchan=nchan,ntime=ntime,nsrc=nsrc,dtype=dtype,**kwargs)
+            na=na,nchan=nchan,ntime=ntime,npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
 
         # Check that nbl agrees with version from constructor
         assert nbl == self.nbl

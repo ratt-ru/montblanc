@@ -15,7 +15,7 @@ __global__
 void rime_jones_sum_float(
     float2 * jones,
     float2 * visibilities,
-    int nvis, int nsrc)
+    int nvis, int npsrc)
 {
     // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
     // V is the visibility
@@ -24,11 +24,11 @@ void rime_jones_sum_float(
     if(V >= nvis)
         return;
 
-    int J = V*nsrc;
+    int J = V*npsrc;
 
     float2 sum = make_float2(0.0f, 0.0f);
 	    
-    for(int SRC=0; SRC<nsrc; ++SRC)
+    for(int SRC=0; SRC<npsrc; ++SRC)
     {
     	float2 value = jones[J+SRC];
     	sum.x += value.x; sum.y += value.y;
@@ -36,10 +36,10 @@ void rime_jones_sum_float(
 
     visibilities[V] = sum;
 
-    J += nvis*nsrc; V += nvis;
+    J += nvis*npsrc; V += nvis;
     sum = make_float2(0.0f, 0.0f);
 
-    for(int SRC=0; SRC<nsrc; ++SRC)
+    for(int SRC=0; SRC<npsrc; ++SRC)
     {
     	float2 value = jones[J+SRC];
     	sum.x += value.x; sum.y += value.y;
@@ -47,10 +47,10 @@ void rime_jones_sum_float(
 
     visibilities[V] = sum;
 
-    J += nvis*nsrc; V += nvis;
+    J += nvis*npsrc; V += nvis;
     sum = make_float2(0.0f, 0.0f);
 
-    for(int SRC=0; SRC<nsrc; ++SRC)
+    for(int SRC=0; SRC<npsrc; ++SRC)
     {
     	float2 value = jones[J+SRC];
     	sum.x += value.x; sum.y += value.y;
@@ -58,10 +58,10 @@ void rime_jones_sum_float(
 
     visibilities[V] = sum;
 
-    J += nvis*nsrc; V += nvis;
+    J += nvis*npsrc; V += nvis;
     sum = make_float2(0.0f, 0.0f);
 
-    for(int SRC=0; SRC<nsrc; ++SRC)
+    for(int SRC=0; SRC<npsrc; ++SRC)
     {
     	float2 value = jones[J+SRC];
     	sum.x += value.x; sum.y += value.y;
@@ -101,7 +101,7 @@ class RimeSumFloat(Node):
         sd = shared_data
 
         self.kernel(sd.jones_gpu, sd.vis_gpu,
-            np.int32(sd.nbl*sd.nchan*sd.ntime), np.int32(sd.nsrc),
+            np.int32(sd.nbl*sd.nchan*sd.ntime), np.int32(sd.npsrc),
             **self.get_kernel_params(sd))       
 
     def post_execution(self, shared_data):

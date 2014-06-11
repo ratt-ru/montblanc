@@ -67,9 +67,9 @@ If you're running on an ubuntu laptop with optimus technology, you may have to i
 
 You could also try run
 
-    # python MS_example.py /home/user/data/WSRT.MS -n 17 -c 100
+    # python MS_example.py /home/user/data/WSRT.MS -np 10 -ng 10 -c 100
 
-which sets up things based on the Westerbork Measurement Set, with 17 sources. It performs 100 iterations of the pipeline.
+which sets up things based on the Westerbork Measurement Set, with 10 point and 10 gaussian sources. It performs 100 iterations of the pipeline.
 
 [pycuda]:http://mathema.tician.de/software/pycuda/
 [pytools]:https://pypi.python.org/pypi/pytools

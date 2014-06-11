@@ -66,14 +66,14 @@ class TestRimes(unittest.TestCase):
 
     def test_BK_float(self):
         """ single precision BK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float32,
             device=pycuda.autoinit.device)      
 
         self.BK_test_impl(sd)
 
     def test_BK_double(self):
         """ double precision BK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
             device=pycuda.autoinit.device)
 
         self.BK_test_impl(sd)
@@ -84,33 +84,51 @@ class TestRimes(unittest.TestCase):
 
         sd.set_beam_width(65*1e5)
 
-        rime_ebk = RimeEBK()
+        kernels = []
 
-        # Invoke the EBK kernel
-        rime_ebk.initialise(sd)
-        rime_ebk.execute(sd)        
-        rime_ebk.shutdown(sd)
+        if sd.npsrc > 0: kernels.append(RimeEBK(gaussian=False))
+        if sd.ngsrc > 0: kernels.append(RimeEBK(gaussian=True))
+
+        # Invoke the EBK kernels
+        for k in kernels: k.initialise(sd)
+        for k in kernels: k.execute(sd)
+        for k in kernels: k.shutdown(sd)
 
         jones_gpu = sd.jones_gpu.get()
         jones_cpu = sd.compute_ebk_jones()
 
         self.assertTrue(np.allclose(jones_gpu, jones_cpu,**cmp))
 
-    def test_EBK_double(self):
-        """ double precision EBK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
+    def test_pEBK_double(self):
+        """ double precision EBK test for point sources only """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
             device=pycuda.autoinit.device)
 
         self.EBK_test_impl(sd)
 
-    def test_EBK_float(self):
-        """ single precision EBK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
-            device=pycuda.autoinit.device)
+    def test_pEBK_float(self):
+        """ single precision EBK test for point sources only """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
+            dtype=np.float32, device=pycuda.autoinit.device)
 
         # Hmmm, we don't need this tolerance now? I wonder why it's working...
         #self.EBK_test_impl(sd, cmp={'rtol' : 1e-2,'atol' : 1e-2})
         self.EBK_test_impl(sd)
+
+    def test_pgEBK_double(self):
+        """ double precision EBK test for point and gaussian sources """
+        #sd = TestSharedData(na=2,nchan=2,ntime=1,npsrc=2,ngsrc=1,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
+            device=pycuda.autoinit.device)
+
+        self.EBK_test_impl(sd)
+
+    def test_pgEBK_float(self):
+        """ single precision EBK test for point and gaussian sources """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
+            dtype=np.float32, device=pycuda.autoinit.device)
+
+        self.EBK_test_impl(sd, cmp={'rtol' : 1e-2})
 
     def multiply_test_impl(self, sd, cmp=None):
         """ Type independent implementation of the multiply test """
@@ -121,7 +139,7 @@ class TestRimes(unittest.TestCase):
         rime_multiply.initialise(sd)
 
         # Output jones matrix
-        njones = sd.nbl*sd.nsrc*sd.nchan*sd.ntime
+        njones = sd.nbl*sd.npsrc*sd.nchan*sd.ntime
         jsize = np.product(sd.jones_shape) # Number of complex  numbers
         # Create some random jones matrices to multiply together
         jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
@@ -152,7 +170,7 @@ class TestRimes(unittest.TestCase):
         for bl in range(sd.nbl):
             for ch in range(sd.nchan):
                 for t in range(sd.ntime):               
-                    for src in range(sd.nsrc):
+                    for src in range(sd.npsrc):
                         jones_output_cpu[:,bl,ch,t,src] = np.dot(
                         jones_lhs[:,bl,ch,t,src].reshape(2,2),
                         jones_rhs[:,bl,ch,t,src].reshape(2,2)).reshape(4)
@@ -164,7 +182,7 @@ class TestRimes(unittest.TestCase):
     def test_multiply_double(self):
         """ double precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,nsrc=10,
+        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,
             device=pycuda.autoinit.device)
         
         self.multiply_test_impl(sd)
@@ -173,7 +191,7 @@ class TestRimes(unittest.TestCase):
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,nsrc=10,
+        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,
             device=pycuda.autoinit.device)
         
         self.multiply_test_impl(sd)
@@ -204,28 +222,28 @@ class TestRimes(unittest.TestCase):
 
     def test_chi_squared_double(self):
         """ double precision chi squared test """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,nsrc=2,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=2,
             device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd)
 
     def test_chi_squared_float(self):
         """ single precision chi squared test """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,nsrc=2,dtype=np.float32,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=2,dtype=np.float32,
             device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd, cmp={'rtol' : 1e-4})
 
     def test_chi_squared_noise_vector_double(self):
         """ double precision chi squared test with noise vector """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,nsrc=2,
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
             device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd, noise_vector=True)
 
     def test_chi_squared_noise_vector_float(self):
         """ single precision chi squared test with noise vector """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,nsrc=2,dtype=np.float32,
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32,
             device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd, noise_vector=True, cmp={'rtol' : 1e-3 })
@@ -264,17 +282,24 @@ class TestRimes(unittest.TestCase):
 
     def test_reduce_double(self):
         """ double precision reduction test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
             device=pycuda.autoinit.device)
 
         self.reduce_test_impl(sd)
 
     def test_reduce_float(self):
         """ single precision reduction test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=200,dtype=np.float32,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float32,
             device=pycuda.autoinit.device)
 
         self.reduce_test_impl(sd)
+
+    def test_gauss_float(self):
+        """ single precision gauss test """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10, ngsrc=10,dtype=np.float32,
+            device=pycuda.autoinit.device)
+
+        sd.compute_gaussian_shape()
 
     def time_predict(self, sd):
         na=sd.na          # Number of antenna
@@ -351,19 +376,19 @@ class TestRimes(unittest.TestCase):
         self.assertTrue(np.allclose(vis_gpu, vis_predict_cpu))
 
     def test_predict_double(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,
+        sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             device=pycuda.autoinit.device)
 
         self.do_predict_test(sd)
 
     def test_predict_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=1,nsrc=10000,dtype=np.float32,
-            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+            dtype=np.float32, device=pycuda.autoinit.device)
 
         self.do_predict_test(sd)
 
     def test_sum_float(self):
-        sd = TestSharedData(na=14,nchan=32,ntime=36,nsrc=100,dtype=np.float32,
+        sd = TestSharedData(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32,
             device=pycuda.autoinit.device)
         jones_cpu = (np.random.random(np.product(sd.jones_shape)) + \
             np.random.random(np.product(sd.jones_shape))*1j)\
@@ -382,7 +407,7 @@ class TestRimes(unittest.TestCase):
         rime_sum.shutdown(sd)
 
     def test_EBK_sum_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,nsrc=100,dtype=np.float32,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,dtype=np.float32,
             device=pycuda.autoinit.device)
         rime_ebk_sum = RimeEBKSumFloat()
 

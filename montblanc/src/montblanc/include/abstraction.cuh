@@ -52,6 +52,10 @@ public:
 		{ return ::powf(value, exponent); }
 
 	__device__ __forceinline__ static
+	Tr::ft exp(const Tr::ft & value)
+		{ return ::expf(value); }
+
+	__device__ __forceinline__ static
 	Tr::ft sin(const Tr::ft & value)
 		{ return ::sinf(value); }
 
@@ -100,6 +104,10 @@ public:
 	__device__ __forceinline__ static
 	Tr::ft pow(const Tr::ft & value, const Tr::ft & exponent)
 		{ return ::pow(value, exponent); }
+
+	__device__ __forceinline__ static
+	Tr::ft exp(const Tr::ft & value)
+		{ return ::exp(value); }
 
 	__device__ __forceinline__ static
 	Tr::ft sin(const Tr::ft & value)
