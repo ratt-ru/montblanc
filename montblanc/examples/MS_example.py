@@ -39,11 +39,11 @@ if __name__ == '__main__':
     lm=np.array([l,m], dtype=sd.ft)
 
     # Random brightness matrix for the point sources
-    fI=sd.ft(np.ones((sd.nsrc,)))
-    fQ=sd.ft(np.random.random(sd.nsrc)*0.5)
-    fU=sd.ft(np.random.random(sd.nsrc)*0.5)
-    fV=sd.ft(np.random.random(sd.nsrc)*0.5)
-    alpha=sd.ft(np.random.random(sd.nsrc)*0.1)
+    fI=sd.ft(np.ones((sd.ntime,sd.nsrc,)))
+    fQ=sd.ft(np.random.random(sd.ntime*sd.nsrc)*0.5).reshape(sd.ntime,sd.nsrc)
+    fU=sd.ft(np.random.random(sd.ntime*sd.nsrc)*0.5).reshape(sd.ntime,sd.nsrc)
+    fV=sd.ft(np.random.random(sd.ntime*sd.nsrc)*0.5).reshape(sd.ntime,sd.nsrc)
+    alpha=sd.ft(np.random.random(sd.ntime*sd.nsrc)*0.1).reshape(sd.ntime,sd.nsrc)
     brightness = np.array([fI,fQ,fU,fV,alpha], dtype=sd.ft)
 
     # If there are gaussian sources, create their

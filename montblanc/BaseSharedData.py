@@ -104,7 +104,7 @@ class BaseSharedData(SharedData):
 
         # Point Sources
         self.lm_shape = (2, nsrc)
-        self.brightness_shape = (5, nsrc)
+        self.brightness_shape = (5, ntime, nsrc)
 
         # Gaussian Shapes
         self.gauss_shape_shape = (3, ngsrc)
@@ -458,7 +458,7 @@ class GPUSharedData(BaseSharedData):
             assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
 
             # Dim nchan x ntime x nsrcs 
-            power = np.power(sd.ref_wave/w[:,:,np.newaxis], sd.brightness[4])
+            power = np.power(sd.ref_wave/w[:,:,np.newaxis], sd.brightness[4,np.newaxis,:,:])
             assert power.shape == (sd.nchan, sd.ntime, sd.nsrc)            
 
             # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
@@ -560,13 +560,13 @@ class GPUSharedData(BaseSharedData):
         """
         sd = self
         try:
-            # Create the brightness matrix. Dim 4 x nsrcs
+            # Create the brightness matrix. Dim 4 x ntime x nsrcs
             B = sd.ct([
                 sd.brightness[0]+sd.brightness[1] + 0j,     # fI+fQ + 0j
                 sd.brightness[2] + 1j*sd.brightness[3],     # fU + fV*1j
                 sd.brightness[2] - 1j*sd.brightness[3],     # fU - fV*1j
                 sd.brightness[0]-sd.brightness[1] + 0j])    # fI-fQ + 0j
-            assert B.shape == (4, sd.nsrc)
+            assert B.shape == (4, sd.ntime, sd.nsrc)
 
             return B
 
@@ -588,7 +588,7 @@ class GPUSharedData(BaseSharedData):
         # This works due to broadcast! Multiplies phase and brightness along
         # srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
         jones_cpu = (scalar_K[np.newaxis,:,:,:,:]* \
-            B[:,np.newaxis, np.newaxis, np.newaxis,:])#\
+            B[:,np.newaxis, np.newaxis,:,:])#\
             #.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
         assert jones_cpu.shape == sd.jones_shape
 

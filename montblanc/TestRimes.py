@@ -14,7 +14,6 @@ import montblanc.ext.crimes
 
 from montblanc.RimeBK import RimeBK
 from montblanc.RimeEBK import RimeEBK
-from montblanc.RimeEBKSumFloat import RimeEBKSumFloat
 from montblanc.RimeSumFloat import RimeSumFloat
 from montblanc.RimeJonesReduce import RimeJonesReduce
 from montblanc.RimeMultiply import RimeMultiply
@@ -308,6 +307,9 @@ class TestRimes(unittest.TestCase):
         nsrc=sd.nsrc      # Number of sources
         ntime=sd.ntime    # Number of timesteps
 
+        # We only handle a timestep of 1 here, because the predict code doesn't handle time
+        assert ntime == 1
+
         # Visibilities ! has to have double complex
         Vis=np.complex128(np.zeros((nbl,nchan,4)))
         # UVW coordinates
@@ -316,8 +318,10 @@ class TestRimes(unittest.TestCase):
         # Frequencies in Hz
         WaveL = sd.wavelength.astype(np.float64)
         # Sky coordinates
-        lms=np.array([sd.lm[0], sd.lm[1], sd.brightness[0], sd.brightness[4], 
-            sd.brightness[1], sd.brightness[2], sd.brightness[3]]).astype(np.float64).T.copy()
+        T=0 # We should only have one timestep in this test
+
+        lms=np.array([sd.lm[0], sd.lm[1], sd.brightness[0,T], sd.brightness[4,T], 
+            sd.brightness[1,T], sd.brightness[2,T], sd.brightness[3,T]]).astype(np.float64).T.copy()
 
         # Antennas
         A0=np.int64(np.random.rand(nbl)*na)
@@ -405,29 +409,6 @@ class TestRimes(unittest.TestCase):
         self.assertTrue(np.allclose(vis_cpu, sd.vis_gpu.get()))
 
         rime_sum.shutdown(sd)
-
-    def test_EBK_sum_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,dtype=np.float32,
-            device=pycuda.autoinit.device)
-        rime_ebk_sum = RimeEBKSumFloat()
-
-        # Initialise the BK float kernel
-        rime_ebk_sum.initialise(sd)
-        rime_ebk_sum.execute(sd)
-        rime_ebk_sum.shutdown(sd)
-
-        # Compute the jones matrix on the CPU, and sum over
-        # the sources (axis 4)
-        vis_cpu = sd.compute_bk_vis()
-
-        # Get the visibilities calculated by the GPU
-        vis_gpu = sd.vis_gpu.get()
-
-        # Test that the CPU calculation matches that of the GPU calculation
-        # By default, rtol=1e-5. The different summation orders on the CPU
-        # and GPU seem to make a difference here, so we relax the tolerance
-        # somewhat.
-        self.assertTrue(np.allclose(vis_cpu, vis_gpu, rtol=1e-4))
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestRimes)
