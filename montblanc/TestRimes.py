@@ -32,12 +32,12 @@ class TestRimes(unittest.TestCase):
         # Set up various things that aren't possible in PyCUDA
         montblanc.ext.crimes.setup_cuda()
 
-        # Add a handler that outputs DEBUG level logging
+        # Add a handler that outputs INFO level logging
         fh = logging.FileHandler('test.log')
-        fh.setLevel(logging.DEBUG)
+        fh.setLevel(logging.INFO)
 
         montblanc.log.addHandler(fh)
-        montblanc.log.setLevel(logging.DEBUG)
+        montblanc.log.setLevel(logging.INFO)
 
     def tearDown(self):
         """ Tear down each test case """
@@ -340,7 +340,7 @@ class TestRimes(unittest.TestCase):
             Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
         predict_end = time.time()
 
-        montblanc.log.debug('predict start: %fs end: %fs elapsed time: %fs',
+        montblanc.log.info('predict start: %fs end: %fs elapsed time: %fs',
             predict_start, predict_end, predict_end - predict_start)
 
         return Vis
@@ -355,7 +355,7 @@ class TestRimes(unittest.TestCase):
 
         vis_predict_cpu = self.time_predict(sd)
 
-        montblanc.log.debug(sd)
+        montblanc.log.info(sd)
 
         kernels_start, kernels_end = cuda.Event(), cuda.Event()
         kernels_start.record()
@@ -367,7 +367,7 @@ class TestRimes(unittest.TestCase):
         kernels_end.record()
         kernels_end.synchronize()
 
-        montblanc.log.debug('kernels: elapsed time: %fs',
+        montblanc.log.info('kernels: elapsed time: %fs',
             kernels_start.time_till(kernels_end)*1e-3)
 
         # Shutdown the rime node, we don't need it any more

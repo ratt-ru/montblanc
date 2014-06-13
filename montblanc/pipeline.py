@@ -50,13 +50,13 @@ class Pipeline:
         >>> pipeline.shutdown(sd)
         """
 
-        montblanc.log.info('Initialising pipeline')
+        montblanc.log.debug('Initialising pipeline')
 
         try:
             for node in self.pipeline:
-                montblanc.log.info('Initialising node \'' + node.description() + '\'')
+                montblanc.log.debug('Initialising node \'' + node.description() + '\'')
                 node.initialise(shared_data)
-                montblanc.log.info('Done')
+                montblanc.log.debug('Done')
         except PipeLineError as e:
             montblanc.log.error('Pipeline Error occurred during RIME pipeline initialisation', exc_info=True)
             self.initialised = False
@@ -67,7 +67,7 @@ class Pipeline:
 #            self.initialised = False
 #            return self.initialised
 
-        montblanc.log.info('Initialisation of pipeline complete')
+        montblanc.log.debug('Initialisation of pipeline complete')
 
         self.initialised = True
         return self.initialised
@@ -84,7 +84,7 @@ class Pipeline:
         >>> pipeline.shutdown(sd)
         """
 
-        montblanc.log.info('Executing pipeline')
+        montblanc.log.debug('Executing pipeline')
 
         if not self.initialised:
             montblanc.log.error('Pipeline was not initialised!')
@@ -96,13 +96,13 @@ class Pipeline:
 
             for node in self.pipeline:
 
-                montblanc.log.info('Executing node \'' + node.description() + '\'')
+                montblanc.log.debug('Executing node \'' + node.description() + '\'')
                 node.pre_execution(shared_data)
-                montblanc.log.info('pre')
+                montblanc.log.debug('pre')
                 node.execute(shared_data)
-                montblanc.log.info('execute')
+                montblanc.log.debug('execute')
                 node.post_execution(shared_data)
-                montblanc.log.info('post Done')
+                montblanc.log.debug('post Done')
 
             # Record pipeline end
             self.pipeline_end.record()
@@ -121,7 +121,7 @@ class Pipeline:
 
         self.avg_execution_time = self.sum_execution_time / self.nr_of_executions
 
-        montblanc.log.info('Execution of pipeline complete')
+        montblanc.log.debug('Execution of pipeline complete')
         return False
 
     def shutdown(self, shared_data):
@@ -136,16 +136,16 @@ class Pipeline:
         >>> pipeline.shutdown(sd)
         """
 
-        montblanc.log.info('Shutting down pipeline')
+        montblanc.log.debug('Shutting down pipeline')
 
         success = True
 
         # Even if shutdown fails, keep trying on the other nodes
         for node in self.pipeline:
             try:
-                    montblanc.log.info('Shutting down node \'' + node.description() + '\'')
+                    montblanc.log.debug('Shutting down node \'' + node.description() + '\'')
                     node.shutdown(shared_data)
-                    montblanc.log.info('Done')
+                    montblanc.log.debug('Done')
             except PipeLineError as e:
                 montblanc.log.error('Pipeline Error occurred during RIME pipeline shutdown', exc_info=True)
                 success = False
@@ -154,7 +154,7 @@ class Pipeline:
 #                print 'Unexpected exception occurred during RIME pipeline shutdown', e
 #                success = False
 
-        montblanc.log.info('Shutdown of pipeline Complete')
+        montblanc.log.debug('Shutdown of pipeline Complete')
         return success
 
     def __str__(self):
