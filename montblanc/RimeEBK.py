@@ -87,10 +87,10 @@ void rime_jones_EBK_impl(
     // and brightness matrix
     __shared__ typename Tr::ft l[BLOCKDIMX];
     __shared__ typename Tr::ft m[BLOCKDIMX];
-    __shared__ typename Tr::ft fI[BLOCKDIMX];
-    __shared__ typename Tr::ft fQ[BLOCKDIMX];
-    __shared__ typename Tr::ft fV[BLOCKDIMX];
-    __shared__ typename Tr::ft fU[BLOCKDIMX];
+    __shared__ typename Tr::ft fI[BLOCKDIMX*BLOCKDIMY];
+    __shared__ typename Tr::ft fQ[BLOCKDIMX*BLOCKDIMY];
+    __shared__ typename Tr::ft fV[BLOCKDIMX*BLOCKDIMY];
+    __shared__ typename Tr::ft fU[BLOCKDIMX*BLOCKDIMY];
 
     // Wavelengths
     // Should only have one here
@@ -122,10 +122,20 @@ void rime_jones_EBK_impl(
     // Varies by source (x)
     if(threadIdx.y == 0 && threadIdx.z == 0)
     {
-        i = SRC;   l[threadIdx.x] = LM[i]; fI[threadIdx.x] = brightness[i];
-        i += NSRC; m[threadIdx.x] = LM[i]; fQ[threadIdx.x] = brightness[i];
-        i += NSRC; fU[threadIdx.x] = brightness[i];
-        i += NSRC; fV[threadIdx.x] = brightness[i];
+        i = SRC;   l[threadIdx.x] = LM[i];
+        i += NSRC; m[threadIdx.x] = LM[i];
+    }
+
+    // Varies by time (y) and source (x)
+    if(threadIdx.z == 0)
+    {
+        // TIME*NSRC + SRC;
+        int j = threadIdx.y*BLOCKDIMX + threadIdx.x;
+
+        i = TIME*NSRC + SRC; fI[j] = brightness[i];
+        i += NTIME*NSRC;     fQ[j] = brightness[i];
+        i += NTIME*NSRC;     fU[j] = brightness[i];
+        i += NTIME*NSRC;     fV[j] = brightness[i];
     }
 
     // Varies by channel (y)
@@ -147,7 +157,7 @@ void rime_jones_EBK_impl(
 
     // u*l + v*m + w*n, in the wrong order :)
     int j = threadIdx.z*BLOCKDIMY + threadIdx.y;
-    phase *= w[j]; // w*n
+    phase *= w[j];                // w*n
     phase += v[j]*m[threadIdx.x]; // v*m
     phase += u[j]*l[threadIdx.x]; // u*l
 
@@ -160,7 +170,8 @@ void rime_jones_EBK_impl(
     Po::sincos(phase, &imag, &real);
 
     // Multiply by the wavelength to the power of alpha
-    i = SRC+NSRC*4; phase = Po::pow(ref_wave/wave[threadIdx.y], brightness[i]);
+    i = TIME*NSRC + SRC + 4*NTIME*NSRC;
+    phase = Po::pow(ref_wave/wave[threadIdx.y], brightness[i]);
     real *= phase; imag *= phase;
 
     if(gaussian)
@@ -223,30 +234,32 @@ void rime_jones_EBK_impl(
 
     // Index into the jones matrices
     i = (BL*NCHAN*NTIME + CHAN*NTIME + TIME)*NSRC + SRC;
+    // TIME*NSRC + SRC;
+    j = threadIdx.y*BLOCKDIMX + threadIdx.x;
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = fI+fQ, b=0.0, c=real, d = imag
     jones[i]=Po::make_ct(
-        (fI[threadIdx.x]+fQ[threadIdx.x])*real - 0.0*imag,
-        (fI[threadIdx.x]+fQ[threadIdx.x])*imag + 0.0*real);
+        (fI[j]+fQ[j])*real - 0.0*imag,
+        (fI[j]+fQ[j])*imag + 0.0*real);
 
     // a=fU, b=fV, c=real, d = imag 
     i += NBL*NCHAN*NTIME*NSRC;
     jones[i]=Po::make_ct(
-        fU[threadIdx.x]*real - fV[threadIdx.x]*imag,
-        fU[threadIdx.x]*imag + fV[threadIdx.x]*real);
+        fU[j]*real - fV[j]*imag,
+        fU[j]*imag + fV[j]*real);
 
     // a=fU, b=-fV, c=real, d = imag 
     i += NBL*NCHAN*NTIME*NSRC;
     jones[i]=Po::make_ct(
-        fU[threadIdx.x]*real - -fV[threadIdx.x]*imag,
-        fU[threadIdx.x]*imag + -fV[threadIdx.x]*real);
+        fU[j]*real - -fV[j]*imag,
+        fU[j]*imag + -fV[j]*real);
 
     // a=fI-fQ, b=0.0, c=real, d = imag 
     i += NBL*NCHAN*NTIME*NSRC;
     jones[i]=Po::make_ct(
-        (fI[threadIdx.x]-fQ[threadIdx.x])*real - 0.0*imag,
-        (fI[threadIdx.x]-fQ[threadIdx.x])*imag + 0.0*real);
+        (fI[j]-fQ[j])*real - 0.0*imag,
+        (fI[j]-fQ[j])*imag + 0.0*real);
 }
 
 extern "C" {

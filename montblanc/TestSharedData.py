@@ -30,11 +30,11 @@ class TestSharedData(GPUSharedData):
             .reshape(sd.lm_shape)
 
         # Brightness matrix for the point sources
-        fI=ft(np.ones((nsrc,)))
-        fQ=ft(np.random.random(nsrc)*0.5)
-        fU=ft(np.random.random(nsrc)*0.5)
-        fV=ft(np.random.random(nsrc)*0.5)
-        alpha=ft(np.random.random(nsrc)*0.1)
+        fI=ft(np.ones((ntime*nsrc,)))
+        fQ=ft(np.random.random(ntime*nsrc)*0.5)
+        fU=ft(np.random.random(ntime*nsrc)*0.5)
+        fV=ft(np.random.random(ntime*nsrc)*0.5)
+        alpha=ft(np.random.random(ntime*nsrc)*0.1)
         brightness = np.array([fI,fQ,fU,fV,alpha], dtype=ft)\
             .reshape(sd.brightness_shape)
 
