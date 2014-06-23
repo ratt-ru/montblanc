@@ -1,5 +1,8 @@
+import numpy as np
 import string
 from pycuda.compiler import SourceModule
+
+import pycuda.gpuarray as gpuarray
 
 import montblanc
 from montblanc.node import Node
@@ -26,8 +29,9 @@ KERNEL_TEMPLATE = string.Template("""
 #define NCHAN ${nchan}
 #define NTIME ${ntime}
 #define NPSRC ${npsrc}
+#define NSRC ${nsrc}
 
-#define NJONES NBL*NCHAN*NTIME*NPSRC
+#define NJONES NBL*NCHAN*NTIME*NSRC
 
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
@@ -165,7 +169,7 @@ class RimeMultiply(Node):
         sd = shared_data
         D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
 
-        njones = sd.nbl*sd.nchan*sd.ntime*sd.npsrc
+        njones = sd.nbl*sd.nchan*sd.ntime*sd.nsrc
         jones_per_block = D['BLOCKDIMX'] if njones > D['BLOCKDIMX'] else njones
         jones_blocks = self.blocks_required(njones,jones_per_block)
 
@@ -178,7 +182,7 @@ class RimeMultiply(Node):
         sd = shared_data
 
         # Output jones matrix
-        njones = sd.nbl*sd.nchan*sd.ntime*sd.npsrc
+        njones = sd.nbl*sd.nchan*sd.ntime*sd.nsrc
         jsize = np.product(sd.jones_shape) # Number of complex  numbers
 
         # TODO: This is all wrong and should be replaced with actual gpuarray's
@@ -192,7 +196,7 @@ class RimeMultiply(Node):
         jones_output_gpu = gpuarray.empty(shape=sd.jones_shape, dtype=np.complex128)
 
         self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, \
-            **get_kernel_params())
+            **self.get_kernel_params(sd))
             
         sd.jones_gpu = jones_output_gpu
 
