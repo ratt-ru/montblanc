@@ -2,6 +2,10 @@
 
 API Changes
 
+  - An `init_weights` keyword argument has been added to the `get_biro_pipeline`. Possible values are `None`, `'sigma'` and `'weight'`. Respectively, these options govern, not initialising the weight vector or, initialising it from either the 'SIGMA' or 'WEIGHT' MeasurementSet columns.
+  - The `noise_vector` keyword argument changes to the `weight_vector` keyword argument on the `get_biro_pipeline` method.
+  - `transfer_noise_vector` changes to `transfer_weight_vector` on the `GPUSharedData` object.
+  - The `noise_vector` is renamed to `weight_vector`. Additionally, the dimension of this matrix changes from (nbl, nchan, ntime) to (4, nbl, nchan, ntime).
   - The dimension of the `brightness` matrix changes from (5,nsrc) to (5,ntime,nsrc)
   - On the `BaseSharedData` class
     - The `nsrc` parameter changes to `npsrc` (Number of *Point* Sources).

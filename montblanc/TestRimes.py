@@ -18,7 +18,6 @@ from montblanc.RimeSumFloat import RimeSumFloat
 from montblanc.RimeJonesReduce import RimeJonesReduce
 from montblanc.RimeMultiply import RimeMultiply
 from montblanc.RimeChiSquared import RimeChiSquared
-from montblanc.RimeChiSquaredReduce import RimeChiSquaredReduce
 from montblanc.TestSharedData import TestSharedData
 
 class TestRimes(unittest.TestCase):
@@ -195,11 +194,11 @@ class TestRimes(unittest.TestCase):
         
         self.multiply_test_impl(sd)
 
-    def chi_squared_test_impl(self, sd, noise_vector=False, cmp=None):
+    def chi_squared_test_impl(self, sd, weight_vector=False, cmp=None):
         """ Type independent implementation of the chi squared test """
         if cmp is None: cmp = {}
 
-        kernels = [RimeChiSquared(), RimeChiSquaredReduce(noise_vector=noise_vector)]
+        kernels = [RimeChiSquared(weight_vector=weight_vector)]
 
         # Initialise, execute and shutdown the kernels
         for k in kernels: k.initialise(sd)
@@ -207,45 +206,45 @@ class TestRimes(unittest.TestCase):
         for k in kernels: k.shutdown(sd)
 
         # Compute the chi squared sum values
-        chi_sqrd_cpu = sd.compute_chi_sqrd_sum_terms()
+        chi_sqrd_cpu = sd.compute_chi_sqrd_sum_terms(weight_vector=weight_vector)
         chi_sqrd_gpu = sd.chi_sqrd_result_gpu.get()
 
         # Check the values inside the sum term of the Chi Squared
         self.assertTrue(np.allclose(chi_sqrd_cpu, chi_sqrd_gpu,**cmp))
 
         # Compute the actual chi squared value
-        X2_cpu = sd.compute_chi_sqrd(noise_vector=noise_vector)
+        X2_cpu = sd.compute_chi_sqrd(weight_vector=weight_vector)
 
         # Check that the result returned by the CPU and GPU are the same,
         self.assertTrue(np.allclose(np.array([X2_cpu]), np.array([sd.X2]), **cmp))
 
     def test_chi_squared_double(self):
         """ double precision chi squared test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=2,
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
             device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd)
 
     def test_chi_squared_float(self):
         """ single precision chi squared test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=2,dtype=np.float32,
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32,
             device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd, cmp={'rtol' : 1e-4})
 
-    def test_chi_squared_noise_vector_double(self):
+    def test_chi_squared_weight_vector_double(self):
         """ double precision chi squared test with noise vector """
         sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
             device=pycuda.autoinit.device)
 
-        self.chi_squared_test_impl(sd, noise_vector=True)
+        self.chi_squared_test_impl(sd, weight_vector=True)
 
-    def test_chi_squared_noise_vector_float(self):
+    def test_chi_squared_weight_vector_float(self):
         """ single precision chi squared test with noise vector """
         sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32,
             device=pycuda.autoinit.device)
 
-        self.chi_squared_test_impl(sd, noise_vector=True, cmp={'rtol' : 1e-3 })
+        self.chi_squared_test_impl(sd, weight_vector=True, cmp={'rtol' : 1e-3 })
 
     def reduce_test_impl(self, sd, cmp=None):
         """ Type independent implementation of the reduction tests """

@@ -12,7 +12,7 @@ class MeasurementSetSharedData(GPUSharedData):
     ANTENNA_TABLE = "ANTENNA"
     SPECTRAL_WINDOW = "SPECTRAL_WINDOW"
 
-    def __init__(self, ms_file, npsrc, ngsrc, dtype=np.float64,**kwargs):
+    def __init__(self, ms_file, npsrc, ngsrc, dtype=np.float64, **kwargs):
         # Do some checks on the supplied filename
         if not isinstance(ms_file, str):
             raise TypeError, 'ms_file is not a string'
@@ -82,6 +82,72 @@ class MeasurementSetSharedData(GPUSharedData):
                     4,nbl,ntime,nchan),
                 axis=3,start=2).astype(self.ct).copy()
             self.transfer_bayes_data(vis_data)
+
+        # Should we initialise our weights from the MS data?
+        init_weights = kwargs.get('init_weights', None)
+        valid = [None, 'sigma', 'weight']
+
+        if not init_weights in valid:
+            raise ValueError, 'init_weights should be set to None, ''sigma'' or ''weights'''
+
+        # Load in flag and weighting data, if it exists
+        if init_weights is not None and t.colnames().count('FLAG') > 0:
+            # Get the flag data. Data flagged as True should be ignored,
+            # therefore we flip the values so that when we multiply flag
+            # by the weights later, a False value zeroes out the weight
+            flag = (t.getcol('FLAG') == False)
+            flag_row = (t.getcol('FLAG_ROW') == False)
+
+            # Incorporate the flag_row data into the larger
+            # flag matrix
+            flag = np.logical_or(flag, flag_row[:,np.newaxis,np.newaxis])
+
+            if init_weights == 'weight':
+                # Obtain weighting information from WEIGHT_SPECTRUM
+                # preferably, otherwise WEIGHT.
+                if t.colnames().count('WEIGHT_SPECTRUM') > 0:
+                    # Try obtain the weightings from 'WEIGHT_SPECTRUM' first.
+                    # It has the same dimensions as 'FLAG'
+                    weight_vector = flag*t.getcol('WEIGHT_SPECTRUM')
+                elif t.colnames().count('WEIGHT') > 0:
+                    # Otherwise we should try obtain the weightings from 'WEIGHT.
+                    # This doesn't have per-channel weighting, so we introduce
+                    # this with a broadcast
+                    weight_vector = flag * \
+                        (t.getcol('WEIGHT')[:,np.newaxis,:]*np.ones(shape=(nchan,1)))
+                else:
+                    # Just use the boolean flags as weighting values
+                    weight_vector = flag.astype(self.ft)
+            elif init_weights == 'sigma':
+                # Obtain weighting information from SIGMA_SPECTRUM
+                # preferably, otherwise SIGMA.
+                if t.colnames().count('SIGMA_SPECTRUM') > 0:
+                    # Try obtain the weightings from 'WEIGHT_SPECTRUM' first.
+                    # It has the same dimensions as 'FLAG'
+                    weight_vector = flag*t.getcol('SIGMA_SPECTRUM')
+                elif t.colnames().count('SIGMA') > 0:
+                    # Otherwise we should try obtain the weightings from 'WEIGHT.
+                    # This doesn't have per-channel weighting, so we introduce
+                    # this with a broadcast
+                    weight_vector = flag * \
+                        (t.getcol('SIGMA')[:,np.newaxis,:]*np.ones(shape=(nchan,1)))
+                else:
+                    # Just use the boolean flags as weighting values
+                    weight_vector = flag.astype(self.ft)
+            else:
+                raise Exception, 'init_weights used incorrectly!'
+
+            assert weight_vector.shape == (nbl*ntime, nchan, 4)
+
+            # Shift the dim 4 axis to the front,
+            # reshape to separate nbl and ntime, and then
+            # swap channel and time
+            weight_vector=np.rollaxis(
+                np.rollaxis(weight_vector,axis=2,start=0).reshape(
+                    4,nbl,ntime,nchan),
+                axis=3,start=2).astype(self.ft).copy()
+
+            self.transfer_weight_vector(weight_vector)
 
         expected_ant_shape = (nbl*ntime,)
         

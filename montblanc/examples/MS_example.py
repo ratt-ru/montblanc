@@ -23,12 +23,18 @@ if __name__ == '__main__':
     # Get the BIRO pipeline and shared data.
     # npsrc : number of point sources
     # ngsrc : number of gaussian sources
-    # noise_vector : indicates whether a noise vector should be used to
+    # init_weights : (1) None (2) 'sigma' or (3) 'weight'. Either
+    #   (1) do not initialise the weight vector, or
+    #   (2) initialise from the MS 'SIGMA' tables, or
+    #   (3) initialise from the MS 'WEIGHT' tables.
+    # weight_vector : indicates whether a weight vector should be used to
     #   compute the chi squared or a single sigma squared value
     # store_cpu : indicates whether copies of the data passed into the
     #   shared data transfer_* methods should be stored on the shared data object
-    pipeline, sd = montblanc.get_biro_pipeline(args.msfile, npsrc=args.npsrc, ngsrc=args.ngsrc,
-        noise_vector=False, store_cpu=False, device=pycuda.autoinit.device)
+    pipeline, sd = montblanc.get_biro_pipeline(args.msfile,
+        npsrc=args.npsrc, ngsrc=args.ngsrc,
+        init_weights=None, weight_vector=False,
+        store_cpu=False, device=pycuda.autoinit.device)
 
     # Initialise the pipeline
     pipeline.initialise(sd)
@@ -66,9 +72,9 @@ if __name__ == '__main__':
         .astype(sd.ft).reshape((sd.point_errors_shape))
 
     # Generate and transfer a noise vector.
-    noise_vector = np.random.random(np.product(sd.noise_vector_shape))\
-        .astype(sd.ft).reshape((sd.noise_vector_shape))
-    sd.transfer_noise_vector(noise_vector)
+    weight_vector = np.random.random(np.product(sd.weight_vector_shape))\
+        .astype(sd.ft).reshape((sd.weight_vector_shape))
+    sd.transfer_weight_vector(weight_vector)
 
     # Execute the pipeline
     for i in range(args.count):
