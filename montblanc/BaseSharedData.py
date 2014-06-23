@@ -262,7 +262,11 @@ class GPUSharedData(BaseSharedData):
             npsrc=npsrc,ngsrc=ngsrc,dtype=dtype)
 
         # Store the device, choosing the default if not specified
-        self.device = kwargs.get('device',pycuda.autoinit.device)
+        self.device = kwargs.get('device')
+
+        if self.device is None:
+            import pycuda.autoinit
+            self.device = pycuda.autoinit.device
 
         # Should we store CPU versions of the GPU arrays
         self.store_cpu = kwargs.get('store_cpu', False)
