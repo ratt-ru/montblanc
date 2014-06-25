@@ -55,8 +55,11 @@ class TestSharedData(GPUSharedData):
             .astype(ft).reshape(sd.point_errors_shape)
 
         # Generate the noise vector
-        noise_vector = np.random.random(np.product(sd.noise_vector_shape))\
-            .astype(ft).reshape(sd.noise_vector_shape)
+        weight_vector = np.random.random(np.product(sd.weight_vector_shape))\
+            .astype(ft).reshape(sd.weight_vector_shape)
+
+        weight_vector = np.random.random(np.product(sd.weight_vector_shape))\
+            .astype(ft).reshape(sd.weight_vector_shape)
 
         # Copy the uvw, lm and brightness data to the gpu
         sd.transfer_uvw(uvw)
@@ -66,7 +69,7 @@ class TestSharedData(GPUSharedData):
         if ngsrc > 0: sd.transfer_gauss_shape(gauss_shape)
         sd.transfer_wavelength(wavelength)
         sd.transfer_point_errors(point_errors)
-        sd.transfer_noise_vector(noise_vector)
+        sd.transfer_weight_vector(weight_vector)
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)

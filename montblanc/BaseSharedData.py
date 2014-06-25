@@ -117,7 +117,7 @@ class BaseSharedData(SharedData):
         self.jones_shape = (4,nbl,nchan,ntime,nsrc)
         self.vis_shape = self.bayes_data_shape
         self.chi_sqrd_result_shape = (nbl,nchan,ntime)
-        self.noise_vector_shape = (nbl,nchan,ntime)
+        self.weight_vector_shape = self.bayes_data_shape
 
         # Set up gaussian scaling parameters
         # Derived from https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L493
@@ -232,7 +232,7 @@ class GPUSharedData(BaseSharedData):
     jones_gpu = ArrayData()
     vis_gpu = ArrayData()
     chi_sqrd_result_gpu = ArrayData()
-    noise_vector_gpu = ArrayData()
+    weight_vector_gpu = ArrayData()
 
     def __init__(self, na=7, nchan=8, ntime=5, npsrc=10, ngsrc=10, dtype=np.float32, **kwargs):
         """
@@ -292,7 +292,7 @@ class GPUSharedData(BaseSharedData):
 
         self.wavelength_gpu = gpuarray.zeros(shape=self.wavelength_shape,dtype=self.ft)
         self.point_errors_gpu = gpuarray.zeros(shape=self.point_errors_shape,dtype=self.ft)
-        self.noise_vector_gpu = gpuarray.zeros(shape=self.noise_vector_shape,dtype=self.ft)
+        self.weight_vector_gpu = gpuarray.zeros(shape=self.weight_vector_shape,dtype=self.ft)
         self.bayes_data_gpu = gpuarray.zeros(shape=self.bayes_data_shape,dtype=self.ct)
 
         # Create the output data arrays on the GPU
@@ -309,7 +309,7 @@ class GPUSharedData(BaseSharedData):
             self.gauss_shape_gpu,
             self.wavelength_gpu,
             self.point_errors_gpu,
-            self.noise_vector_gpu,
+            self.weight_vector_gpu,
             self.bayes_data_gpu,
             self.jones_gpu,
             self.vis_gpu,
@@ -376,10 +376,10 @@ class GPUSharedData(BaseSharedData):
         if self.store_cpu is True: self.bayes_data = bayes_data
         self.bayes_data_gpu.set(bayes_data)
 
-    def transfer_noise_vector(self, noise_vector):
-        self.check_array('noise_vector', noise_vector, self.noise_vector_gpu)
-        if self.store_cpu is True: self.noise_vector = noise_vector
-        self.noise_vector_gpu.set(noise_vector)
+    def transfer_weight_vector(self, weight_vector):
+        self.check_array('weight_vector', weight_vector, self.weight_vector_gpu)
+        if self.store_cpu is True: self.weight_vector = weight_vector
+        self.weight_vector_gpu.set(weight_vector)
 
     def __str__(self):
         return super(GPUSharedData, self).__str__() + \
@@ -624,9 +624,13 @@ class GPUSharedData(BaseSharedData):
         """
         return np.add.reduce(self.compute_ebk_jones(), axis=4)        
 
-    def compute_chi_sqrd_sum_terms(self):
+    def compute_chi_sqrd_sum_terms(self, weight_vector=False):
         """
         Computes the terms of the chi squared sum, but does not perform the sum itself.
+
+        Parameters:
+            weight_vector : boolean
+                True if the chi squared test terms should be computed with a noise vector
 
         Returns a (nbl,nchan,ntime) matrix of floating point scalars.
         """
@@ -636,9 +640,23 @@ class GPUSharedData(BaseSharedData):
             # Take the difference between the visibilities and the model
             # (4,nbl,nchan,ntime)
             d = sd.vis - sd.bayes_data
+
+            # Square of the real and imaginary components
+            real_term, imag_term = d.real**2, d.imag**2
+
+            # Multiply by the weight vector if required
+            if weight_vector is True:
+                real_term *= sd.weight_vector
+                imag_term *= sd.weight_vector
+
             # Reduces a dimension so that we have (nbl,nchan,ntime)
-            # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
-            chi_sqrd_terms = (np.add.reduce(d.real**2,axis=0) + np.add.reduce(d.imag**2,axis=0))
+            # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + 
+            # ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
+
+            # Sum the real and imaginary terms together
+            # for the final result.
+            chi_sqrd_terms = np.add.reduce(real_term,axis=0) + np.add.reduce(imag_term,axis=0)
+
             assert chi_sqrd_terms.shape == (sd.nbl, sd.nchan, sd.ntime)
 
             return chi_sqrd_terms
@@ -646,11 +664,11 @@ class GPUSharedData(BaseSharedData):
         except AttributeError as e:
             self.rethrow_attribute_exception(e)
 
-    def compute_chi_sqrd(self, noise_vector=False):
+    def compute_chi_sqrd(self, weight_vector=False):
         """ Computes the chi squared value.
 
         Parameters:
-            noise_vector : boolean
+            weight_vector : boolean
                 True if the chi squared test should be computed with a noise vector
 
         Returns a floating point scalar values
@@ -658,20 +676,15 @@ class GPUSharedData(BaseSharedData):
         sd = self
 
         # Do the chi squared sum on the CPU.
-        # If we're using the noise vector, sum and
+        # If we're not using the weight vector, sum and
         # divide by the sigma squared.
-        # Otherwise, divide by the noise vector and
-        # then sum
-        chi_sqrd_sum_terms = self.compute_chi_sqrd_sum_terms()
-
+        # Otherwise, simply return the sum
         try:
-            if not noise_vector:
-                return (chi_sqrd_sum_terms.sum() / sd.sigma_sqrd)
-            else:
-                return (chi_sqrd_sum_terms / sd.noise_vector).sum()
+            term_sum = self.compute_chi_sqrd_sum_terms(weight_vector=weight_vector).sum()
+            return term_sum if weight_vector is True else term_sum / sd.sigma_sqrd
         except AttributeError as e:
             self.rethrow_attribute_exception(e)
 
-    def compute_biro_chi_sqrd(self, noise_vector=False):
+    def compute_biro_chi_sqrd(self, weight_vector=False):
         self.vis = self.compute_ebk_vis()
-        return self.compute_chi_sqrd(noise_vector=noise_vector)
+        return self.compute_chi_sqrd(weight_vector=weight_vector)

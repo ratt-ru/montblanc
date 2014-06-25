@@ -17,7 +17,6 @@ from montblanc.RimeBK import RimeBK
 from montblanc.RimeEBK import RimeEBK
 from montblanc.RimeJonesReduce import RimeJonesReduce
 from montblanc.RimeChiSquared import RimeChiSquared
-from montblanc.RimeChiSquaredReduce import RimeChiSquaredReduce
 
 from montblanc.MeasurementSetSharedData import MeasurementSetSharedData
 
@@ -83,8 +82,13 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
 
 	Keyword Arguments
 	-----------------
-	noise_vector : boolean
-		True if the chi squared should be computed with a noise vector.
+	init_weights : string
+		Indicates how the weight vector should be initialised from the Measurementset.
+		None - Don't initialise the weight vector.
+		'sigma' - Initialise from 'SIGMA_SPECTRUM' if present, else 'SIGMA'
+		'weight' - Initialise from 'WEIGHT_SPECTRUM' if present, else 'WEIGHT'
+	weight_vector : boolean
+		True if the chi squared should be computed using a weighting for each value.
 		False if it should be computed with a single sigma squared value.
 	store_cpu : boolean
 		True if copies of the numpy arrays should be stored on the shared data object
@@ -116,12 +120,14 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
 	if sd.ngsrc > 0:
 		nodes.append(RimeEBK(gaussian=True))
 
+	# Decide whether to use the weight vector
+	use_weight_vector = kwargs.get('weight_vector', False)
+
 	# Followed by a reduction,
 	# a chi squared difference between the Bayesian Model and the Visibilities
 	# and a further reduction to produce the Chi Squared Value
 	nodes.extend([RimeJonesReduce(),
-		RimeChiSquared(),
-		RimeChiSquaredReduce(noise_vector=kwargs.get('noise_vector', False))])
+		RimeChiSquared(weight_vector=use_weight_vector)])
 
 	return Pipeline(nodes), sd
 

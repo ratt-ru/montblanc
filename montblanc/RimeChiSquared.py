@@ -1,17 +1,20 @@
+import numpy as np
 import string
+import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
+from pycuda.reduction import ReductionKernel
 
 import montblanc
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
-    'BLOCKDIMX' : 256,
+    'BLOCKDIMX' : 1024,
     'BLOCKDIMY' : 1,
     'BLOCKDIMZ' : 1
 }
 
 DOUBLE_PARAMS = {
-    'BLOCKDIMX' : 256,
+    'BLOCKDIMX' : 1024,
     'BLOCKDIMY' : 1,
     'BLOCKDIMZ' : 1
 }
@@ -33,12 +36,14 @@ KERNEL_TEMPLATE = string.Template("""
 
 template <
     typename T,
+    bool apply_weights=false,
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
 void rime_chi_squared_diff_impl(
     typename Tr::ct * data_vis,
     typename Tr::ct * model_vis,
+    typename Tr::ft * weights,
     T * output)
 {
     // data_vis and model_vis matrix have dimensions
@@ -55,53 +60,78 @@ void rime_chi_squared_diff_impl(
     typename Tr::ct delta = data_vis[i];
     typename Tr::ct model = model_vis[i];
     delta.x -= model.x; delta.y -= model.y;
-    typename Tr::ct sum = Po::make_ct(delta.x*delta.x, delta.y*delta.y);
+    delta.x *= delta.x; delta.y *= delta.y;
+    if(apply_weights) { T w = weights[i]; delta.x *= w; delta.y *= w; }
+    typename Tr::ct sum = Po::make_ct(delta.x, delta.y);
 
     i += NBL*NCHAN*NTIME;
     delta = data_vis[i]; model = model_vis[i];
     delta.x -= model.x; delta.y -= model.y;
-    sum.x += delta.x*delta.x; sum.y += delta.y*delta.y;
+    delta.x *= delta.x; delta.y *= delta.y;
+    if(apply_weights) { T w = weights[i]; delta.x *= w; delta.y *= w; }
+    sum.x += delta.x; sum.y += delta.y;
 
     i += NBL*NCHAN*NTIME;
     delta = data_vis[i]; model = model_vis[i];
     delta.x -= model.x; delta.y -= model.y;
-    sum.x += delta.x*delta.x; sum.y += delta.y*delta.y;
+    delta.x *= delta.x; delta.y *= delta.y;
+    if(apply_weights) { T w = weights[i]; delta.x *= w; delta.y *= w; }
+    sum.x += delta.x; sum.y += delta.y;
 
     i += NBL*NCHAN*NTIME;
     delta = data_vis[i]; model = model_vis[i];
     delta.x -= model.x; delta.y -= model.y;
-    sum.x += delta.x*delta.x; sum.y += delta.y*delta.y;
+    delta.x *= delta.x; delta.y *= delta.y;
+    if(apply_weights) { T w = weights[i]; delta.x *= w; delta.y *= w; }
+    sum.x += delta.x; sum.y += delta.y;
 
     output[blockIdx.x*blockDim.x + threadIdx.x] = sum.x + sum.y;
 }
 
 extern "C" {
 
-__global__
-void rime_chi_squared_diff_float(
-    float2 * data_vis,
-    float2 * model_vis,
-    float * output)
-{
-    rime_chi_squared_diff_impl(data_vis, model_vis, output);
+// Macro that stamps out different kernels, depending on
+// - whether we're handling floats or doubles
+// - point sources or gaussian sources
+// Arguments
+// - ft: The floating point type. Should be float/double.
+// - ct: The complex type. Should be float2/double2.
+// - apply_weights: boolean indicating whether we're weighting our visibilities
+// - symbol: u or w depending on whether we're handling unweighted/weighted visibilities.
+//            
+#define stamp_chi_sqrd_fn(ft, ct, apply_weights, symbol) \
+__global__ void \
+rime_chi_squared_ ## symbol ## diff_ ## ft( \
+    ct * data_vis, \
+    ct * model_vis, \
+    ft * weights, \
+    ft * output) \
+{ \
+    rime_chi_squared_diff_impl<ft, apply_weights>(data_vis,model_vis,weights,output); \
 }
 
-__global__
-void rime_chi_squared_diff_double(
-    double2 * data_vis,
-    double2 * model_vis,
-    double * output)
-{
-    rime_chi_squared_diff_impl(data_vis, model_vis, output);
-}
+stamp_chi_sqrd_fn(float,float2,false,u)
+stamp_chi_sqrd_fn(double,double2,false,u)
+stamp_chi_sqrd_fn(float,float2,true,w)
+stamp_chi_sqrd_fn(double,double2,true,w)
 
 } // extern "C" {
 """)
 
 class RimeChiSquared(Node):
-    def __init__(self):
+    def __init__(self, weight_vector=False):
+        """
+        Parameters:
+        -----------
+        weight_vector : boolean
+            True if each value within the sum of a Chi Squared should
+            be individually multiplied by a weight, and then summed.
+
+            False if no weighting should be applied.
+        """
         super(RimeChiSquared, self).__init__()
- 
+        self.weight_vector = weight_vector
+
     def initialise(self, shared_data):
         sd = shared_data
 
@@ -110,13 +140,16 @@ class RimeChiSquared(Node):
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
-            options=['-lineinfo','-keep'],
+            options=['-lineinfo','--maxrregcount','32'],
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
-        kname = 'rime_chi_squared_diff_float' \
-            if sd.is_float() is True else \
-            'rime_chi_squared_diff_double'
+        kname = 'rime_chi_squared_' + \
+            ('w' if self.weight_vector else 'u') + \
+            'diff_' + \
+            ('float' if sd.is_float() else 'double')
+
+        #print 'kernel', kname
 
         self.kernel = self.mod.get_function(kname)
 
@@ -141,9 +174,23 @@ class RimeChiSquared(Node):
     def execute(self, shared_data):
         sd = shared_data
 
-        self.kernel(sd.vis_gpu, sd.bayes_data_gpu,
+        weight_vector_gpu = sd.weight_vector_gpu if self.weight_vector is True \
+            else np.intp(0)
+
+        self.kernel(sd.vis_gpu, sd.bayes_data_gpu, weight_vector_gpu,
             sd.chi_sqrd_result_gpu,
             **self.get_kernel_params(sd))
+
+        # If we're not catering for a weight vector,
+        # call the simple reduction and divide by sigma squared.
+        # Otherwise, call the more complicated reduction kernel that
+        # internally divides by the noise vector
+        gpu_sum = gpuarray.sum(sd.chi_sqrd_result_gpu).get()
+
+        if not self.weight_vector:
+            sd.set_X2(gpu_sum/sd.sigma_sqrd)
+        else:
+            sd.set_X2(gpu_sum)        
             
     def post_execution(self, shared_data):
         pass
