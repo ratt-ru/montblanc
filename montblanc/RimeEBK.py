@@ -229,7 +229,7 @@ void rime_jones_EBK_impl(
         E_q = Po::min(E_q, E_beam_clip);
         E_q = Po::cos(E_q);
         E_q = E_q*E_q*E_q;
-        real *= E_q; imag *= E_q;
+        real /= E_q; imag /= E_q;
     }
 
     // Index into the jones matrices
