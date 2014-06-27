@@ -543,7 +543,7 @@ class GPUSharedData(BaseSharedData):
 
             assert E_q.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
 
-            return E_p*E_q
+            return E_p/E_q
         except AttributeError as e:
             self.rethrow_attribute_exception(e)
 
