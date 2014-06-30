@@ -478,6 +478,29 @@ class GPUSharedData(BaseSharedData):
         except AttributeError as e:
             self.rethrow_attribute_exception(e)
 
+    def compute_per_ant_e_jones_scalar(self):
+        sd = self
+
+        try:
+            # Compute the offsets for different antenna
+            # Broadcasting here produces, na x ntime x nsrc
+            l_off = sd.lm[0] - sd.point_errors[0,:,:,np.newaxis]
+            m_off = sd.lm[1] - sd.point_errors[1,:,:,np.newaxis]
+            E_p = np.sqrt(l_off**2 + m_off**2)
+
+            assert E_p.shape == (sd.na, sd.ntime, sd.nsrc)
+
+            # Broadcasting here produces, nbl x nchan x ntime x nsrc
+            E_p = sd.beam_width*1e-9*E_p[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
+            np.clip(E_p, np.finfo(sd.ft).min, sd.E_beam_clip, E_p)
+            E_p = np.cos(E_p)**3
+
+            assert E_p.shape == (sd.na, sd.nchan, sd.ntime, sd.nsrc)
+
+            return E_p
+        except AttributeError as e:
+            self.rethrow_attribute_exception(e)
+
     def compute_e_jones_scalar(self):
         """
         Computes the scalar E (analytic cos^3) term of the RIME
