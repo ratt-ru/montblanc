@@ -8,7 +8,7 @@ import montblanc
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
-    'BLOCKDIMX' : 256,
+    'BLOCKDIMX' : 1024,
     'BLOCKDIMY' : 1,
     'BLOCKDIMZ' : 1
 }
