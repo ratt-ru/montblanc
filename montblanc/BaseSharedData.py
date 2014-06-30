@@ -479,6 +479,12 @@ class GPUSharedData(BaseSharedData):
             self.rethrow_attribute_exception(e)
 
     def compute_per_ant_e_jones_scalar(self):
+        """
+        Computes the scalar E (analytic cos^3) term of the RIME per antenna.
+
+        returns a (na,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+
         sd = self
 
         try:
