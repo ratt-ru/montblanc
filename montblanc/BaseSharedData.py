@@ -399,13 +399,45 @@ class GPUSharedData(BaseSharedData):
         """
         sd = self
 
+        # OK, try obtain the same results with the fwhm factored out!
+        # u1 = u*em - v*el
+        # v1 = u*el + v*em
+        u1 = (np.outer(sd.uvw[0], sd.gauss_shape[1]) - np.outer(sd.uvw[1], sd.gauss_shape[0])).reshape(sd.nbl,sd.ntime,sd.ngsrc)
+        v1 = (np.outer(sd.uvw[0], sd.gauss_shape[0]) + np.outer(sd.uvw[1], sd.gauss_shape[1])).reshape(sd.nbl,sd.ntime,sd.ngsrc)
+
+        # Obvious given the above reshape
+        assert u1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
+        assert v1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
+
+        # Construct the scaling factor, this includes the wavelength/frequency
+        # into the mix.
+        scale_uv = self.gauss_scale/sd.wavelength[:,np.newaxis]
+        # Should produce nchan x 1
+        assert scale_uv.shape == (sd.nchan,1)
+
+        # u1 *= R, the ratio of the gaussian axis
+        u1 *= sd.gauss_shape[2][np.newaxis,np.newaxis,:]
+        # Multiply u1 and v1 by the scaling factor
+        u1 = u1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
+        v1 = v1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
+
+        return np.exp(-(u1**2 + v1**2))
+
+    def compute_gaussian_shape_with_fwhm(self):
+        """
+        Compute the shape values for the gaussian sources with fwhm factored in.
+
+        Returns a (nbl, nchan, ntime, ngsrc) matrix of floating point scalars.
+        """
+        sd = self
+
         # 1.0/sqrt(e_l^2 + e_m^2).
         fwhm_inv = 1.0/np.sqrt(sd.gauss_shape[0]**2 + sd.gauss_shape[1]**2)
         # Vector of ngsrc
         assert fwhm_inv.shape == (sd.ngsrc,)
 
-        cos_pa = sd.gauss_shape[0]*fwhm_inv
-        sin_pa = sd.gauss_shape[1]*fwhm_inv
+        cos_pa = sd.gauss_shape[1]*fwhm_inv    # em / fwhm
+        sin_pa = sd.gauss_shape[0]*fwhm_inv    # el / fwhm
 
         # u1 = u*cos_pa - v*sin_pa
         # v1 = u*sin_pa + v*cos_pa

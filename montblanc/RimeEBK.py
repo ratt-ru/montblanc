@@ -180,18 +180,13 @@ void rime_jones_EBK_impl(
         i = SRC;    typename Tr::ft el = gauss_shape[i];
         i += NGSRC; typename Tr::ft em = gauss_shape[i];
 
-        // Calculate the inverse fwhm term
-        typename Tr::ft fwhm_inv = 1.0/Po::sqrt(el*el + em*em);
-        typename Tr::ft cos_pa = el*fwhm_inv;
-        typename Tr::ft sin_pa = em*fwhm_inv;
-
         int j = threadIdx.z*BLOCKDIMY + threadIdx.y;
 
-        typename Tr::ft u1 = u[j]*cos_pa - v[j]*sin_pa;
-        typename Tr::ft v1 = u[j]*sin_pa + v[j]*cos_pa;
+        typename Tr::ft u1 = u[j]*em - v[j]*el;
+        typename Tr::ft v1 = u[j]*el + v[j]*em;
 
         // Work out the scaling factor.
-        typename Tr::ft scale_uv = GAUSS_SCALE/(fwhm_inv*wave[threadIdx.y]);
+        typename Tr::ft scale_uv = GAUSS_SCALE/wave[threadIdx.y];
 
         // Load in the ratio parameter of the gaussian shape
         i += NGSRC; typename Tr::ft R = gauss_shape[i];

@@ -189,7 +189,7 @@ class TestRimes(unittest.TestCase):
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,
+        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32,
             device=pycuda.autoinit.device)
         
         self.multiply_test_impl(sd)
@@ -292,12 +292,30 @@ class TestRimes(unittest.TestCase):
 
         self.reduce_test_impl(sd)
 
+    def gauss_test_impl(self, shared_data, cmp=None):
+        """ Type independent implementation of the gaussian tests """
+        if cmp is None: cmp = {}
+
+        sd = shared_data
+
+        gs = sd.compute_gaussian_shape()
+        gs_with_fwhm = sd.compute_gaussian_shape_with_fwhm()
+
+        self.assertTrue(np.allclose(gs,gs_with_fwhm, **cmp))
+
+    def test_gauss_double(self):
+        """ Gaussian with fwhm and without is the same """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10, ngsrc=10,
+            device=pycuda.autoinit.device)
+
+        self.gauss_test_impl(sd)
+
     def test_gauss_float(self):
-        """ single precision gauss test """
+        """ Gaussian with fwhm and without is the same """
         sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10, ngsrc=10,dtype=np.float32,
             device=pycuda.autoinit.device)
 
-        sd.compute_gaussian_shape()
+        self.gauss_test_impl(sd, cmp={'rtol' : 1e-4 })
 
     def time_predict(self, sd):
         na=sd.na          # Number of antenna
