@@ -374,12 +374,12 @@ class RimeEBK(Node):
             # Note the null pointer passed for gauss_shape here.
             self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu, np.intp(0),
                 sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
-                sd.ref_wave, sd.beam_width, sd.E_beam_clip,
+                sd.ref_wave, sd.beam_width, sd.beam_clip,
     			**self.get_kernel_params(sd))
         elif self.gaussian and sd.ngsrc > 0:
             self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu, sd.gauss_shape_gpu,
                 sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
-                sd.ref_wave, sd.beam_width, sd.E_beam_clip,
+                sd.ref_wave, sd.beam_width, sd.beam_clip,
                 **self.get_kernel_params(sd))
 
     def post_execution(self, shared_data):

@@ -5,10 +5,12 @@ import pycuda.gpuarray as gpuarray
 from pyrap.tables import table
 
 import montblanc
-import montblanc.BaseSharedData as BaseSharedData
-from montblanc.BaseSharedData import GPUSharedData
+import montblanc.BaseSharedData
 
-class MeasurementSetSharedData(GPUSharedData):
+from montblanc.BaseSharedData import get_nr_of_baselines
+from montblanc.BiroSharedData import BiroSharedData
+
+class MeasurementSetSharedData(BiroSharedData):
     ANTENNA_TABLE = "ANTENNA"
     SPECTRAL_WINDOW = "SPECTRAL_WINDOW"
 
@@ -42,7 +44,7 @@ class MeasurementSetSharedData(GPUSharedData):
 
         # Determine the problem dimensions
         na = len(ta.getcol("NAME"))
-        nbl = BaseSharedData.get_nr_of_baselines(na)
+        nbl = get_nr_of_baselines(na)
         nchan = f.size
         ntime = uvw.shape[1] // nbl
 

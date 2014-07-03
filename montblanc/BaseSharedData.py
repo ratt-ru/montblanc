@@ -1,5 +1,8 @@
-import sys
 import numpy as np
+import sys
+import types
+
+from weakref import WeakKeyDictionary
 
 import pycuda
 import pycuda.driver as cuda
@@ -7,36 +10,91 @@ import pycuda.gpuarray as gpuarray
 
 import montblanc
 
-class Parameter(object):
-    """ Unused Descriptor Class. For gpuarrays """
-    def __init__(self, value=None):
-#        if value is None:
-#            value = []
+class ArrayRecord(object):
+    """ Records information about an array """
+    def __init__(self, name, shape, dtype, registrant, has_cpu_ary, has_gpu_ary):
+        self.name = name
+        self.shape = shape
+        self.dtype = dtype
+        self.registrant = registrant
+        self.has_cpu_ary = has_cpu_ary
+        self.has_gpu_ary = has_gpu_ary
 
-        self.value = value
+class PropertyRecord(object):
+    """ Records information about a property """
+    def __init__(self, name, dtype, default, registrant):
+        self.name = name
+        self.dtype = dtype
+        self.default = default
+        self.registrant = registrant
+
+class PropertyDescriptor(object):
+    """ Descriptor class for properties """
+    def __init__(self, record_key, default=None, ):
+        self.default = default
+        self.record_key = record_key
+        self.data = WeakKeyDictionary()
 
     def __get__(self, instance, owner):
-        return self.value
+        return self.data.get(instance,self.default)
+
+    def __set__(self, instance, value):
+        dtype = instance.properties[self.record_key].dtype
+        self.data[instance] = dtype(value)
+
+    def __delete__(self, instance):
+        del self.data[instance]
+
+class CPUArrayDescriptor(object):
+    """ Descriptor class for NumPy ndarrays arrays on the CPU """
+    def __init__(self, record_key, default=None):
+        self.default = default
+        self.record_key = record_key
+        self.data = WeakKeyDictionary()
+
+    def __get__(self, instance, owner):
+        return self.data.get(instance,self.default)
+
+    def __set__(self, instance, value):
+        instance.check_array(self.record_key, value)
+        self.data[instance] = value
+
+    def __delete__(self, instance):
+        del self.data[instance]
+
+class GPUArrayDescriptor(object):
+    """ Descriptor class for pycuda.gpuarrays on the GPU """
+    def __init__(self, record_key, default=None):
+        self.default = default
+        self.record_key = record_key
+        self.data = WeakKeyDictionary()
+
+    def __get__(self, instance, owner):
+        return self.data.get(instance,self.default)
+
+    def __set__(self, instance, value):
+        instance.check_array(self.record_key, value)
+        self.data[instance] = value
+
+    def __delete__(self, instance):
+        del self.data[instance]
+
+class Parameter(object):
+    """ Descriptor class for describing parameters """
+    def __init__(self, default=None):
+        self.default = default
+        self.data = WeakKeyDictionary()
+
+    def __get__(self, instance, owner):
+        return self.data.get(instance,self.default)
 
     def __set__(self, instance, value):
         if value < 0:
             raise ValueError('Negative parameter value: %s' % value )
-        self.value = value
+        self.data[instance] = value
 
-
-class ArrayData(object):
-    """ Unused Descriptor Class. For gpuarrays """
-    def __init__(self, value=None):
-#        if value is None:
-#            value = []
-
-        self.value = value
-
-    def __get__(self, instance, owner):
-        return self.value
-
-    def __set__(self, instance, value):
-        self.value = value
+    def __delete__(self, instance):
+        del self.data[instance]
 
 def get_nr_of_baselines(na):
     """ Compute the number of baselines for the 
@@ -52,191 +110,31 @@ class SharedData(object):
     """
     pass
 
+DEFAULT_NA=3
+DEFAULT_NBL=get_nr_of_baselines(DEFAULT_NA)
+DEFAULT_NCHAN=4
+DEFAULT_NTIME=10
+DEFAULT_NPSRC=2
+DEFAULT_NGSRC=1
+DEFAULT_NSRC=DEFAULT_NPSRC + DEFAULT_NGSRC
+DEFAULT_NVIS=DEFAULT_NBL*DEFAULT_NCHAN*DEFAULT_NTIME
+DEFAULT_DTYPE=np.float32
+
 class BaseSharedData(SharedData):
     """ Class defining the RIME Simulation Parameters. """
-    na = Parameter(7)
-    nbl = Parameter(get_nr_of_baselines(7))
-    nchan = Parameter(8)
-    ntime = Parameter(5)
-    npsrc = Parameter(10)
-    ngsrc = Parameter(10)
-    nsrc = Parameter(20)
-    nvis = Parameter(1)
+    na = Parameter(DEFAULT_NA)
+    nbl = Parameter(DEFAULT_NBL)
+    nchan = Parameter(DEFAULT_NCHAN)
+    ntime = Parameter(DEFAULT_NTIME)
+    npsrc = Parameter(DEFAULT_NPSRC)
+    ngsrc = Parameter(DEFAULT_NGSRC)
+    nsrc = Parameter(DEFAULT_NSRC)
+    nvis = Parameter(DEFAULT_NVIS)
 
-    def __init__(self, na=7, nchan=8, ntime=5, npsrc=10, ngsrc=10, dtype=np.float64):
-        super(BaseSharedData, self).__init__()
-        self.set_params(na,nchan,ntime,npsrc,ngsrc,dtype)
-
-    def set_params(self, na, nchan, ntime, npsrc, ngsrc, dtype=np.float32):
-        # Configure our problem dimensions. Number of
-        # - antenna
-        # - baselines
-        # - channels
-        # - timesteps
-        # - point sources
-        # - gaussian sources
-        self.na = na
-        self.nbl = nbl = get_nr_of_baselines(na)
-        self.nchan = nchan
-        self.ntime = ntime
-        self.npsrc = npsrc
-        self.ngsrc = ngsrc
-        self.nsrc = nsrc = npsrc + ngsrc
-        self.nvis = nbl*nchan*ntime
-
-        if nsrc == 0:
-            raise ValueError, 'The number of sources, or, the sum of npsrc and ngsrc, must be greater than zero'
-
-        # Configure our floating point and complex types
-        if dtype == np.float32:
-            self.ct = np.complex64
-        elif dtype == np.float64:
-            self.ct = np.complex128
-        else:
-            raise TypeError, 'Must specify either np.float32 or np.float64 for dtype'
-
-        self.ft = dtype
-
-        # UVW coordinates per baseline, changing over time
-        self.uvw_shape = (3, nbl, ntime)
-        # Antenna Pairs per baseline, changing over time
-        self.ant_pairs_shape = (2, nbl, ntime)
-
-        # Point Sources
-        self.lm_shape = (2, nsrc)
-        self.brightness_shape = (5, ntime, nsrc)
-
-        # Gaussian Shapes
-        self.gauss_shape_shape = (3, ngsrc)
-
-        self.wavelength_shape = (nchan)
-        self.point_errors_shape = (2, na, ntime)
-        self.bayes_data_shape = (4,nbl,nchan,ntime)
-
-        # Set up output data shapes
-        self.jones_shape = (4,nbl,nchan,ntime,nsrc)
-        self.vis_shape = self.bayes_data_shape
-        self.chi_sqrd_result_shape = (nbl,nchan,ntime)
-        self.weight_vector_shape = self.bayes_data_shape
-
-        # Set up gaussian scaling parameters
-        # Derived from https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L493
-        # and https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L602
-        self.fwhm2int = 1.0/np.sqrt(np.log(256))
-        # Note that we don't divide by speed of light here. meqtrees code operates
-        # on frequency, while we're dealing with wavelengths.
-        self.gauss_scale = self.fwhm2int*np.sqrt(2)*np.pi
-
-        # Initialise sigma squared term and X2 result
-        # with default values
-        self.set_sigma_sqrd(1.0)
-        self.set_X2(0.0)
-
-        # Initialise the cos3 constant
-        self.set_beam_width(65)
-
-        # Initialise the beam clipping paramter
-        self.set_beam_clip(1.0881)
-
-    def get_params(self):
-        sd = self
-        
-        return {
-            'na' : sd.na,
-            'nbl' : sd.nbl,
-            'nchan' : sd.nchan,
-            'ntime' : sd.ntime,
-            'npsrc' : sd.npsrc,
-            'ngsrc' : sd.ngsrc,
-            'nsrc'  : sd.nsrc,
-            'nvis' : sd.nvis,
-            'beam_width': sd.beam_width,
-            'beam_clip' : sd.E_beam_clip,
-            'sigma_sqrd' : sd.sigma_sqrd,
-            'gauss_scale' : sd.gauss_scale
-        }
-
-    def is_float(self):
-        return self.ft == np.float32
-
-    def is_double(self):
-        return self.ft == np.float64
-
-    def set_beam_width(self, beam_width):
+    def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE, **kwargs):
         """
-        Set the beam width used in the analytic E term.
-
-        Should be set in metres.
-
-        >>> sd.set_beam_width(65)
-
-        """
-        self.beam_width = self.ft(beam_width)
-
-    def set_beam_clip(self, clip):
-        """ Set the beam clipping parameter used in the analytic E term """
-        self.E_beam_clip = self.ft(clip)
-
-    def set_ref_wave(self, ref_wave):
-        """ Set the reference wavelength """
-        self.ref_wave = self.ft(ref_wave)
-
-    def set_sigma_sqrd(self, sigma_sqrd):
-        """ Set the sigma squared term, used
-        for chi squared """
-        self.sigma_sqrd = self.ft(sigma_sqrd)
-
-    def set_X2(self, X2):
-        """ Set the chi squared result. Useful for sensibly initialising it """
-        self.X2 = self.ft(X2)
-
-    def get_default_ant_pairs(self):
-        """
-        Return an np.array(shape=(2, nbl, ntime), dtype=np.int32]) containing the
-        default antenna pairs for each baseline at each timestep.
-        """
-        # Create the antenna pair mapping, from upper triangle indices
-        # based on the number of antenna. 
-        sd = self
-
-        tmp = np.int32(np.triu_indices(sd.na,1))
-        tmp = np.tile(tmp,sd.ntime).reshape(2,sd.ntime,sd.nbl)
-        tmp = np.rollaxis(tmp, axis=2, start=1)
-        assert tmp.shape == sd.ant_pairs_shape
-        return tmp.copy()
-
-    def __str__(self):
-        return "RIME Simulation Dimensions" + \
-            "\nAntenna:          " + str(self.na) + \
-            "\nBaselines:        " + str(self.nbl) + \
-            "\nChannels:         " + str(self.nchan) + \
-            "\nTimesteps:        " + str(self.ntime) + \
-            "\nPoint Sources:    " + str(self.npsrc) + \
-            "\nGaussian Sources: " + str(self.ngsrc) + \
-            "\nTotal Sources:    " + str(self.nsrc)
-
-class GPUSharedData(BaseSharedData):
-    """
-    Class extending BaseSharedData to add GPU arrays
-    for holding simulation input and output.
-    """
-    uvw_gpu = ArrayData()
-    ant_pairs_gpu = ArrayData()
-    lm_gpu = ArrayData()
-    brightness_gpu = ArrayData()
-    gauss_shape_gpu = ArrayData()
-    wavelength_gpu = ArrayData()
-    point_errors_gpu = ArrayData()
-    bayes_data_gpu = ArrayData()
-
-    jones_gpu = ArrayData()
-    vis_gpu = ArrayData()
-    chi_sqrd_result_gpu = ArrayData()
-    weight_vector_gpu = ArrayData()
-
-    def __init__(self, na=7, nchan=8, ntime=5, npsrc=10, ngsrc=10, dtype=np.float32, **kwargs):
-        """
-        GPUSharedData constructor
+        BaseSharedData Constructor
 
         Parameters:
             na : integer
@@ -257,9 +155,40 @@ class GPUSharedData(BaseSharedData):
             store_cpu: boolean
                 if True, store cpu versions of the kernel arrays
                 within the GPUSharedData object.
-    """
-        super(GPUSharedData, self).__init__(na=na,nchan=nchan,ntime=ntime, \
-            npsrc=npsrc,ngsrc=ngsrc,dtype=dtype)
+        """
+
+        super(BaseSharedData, self).__init__()
+
+        # Configure our problem dimensions. Number of
+        # - antenna
+        # - baselines
+        # - channels
+        # - timesteps
+        # - point sources
+        # - gaussian sources
+        self.na = na
+        self.nbl = nbl = get_nr_of_baselines(na)
+        self.nchan = nchan
+        self.ntime = ntime
+        self.npsrc = npsrc
+        self.ngsrc = ngsrc
+        self.nsrc = nsrc = npsrc + ngsrc
+        self.nvis = nbl*nchan*ntime
+
+        if nsrc == 0:
+            raise ValueError, ('The number of sources, or, ',
+                'the sum of npsrc and ngsrc, must be greater than zero')
+
+        # Configure our floating point and complex types
+        if dtype == np.float32:
+            self.ct = ct = np.complex64
+        elif dtype == np.float64:
+            self.ct = ct = np.complex128
+        else:
+            raise TypeError, ('Must specify either np.float32 ',
+                'or np.float64 for dtype')
+
+        self.ft = ft = dtype
 
         # Store the device, choosing the default if not specified
         self.device = kwargs.get('device')
@@ -268,484 +197,405 @@ class GPUSharedData(BaseSharedData):
             import pycuda.autoinit
             self.device = pycuda.autoinit.device
 
-        # Should we store CPU versions of the GPU arrays
-        self.store_cpu = kwargs.get('store_cpu', False)
-
         # Figure out the integer compute cability of the device
         cc_tuple = self.device.compute_capability()
         # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
         self.cc = np.int32(np.dot(cc_tuple, (100,10)))
 
-        # Create the input data arrays on the GPU
-        self.uvw_gpu = gpuarray.zeros(shape=self.uvw_shape,dtype=self.ft)
-        self.ant_pairs_gpu = gpuarray.zeros(shape=self.ant_pairs_shape,dtype=np.int32)
+        # Dictionaries to store records about our arrays and properties
+        self.arrays = {}
+        self.properties = {}
 
-        self.lm_gpu = gpuarray.zeros(shape=self.lm_shape,dtype=self.ft)
-        self.brightness_gpu = gpuarray.zeros(shape=self.brightness_shape,dtype=self.ft)
+        # Should we store CPU versions of the GPU arrays
+        self.store_cpu = kwargs.get('store_cpu', False)
 
-        # We could have zero gaussian sources, in which case PyCUDA falls over trying
-        # to fill a zero length array.
-        if np.product(self.gauss_shape_shape) > 0:
-            self.gauss_shape_gpu = gpuarray.zeros(shape=self.gauss_shape_shape,dtype=self.ft)
+    @staticmethod
+    def __cpu_name(name):
+        """ Constructs a name for the CPU version of the array """
+        return name + '_cpu'
+
+    @staticmethod
+    def __gpu_name(name):
+        """ Constructs a name for the GPU version of the array """
+        return name + '_gpu'
+
+    @staticmethod
+    def __transfer_method_name(name):
+        """ Constructs a transfer method name, given the array name """
+        return 'transfer_' + name
+
+    @staticmethod
+    def __shape_name(name):
+        """ Constructs a name for the array shape member, based on the array name """
+        return name + '_shape'
+
+    @staticmethod
+    def __dtype_name(name):
+        """ Constructs a name for the array data-type member, based on the array name """
+        return name + '_dtype'
+
+    @staticmethod
+    def __setter_name(name):
+        """ Constructs a name for the property, based on the property name """
+        return 'set_' + name
+
+    @staticmethod
+    def fmt_array_line(name,size,dtype,cpu,gpu,shape):
+        """ Format array parameters on an 80 character width line """
+        return '%-*s%-*s%-*s%-*s%-*s%-*s' % (
+            20,name,
+            10,size,
+            10,dtype,
+            4,cpu,
+            4,gpu,
+            20,shape)
+
+    @staticmethod
+    def fmt_property_line(name,dtype,default):
+        return '%-*s%-*s%-*s' % (
+            20,name,
+            10,dtype,
+            10,default)
+
+    @staticmethod
+    def fmt_bytes(nbytes):
+        """ Returns a human readable string, given the number of bytes """
+        for x in ['B','KB','MB','GB']:
+            if nbytes < 1024.0:
+                return "%3.1f%s" % (nbytes, x)
+            nbytes /= 1024.0
+        
+        return "%.1f%s" % (nbytes, 'TB')
+
+    @staticmethod
+    def array_bytes(shape, dtype):
+        """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
+        return np.product(shape)*np.dtype(dtype).itemsize
+
+    def bytes_required(self):
+        """ Returns the memory required by all arrays in bytes."""
+        return np.sum([BaseSharedData.array_bytes(a.shape,a.dtype) 
+            for a in self.arrays.itervalues()])
+
+    def mem_required(self):
+        """ Return a string representation of the total memory required """
+        return BaseSharedData.fmt_bytes(self.bytes_required())
+
+    def check_array(self, record_key, ary):
+        """
+        Check that the shape and type of the supplied array matches
+        our supplied record
+        """
+        record = self.arrays[record_key]
+
+        if record.shape != ary.shape:
+            raise ValueError, \
+                '%s\'s shape %s is different from the shape %s of the supplied argument.' \
+                % (record.name, record.shape, ary.shape)
+
+        if record.dtype != ary.dtype:
+            raise TypeError, \
+                '%s\'s type \'%s\' is different from the type \'%s\' of the supplied argument.' % \
+                    (record.name,
+                    np.dtype(record.dtype).name,
+                    np.dtype(ary.dtype).name)          
+
+    def handle_existing_array(self, old, new, **kwargs):
+        """
+        Compares old array record against new. Complains
+        if there's a mismatch in shape or type. 
+        """ 
+        should_replace = kwargs.get('replace',False)
+
+        # There's no existing record, or we've been told to replace it
+        if old is None or should_replace is True:
+            return
+
+        # Check that the shapes are the same
+        if old.shape != new.shape:
+            raise Warning, ('\'%s\' array ws already registered by '
+                '\'%s\ with shape %s different to the supplied %s.') % \
+                (old.name,
+                old.registrant,
+                old.shape,
+                new.shape,)
+
+        # Check that the types are the same
+        if old.dtype != new.dtype:
+            raise Warning, ('\'%s\' array is already registered by '
+                '\'%s\' with type %s different to the supplied %s.') % \
+                    (old.name, old.registrant,
+                    np.dtype(old.dtype).name,
+                    np.dtype(new.dtype).name,)
+
+    def register_array(self, name, shape, dtype, registrant, **kwargs):
+        """
+        Register an array with this SharedData object.
+
+        Parameters
+        ----------
+            name : string
+                name of the array.
+            shape : integer or tuple of integers
+                Shape of the array.
+            dtype : data-type
+                The data-type for the array.
+            registrant : string
+                Name of the entity registering this array.
+        
+        Keyword Arguments
+        -----------------
+            cpu : boolean
+                True if a ndarray called 'name_cpu' should be
+                created on the SharedData object.
+            gpu : boolean
+                True if a gpuarray called 'name_gpu' should be
+                created on the SharedData object.
+            shape_member : boolean
+                True if a member called 'name_shape' should be
+                created on the SharedData object.
+            dtype_member : boolean
+                True if a member called 'name_dtype' should be
+                created on the SharedData object.
+            replace : boolean
+                True if existing arrays should be replaced.
+        """
+        # Try and find an existing version of this array
+        old = self.arrays.get(name, None)
+
+        has_cpu_ary = kwargs.get('cpu', False)
+        has_gpu_ary = kwargs.get('gpu', True)
+
+        # Assume that we don't have any arrays yet
+        cpu_ary_exists = gpu_ary_exists = False
+
+        if old is not None:
+            cpu_ary_exists = old.has_cpu_ary
+            gpu_ary_exist = old.has_gpu_ary
+            has_cpu_ary = has_cpu_ary or cpu_ary_exists or self.store_cpu is True
+            has_gpu_ary = has_gpu_ary or gpu_ary_exists
+
+        # Create a new record
+        new = ArrayRecord(
+            name=name,
+            shape=shape,
+            dtype=dtype,
+            registrant=registrant,
+            has_cpu_ary=has_cpu_ary,
+            has_gpu_ary=has_gpu_ary)
+
+        # Check if the array has been registered previously
+        # and if we're allowed to replace it
+        self.handle_existing_array(old, new, **kwargs)
+
+        # OK, create/replace a record for this array
+        self.arrays[name] = new
+
+        # Attribute names
+        cpu_name = BaseSharedData.__cpu_name(name)
+        gpu_name = BaseSharedData.__gpu_name(name)
+
+        # Create descriptors on the class instance, even though members
+        # may not necessarily be created on object instances. This is so
+        # that if someone registers an array but doesn't ask for it to be
+        # created, we have control over it, if at some later point they wish
+        # to do a
+        #
+        # sd.blah_cpu = ...
+        #
+        setattr(BaseSharedData, cpu_name, CPUArrayDescriptor(record_key=name))
+        setattr(BaseSharedData, gpu_name, GPUArrayDescriptor(record_key=name))
+
+        # Create an empty cpu array if it doesn't exist
+        # and set it on the object instance
+        if cpu_ary_exists is not True and has_cpu_ary is True:
+            cpu_ary = np.empty(shape=shape, dtype=dtype)
+            setattr(self, cpu_name, cpu_ary)
+
+        # Create an empty gpu array if it doesn't exist
+        # and set it on the object instance
+        # Also create a transfer method for tranferring data to the GPU
+        if gpu_ary_exists is not True and has_gpu_ary is True:
+            gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
+            setattr(self, gpu_name, gpu_ary)
+
+            # Create the transfer method
+            def transfer(self, npary):
+                self.check_array(name, npary)
+                if self.store_cpu: setattr(self,cpu_name,npary)
+                getattr(self,gpu_name).set(npary)
+
+            # Create the method on ourself
+            method_name = BaseSharedData.__transfer_method_name(name)
+            method = types.MethodType(transfer,self)
+            setattr(self,  method_name, method)
+            # Create a docstring!
+            getattr(method, '__func__').__doc__ = \
+            """
+            Transfers the npary numpy array to the %s gpuarray.
+            npary and %s must be the same shape and type.
+            """ % (gpu_name,gpu_name)
+
+        # Set up a member describing the shape
+        if kwargs.get('shape_member', False) is True:
+            shape_name = BaseSharedData.__shape_name(name)
+            setattr(self, shape_name, shape)
+
+        # Set up a member describing the dtype
+        if kwargs.get('dtype_member', False) is True:
+            dtype_name = BaseSharedData.__dtype_name(name)
+            setattr(self, dtype_name, dtype)
+
+    def register_property(self, name, dtype, default, registrant, **kwargs):
+        """
+        Registers a property with this SharedData object
+
+        Parameters
+        ----------
+            name : string
+                The name of the property.
+            dtype : data-type
+                The data-type of this property
+            default : 
+                Default value for the property.
+            registrant : string
+                Name of the entity registering the property.
+
+        Keyword Arguments
+        -----------------
+            setter : boolean or function
+                if True, a default 'set_name' member is created, otherwise not.
+                If a method, this is used instead.
+            setter_docstring : string
+                docstring for the default setter.
+
+        """
+
+        self.properties[name] = pr = PropertyRecord(
+            name, dtype, default, registrant)
+
+        # Create the descriptor for this property on the class instance
+        setattr(BaseSharedData, name, PropertyDescriptor(record_key=name, default=default))
+        # Set the descriptor on this object instance
+        setattr(self, name, default)
+
+        # Should we create a setter for this property?
+        setter = kwargs.get('setter', False)
+        setter_name = BaseSharedData.__setter_name(name)
+
+        # Yes, create a default setter
+        if isinstance(setter, types.BooleanType) and setter is True:
+            def set(self, value):
+                setattr(self,name,value)
+
+            setter_method = types.MethodType(set, self)
+            setattr(self, setter_name, setter_method)
+
+            # Set up the docstring, using the supplied one
+            # if it is present, otherwise generating a default
+            setter_docstring = kwargs.get('setter_docstring', None)
+            getattr(setter_method, '__func__').__doc__ = \
+                """ Sets property %s to value. """ % (name) \
+                if setter_docstring is None else setter_docstring
+
+        elif isinstance(setter, types.MethodType):
+            settattr(self, setter_name, setter)
         else:
-            self.gauss_shape_gpu = gpuarray.empty(shape=self.gauss_shape_shape,dtype=self.ft)
+            raise TypeError, ('setter keyword argument set',
+                ' to an invalid type %s' % (type(setter)))
 
-        self.wavelength_gpu = gpuarray.zeros(shape=self.wavelength_shape,dtype=self.ft)
-        self.point_errors_gpu = gpuarray.zeros(shape=self.point_errors_shape,dtype=self.ft)
-        self.weight_vector_gpu = gpuarray.zeros(shape=self.weight_vector_shape,dtype=self.ft)
-        self.bayes_data_gpu = gpuarray.zeros(shape=self.bayes_data_shape,dtype=self.ct)
+    def shape(self,name):
+        return self.arrays[name].shape
 
-        # Create the output data arrays on the GPU
-        self.jones_gpu = gpuarray.zeros(shape=self.jones_shape,dtype=self.ct)
-        self.vis_gpu = gpuarray.zeros(shape=self.vis_shape,dtype=self.ct)
-        self.chi_sqrd_result_gpu = gpuarray.zeros(shape=self.chi_sqrd_result_shape,dtype=self.ft)
+    def get_params(self):
+        sd = self
+        
+        return {
+            'na' : sd.na,
+            'nbl' : sd.nbl,
+            'nchan' : sd.nchan,
+            'ntime' : sd.ntime,
+            'npsrc' : sd.npsrc,
+            'ngsrc' : sd.ngsrc,
+            'nsrc'  : sd.nsrc,
+            'nvis' : sd.nvis,
+            'beam_width': sd.beam_width,
+            'beam_clip' : sd.beam_clip,
+            'sigma_sqrd' : sd.sigma_sqrd,
+            'gauss_scale' : sd.gauss_scale
+        }
 
-        # Create a list of the GPU arrays
-        self.gpu_data = [
-            self.uvw_gpu,
-            self.ant_pairs_gpu,
-            self.lm_gpu,
-            self.brightness_gpu,
-            self.gauss_shape_gpu,
-            self.wavelength_gpu,
-            self.point_errors_gpu,
-            self.weight_vector_gpu,
-            self.bayes_data_gpu,
-            self.jones_gpu,
-            self.vis_gpu,
-            self.chi_sqrd_result_gpu]
+    def is_float(self):
+        return self.ft == np.float32
 
-    def check_array(self, name, npary, gpuary):
-        if npary.shape != gpuary.shape:
-            raise ValueError, '%s\'s shape %s is different from the expected shape %s.' % (name, npary.shape, gpuary.shape)
+    def is_double(self):
+        return self.ft == np.float64
 
-        if npary.dtype.type != gpuary.dtype.type:
-            raise TypeError, 'Type of %s, \'%s\' is different from the expected type %s.' % (name, npary.dtype.type, gpuary.dtype.type)          
+    def get_default_ant_pairs(self):
+        """
+        Return an np.array(shape=(2, nbl, ntime), dtype=np.int32]) containing the
+        default antenna pairs for each baseline at each timestep.
+        """
+        # Create the antenna pair mapping, from upper triangle indices
+        # based on the number of antenna. 
+        sd = self
 
-    def gpu_mem(self):
-        """ Returns the amount of GPU memory used, in bytes """
-        return np.array([a.nbytes for a in self.gpu_data]).sum()
+        tmp = np.int32(np.triu_indices(sd.na,1))
+        tmp = np.tile(tmp,sd.ntime).reshape(2,sd.ntime,sd.nbl)
+        tmp = np.rollaxis(tmp, axis=2, start=1)
+        return tmp.copy()
 
-    def transfer_uvw(self,uvw):
-        self.check_array('uvw', uvw, self.uvw_gpu)
-        if self.store_cpu is True: self.uvw=uvw
-        self.uvw_gpu.set(uvw)
+    def gen_array_descriptions(self):
+        """ Generator generating strings describing each registered array """
+        yield 'Registered Arrays'
+        yield '-'*80
+        yield BaseSharedData.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
+        yield '-'*80
 
-    def transfer_ant_pairs(self, ant_pairs):
-        self.check_array('ant_pairs', ant_pairs, self.ant_pairs_gpu)
-        if self.store_cpu is True: self.ant_pairs=ant_pairs
-        self.ant_pairs_gpu.set(ant_pairs)
+        for a in self.arrays.itervalues():
+            yield BaseSharedData.fmt_array_line(a.name,
+                BaseSharedData.fmt_bytes(BaseSharedData.array_bytes(a.shape, a.dtype)),
+                np.dtype(a.dtype).name,
+                'Y' if a.has_cpu_ary else 'N',
+                'Y' if a.has_gpu_ary else 'N',
+                a.shape)
 
-    def transfer_lm(self,lm):
-        self.check_array('lm', lm, self.lm_gpu)
-        if self.store_cpu is True: self.lm = lm
-        self.lm_gpu.set(lm)
+    def gen_property_descriptions(self):
+        """ Generator generating string describing each registered property """
+        yield 'Registered Properties'
+        yield '-'*80
+        yield BaseSharedData.fmt_property_line('Property Name', 'Type', 'Default Value')
+        yield '-'*80
 
-    def transfer_brightness(self,brightness):
-        self.check_array('brightness', brightness, self.brightness_gpu)
-        if self.store_cpu is True: self.brightness = brightness
-        self.brightness_gpu.set(brightness)
-
-    def transfer_gauss_shape(self,gauss_shape):
-        self.check_array('gauss_shape', gauss_shape, self.gauss_shape_gpu)
-        if self.store_cpu is True: self.gauss_shape = gauss_shape
-        self.gauss_shape_gpu.set(gauss_shape)
-
-    def transfer_wavelength(self, wavelength):
-        self.check_array('wavelength', wavelength, self.wavelength_gpu)
-        if self.store_cpu is True: self.wavelength = wavelength
-        self.wavelength_gpu.set(wavelength)
-
-    def transfer_point_errors(self,point_errors):
-        self.check_array('point_errors', point_errors, self.point_errors_gpu)
-        if self.store_cpu is True: self.point_errors = point_errors
-        self.point_errors_gpu.set(point_errors)
-
-    def transfer_jones(self,jones):
-        self.check_array('jones', jones, self.jones_gpu)
-        if self.store_cpu is True: self.jones = jones
-        self.jones_gpu.set(jones)
-
-    def transfer_vis(self,vis):
-        self.check_array('vis', vis, self.vis_gpu)
-        if self.store_cpu is True: self.vis = vis
-        self.vis_gpu.set(vis)        
-
-    def transfer_bayes_data(self,bayes_data):
-        self.check_array('bayes_data', bayes_data, self.bayes_data_gpu)
-        if self.store_cpu is True: self.bayes_data = bayes_data
-        self.bayes_data_gpu.set(bayes_data)
-
-    def transfer_weight_vector(self, weight_vector):
-        self.check_array('weight_vector', weight_vector, self.weight_vector_gpu)
-        if self.store_cpu is True: self.weight_vector = weight_vector
-        self.weight_vector_gpu.set(weight_vector)
+        for p in self.properties.itervalues():
+            yield BaseSharedData.fmt_property_line(
+                p.name, np.dtype(p.dtype).name, p.default)
 
     def __str__(self):
-        return super(GPUSharedData, self).__str__() + \
-            "\nGPU Memory:    %.3f MB" % (self.gpu_mem() / (1024.**2))
-
-    def rethrow_attribute_exception(self, e):
-        raise AttributeError, '%s. The appropriate numpy array has not ' \
-            'been set on the shared data object. You need to set ' \
-            'store_cpu=True on your shared data object ' \
-            'as well as call the transfer_* method for this to work.' % e
-
-    def compute_gaussian_shape(self):
-        """
-        Compute the shape values for the gaussian sources.
-
-        Returns a (nbl, nchan, ntime, ngsrc) matrix of floating point scalars.
-        """
-        sd = self
-
-        # OK, try obtain the same results with the fwhm factored out!
-        # u1 = u*em - v*el
-        # v1 = u*el + v*em
-        u1 = (np.outer(sd.uvw[0], sd.gauss_shape[1]) - np.outer(sd.uvw[1], sd.gauss_shape[0])).reshape(sd.nbl,sd.ntime,sd.ngsrc)
-        v1 = (np.outer(sd.uvw[0], sd.gauss_shape[0]) + np.outer(sd.uvw[1], sd.gauss_shape[1])).reshape(sd.nbl,sd.ntime,sd.ngsrc)
-
-        # Obvious given the above reshape
-        assert u1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
-        assert v1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
-
-        # Construct the scaling factor, this includes the wavelength/frequency
-        # into the mix.
-        scale_uv = self.gauss_scale/sd.wavelength[:,np.newaxis]
-        # Should produce nchan x 1
-        assert scale_uv.shape == (sd.nchan,1)
-
-        # u1 *= R, the ratio of the gaussian axis
-        u1 *= sd.gauss_shape[2][np.newaxis,np.newaxis,:]
-        # Multiply u1 and v1 by the scaling factor
-        u1 = u1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
-        v1 = v1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
-
-        return np.exp(-(u1**2 + v1**2))
-
-    def compute_gaussian_shape_with_fwhm(self):
-        """
-        Compute the shape values for the gaussian sources with fwhm factored in.
-
-        Returns a (nbl, nchan, ntime, ngsrc) matrix of floating point scalars.
-        """
-        sd = self
-
-        # 1.0/sqrt(e_l^2 + e_m^2).
-        fwhm_inv = 1.0/np.sqrt(sd.gauss_shape[0]**2 + sd.gauss_shape[1]**2)
-        # Vector of ngsrc
-        assert fwhm_inv.shape == (sd.ngsrc,)
-
-        cos_pa = sd.gauss_shape[1]*fwhm_inv    # em / fwhm
-        sin_pa = sd.gauss_shape[0]*fwhm_inv    # el / fwhm
-
-        # u1 = u*cos_pa - v*sin_pa
-        # v1 = u*sin_pa + v*cos_pa
-        u1 = (np.outer(sd.uvw[0],cos_pa) - np.outer(sd.uvw[1],sin_pa)).reshape(sd.nbl,sd.ntime,sd.ngsrc)
-        v1 = (np.outer(sd.uvw[0],sin_pa) + np.outer(sd.uvw[1],cos_pa)).reshape(sd.nbl,sd.ntime,sd.ngsrc)
-
-        # Obvious given the above reshape
-        assert u1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
-        assert v1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
-
-        # Construct the scaling factor, this includes the wavelength/frequency
-        # into the mix.
-        scale_uv = self.gauss_scale/(sd.wavelength[:,np.newaxis]*fwhm_inv)
-        # Should produce nchan x ngsrc
-        assert scale_uv.shape == (sd.nchan, sd.ngsrc)
-
-        # u1 *= R, the ratio of the gaussian axis
-        u1 *= sd.gauss_shape[2][np.newaxis,np.newaxis,:]
-        # Multiply u1 and v1 by the scaling factor
-        u1 = u1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
-        v1 = v1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
-
-        assert u1.shape == (sd.nbl, sd.nchan, sd.ntime, sd.ngsrc)
-        assert v1.shape == (sd.nbl, sd.nchan, sd.ntime, sd.ngsrc)
-
-        return np.exp(-(u1**2 + v1**2))
-
-    def compute_k_jones_scalar(self):
-        """
-        Computes the scalar K (phase) term of the RIME using numpy.
-
-        Returns a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        sd = self
-
-        try:
-            sd = self
-            # Repeat the wavelengths along the timesteps for now
-            # dim nchan x ntime. 
-            w = np.repeat(sd.wavelength,sd.ntime).reshape(sd.nchan, sd.ntime)
-
-            # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
-            n = np.sqrt(1. - sd.lm[0]**2 - sd.lm[1]**2) - 1.
-
-            # u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
-            phase = (np.outer(sd.uvw[0], sd.lm[0]) + \
-                np.outer(sd.uvw[1], sd.lm[1]) + \
-                np.outer(sd.uvw[2],n))\
-                    .reshape(sd.nbl, sd.ntime, sd.nsrc)
-            assert phase.shape == (sd.nbl, sd.ntime, sd.nsrc)            
-
-            # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
-            phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
-            assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
-
-            # Dim nchan x ntime x nsrcs 
-            power = np.power(sd.ref_wave/w[:,:,np.newaxis], sd.brightness[4,np.newaxis,:,:])
-            assert power.shape == (sd.nchan, sd.ntime, sd.nsrc)            
-
-            # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
-            phase_term = power*np.exp(phase)
-            assert phase_term.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
-
-            # Multiply the gaussian sources by their shape terms.
-            if sd.ngsrc > 0:
-                phase_term[:,:,:,sd.npsrc:sd.nsrc] *= self.compute_gaussian_shape()
-
-            return phase_term
-
-        except AttributeError as e:
-            self.rethrow_attribute_exception(e)
-
-    def compute_per_ant_e_jones_scalar(self):
-        """
-        Computes the scalar E (analytic cos^3) term of the RIME per antenna.
-
-        returns a (na,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-
-        sd = self
-
-        try:
-            # Compute the offsets for different antenna
-            # Broadcasting here produces, na x ntime x nsrc
-            l_off = sd.lm[0] - sd.point_errors[0,:,:,np.newaxis]
-            m_off = sd.lm[1] - sd.point_errors[1,:,:,np.newaxis]
-            E_p = np.sqrt(l_off**2 + m_off**2)
-
-            assert E_p.shape == (sd.na, sd.ntime, sd.nsrc)
-
-            # Broadcasting here produces, nbl x nchan x ntime x nsrc
-            E_p = sd.beam_width*1e-9*E_p[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
-            np.clip(E_p, np.finfo(sd.ft).min, sd.E_beam_clip, E_p)
-            E_p = np.cos(E_p)**3
-
-            assert E_p.shape == (sd.na, sd.nchan, sd.ntime, sd.nsrc)
-
-            return E_p
-        except AttributeError as e:
-            self.rethrow_attribute_exception(e)
-
-    def compute_e_jones_scalar(self):
-        """
-        Computes the scalar E (analytic cos^3) term of the RIME
-
-        returns a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        sd = self
-
-        try:
-            # Here we obtain our antenna pairs and pointing errors
-            # TODO: The last dimensions are flattened to make indexing easier
-            # later. There may be a more numpy way to do this but YOLO.
-            ap = sd.get_default_ant_pairs().reshape(2,sd.nbl*sd.ntime)
-            pe = sd.point_errors.reshape(2,sd.na*sd.ntime)
-
-            # The flattened antenna pair array will look something like this.
-            # It is based on 2 x nbl x ntime. Here we have 3 baselines and
-            # 4 timesteps.
-            #
-            #            timestep
-            #       0 1 2 3 0 1 2 3 0 1 2 3
-            #
-            # ant0: 0 0 0 0 0 0 0 0 1 1 1 1
-            # ant1: 1 1 1 1 2 2 2 2 2 2 2 2
-
-            # Create indexes into the pointing errors from the antenna pairs.
-            # Pointing errors is 2 x na x ntime, thus each index will be
-            # i = ANT*ntime + TIME. The TIME additions need to be padded by nbl.
-            ant0 = ap[0]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
-            ant1 = ap[1]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
-
-            # Get the pointing errors for antenna p and q.
-            d_p = pe[:,ant0].reshape(2,sd.nbl,sd.ntime)
-            d_q = pe[:,ant1].reshape(2,sd.nbl,sd.ntime)
-
-            # Compute the offsets for antenna 0 or p
-            # Broadcasting here produces, nbl x ntime x nsrc
-            l_off = sd.lm[0] - d_p[0,:,:,np.newaxis]
-            m_off = sd.lm[1] - d_p[1,:,:,np.newaxis]
-            E_p = np.sqrt(l_off**2 + m_off**2)
-
-            assert E_p.shape == (sd.nbl, sd.ntime, sd.nsrc)
-
-            # Broadcasting here produces, nbl x nchan x ntime x nsrc
-            E_p = sd.beam_width*1e-9*E_p[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
-            np.clip(E_p, np.finfo(sd.ft).min, sd.E_beam_clip, E_p)
-            E_p = np.cos(E_p)**3
-
-            assert E_p.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
-
-            # Compute the offsets for antenna 1 or q
-            # Broadcasting here produces, nbl x ntime x nsrc
-            l_off = sd.lm[0] - d_q[0,:,:,np.newaxis]
-            m_off = sd.lm[1] - d_q[1,:,:,np.newaxis]
-            E_q = np.sqrt(l_off**2 + m_off**2)
-
-            assert E_q.shape == (sd.nbl, sd.ntime, sd.nsrc)
-
-            # Broadcasting here produces, nbl x nchan x ntime x nsrc
-            E_q = sd.beam_width*1e-9*E_q[:,np.newaxis,:,:]*sd.wavelength[np.newaxis,:,np.newaxis,np.newaxis]
-            np.clip(E_q, np.finfo(sd.ft).min, sd.E_beam_clip, E_q)
-            E_q = np.cos(E_q)**3
-
-            assert E_q.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
-
-            return E_p/E_q
-        except AttributeError as e:
-            self.rethrow_attribute_exception(e)
-
-    def compute_ek_jones_scalar(self):
-        """
-        Computes the scalar EK (phase*cos^3) term of the RIME.
-
-        Return a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        return self.compute_k_jones_scalar()*\
-            self.compute_e_jones_scalar()
-
-    def compute_b_jones(self):
-        """
-        Computes the B term of the RIME.
-
-        Returns a (4,nsrc) matrix of complex scalars.
-        """
-        sd = self
-        try:
-            # Create the brightness matrix. Dim 4 x ntime x nsrcs
-            B = sd.ct([
-                sd.brightness[0]+sd.brightness[1] + 0j,     # fI+fQ + 0j
-                sd.brightness[2] + 1j*sd.brightness[3],     # fU + fV*1j
-                sd.brightness[2] - 1j*sd.brightness[3],     # fU - fV*1j
-                sd.brightness[0]-sd.brightness[1] + 0j])    # fI-fQ + 0j
-            assert B.shape == (4, sd.ntime, sd.nsrc)
-
-            return B
-
-        except AttributeError as e:
-            self.rethrow_attribute_exception(e)
-
-    def compute_bk_jones(self):
-        """
-        Computes the BK term of the RIME.
-
-        Returns a (4,nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        sd = self
-
-        # Compute the K and B terms
-        scalar_K = self.compute_k_jones_scalar()
-        B = self.compute_b_jones()
-
-        # This works due to broadcast! Multiplies phase and brightness along
-        # srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
-        jones_cpu = (scalar_K[np.newaxis,:,:,:,:]* \
-            B[:,np.newaxis, np.newaxis,:,:])#\
-            #.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
-        assert jones_cpu.shape == sd.jones_shape
-
-        return jones_cpu 
-
-    def compute_ebk_jones(self):
-        """
-        Computes the BK term of the RIME.
-
-        Returns a (4,nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        return self.compute_bk_jones()*self.compute_e_jones_scalar()
-
-    def compute_bk_vis(self):
-        """
-        Computes the complex visibilities based on the
-        scalar K term and the 2x2 B term.
-
-        Returns a (4,nbl,nchan,ntime) matrix of complex scalars.
-        """
-        return np.add.reduce(self.compute_bk_jones(), axis=4)        
-
-    def compute_ebk_vis(self):
-        """
-        Computes the complex visibilities based on the
-        scalar EK term and the 2x2 B term.
-
-        Returns a (4,nbl,nchan,ntime) matrix of complex scalars.
-        """
-        return np.add.reduce(self.compute_ebk_jones(), axis=4)        
-
-    def compute_chi_sqrd_sum_terms(self, weight_vector=False):
-        """
-        Computes the terms of the chi squared sum, but does not perform the sum itself.
-
-        Parameters:
-            weight_vector : boolean
-                True if the chi squared test terms should be computed with a noise vector
-
-        Returns a (nbl,nchan,ntime) matrix of floating point scalars.
-        """
-        sd = self
-
-        try:
-            # Take the difference between the visibilities and the model
-            # (4,nbl,nchan,ntime)
-            d = sd.vis - sd.bayes_data
-
-            # Square of the real and imaginary components
-            real_term, imag_term = d.real**2, d.imag**2
-
-            # Multiply by the weight vector if required
-            if weight_vector is True:
-                real_term *= sd.weight_vector
-                imag_term *= sd.weight_vector
-
-            # Reduces a dimension so that we have (nbl,nchan,ntime)
-            # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + 
-            # ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
-
-            # Sum the real and imaginary terms together
-            # for the final result.
-            chi_sqrd_terms = np.add.reduce(real_term,axis=0) + np.add.reduce(imag_term,axis=0)
-
-            assert chi_sqrd_terms.shape == (sd.nbl, sd.nchan, sd.ntime)
-
-            return chi_sqrd_terms
-
-        except AttributeError as e:
-            self.rethrow_attribute_exception(e)
-
-    def compute_chi_sqrd(self, weight_vector=False):
-        """ Computes the chi squared value.
-
-        Parameters:
-            weight_vector : boolean
-                True if the chi squared test should be computed with a noise vector
-
-        Returns a floating point scalar values
-        """
-        sd = self
-
-        # Do the chi squared sum on the CPU.
-        # If we're not using the weight vector, sum and
-        # divide by the sigma squared.
-        # Otherwise, simply return the sum
-        try:
-            term_sum = self.compute_chi_sqrd_sum_terms(weight_vector=weight_vector).sum()
-            return term_sum if weight_vector is True else term_sum / sd.sigma_sqrd
-        except AttributeError as e:
-            self.rethrow_attribute_exception(e)
-
-    def compute_biro_chi_sqrd(self, weight_vector=False):
-        self.vis = self.compute_ebk_vis()
-        return self.compute_chi_sqrd(weight_vector=weight_vector)
+        """ Outputs a string representation of this object """
+        n_cpu_bytes = np.sum([BaseSharedData.array_bytes(a.shape,a.dtype)
+            for a in self.arrays.itervalues() if a.has_cpu_ary is True])
+
+        n_gpu_bytes = np.sum([BaseSharedData.array_bytes(a.shape,a.dtype)
+            for a in self.arrays.itervalues() if a.has_gpu_ary is True])
+
+        w = 20
+
+        l = ['',
+            'RIME Dimensions',
+            '-'*80,
+            '%-*s: %s' % (w,'Antenna', self.na),
+            '%-*s: %s' % (w,'Baselines', self.nbl),
+            '%-*s: %s' % (w,'Channels', self.nchan),
+            '%-*s: %s' % (w,'Timesteps', self.ntime),
+            '%-*s: %s' % (w,'Point Sources', self.npsrc),
+            '%-*s: %s' % (w,'Gaussian Sources', self.ngsrc),
+            '%-*s: %s' % (w,'CPU Memory', BaseSharedData.fmt_bytes(n_cpu_bytes)),
+            '%-*s: %s' % (w,'GPU Memory', BaseSharedData.fmt_bytes(n_gpu_bytes))]
+
+        l.extend([''])
+        l.extend([s for s in self.gen_array_descriptions()])
+        l.extend([''])
+        l.extend([s for s in self.gen_property_descriptions()])
+
+        return '\n'.join(l)

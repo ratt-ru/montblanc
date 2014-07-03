@@ -11,7 +11,7 @@ import montblanc
 
 from montblanc.node import Node, NullNode
 from montblanc.pipeline import Pipeline
-from montblanc.BaseSharedData import GPUSharedData
+from montblanc.BaseSharedData import BaseSharedData
 
 from montblanc.RimeBK import RimeBK
 from montblanc.RimeEBK import RimeEBK
