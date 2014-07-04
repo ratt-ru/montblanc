@@ -8,7 +8,7 @@ import montblanc
 import montblanc.BaseSharedData
 
 from montblanc.BaseSharedData import get_nr_of_baselines
-from montblanc.BiroSharedData import BiroSharedData
+from montblanc.impl.biro.v1.BiroSharedData import BiroSharedData
 
 class MeasurementSetSharedData(BiroSharedData):
     ANTENNA_TABLE = "ANTENNA"

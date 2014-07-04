@@ -8,19 +8,19 @@ import pycuda.autoinit
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
-import montblanc
+#import montblanc
 import montblanc.ext.predict
 import montblanc.ext.crimes
 
-from montblanc.RimeBK import RimeBK
-from montblanc.RimeEBK import RimeEBK
-from montblanc.RimeSumFloat import RimeSumFloat
-from montblanc.RimeJonesReduce import RimeJonesReduce
-from montblanc.RimeMultiply import RimeMultiply
-from montblanc.RimeChiSquared import RimeChiSquared
-from montblanc.TestSharedData import TestSharedData
+from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
+from montblanc.impl.biro.v1.gpu.RimeEBK import RimeEBK
+from montblanc.impl.biro.v1.gpu.RimeSumFloat import RimeSumFloat
+from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
+from montblanc.impl.biro.v1.gpu.RimeMultiply import RimeMultiply
+from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
+from montblanc.impl.biro.v1.test.TestSharedData import TestSharedData
 
-import montblanc.RimeCPU
+import montblanc.impl.biro.v1.cpu.RimeCPU as RimeCPU
 
 class TestRimes(unittest.TestCase):
     """
@@ -56,7 +56,7 @@ class TestRimes(unittest.TestCase):
         rime_bk.shutdown(sd)
 
         # Compute the jones matrix on the CPU
-        jones_cpu = montblanc.RimeCPU.compute_bk_jones(sd)
+        jones_cpu = RimeCPU.compute_bk_jones(sd)
 
         # Get the jones matrices calculated by the GPU
         jones_gpu = sd.jones_gpu.get()
@@ -95,7 +95,7 @@ class TestRimes(unittest.TestCase):
         for k in kernels: k.shutdown(sd)
 
         jones_gpu = sd.jones_gpu.get()
-        jones_cpu = montblanc.RimeCPU.compute_ebk_jones(sd)
+        jones_cpu = RimeCPU.compute_ebk_jones(sd)
 
         self.assertTrue(np.allclose(jones_gpu, jones_cpu,**cmp))
 
@@ -208,14 +208,14 @@ class TestRimes(unittest.TestCase):
         for k in kernels: k.shutdown(sd)
 
         # Compute the chi squared sum values
-        chi_sqrd_cpu = montblanc.RimeCPU.compute_chi_sqrd_sum_terms(sd, weight_vector=weight_vector)
+        chi_sqrd_cpu = RimeCPU.compute_chi_sqrd_sum_terms(sd, weight_vector=weight_vector)
         chi_sqrd_gpu = sd.chi_sqrd_result_gpu.get()
 
         # Check the values inside the sum term of the Chi Squared
         self.assertTrue(np.allclose(chi_sqrd_cpu, chi_sqrd_gpu,**cmp))
 
         # Compute the actual chi squared value
-        X2_cpu = montblanc.RimeCPU.compute_chi_sqrd(sd, weight_vector=weight_vector)
+        X2_cpu = RimeCPU.compute_chi_sqrd(sd, weight_vector=weight_vector)
 
         # Check that the result returned by the CPU and GPU are the same,
         self.assertTrue(np.allclose(np.array([X2_cpu]), np.array([sd.X2]), **cmp))
@@ -300,8 +300,8 @@ class TestRimes(unittest.TestCase):
 
         sd = shared_data
 
-        gs = montblanc.RimeCPU.compute_gaussian_shape(sd)
-        gs_with_fwhm = montblanc.RimeCPU.compute_gaussian_shape_with_fwhm(sd)
+        gs = RimeCPU.compute_gaussian_shape(sd)
+        gs_with_fwhm = RimeCPU.compute_gaussian_shape_with_fwhm(sd)
 
         self.assertTrue(np.allclose(gs,gs_with_fwhm, **cmp))
 
