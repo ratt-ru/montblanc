@@ -13,13 +13,6 @@ from montblanc.node import Node, NullNode
 from montblanc.pipeline import Pipeline
 from montblanc.BaseSharedData import BaseSharedData
 
-from montblanc.RimeBK import RimeBK
-from montblanc.RimeEBK import RimeEBK
-from montblanc.RimeJonesReduce import RimeJonesReduce
-from montblanc.RimeChiSquared import RimeChiSquared
-
-from montblanc.MeasurementSetSharedData import MeasurementSetSharedData
-
 def get_montblanc_path():
 	""" Return the current path in which montblanc is installed """
 	return os.path.dirname(inspect.getfile(montblanc))
@@ -49,6 +42,13 @@ def get_bk_pipeline(msfile, npsrc, ngsrc, device=None):
 	-------
 	A (pipeline, shared_data) tuple
 	"""
+
+	from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
+	from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
+	from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
+
+	from montblanc.impl.biro.v1.MeasurementSetSharedData import MeasurementSetSharedData
+
 	if device is None:
 		import pycuda.autoinit
 		device=pycuda.autoinit.device
@@ -101,6 +101,13 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
 	-------
 	A (pipeline, shared_data) tuple
 	"""
+
+	from montblanc.impl.biro.v1.gpu.RimeEBK import RimeEBK
+	from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
+	from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
+
+	from montblanc.impl.biro.v1.MeasurementSetSharedData import MeasurementSetSharedData
+
 	if kwargs.get('device') is None:
 		import pycuda.autoinit
 		kwargs['device']=pycuda.autoinit.device
