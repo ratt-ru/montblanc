@@ -52,21 +52,23 @@ should install the package.
 
 ## Running Tests
 
-Once the libraries have been compiled you should be able to run
+Once the libraries have been compiled you should be able to run the
 
-    # python TestRimes.py
-    # python -m unittest TestRimes.TestRimes.test_predict_float
+    # cd tests
+    # python test_biro_v1.py
+    # python -m unittest test_biro_v1.TestBiroV1.test_predict_float
 
 which will run the current test suite or only the particular test case specified. The reported times are for the entire test case with numpy code, and not just the CUDA kernels.
 
 If you're running on an ubuntu laptop with optimus technology, you may have to install bumblebee and run
 
-    # optirun python TestRimes.py
+    # optirun python test_biro_v1.py
 
 ## Playing with the Westerbork MeasurementSet
 
 You could also try run
 
+    # cd examples
     # python MS_example.py /home/user/data/WSRT.MS -np 10 -ng 10 -c 100
 
 which sets up things based on the Westerbork Measurement Set, with 10 point and 10 gaussian sources. It performs 100 iterations of the pipeline.

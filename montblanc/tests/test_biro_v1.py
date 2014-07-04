@@ -12,17 +12,18 @@ import pycuda.gpuarray as gpuarray
 import montblanc.ext.predict
 import montblanc.ext.crimes
 
+from montblanc.impl.biro.v1.TestSharedData import TestSharedData
+
 from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
 from montblanc.impl.biro.v1.gpu.RimeEBK import RimeEBK
 from montblanc.impl.biro.v1.gpu.RimeSumFloat import RimeSumFloat
 from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
 from montblanc.impl.biro.v1.gpu.RimeMultiply import RimeMultiply
 from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
-from montblanc.impl.biro.v1.test.TestSharedData import TestSharedData
 
 import montblanc.impl.biro.v1.cpu.RimeCPU as RimeCPU
 
-class TestRimes(unittest.TestCase):
+class TestBiroV1(unittest.TestCase):
     """
     TestRimes class defining the unit test cases for montblanc
     """
@@ -432,5 +433,5 @@ class TestRimes(unittest.TestCase):
         rime_sum.shutdown(sd)
 
 if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestRimes)
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV1)
     unittest.TextTestRunner(verbosity=2).run(suite)
