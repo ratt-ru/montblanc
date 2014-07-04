@@ -3,31 +3,48 @@ import pycuda.gpuarray as gpuarray
 
 import montblanc
 
-from montblanc.BaseSharedData import GPUSharedData
+from montblanc.BaseSharedData import DEFAULT_NA
+from montblanc.BaseSharedData import DEFAULT_NCHAN
+from montblanc.BaseSharedData import DEFAULT_NTIME
+from montblanc.BaseSharedData import DEFAULT_NPSRC
+from montblanc.BaseSharedData import DEFAULT_NGSRC
+from montblanc.BaseSharedData import DEFAULT_DTYPE
 
-class TestSharedData(GPUSharedData):
-    def __init__(self, na=7, npsrc=10, nchan=8, ntime=5, ngsrc=0, dtype=np.float64, **kwargs):
+from montblanc.BiroSharedData import BiroSharedData
+
+class TestSharedData(BiroSharedData):
+    def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
+        npsrc=DEFAULT_NPSRC, ngsrc=0, dtype=np.float32, **kwargs):
+
         kwargs['store_cpu'] = True
-        super(TestSharedData, self).__init__(na=na,nchan=nchan,ntime=ntime,
-			npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+
+        super(TestSharedData, self).__init__(na=na, nchan=nchan, ntime=ntime,
+			npsrc=npsrc, ngsrc=ngsrc, dtype=dtype,**kwargs)
 
         sd = self
-        na,nbl,nchan,ntime = sd.na,sd.nbl,sd.nchan,sd.ntime
+        na, nbl, nchan, ntime = sd.na, sd.nbl, sd.nchan, sd.ntime
         npsrc, ngsrc, nsrc = sd.npsrc, sd.ngsrc, sd.nsrc
-        ft,ct = sd.ft,sd.ct
+        ft, ct = sd.ft, sd.ct
+
+        # Curry the creation of a random array
+        def make_random(shape,dtype):
+            return np.random.random(size=shape).astype(dtype)
+
+        # Curry the shaping and casting of a list of arrays
+        def shape_list(list,shape,dtype):
+            return np.array(list, dtype=dtype).reshape(shape)
 
         # Baseline coordinates in the u,v,w (frequency) domain
-        uvw = np.array([ \
+        uvw = shape_list([
             np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*3., \
             np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*2., \
-            np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*1.], \
-            dtype=ft)
+            np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*1.],
+            shape=sd.uvw_shape, dtype=sd.uvw_dtype)
 
         # Point source coordinates in the l,m,n (sky image) domain
         l=ft(np.random.random(nsrc)*0.1)
         m=ft(np.random.random(nsrc)*0.1)
-        lm=np.array([l,m], dtype=ft)\
-            .reshape(sd.lm_shape)
+        lm=shape_list([l,m], sd.lm_shape, sd.lm_dtype)
 
         # Brightness matrix for the point sources
         fI=ft(np.ones((ntime*nsrc,)))
@@ -35,15 +52,15 @@ class TestSharedData(GPUSharedData):
         fU=ft(np.random.random(ntime*nsrc)*0.5)
         fV=ft(np.random.random(ntime*nsrc)*0.5)
         alpha=ft(np.random.random(ntime*nsrc)*0.1)
-        brightness = np.array([fI,fQ,fU,fV,alpha], dtype=ft)\
-            .reshape(sd.brightness_shape)
+        brightness = shape_list([fI,fQ,fU,fV,alpha],
+            sd.brightness_shape, sd.brightness_dtype)
 
         # Gaussian shape matrix
         el = ft(np.random.random(ngsrc)*0.5)
         em = ft(np.random.random(ngsrc)*0.5)
         R = ft(np.ones(ngsrc)*100)
-        gauss_shape = np.array([el,em,R], dtype=ft)\
-            .reshape(sd.gauss_shape_shape)
+        gauss_shape = shape_list([el,em,R],
+            sd.gauss_shape_shape, sd.gauss_shape_dtype)
 
         # Generate nchan frequencies/wavelengths
     	frequencies = ft(np.linspace(1e6,2e6,nchan))
@@ -51,15 +68,12 @@ class TestSharedData(GPUSharedData):
         sd.set_ref_wave(wavelength[nchan//2])
 
         # Generate the antenna pointing errors
-        point_errors = np.random.random(np.product(sd.point_errors_shape))\
-            .astype(ft).reshape(sd.point_errors_shape)
+        point_errors = make_random(sd.point_errors_shape,
+            sd.point_errors_dtype)
 
         # Generate the noise vector
-        weight_vector = np.random.random(np.product(sd.weight_vector_shape))\
-            .astype(ft).reshape(sd.weight_vector_shape)
-
-        weight_vector = np.random.random(np.product(sd.weight_vector_shape))\
-            .astype(ft).reshape(sd.weight_vector_shape)
+        weight_vector = make_random(sd.weight_vector_shape,
+            sd.weight_vector_dtype)
 
         # Copy the uvw, lm and brightness data to the gpu
         sd.transfer_uvw(uvw)
@@ -79,15 +93,14 @@ class TestSharedData(GPUSharedData):
 
         # Output visibility matrix
         assert np.product(sd.vis_shape) == np.product(sd.keys.shape)
-        nviselements = np.product(sd.vis_shape)
-        vis = (np.random.random(nviselements) + np.random.random(nviselements)*1j)\
-            .astype(ct).reshape(sd.vis_shape)
+
+        vis = make_random(sd.vis_shape, sd.vis_dtype) + \
+            make_random(sd.vis_shape, sd.vis_dtype)*1j
         sd.transfer_vis(vis)
 
         # The bayesian model
-        assert np.product(sd.bayes_data_shape) == np.product(sd.keys.shape)
-        nbayes = np.product(sd.bayes_data_shape)
-        bayes_data = (np.random.random(nbayes) + np.random.random(nbayes)*1j)\
-            .astype(ct).reshape(sd.bayes_data_shape)
+        assert sd.bayes_data_shape == sd.vis_shape
+        bayes_data = make_random(sd.bayes_data_shape,sd.bayes_data_dtype) +\
+            make_random(sd.bayes_data_shape,sd.bayes_data_dtype)*1j
         sd.transfer_bayes_data(bayes_data)
         sd.set_sigma_sqrd((np.random.random(1)**2).astype(ft)[0])

@@ -20,6 +20,8 @@ from montblanc.RimeMultiply import RimeMultiply
 from montblanc.RimeChiSquared import RimeChiSquared
 from montblanc.TestSharedData import TestSharedData
 
+import montblanc.RimeCPU
+
 class TestRimes(unittest.TestCase):
     """
     TestRimes class defining the unit test cases for montblanc
@@ -54,7 +56,7 @@ class TestRimes(unittest.TestCase):
         rime_bk.shutdown(sd)
 
         # Compute the jones matrix on the CPU
-        jones_cpu = sd.compute_bk_jones()
+        jones_cpu = montblanc.RimeCPU.compute_bk_jones(sd)
 
         # Get the jones matrices calculated by the GPU
         jones_gpu = sd.jones_gpu.get()
@@ -64,15 +66,15 @@ class TestRimes(unittest.TestCase):
 
     def test_BK_float(self):
         """ single precision BK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float32,
-            device=pycuda.autoinit.device)      
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
+            dtype=np.float32, device=pycuda.autoinit.device)      
 
         self.BK_test_impl(sd)
 
     def test_BK_double(self):
         """ double precision BK test """
         sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            device=pycuda.autoinit.device)
+            dtype=np.float64, device=pycuda.autoinit.device)
 
         self.BK_test_impl(sd)
 
@@ -93,14 +95,14 @@ class TestRimes(unittest.TestCase):
         for k in kernels: k.shutdown(sd)
 
         jones_gpu = sd.jones_gpu.get()
-        jones_cpu = sd.compute_ebk_jones()
+        jones_cpu = montblanc.RimeCPU.compute_ebk_jones(sd)
 
         self.assertTrue(np.allclose(jones_gpu, jones_cpu,**cmp))
 
     def test_pEBK_double(self):
         """ double precision EBK test for point sources only """
         sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            device=pycuda.autoinit.device)
+            dtype=np.float64, device=pycuda.autoinit.device)
 
         self.EBK_test_impl(sd)
 
@@ -117,7 +119,7 @@ class TestRimes(unittest.TestCase):
         """ double precision EBK test for point and gaussian sources """
         #sd = TestSharedData(na=2,nchan=2,ntime=1,npsrc=2,ngsrc=1,
         sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
-            device=pycuda.autoinit.device)
+            dtype=np.float64, device=pycuda.autoinit.device)
 
         self.EBK_test_impl(sd)
 
@@ -181,7 +183,7 @@ class TestRimes(unittest.TestCase):
         """ double precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
         sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,
-            device=pycuda.autoinit.device)
+            dtype=np.float64, device=pycuda.autoinit.device)
         
         self.multiply_test_impl(sd)
 
@@ -189,8 +191,8 @@ class TestRimes(unittest.TestCase):
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32,
-            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,
+            dtype=np.float32, device=pycuda.autoinit.device)
         
         self.multiply_test_impl(sd)
 
@@ -206,14 +208,14 @@ class TestRimes(unittest.TestCase):
         for k in kernels: k.shutdown(sd)
 
         # Compute the chi squared sum values
-        chi_sqrd_cpu = sd.compute_chi_sqrd_sum_terms(weight_vector=weight_vector)
+        chi_sqrd_cpu = montblanc.RimeCPU.compute_chi_sqrd_sum_terms(sd, weight_vector=weight_vector)
         chi_sqrd_gpu = sd.chi_sqrd_result_gpu.get()
 
         # Check the values inside the sum term of the Chi Squared
         self.assertTrue(np.allclose(chi_sqrd_cpu, chi_sqrd_gpu,**cmp))
 
         # Compute the actual chi squared value
-        X2_cpu = sd.compute_chi_sqrd(weight_vector=weight_vector)
+        X2_cpu = montblanc.RimeCPU.compute_chi_sqrd(sd, weight_vector=weight_vector)
 
         # Check that the result returned by the CPU and GPU are the same,
         self.assertTrue(np.allclose(np.array([X2_cpu]), np.array([sd.X2]), **cmp))
@@ -221,28 +223,28 @@ class TestRimes(unittest.TestCase):
     def test_chi_squared_double(self):
         """ double precision chi squared test """
         sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
-            device=pycuda.autoinit.device)
+            dtype=np.float64, device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd)
 
     def test_chi_squared_float(self):
         """ single precision chi squared test """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32,
-            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
+            dtype=np.float32, device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd, cmp={'rtol' : 1e-4})
 
     def test_chi_squared_weight_vector_double(self):
         """ double precision chi squared test with noise vector """
         sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
-            device=pycuda.autoinit.device)
+            dtype=np.float64, device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd, weight_vector=True)
 
     def test_chi_squared_weight_vector_float(self):
         """ single precision chi squared test with noise vector """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32,
-            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
+            dtype=np.float32, device=pycuda.autoinit.device)
 
         self.chi_squared_test_impl(sd, weight_vector=True, cmp={'rtol' : 1e-3 })
 
@@ -280,15 +282,15 @@ class TestRimes(unittest.TestCase):
 
     def test_reduce_double(self):
         """ double precision reduction test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,
+            dtype=np.float64, device=pycuda.autoinit.device)
 
         self.reduce_test_impl(sd)
 
     def test_reduce_float(self):
         """ single precision reduction test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float32,
-            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,
+            dtype=np.float32, device=pycuda.autoinit.device)
 
         self.reduce_test_impl(sd)
 
@@ -298,22 +300,22 @@ class TestRimes(unittest.TestCase):
 
         sd = shared_data
 
-        gs = sd.compute_gaussian_shape()
-        gs_with_fwhm = sd.compute_gaussian_shape_with_fwhm()
+        gs = montblanc.RimeCPU.compute_gaussian_shape(sd)
+        gs_with_fwhm = montblanc.RimeCPU.compute_gaussian_shape_with_fwhm(sd)
 
         self.assertTrue(np.allclose(gs,gs_with_fwhm, **cmp))
 
     def test_gauss_double(self):
         """ Gaussian with fwhm and without is the same """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10, ngsrc=10,
-            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=10, ngsrc=10,
+            dtype=np.float64, device=pycuda.autoinit.device)
 
         self.gauss_test_impl(sd)
 
     def test_gauss_float(self):
         """ Gaussian with fwhm and without is the same """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10, ngsrc=10,dtype=np.float32,
-            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10, nchan=32, ntime=10,npsrc=10, ngsrc=10, \
+            dtype=np.float32, device=pycuda.autoinit.device)
 
         self.gauss_test_impl(sd, cmp={'rtol' : 1e-4 })
 
@@ -330,15 +332,16 @@ class TestRimes(unittest.TestCase):
         # Visibilities ! has to have double complex
         Vis=np.complex128(np.zeros((nbl,nchan,4)))
         # UVW coordinates
-        uvw=sd.uvw.T.astype(np.float64).copy()
+        uvw=sd.uvw_cpu.T.astype(np.float64).copy()
 
         # Frequencies in Hz
-        WaveL = sd.wavelength.astype(np.float64)
+        WaveL = sd.wavelength_cpu.astype(np.float64)
         # Sky coordinates
         T=0 # We should only have one timestep in this test
 
-        lms=np.array([sd.lm[0], sd.lm[1], sd.brightness[0,T], sd.brightness[4,T], 
-            sd.brightness[1,T], sd.brightness[2,T], sd.brightness[3,T]]).astype(np.float64).T.copy()
+        lms=np.array([sd.lm_cpu[0], sd.lm_cpu[1],
+            sd.brightness_cpu[0,T], sd.brightness_cpu[4,T], sd.brightness_cpu[1,T],
+            sd.brightness_cpu[2,T], sd.brightness_cpu[3,T]]).astype(np.float64).T.copy()
 
         # Antennas
         A0=np.int64(np.random.rand(nbl)*na)
@@ -398,7 +401,7 @@ class TestRimes(unittest.TestCase):
 
     def test_predict_double(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            device=pycuda.autoinit.device)
+            dtype=np.float64, device=pycuda.autoinit.device)
 
         self.do_predict_test(sd)
 
@@ -409,8 +412,9 @@ class TestRimes(unittest.TestCase):
         self.do_predict_test(sd)
 
     def test_sum_float(self):
-        sd = TestSharedData(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32,
-            device=pycuda.autoinit.device)
+        sd = TestSharedData(na=14,nchan=32,ntime=36,npsrc=100,
+            dtype=np.float32, device=pycuda.autoinit.device)
+
         jones_cpu = (np.random.random(np.product(sd.jones_shape)) + \
             np.random.random(np.product(sd.jones_shape))*1j)\
             .reshape(sd.jones_shape).astype(sd.ct)
