@@ -46,7 +46,7 @@ class BiroSharedData(BaseSharedData):
         # Curry the register_array function for simplicity
         def reg(name,shape,dtype):
             self.register_array(name=name,shape=shape,dtype=dtype,
-                registrant='BaseSharedData', gpu=True, cpu=True,
+                registrant='BaseSharedData', gpu=True, cpu=False,
                 shape_member=True, dtype_member=True)
 
         def reg_prop(name,dtype,default):
