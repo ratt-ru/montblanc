@@ -85,15 +85,6 @@ class TestSharedData(BiroSharedData):
         sd.transfer_point_errors(point_errors)
         sd.transfer_weight_vector(weight_vector)
 
-        # Create the key positions. This snippet creates an array
-        # equal to the list of positions of the last array element timestep)
-        sd.keys = (np.arange(np.product(sd.jones_shape[:-1]))
-            *sd.jones_shape[-1]).astype(np.int32)
-        sd.keys_gpu = gpuarray.to_gpu(sd.keys)
-
-        # Output visibility matrix
-        assert np.product(sd.vis_shape) == np.product(sd.keys.shape)
-
         vis = make_random(sd.vis_shape, sd.vis_dtype) + \
             make_random(sd.vis_shape, sd.vis_dtype)*1j
         sd.transfer_vis(vis)

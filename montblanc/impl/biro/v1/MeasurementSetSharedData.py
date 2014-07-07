@@ -170,12 +170,6 @@ class MeasurementSetSharedData(BiroSharedData):
         # Divide speed of light by frequency to get the wavelength here.
         self.set_ref_wave(montblanc.constants.C/tf.getcol('REF_FREQUENCY')[0])
 
-        # Create the key positions. This snippet creates an array
-        # equal to the list of positions of the last array element timestep)
-        self.keys = (np.arange(np.product(self.jones_shape[:-1]))
-            *self.jones_shape[-1]).astype(np.int32)
-        self.keys_gpu = gpuarray.to_gpu(self.keys)
-
         t.close()
         ta.close()
         tf.close()
