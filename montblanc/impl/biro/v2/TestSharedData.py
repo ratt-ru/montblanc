@@ -10,7 +10,7 @@ from montblanc.BaseSharedData import DEFAULT_NPSRC
 from montblanc.BaseSharedData import DEFAULT_NGSRC
 from montblanc.BaseSharedData import DEFAULT_DTYPE
 
-from montblanc.impl.biro.v1.BiroSharedData import BiroSharedData
+from montblanc.impl.biro.v2.BiroSharedData import BiroSharedData
 
 class TestSharedData(BiroSharedData):
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,

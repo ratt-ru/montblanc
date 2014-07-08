@@ -76,20 +76,11 @@ class BiroSharedData(BaseSharedData):
 
         reg(name='wavelength', shape=(nchan,), dtype=ft)
         reg(name='point_errors', shape=(2,na,ntime), dtype=ft)
-        reg(name='weight_vector', shape=(4,nbl,nchan,ntime), dtype=ft)
-        reg(name='bayes_data', shape=(4,nbl,nchan,ntime), dtype=ct)
+        reg(name='weight_vector', shape=(4,nbl,ntime,nchan), dtype=ft)
+        reg(name='bayes_data', shape=(4,nbl,ntime,nchan), dtype=ct)
 
-        jones_shape = (4,nbl,nchan,ntime,nsrc)
+        jones_scalar_shape = (4,na,ntime,nsrc,nchan)
 
-        reg(name='jones', shape=jones_shape, dtype=ct)
-        reg(name='vis', shape=(4,nbl,nchan,ntime), dtype=ct)
-        reg(name='chi_sqrd_result', shape=(nbl,nchan,ntime), dtype=ft)
-
-        # Create the key positions. This snippet creates an array
-        # equal to the list of positions of the last array element timestep)
-        keys = (np.arange(np.product(jones_shape[:-1]))
-            *jones_shape[-1]).astype(np.int32)
-
-        reg(name='keys', shape=keys.shape, dtype=np.int32)
-
-        sd.transfer_keys(keys)
+        reg(name='jones_scalar', shape=jones_scalar_shape, dtype=ct)
+        reg(name='vis', shape=(4,nbl,ntime,nchan), dtype=ct)
+        reg(name='chi_sqrd_result', shape=(nbl,ntime,nchan), dtype=ft)

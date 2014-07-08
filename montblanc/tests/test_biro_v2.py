@@ -13,6 +13,8 @@ import montblanc.ext.crimes
 
 from montblanc.impl.biro.v2.TestSharedData import TestSharedData
 
+from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
+
 from montblanc.impl.biro.v2.gpu.RimeBK import RimeBK
 from montblanc.impl.biro.v2.gpu.RimeEBK import RimeEBK
 from montblanc.impl.biro.v2.gpu.RimeSumFloat import RimeSumFloat
@@ -43,6 +45,32 @@ class TestBiroV2(unittest.TestCase):
     def tearDown(self):
         """ Tear down each test case """
         pass
+
+    def EK_test_impl(self, sd, cmp=None):
+        """ Type independent implementaiton of the EK test """
+        if cmp is None: cmp = {}
+
+        rime_ek = RimeEK()
+
+        # Initialise the BK float kernel
+        rime_ek.initialise(sd)
+        rime_ek.execute(sd)
+        rime_ek.shutdown(sd)
+
+    def test_EK_float(self):
+        """ Single precision EK test """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
+            dtype=np.float32, device=pycuda.autoinit.device)      
+
+        self.EK_test_impl(sd)
+
+    def test_EK_double(self):
+        """ Double precision EK test """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
+            dtype=np.float64, device=pycuda.autoinit.device)      
+
+        self.EK_test_impl(sd)
+
 
     def BK_test_impl(self, sd, cmp=None):
         """ Type independent implementation of the BK test """
