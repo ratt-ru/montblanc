@@ -67,7 +67,7 @@ class BiroSharedData(BaseSharedData):
         reg_prop('beam_width', ft, 65)
         reg_prop('beam_clip', ft, 1.0881)
 
-        reg(name='uvw', shape=(3,nbl,ntime), dtype=ft)
+        reg(name='uvw', shape=(3,na,ntime), dtype=ft)
         reg(name='ant_pairs', shape=(2,nbl,ntime), dtype=np.int32)
 
         reg(name='lm', shape=(2,nsrc), dtype=ft)
@@ -79,7 +79,7 @@ class BiroSharedData(BaseSharedData):
         reg(name='weight_vector', shape=(4,nbl,ntime,nchan), dtype=ft)
         reg(name='bayes_data', shape=(4,nbl,ntime,nchan), dtype=ct)
 
-        jones_scalar_shape = (4,na,ntime,nsrc,nchan)
+        jones_scalar_shape = (na,ntime,nsrc,nchan)
 
         reg(name='jones_scalar', shape=jones_scalar_shape, dtype=ct)
         reg(name='vis', shape=(4,nbl,ntime,nchan), dtype=ct)

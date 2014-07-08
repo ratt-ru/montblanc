@@ -35,10 +35,8 @@ class TestSharedData(BiroSharedData):
             return np.array(list, dtype=dtype).reshape(shape)
 
         # Baseline coordinates in the u,v,w (frequency) domain
-        uvw = shape_list([
-            np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*3., \
-            np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*2., \
-            np.arange(1,nbl*ntime+1).reshape(nbl,ntime).astype(ft)*1.],
+        r = np.arange(1,na*ntime+1).reshape(na,ntime).astype(ft)
+        uvw = shape_list([3.*r, 2.*r, 1.*r],
             shape=sd.uvw_shape, dtype=sd.uvw_dtype)
 
         # Point source coordinates in the l,m,n (sky image) domain

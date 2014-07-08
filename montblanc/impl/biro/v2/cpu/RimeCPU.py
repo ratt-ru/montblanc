@@ -99,6 +99,48 @@ class RimeCPU(object):
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
+    def compute_k_jones_scalar_per_ant(self):
+        """
+        Computes the scalar K (phase) term of the RIME using numpy.
+
+        Returns a (na,ntime,nsrc,nchan) matrix of complex scalars.
+        """
+        sd = self.shared_data
+
+        try:
+            uvw = sd.uvw_cpu[:,0:sd.na,:]
+            assert uvw.shape == (3, sd.na, sd.ntime)
+
+            # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
+            n = np.sqrt(1. - sd.lm_cpu[0]**2 - sd.lm_cpu[1]**2) - 1.
+
+            # u*l+v*m+w*n. Outer product creates array of dim na x ntime x nsrcs
+            phase = (np.outer(uvw[0], sd.lm_cpu[0]) + \
+                np.outer(uvw[1], sd.lm_cpu[1]) + \
+                np.outer(uvw[2],n))\
+                    .reshape(sd.na, sd.ntime, sd.nsrc)
+            assert phase.shape == (sd.na, sd.ntime, sd.nsrc)            
+
+            # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. na x ntime x nchan x nsrcs 
+            phase = (2*np.pi*1j*phase)[:,:,:,np.newaxis]/ \
+                sd.wavelength_cpu[np.newaxis,np.newaxis,np.newaxis,:]
+            assert phase.shape == (sd.na, sd.ntime, sd.nsrc, sd.nchan)
+
+            # Dimension ntime x nsrc x nchan
+            power = np.power(sd.ref_wave/sd.wavelength_cpu[np.newaxis,np.newaxis,:],
+                sd.brightness_cpu[4,:,:,np.newaxis])
+            assert power.shape == (sd.ntime,sd.nsrc,sd.nchan)
+
+            # Combine the power and phase together. Broadcast
+            # just works here
+            phase_term = power*np.exp(phase)
+            assert phase_term.shape == (sd.na, sd.ntime, sd.nsrc, sd.nchan)
+
+            return phase_term
+
+        except AttributeError as e:
+            rethrow_attribute_exception(e)
+
     def compute_k_jones_scalar(self):
         """
         Computes the scalar K (phase) term of the RIME using numpy.
@@ -144,7 +186,7 @@ class RimeCPU(object):
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
-    def compute_per_ant_e_jones_scalar(self):
+    def compute_e_jones_scalar_per_ant(self):
         """
         Computes the scalar E (analytic cos^3) term of the RIME per antenna.
 
@@ -155,19 +197,19 @@ class RimeCPU(object):
         try:
             # Compute the offsets for different antenna
             # Broadcasting here produces, na x ntime x nsrc
-            l_off = sd.lm_cpu[0] - sd.point_errors_cpu[0,:,:,np.newaxis]
-            m_off = sd.lm_cpu[1] - sd.point_errors_cpu[1,:,:,np.newaxis]
-            E_p = np.sqrt(l_off**2 + m_off**2)
+            l_diff = sd.lm_cpu[0] - sd.point_errors_cpu[0,:,:,np.newaxis]
+            m_diff = sd.lm_cpu[1] - sd.point_errors_cpu[1,:,:,np.newaxis]
+            E_p = np.sqrt(l_diff**2 + m_diff**2)
 
             assert E_p.shape == (sd.na, sd.ntime, sd.nsrc)
 
             # Broadcasting here produces, nbl x nchan x ntime x nsrc
-            E_p = sd.beam_width*1e-9*E_p[:,np.newaxis,:,:] *\
-                sd.wavelength_cpu[np.newaxis,:,np.newaxis,np.newaxis]
+            E_p = sd.beam_width*1e-9*E_p[:,:,:,np.newaxis] *\
+                sd.wavelength_cpu[np.newaxis,np.newaxis,np.newaxis,:]
             np.clip(E_p, np.finfo(sd.ft).min, sd.beam_clip, E_p)
             E_p = np.cos(E_p)**3
 
-            assert E_p.shape == (sd.na, sd.nchan, sd.ntime, sd.nsrc)
+            assert E_p.shape == (sd.na, sd.ntime, sd.nsrc, sd.nchan)
 
             return E_p
         except AttributeError as e:

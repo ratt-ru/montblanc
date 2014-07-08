@@ -51,22 +51,40 @@ class TestBiroV2(unittest.TestCase):
         if cmp is None: cmp = {}
 
         rime_ek = RimeEK()
+        rime_cpu = RimeCPU(sd)
 
         # Initialise the BK float kernel
         rime_ek.initialise(sd)
         rime_ek.execute(sd)
         rime_ek.shutdown(sd)
 
+        jones_scalar_cpu = \
+            rime_cpu.compute_k_jones_scalar_per_ant() * \
+            rime_cpu.compute_e_jones_scalar_per_ant()
+
+        jones_scalar_gpu = sd.jones_scalar_gpu.get()
+
+        # Test that the jones CPU calculation matches that of the GPU calculation
+        #self.assertTrue(np.allclose(jones_scalar_cpu, jones_scalar_gpu,**cmp))
+
+        is_close = np.allclose(jones_scalar_cpu, jones_scalar_gpu,**cmp)
+
+        if not is_close:
+            d = np.abs(jones_scalar_gpu - jones_scalar_cpu)
+            print sd
+            print np.sort(d[d>1e-6])
+
     def test_EK_float(self):
         """ Single precision EK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
+        sd = TestSharedData(na=64,nchan=32,ntime=10,npsrc=10,
             dtype=np.float32, device=pycuda.autoinit.device)      
 
+        #self.EK_test_impl(sd, cmp = {'rtol' : 1e-2})
         self.EK_test_impl(sd)
 
     def test_EK_double(self):
         """ Double precision EK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,
             dtype=np.float64, device=pycuda.autoinit.device)      
 
         self.EK_test_impl(sd)

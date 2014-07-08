@@ -8,14 +8,14 @@ from montblanc.node import Node
 
 FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,
-    'BLOCKDIMY' : 1,
-    'BLOCKDIMZ' : 8
+    'BLOCKDIMY' : 8,
+    'BLOCKDIMZ' : 2
 }
 
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,
-    'BLOCKDIMY' : 1,
-    'BLOCKDIMZ' : 8
+    'BLOCKDIMY' : 4,
+    'BLOCKDIMZ' : 1
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -97,12 +97,13 @@ void rime_jones_EK_impl(
 		// brightness varies by time (and source), not baseline or channel
 		if(threadIdx.x == 0 && threadIdx.z == 0)
 		{
-			i = TIME*NSRC + SRC + 4*NTIME*NSRC; a[threadIdx.y] = brightness[i];
+			i = TIME*NSRC + SRC + 4*NTIME*NSRC;
+			a[threadIdx.y] = brightness[i];
 		}
 
 		__syncthreads();
 
-		typename Tr::ft wl = 200 + 200*CHAN/NCHAN;
+		typename Tr::ft wl = wavelength[CHAN];
 
 		// Calculate the beam term for this antenna
 		typename Tr::ft diff = l[0] - ld[threadIdx.z][threadIdx.y];
@@ -110,10 +111,11 @@ void rime_jones_EK_impl(
 		diff = m[0] - md[threadIdx.z][threadIdx.y];
 		E += diff*diff;
 		E = Po::sqrt(E);
-		E = BEAMWIDTH*1e9*wl;
-		E = fminf(E, BEAMCLIP);
+		E *= BEAMWIDTH*1e-9*wl;
+		E = Po::min(E, BEAMCLIP);
 		E = Po::cos(E);
-		E = E*E*E;
+		// This is folded into phase further down
+		//E = E*E*E;
 
 		// Calculate the phase term for this antenna
 		typename Tr::ft phase = 1.0 - l[0]*l[0];
@@ -124,14 +126,13 @@ void rime_jones_EK_impl(
 		phase += v[threadIdx.z][threadIdx.y]*m[0];
 		phase += u[threadIdx.z][threadIdx.y]*l[0];
 
-		// Calculate the phase term for this antenna.
-		typename Tr::ft p = phase/wl;
+	    phase *= (2. * Tr::cuda_pi / wl);
 
 		typename Tr::ft real, imag;
-		Po::sincos(p, &imag, &real);
+		Po::sincos(phase, &imag, &real);
 
-		p = Po::pow(REFWAVE/wl, a[threadIdx.y]);
-		real *= p*E; imag *= p*E;
+		phase = Po::pow(REFWAVE/wl, a[threadIdx.y])*E*E*E;
+		real *= phase; imag *= phase;
 
 		// Write out the phase term.
 		i = (ANT*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
@@ -166,7 +167,7 @@ __global__ void rime_jones_EK_double(
         point_errors, jones);
 }
 
-} // extern "C" {}
+} // extern "C" {
 """)
 
 class RimeEK(Node):
@@ -176,8 +177,8 @@ class RimeEK(Node):
     def initialise(self, shared_data):
         sd = shared_data
 
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
-        D.update(sd.get_properties())
+        D = sd.get_properties()
+        D.update(FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS)
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
@@ -202,17 +203,17 @@ class RimeEK(Node):
 
         D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
 
-        srcs_per_block = D['BLOCKDIMX'] if sd.nsrc > D['BLOCKDIMX'] else sd.nsrc
-        time_chans_per_block = D['BLOCKDIMY']
-        baselines_per_block = D['BLOCKDIMZ'] if sd.nbl > D['BLOCKDIMZ'] else sd.nbl
+        chans_per_block = D['BLOCKDIMX'] if sd.nchan > D['BLOCKDIMX'] else sd.nchan
+        times_per_block = D['BLOCKDIMY'] if sd.ntime > D['BLOCKDIMY'] else sd.ntime
+        ants_per_block = D['BLOCKDIMZ'] if sd.na > D['BLOCKDIMZ'] else sd.na
 
-        src_blocks = self.blocks_required(sd.nsrc,srcs_per_block)
-        baseline_blocks = self.blocks_required(sd.nbl,baselines_per_block)
-        time_chan_blocks = sd.ntime*sd.nchan
+        chan_blocks = self.blocks_required(sd.nchan, chans_per_block)
+        time_blocks = self.blocks_required(sd.ntime, times_per_block)
+        ant_blocks = self.blocks_required(sd.na, ants_per_block)
 
         return {
-            'block' : (srcs_per_block,time_chans_per_block,baselines_per_block),
-            'grid'  : (src_blocks,time_chan_blocks,baseline_blocks), 
+            'block' : (chans_per_block, times_per_block, ants_per_block),
+            'grid'  : (chan_blocks, time_blocks, ant_blocks), 
         }
 
     def execute(self, shared_data):
