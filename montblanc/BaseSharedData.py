@@ -245,7 +245,7 @@ class BaseSharedData(SharedData):
         return '%-*s%-*s%-*s%-*s%-*s%-*s' % (
             20,name,
             10,size,
-            10,dtype,
+            15,dtype,
             4,cpu,
             4,gpu,
             20,shape)
