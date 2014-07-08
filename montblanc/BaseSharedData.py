@@ -251,11 +251,12 @@ class BaseSharedData(SharedData):
             20,shape)
 
     @staticmethod
-    def fmt_property_line(name,dtype,default):
-        return '%-*s%-*s%-*s' % (
+    def fmt_property_line(name,dtype,value,default):
+        return '%-*s%-*s%-*s%-*s' % (
             20,name,
             10,dtype,
-            10,default)
+            20,value,
+            20,default)
 
     @staticmethod
     def fmt_bytes(nbytes):
@@ -567,12 +568,14 @@ class BaseSharedData(SharedData):
         """ Generator generating string describing each registered property """
         yield 'Registered Properties'
         yield '-'*80
-        yield BaseSharedData.fmt_property_line('Property Name', 'Type', 'Default Value')
+        yield BaseSharedData.fmt_property_line('Property Name',
+            'Type', 'Value', 'Default Value')
         yield '-'*80
 
         for p in self.properties.itervalues():
             yield BaseSharedData.fmt_property_line(
-                p.name, np.dtype(p.dtype).name, p.default)
+                p.name, np.dtype(p.dtype).name,
+                getattr(self, p.name), p.default)
 
     def __str__(self):
         """ Outputs a string representation of this object """
