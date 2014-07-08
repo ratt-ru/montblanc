@@ -21,7 +21,7 @@ from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
 from montblanc.impl.biro.v1.gpu.RimeMultiply import RimeMultiply
 from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
 
-import montblanc.impl.biro.v1.cpu.RimeCPU as RimeCPU
+from montblanc.impl.biro.v1.cpu.RimeCPU import RimeCPU
 
 class TestBiroV1(unittest.TestCase):
     """
@@ -57,7 +57,7 @@ class TestBiroV1(unittest.TestCase):
         rime_bk.shutdown(sd)
 
         # Compute the jones matrix on the CPU
-        jones_cpu = RimeCPU.compute_bk_jones(sd)
+        jones_cpu = RimeCPU(sd).compute_bk_jones()
 
         # Get the jones matrices calculated by the GPU
         jones_gpu = sd.jones_gpu.get()
@@ -96,7 +96,7 @@ class TestBiroV1(unittest.TestCase):
         for k in kernels: k.shutdown(sd)
 
         jones_gpu = sd.jones_gpu.get()
-        jones_cpu = RimeCPU.compute_ebk_jones(sd)
+        jones_cpu = RimeCPU(sd).compute_ebk_jones()
 
         self.assertTrue(np.allclose(jones_gpu, jones_cpu,**cmp))
 
@@ -209,14 +209,14 @@ class TestBiroV1(unittest.TestCase):
         for k in kernels: k.shutdown(sd)
 
         # Compute the chi squared sum values
-        chi_sqrd_cpu = RimeCPU.compute_chi_sqrd_sum_terms(sd, weight_vector=weight_vector)
+        chi_sqrd_cpu = RimeCPU(sd).compute_chi_sqrd_sum_terms(weight_vector=weight_vector)
         chi_sqrd_gpu = sd.chi_sqrd_result_gpu.get()
 
         # Check the values inside the sum term of the Chi Squared
         self.assertTrue(np.allclose(chi_sqrd_cpu, chi_sqrd_gpu,**cmp))
 
         # Compute the actual chi squared value
-        X2_cpu = RimeCPU.compute_chi_sqrd(sd, weight_vector=weight_vector)
+        X2_cpu = RimeCPU(sd).compute_chi_sqrd(weight_vector=weight_vector)
 
         # Check that the result returned by the CPU and GPU are the same,
         self.assertTrue(np.allclose(np.array([X2_cpu]), np.array([sd.X2]), **cmp))
@@ -301,8 +301,8 @@ class TestBiroV1(unittest.TestCase):
 
         sd = shared_data
 
-        gs = RimeCPU.compute_gaussian_shape(sd)
-        gs_with_fwhm = RimeCPU.compute_gaussian_shape_with_fwhm(sd)
+        gs = RimeCPU(sd).compute_gaussian_shape()
+        gs_with_fwhm = RimeCPU(sd).compute_gaussian_shape_with_fwhm()
 
         self.assertTrue(np.allclose(gs,gs_with_fwhm, **cmp))
 
