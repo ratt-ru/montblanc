@@ -8,7 +8,6 @@ import pycuda.autoinit
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
-#import montblanc
 import montblanc.ext.predict
 import montblanc.ext.crimes
 
@@ -65,6 +64,7 @@ class TestBiroV2(unittest.TestCase):
         # Test that the jones CPU calculation matches that of the GPU calculation
         self.assertTrue(np.allclose(jones_cpu, jones_gpu,**cmp))
 
+    @unittest.skip('ignore for now')
     def test_BK_float(self):
         """ single precision BK test """
         sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
@@ -72,6 +72,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.BK_test_impl(sd)
 
+    @unittest.skip('ignore for now')
     def test_BK_double(self):
         """ double precision BK test """
         sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
@@ -100,6 +101,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.assertTrue(np.allclose(jones_gpu, jones_cpu,**cmp))
 
+    @unittest.skip('ignore for now')
     def test_pEBK_double(self):
         """ double precision EBK test for point sources only """
         sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
@@ -107,6 +109,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.EBK_test_impl(sd)
 
+    @unittest.skip('ignore for now')
     def test_pEBK_float(self):
         """ single precision EBK test for point sources only """
         sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
@@ -116,6 +119,7 @@ class TestBiroV2(unittest.TestCase):
         #self.EBK_test_impl(sd, cmp={'rtol' : 1e-2,'atol' : 1e-2})
         self.EBK_test_impl(sd)
 
+    @unittest.skip('ignore for now')
     def test_pgEBK_double(self):
         """ double precision EBK test for point and gaussian sources """
         #sd = TestSharedData(na=2,nchan=2,ntime=1,npsrc=2,ngsrc=1,
@@ -124,6 +128,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.EBK_test_impl(sd)
 
+    @unittest.skip('ignore for now')
     def test_pgEBK_float(self):
         """ single precision EBK test for point and gaussian sources """
         sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
@@ -179,7 +184,7 @@ class TestBiroV2(unittest.TestCase):
         # Confirm similar results
         self.assertTrue(np.allclose(jones_output_gpu, jones_output_cpu,**cmp))
 
-    @unittest.skipIf(False, 'test_multiply_double numpy code is somewhat inefficient')
+    @unittest.skipIf(True, 'test_multiply_double numpy code is somewhat inefficient')
     def test_multiply_double(self):
         """ double precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
@@ -188,7 +193,7 @@ class TestBiroV2(unittest.TestCase):
         
         self.multiply_test_impl(sd)
 
-    @unittest.skipIf(False, 'test_multiply_float numpy code is somewhat inefficient')
+    @unittest.skipIf(True, 'test_multiply_float numpy code is somewhat inefficient')
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
@@ -221,6 +226,7 @@ class TestBiroV2(unittest.TestCase):
         # Check that the result returned by the CPU and GPU are the same,
         self.assertTrue(np.allclose(np.array([X2_cpu]), np.array([sd.X2]), **cmp))
 
+    @unittest.skip('ignore for now')
     def test_chi_squared_double(self):
         """ double precision chi squared test """
         sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
@@ -228,6 +234,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.chi_squared_test_impl(sd)
 
+    @unittest.skip('ignore for now')
     def test_chi_squared_float(self):
         """ single precision chi squared test """
         sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
@@ -235,6 +242,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.chi_squared_test_impl(sd, cmp={'rtol' : 1e-4})
 
+    @unittest.skip('ignore for now')
     def test_chi_squared_weight_vector_double(self):
         """ double precision chi squared test with noise vector """
         sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
@@ -242,6 +250,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.chi_squared_test_impl(sd, weight_vector=True)
 
+    @unittest.skip('ignore for now')
     def test_chi_squared_weight_vector_float(self):
         """ single precision chi squared test with noise vector """
         sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
@@ -281,6 +290,7 @@ class TestBiroV2(unittest.TestCase):
         # Confirm similar results
         self.assertTrue(np.allclose(vis_cpu, vis_gpu, **cmp))
 
+    @unittest.skip('ignore for now')
     def test_reduce_double(self):
         """ double precision reduction test """
         sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,
@@ -288,6 +298,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.reduce_test_impl(sd)
 
+    @unittest.skip('ignore for now')
     def test_reduce_float(self):
         """ single precision reduction test """
         sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,
@@ -306,6 +317,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.assertTrue(np.allclose(gs,gs_with_fwhm, **cmp))
 
+    @unittest.skip('ignore for now')
     def test_gauss_double(self):
         """ Gaussian with fwhm and without is the same """
         sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=10, ngsrc=10,
@@ -313,6 +325,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.gauss_test_impl(sd)
 
+    @unittest.skip('ignore for now')
     def test_gauss_float(self):
         """ Gaussian with fwhm and without is the same """
         sd = TestSharedData(na=10, nchan=32, ntime=10,npsrc=10, ngsrc=10, \
@@ -400,18 +413,21 @@ class TestBiroV2(unittest.TestCase):
         # Compare the GPU solution with Cyril's predict code
         self.assertTrue(np.allclose(vis_gpu, vis_predict_cpu))
 
+    @unittest.skip('ignore for now')
     def test_predict_double(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float64, device=pycuda.autoinit.device)
 
         self.do_predict_test(sd)
 
+    @unittest.skip('ignore for now')
     def test_predict_float(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float32, device=pycuda.autoinit.device)
 
         self.do_predict_test(sd)
 
+    @unittest.skip('ignore for now')
     def test_sum_float(self):
         sd = TestSharedData(na=14,nchan=32,ntime=36,npsrc=100,
             dtype=np.float32, device=pycuda.autoinit.device)
