@@ -504,13 +504,15 @@ class BaseSharedData(SharedData):
             raise TypeError, ('setter keyword argument set',
                 ' to an invalid type %s' % (type(setter)))
 
-    def shape(self,name):
-        return self.arrays[name].shape
+    def get_properties(self):
+        """
+        Returns a dictionary of properties related to this SharedData object.
 
-    def get_params(self):
+        Used in templated GPU kernels.
+        """
         sd = self
         
-        return {
+        D = {
             'na' : sd.na,
             'nbl' : sd.nbl,
             'nchan' : sd.nchan,
@@ -519,11 +521,12 @@ class BaseSharedData(SharedData):
             'ngsrc' : sd.ngsrc,
             'nsrc'  : sd.nsrc,
             'nvis' : sd.nvis,
-            'beam_width': sd.beam_width,
-            'beam_clip' : sd.beam_clip,
-            'sigma_sqrd' : sd.sigma_sqrd,
-            'gauss_scale' : sd.gauss_scale
         }
+
+        for p in self.properties.itervalues():
+            D[p.name] = getattr(self,p.name)
+
+        return D
 
     def is_float(self):
         return self.ft == np.float32

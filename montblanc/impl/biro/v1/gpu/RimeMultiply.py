@@ -145,7 +145,7 @@ class RimeMultiply(Node):
         sd = shared_data
 
         D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
-        D.update(sd.get_params())
+        D.update(sd.get_properties())
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
