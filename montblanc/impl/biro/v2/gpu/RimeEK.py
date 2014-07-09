@@ -17,9 +17,9 @@ FLOAT_PARAMS = {
 # local memory
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 8,    # Number of timesteps
+    'BLOCKDIMY' : 4,    # Number of timesteps
     'BLOCKDIMZ' : 1,    # Number of antennas
-    'maxregs'   : 40    # Maximum number of registers
+    'maxregs'   : 44    # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -114,13 +114,13 @@ void rime_jones_EK_impl(
 		__syncthreads();
 
 		// Calculate the phase term for this antenna
-		typename Tr::ft phase = Po::sqrt(1.0 - l[0]*l[0] - m[0]*m[0]) - 1.0;
+		typename Tr::ft phase = Po::sqrt(T(1.0) - l[0]*l[0] - m[0]*m[0]) - T(1.0);
 
 		phase = phase*w[threadIdx.z][threadIdx.y]
 			+ v[threadIdx.z][threadIdx.y]*m[0]
 			+ u[threadIdx.z][threadIdx.y]*l[0];
 
-	    phase *= (2. * Tr::cuda_pi / wl[threadIdx.x]);
+	    phase *= (T(2.0) * Tr::cuda_pi / wl[threadIdx.x]);
 
 		typename Tr::ft real, imag;
 		Po::sincos(phase, &imag, &real);
@@ -134,8 +134,8 @@ void rime_jones_EK_impl(
 		diff = m[0] - md[threadIdx.z][threadIdx.y];
 		E += diff*diff;
 		E = Po::sqrt(E);
-		E *= BEAMWIDTH*1e-9*wl[threadIdx.x];
-		E = Po::min(E, BEAMCLIP);
+		E *= T(BEAMWIDTH*1e-9)*wl[threadIdx.x];
+		E = Po::min(E, T(BEAMCLIP));
 		E = Po::cos(E);
 		E = E*E*E;
 
