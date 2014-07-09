@@ -14,6 +14,8 @@ import montblanc.ext.crimes
 from montblanc.impl.biro.v2.TestSharedData import TestSharedData
 
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
+from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
+
 from montblanc.impl.biro.v2.gpu.RimeJonesReduce import RimeJonesReduce
 from montblanc.impl.biro.v2.gpu.RimeMultiply import RimeMultiply
 from montblanc.impl.biro.v2.gpu.RimeChiSquared import RimeChiSquared
@@ -76,6 +78,28 @@ class TestBiroV2(unittest.TestCase):
             dtype=np.float64, device=pycuda.autoinit.device)      
 
         self.EK_test_impl(sd)
+
+    def gauss_B_sum_test_impl(self, sd):
+        rime_gauss_B_sum = RimeGaussBSum()
+
+        rime_gauss_B_sum.initialise(sd)
+        rime_gauss_B_sum.execute(sd)
+        rime_gauss_B_sum.shutdown(sd)
+
+    def test_gauss_B_sum_float(self):
+        """ """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,
+            dtype=np.float32, device=pycuda.autoinit.device)      
+
+        self.gauss_B_sum_test_impl(sd)
+
+    def test_gauss_B_sum_double(self):
+        """ """
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,
+            dtype=np.float64, device=pycuda.autoinit.device)      
+
+        self.gauss_B_sum_test_impl(sd)
+
 
     def multiply_test_impl(self, sd, cmp=None):
         """ Type independent implementation of the multiply test """
