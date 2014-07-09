@@ -65,18 +65,11 @@ class TestBiroV2(unittest.TestCase):
         jones_scalar_gpu = sd.jones_scalar_gpu.get()
 
         # Test that the jones CPU calculation matches that of the GPU calculation
-        #self.assertTrue(np.allclose(jones_scalar_cpu, jones_scalar_gpu,**cmp))
-
-        is_close = np.allclose(jones_scalar_cpu, jones_scalar_gpu,**cmp)
-
-        if not is_close:
-            d = np.abs(jones_scalar_gpu - jones_scalar_cpu)
-            print sd
-            print np.sort(d[d>1e-6])
+        self.assertTrue(np.allclose(jones_scalar_cpu, jones_scalar_gpu,**cmp))
 
     def test_EK_float(self):
         """ Single precision EK test """
-        sd = TestSharedData(na=64,nchan=32,ntime=10,npsrc=10,
+        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=10,
             dtype=np.float32, device=pycuda.autoinit.device)      
 
         #self.EK_test_impl(sd, cmp = {'rtol' : 1e-2})
@@ -84,7 +77,7 @@ class TestBiroV2(unittest.TestCase):
 
     def test_EK_double(self):
         """ Double precision EK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,
+        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=10,
             dtype=np.float64, device=pycuda.autoinit.device)      
 
         self.EK_test_impl(sd)

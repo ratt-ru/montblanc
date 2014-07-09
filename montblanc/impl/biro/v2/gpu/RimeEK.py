@@ -7,15 +7,19 @@ import montblanc
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
-    'BLOCKDIMX' : 32,
-    'BLOCKDIMY' : 8,
-    'BLOCKDIMZ' : 2
+    'BLOCKDIMX' : 32,   # Number of channels
+    'BLOCKDIMY' : 8,    # Number of timesteps
+    'BLOCKDIMZ' : 2,    # Number of antennas
+    'maxregs'   : 32    # Maximum number of registers
 }
 
+# 44 registers results in some spillage into
+# local memory
 DOUBLE_PARAMS = {
-    'BLOCKDIMX' : 32,
-    'BLOCKDIMY' : 4,
-    'BLOCKDIMZ' : 1
+    'BLOCKDIMX' : 32,   # Number of channels
+    'BLOCKDIMY' : 8,    # Number of timesteps
+    'BLOCKDIMZ' : 1,    # Number of antennas
+    'maxregs'   : 40    # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -70,6 +74,8 @@ void rime_jones_EK_impl(
 
 	__shared__ typename Tr::ft a[BLOCKDIMY];
 
+	__shared__ typename Tr::ft wl[BLOCKDIMX];
+
 	int i;
 
 	// UVW coordinates vary by antenna and time, but not channel
@@ -84,6 +90,10 @@ void rime_jones_EK_impl(
 		i += NA*NTIME;
 		w[threadIdx.z][threadIdx.y] = uvw[i];
 	}
+
+	// Wavelengths vary by channel, not by time and antenna
+	if(threadIdx.y == 0 && threadIdx.z == 0)
+		{ wl[threadIdx.x] = wavelength[CHAN]; }
 
 	for(int SRC=0;SRC<NSRC;++SRC)
 	{
@@ -103,7 +113,20 @@ void rime_jones_EK_impl(
 
 		__syncthreads();
 
-		typename Tr::ft wl = wavelength[CHAN];
+		// Calculate the phase term for this antenna
+		typename Tr::ft phase = Po::sqrt(1.0 - l[0]*l[0] - m[0]*m[0]) - 1.0;
+
+		phase = phase*w[threadIdx.z][threadIdx.y]
+			+ v[threadIdx.z][threadIdx.y]*m[0]
+			+ u[threadIdx.z][threadIdx.y]*l[0];
+
+	    phase *= (2. * Tr::cuda_pi / wl[threadIdx.x]);
+
+		typename Tr::ft real, imag;
+		Po::sincos(phase, &imag, &real);
+
+		phase = Po::pow(REFWAVE/wl[threadIdx.x], a[threadIdx.y]);
+		real *= phase; imag *= phase;
 
 		// Calculate the beam term for this antenna
 		typename Tr::ft diff = l[0] - ld[threadIdx.z][threadIdx.y];
@@ -111,30 +134,15 @@ void rime_jones_EK_impl(
 		diff = m[0] - md[threadIdx.z][threadIdx.y];
 		E += diff*diff;
 		E = Po::sqrt(E);
-		E *= BEAMWIDTH*1e-9*wl;
+		E *= BEAMWIDTH*1e-9*wl[threadIdx.x];
 		E = Po::min(E, BEAMCLIP);
 		E = Po::cos(E);
-		// This is folded into phase further down
-		//E = E*E*E;
+		E = E*E*E;
 
-		// Calculate the phase term for this antenna
-		typename Tr::ft phase = 1.0 - l[0]*l[0];
-		phase -= m[0]*m[0];
-		phase = Po::sqrt(phase) - 1.0;
+		// Multiply phase and beam values together
+		real *= E; imag *= E;
 
-		phase *= w[threadIdx.z][threadIdx.y];
-		phase += v[threadIdx.z][threadIdx.y]*m[0];
-		phase += u[threadIdx.z][threadIdx.y]*l[0];
-
-	    phase *= (2. * Tr::cuda_pi / wl);
-
-		typename Tr::ft real, imag;
-		Po::sincos(phase, &imag, &real);
-
-		phase = Po::pow(REFWAVE/wl, a[threadIdx.y])*E*E*E;
-		real *= phase; imag *= phase;
-
-		// Write out the phase term.
+		// Write out the scalar.
 		i = (ANT*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
 		jones_scalar[i] = Po::make_ct(real, imag);
 	}
@@ -180,9 +188,12 @@ class RimeEK(Node):
         D = sd.get_properties()
         D.update(FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS)
 
+        regs = str(FLOAT_PARAMS['maxregs'] \
+        	if sd.is_float() else DOUBLE_PARAMS['maxregs'])
+
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
-            options=['-lineinfo'],
+            options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
