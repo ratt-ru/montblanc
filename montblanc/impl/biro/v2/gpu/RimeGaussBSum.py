@@ -9,17 +9,15 @@ from montblanc.node import Node
 FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
     'BLOCKDIMY' : 8,    # Number of timesteps
-    'BLOCKDIMZ' : 2,    # Number of antennas
+    'BLOCKDIMZ' : 4,    # Number of baselines
     'maxregs'   : 32    # Maximum number of registers
 }
 
-# 44 registers results in some spillage into
-# local memory
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
     'BLOCKDIMY' : 8,    # Number of timesteps
-    'BLOCKDIMZ' : 1,    # Number of antennas
-    'maxregs'   : 40    # Maximum number of registers
+    'BLOCKDIMZ' : 1,    # Number of baselines
+    'maxregs'   : 48    # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -39,6 +37,7 @@ KERNEL_TEMPLATE = string.Template("""
 #define REFWAVE ${ref_wave}
 #define BEAMCLIP ${beam_clip}
 #define BEAMWIDTH ${beam_width}
+#define GAUSS_SCALE ${gauss_scale}
 
 template <
     typename T,
@@ -49,6 +48,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * uvw,
     typename Tr::ft * brightness,
     typename Tr::ft * gauss_shape,
+    typename Tr::ft * wavelength,
     int * ant_pairs,
     typename Tr::ct * jones_EK_scalar,
     typename Tr::ct * visibilities)
@@ -59,6 +59,113 @@ void rime_gauss_B_sum_impl(
 
     if(BL >= NBL || TIME >= NTIME || CHAN >= NCHAN)
         return;   
+
+    __shared__ typename Tr::ft u[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ typename Tr::ft v[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ typename Tr::ft w[BLOCKDIMZ][BLOCKDIMY];
+
+    __shared__ typename Tr::ft el[1];
+    __shared__ typename Tr::ft em[1];
+    __shared__ typename Tr::ft eR[1];
+
+    __shared__ typename Tr::ft I[BLOCKDIMY];
+    __shared__ typename Tr::ft Q[BLOCKDIMY];
+    __shared__ typename Tr::ft U[BLOCKDIMY];
+    __shared__ typename Tr::ft V[BLOCKDIMY];
+
+    __shared__ typename Tr::ft wl[BLOCKDIMX];
+
+    int i;
+
+    // Figure out the antenna pairs
+    i = BL*NTIME + TIME; int ANT1 = ant_pairs[i];
+    i += NBL*NTIME;      int ANT2 = ant_pairs[i];
+
+    // UVW coordinates vary by baseline and time, but not channel
+    if(threadIdx.x == 0)
+    {
+        // UVW, calculated from u_pq = u_p - u_q
+        // baseline x BLOCKDIMY + TIME;
+        i = ANT1*NTIME + TIME; u[threadIdx.z][threadIdx.y] = uvw[i];
+        i += NA*NTIME;         v[threadIdx.z][threadIdx.y] = uvw[i];
+        i += NA*NTIME;         w[threadIdx.z][threadIdx.y] = uvw[i];
+
+        i = ANT2*NTIME + TIME; u[threadIdx.z][threadIdx.y] -= uvw[i];
+        i += NA*NTIME;         v[threadIdx.z][threadIdx.y] -= uvw[i];
+        i += NA*NTIME;         w[threadIdx.z][threadIdx.y] -= uvw[i];
+    }
+
+    // Wavelength varies by channel, but not baseline and time
+    if(threadIdx.y == 0 && threadIdx.z == 0)
+        { wl[threadIdx.x] = wavelength[CHAN]; }
+
+    typename Tr::ft Isum = 0.0;
+    typename Tr::ft Qsum = 0.0;
+    typename Tr::ft Usum = 0.0;
+    typename Tr::ft Vsum = 0.0;
+
+    for(int SRC=0;SRC<NSRC;++SRC)
+    {
+        // The following loads effect the global load efficiency.
+
+        // brightness varies by time (and source), not baseline or channel
+        if(threadIdx.x == 0 && threadIdx.z == 0)
+        {
+            i = TIME*NSRC + SRC;  I[threadIdx.y] = brightness[i];
+            i += NTIME*NSRC;      Q[threadIdx.y] = brightness[i];
+            i += NTIME*NSRC;      U[threadIdx.y] = brightness[i];
+            i += NTIME*NSRC;      V[threadIdx.y] = brightness[i];
+        }
+
+        // gaussian shape only varies by source.
+        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+        {
+            i = SRC;   el[0] = gauss_shape[i];
+            i += NSRC; em[0] = gauss_shape[i];
+            i += NSRC; eR[0] = gauss_shape[i];
+        }
+
+        __syncthreads();
+
+        // Get the complex scalars for antenna one and two
+        i = (ANT1*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_one = jones_EK_scalar[i];
+        i = (ANT2*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_two = jones_EK_scalar[i];
+
+        // Divide the first antenna scalar by the second
+        typename Tr::ft den = ant_two.x*ant_two.x + ant_two.y*ant_two.y;
+        typename Tr::ct value = Po::make_ct(
+            (ant_one.x*ant_two.x + ant_one.y*ant_two.y) / den,
+            (ant_one.y*ant_two.x - ant_one.x*ant_two.y) / den);
+
+        // Calculate the gaussian
+        typename Tr::ft scale_uv = T(GAUSS_SCALE)/wl[threadIdx.x];
+
+        typename Tr::ft u1 = (u[threadIdx.z][threadIdx.y]*em[0] -
+            v[threadIdx.z][threadIdx.y]*el[0])*eR[0]*scale_uv;
+        typename Tr::ft v1 = (u[threadIdx.z][threadIdx.y]*el[0] +
+            v[threadIdx.z][threadIdx.y]*em[0])*scale_uv;
+        typename Tr::ft exp = Po::exp(-(u1*u1 +v1*v1));
+        value.x *= exp; value.y *= exp;
+
+        Isum += value.x*I[threadIdx.y];
+        Qsum += value.x*Q[threadIdx.y];
+        Usum += value.x*U[threadIdx.y];
+        Vsum += value.y*V[threadIdx.y];
+    }
+
+    i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
+    visibilities[i] = Po::make_ct(Isum + Qsum, 0.0);
+
+    i += NBL*NTIME*NCHAN;
+    visibilities[i] = Po::make_ct(Usum, Vsum);
+
+    i += NBL*NTIME*NCHAN;
+    visibilities[i] = Po::make_ct(Usum, -Vsum);
+
+    i += NBL*NTIME*NCHAN;
+    visibilities[i] = Po::make_ct(Isum - Qsum, 0.0);
 }
 
 extern "C" {
@@ -71,12 +178,13 @@ rime_gauss_B_sum_ ## ft( \
     ft * uvw, \
     ft * brightness, \
     ft * gauss_shape, \
+    ft * wavelength, \
     int * ant_pairs, \
     ct * jones_EK_scalar, \
     ct * visibilities) \
 { \
     rime_gauss_B_sum_impl<ft>(uvw, brightness, gauss_shape, \
-        ant_pairs, jones_EK_scalar, visibilities); \
+        wavelength, ant_pairs, jones_EK_scalar, visibilities); \
 }
 
 stamp_gauss_b_sum_fn(float, float2)
@@ -138,7 +246,7 @@ class RimeGaussBSum(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.brightness_gpu, sd.gauss_shape_gpu, 
-            sd.ant_pairs_gpu, sd.jones_scalar_gpu, sd.vis_gpu,
+            sd.wavelength_gpu, sd.ant_pairs_gpu, sd.jones_scalar_gpu, sd.vis_gpu,
             **self.get_kernel_params(sd))
 
     def post_execution(self, shared_data):

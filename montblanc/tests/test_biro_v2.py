@@ -88,14 +88,14 @@ class TestBiroV2(unittest.TestCase):
 
     def test_gauss_B_sum_float(self):
         """ """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,
+        sd = TestSharedData(na=10,nchan=64,ntime=96,npsrc=50,ngsrc=50,
             dtype=np.float32, device=pycuda.autoinit.device)      
 
         self.gauss_B_sum_test_impl(sd)
 
     def test_gauss_B_sum_double(self):
         """ """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,
+        sd = TestSharedData(na=10,nchan=64,ntime=96,npsrc=50,ngsrc=50,
             dtype=np.float64, device=pycuda.autoinit.device)      
 
         self.gauss_B_sum_test_impl(sd)
