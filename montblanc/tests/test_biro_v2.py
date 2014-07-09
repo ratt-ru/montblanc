@@ -14,10 +14,6 @@ import montblanc.ext.crimes
 from montblanc.impl.biro.v2.TestSharedData import TestSharedData
 
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
-
-from montblanc.impl.biro.v2.gpu.RimeBK import RimeBK
-from montblanc.impl.biro.v2.gpu.RimeEBK import RimeEBK
-from montblanc.impl.biro.v2.gpu.RimeSumFloat import RimeSumFloat
 from montblanc.impl.biro.v2.gpu.RimeJonesReduce import RimeJonesReduce
 from montblanc.impl.biro.v2.gpu.RimeMultiply import RimeMultiply
 from montblanc.impl.biro.v2.gpu.RimeChiSquared import RimeChiSquared
@@ -72,7 +68,6 @@ class TestBiroV2(unittest.TestCase):
         sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=10,
             dtype=np.float32, device=pycuda.autoinit.device)      
 
-        #self.EK_test_impl(sd, cmp = {'rtol' : 1e-2})
         self.EK_test_impl(sd)
 
     def test_EK_double(self):
@@ -81,99 +76,6 @@ class TestBiroV2(unittest.TestCase):
             dtype=np.float64, device=pycuda.autoinit.device)      
 
         self.EK_test_impl(sd)
-
-
-    def BK_test_impl(self, sd, cmp=None):
-        """ Type independent implementation of the BK test """
-        if cmp is None: cmp = {}
-
-        rime_bk = RimeBK()
-
-        # Initialise the BK float kernel
-        rime_bk.initialise(sd)
-        rime_bk.execute(sd)
-        rime_bk.shutdown(sd)
-
-        # Compute the jones matrix on the CPU
-        jones_cpu = RimeCPU(sd).compute_bk_jones()
-
-        # Get the jones matrices calculated by the GPU
-        jones_gpu = sd.jones_gpu.get()
-
-        # Test that the jones CPU calculation matches that of the GPU calculation
-        self.assertTrue(np.allclose(jones_cpu, jones_gpu,**cmp))
-
-    @unittest.skip('ignore for now')
-    def test_BK_float(self):
-        """ single precision BK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            dtype=np.float32, device=pycuda.autoinit.device)      
-
-        self.BK_test_impl(sd)
-
-    @unittest.skip('ignore for now')
-    def test_BK_double(self):
-        """ double precision BK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            dtype=np.float64, device=pycuda.autoinit.device)
-
-        self.BK_test_impl(sd)
-
-    def EBK_test_impl(self,sd,cmp=None):
-        """ Type independent implementation of the EBK test """
-        if cmp is None: cmp = {}
-
-        sd.set_beam_width(65*1e5)
-
-        kernels = []
-
-        if sd.npsrc > 0: kernels.append(RimeEBK(gaussian=False))
-        if sd.ngsrc > 0: kernels.append(RimeEBK(gaussian=True))
-
-        # Invoke the EBK kernels
-        for k in kernels: k.initialise(sd)
-        for k in kernels: k.execute(sd)
-        for k in kernels: k.shutdown(sd)
-
-        jones_gpu = sd.jones_gpu.get()
-        jones_cpu = RimeCPU(sd).compute_ebk_jones()
-
-        self.assertTrue(np.allclose(jones_gpu, jones_cpu,**cmp))
-
-    @unittest.skip('ignore for now')
-    def test_pEBK_double(self):
-        """ double precision EBK test for point sources only """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            dtype=np.float64, device=pycuda.autoinit.device)
-
-        self.EBK_test_impl(sd)
-
-    @unittest.skip('ignore for now')
-    def test_pEBK_float(self):
-        """ single precision EBK test for point sources only """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            dtype=np.float32, device=pycuda.autoinit.device)
-
-        # Hmmm, we don't need this tolerance now? I wonder why it's working...
-        #self.EBK_test_impl(sd, cmp={'rtol' : 1e-2,'atol' : 1e-2})
-        self.EBK_test_impl(sd)
-
-    @unittest.skip('ignore for now')
-    def test_pgEBK_double(self):
-        """ double precision EBK test for point and gaussian sources """
-        #sd = TestSharedData(na=2,nchan=2,ntime=1,npsrc=2,ngsrc=1,
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
-            dtype=np.float64, device=pycuda.autoinit.device)
-
-        self.EBK_test_impl(sd)
-
-    @unittest.skip('ignore for now')
-    def test_pgEBK_float(self):
-        """ single precision EBK test for point and gaussian sources """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
-            dtype=np.float32, device=pycuda.autoinit.device)
-
-        self.EBK_test_impl(sd, cmp={'rtol' : 1e-2})
 
     def multiply_test_impl(self, sd, cmp=None):
         """ Type independent implementation of the multiply test """
@@ -465,27 +367,6 @@ class TestBiroV2(unittest.TestCase):
             dtype=np.float32, device=pycuda.autoinit.device)
 
         self.do_predict_test(sd)
-
-    @unittest.skip('ignore for now')
-    def test_sum_float(self):
-        sd = TestSharedData(na=14,nchan=32,ntime=36,npsrc=100,
-            dtype=np.float32, device=pycuda.autoinit.device)
-
-        jones_cpu = (np.random.random(np.product(sd.jones_shape)) + \
-            np.random.random(np.product(sd.jones_shape))*1j)\
-            .reshape(sd.jones_shape).astype(sd.ct)
-        sd.jones_gpu.set(jones_cpu)
-        
-        rime_sum = RimeSumFloat()
-        rime_sum.initialise(sd)
-
-        rime_sum.execute(sd)
-
-        vis_cpu = np.add.reduce(jones_cpu,axis=4)
-
-        self.assertTrue(np.allclose(vis_cpu, sd.vis_gpu.get()))
-
-        rime_sum.shutdown(sd)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV2)
