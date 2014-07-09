@@ -127,18 +127,6 @@ void rime_gauss_B_sum_impl(
 
         __syncthreads();
 
-        // Get the complex scalars for antenna one and two
-        i = (ANT1*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i];
-        i = (ANT2*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_two = jones_EK_scalar[i];
-
-        // Divide the first antenna scalar by the second
-        typename Tr::ft den = ant_two.x*ant_two.x + ant_two.y*ant_two.y;
-        typename Tr::ct value = Po::make_ct(
-            (ant_one.x*ant_two.x + ant_one.y*ant_two.y) / den,
-            (ant_one.y*ant_two.x - ant_one.x*ant_two.y) / den);
-
         // Calculate the gaussian
         typename Tr::ft scale_uv = T(GAUSS_SCALE)/wl[threadIdx.x];
 
@@ -147,7 +135,21 @@ void rime_gauss_B_sum_impl(
         typename Tr::ft v1 = (u[threadIdx.z][threadIdx.y]*el[0] +
             v[threadIdx.z][threadIdx.y]*em[0])*scale_uv;
         typename Tr::ft exp = Po::exp(-(u1*u1 +v1*v1));
-        value.x *= exp; value.y *= exp;
+
+        // Get the complex scalars for antenna one and multiply
+        // in the exponent term
+        i = (ANT1*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_one = jones_EK_scalar[i];
+        ant_one.x *= exp; ant_one.y *= exp;
+        // Get the complex scalars for antenna two
+        i = (ANT2*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_two = jones_EK_scalar[i];
+
+        // Divide the first antenna scalar by the second
+        typename Tr::ft mult = T(1.0)/ant_two.x*ant_two.x + ant_two.y*ant_two.y;
+        typename Tr::ct value = Po::make_ct(
+            (ant_one.x*ant_two.x + ant_one.y*ant_two.y)*mult,
+            (ant_one.y*ant_two.x - ant_one.x*ant_two.y)*mult);
 
         Isum += value.x*I[threadIdx.y];
         Qsum += value.x*Q[threadIdx.y];
