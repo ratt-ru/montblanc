@@ -46,11 +46,11 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__
 void rime_jones_EK_impl(
-    typename Tr::ft * uvw,
-    typename Tr::ft * lm,
-    typename Tr::ft * brightness,
-    typename Tr::ft * wavelength,
-    typename Tr::ft * point_errors,
+    T * uvw,
+    T * lm,
+    T * brightness,
+    T * wavelength,
+    T * point_errors,
     typename Tr::ct * jones_scalar)
 {
 	int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
@@ -60,21 +60,21 @@ void rime_jones_EK_impl(
 	if(ANT >= NA || TIME >= NTIME || CHAN >= NCHAN)
 		return;
 
-	__shared__ typename Tr::ft u[BLOCKDIMZ][BLOCKDIMY];
-	__shared__ typename Tr::ft v[BLOCKDIMZ][BLOCKDIMY];
-	__shared__ typename Tr::ft w[BLOCKDIMZ][BLOCKDIMY];
+	__shared__ T u[BLOCKDIMZ][BLOCKDIMY];
+	__shared__ T v[BLOCKDIMZ][BLOCKDIMY];
+	__shared__ T w[BLOCKDIMZ][BLOCKDIMY];
 
 	// Shared Memory produces a faster kernel than
 	// registers for some reason!
-	__shared__ typename Tr::ft l[1];
-	__shared__ typename Tr::ft m[1];
+	__shared__ T l[1];
+	__shared__ T m[1];
 
-	__shared__ typename Tr::ft ld[BLOCKDIMZ][BLOCKDIMY];
-	__shared__ typename Tr::ft md[BLOCKDIMZ][BLOCKDIMY];
+	__shared__ T ld[BLOCKDIMZ][BLOCKDIMY];
+	__shared__ T md[BLOCKDIMZ][BLOCKDIMY];
 
-	__shared__ typename Tr::ft a[BLOCKDIMY];
+	__shared__ T a[BLOCKDIMY];
 
-	__shared__ typename Tr::ft wl[BLOCKDIMX];
+	__shared__ T wl[BLOCKDIMX];
 
 	int i;
 
@@ -114,7 +114,7 @@ void rime_jones_EK_impl(
 		__syncthreads();
 
 		// Calculate the phase term for this antenna
-		typename Tr::ft phase = Po::sqrt(T(1.0) - l[0]*l[0] - m[0]*m[0]) - T(1.0);
+		T phase = Po::sqrt(T(1.0) - l[0]*l[0] - m[0]*m[0]) - T(1.0);
 
 		phase = phase*w[threadIdx.z][threadIdx.y]
 			+ v[threadIdx.z][threadIdx.y]*m[0]
@@ -122,15 +122,15 @@ void rime_jones_EK_impl(
 
 	    phase *= (T(2.0) * Tr::cuda_pi / wl[threadIdx.x]);
 
-		typename Tr::ft real, imag;
+		T real, imag;
 		Po::sincos(phase, &imag, &real);
 
 		phase = Po::pow(REFWAVE/wl[threadIdx.x], a[threadIdx.y]);
 		real *= phase; imag *= phase;
 
 		// Calculate the beam term for this antenna
-		typename Tr::ft diff = l[0] - ld[threadIdx.z][threadIdx.y];
-		typename Tr::ft E = diff*diff;
+		T diff = l[0] - ld[threadIdx.z][threadIdx.y];
+		T E = diff*diff;
 		diff = m[0] - md[threadIdx.z][threadIdx.y];
 		E += diff*diff;
 		E = Po::sqrt(E);

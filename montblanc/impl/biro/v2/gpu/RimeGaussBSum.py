@@ -60,20 +60,20 @@ void rime_gauss_B_sum_impl(
     if(BL >= NBL || TIME >= NTIME || CHAN >= NCHAN)
         return;   
 
-    __shared__ typename Tr::ft u[BLOCKDIMZ][BLOCKDIMY];
-    __shared__ typename Tr::ft v[BLOCKDIMZ][BLOCKDIMY];
-    __shared__ typename Tr::ft w[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T u[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T v[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T w[BLOCKDIMZ][BLOCKDIMY];
 
-    __shared__ typename Tr::ft el[1];
-    __shared__ typename Tr::ft em[1];
-    __shared__ typename Tr::ft eR[1];
+    __shared__ T el[1];
+    __shared__ T em[1];
+    __shared__ T eR[1];
 
-    __shared__ typename Tr::ft I[BLOCKDIMY];
-    __shared__ typename Tr::ft Q[BLOCKDIMY];
-    __shared__ typename Tr::ft U[BLOCKDIMY];
-    __shared__ typename Tr::ft V[BLOCKDIMY];
+    __shared__ T I[BLOCKDIMY];
+    __shared__ T Q[BLOCKDIMY];
+    __shared__ T U[BLOCKDIMY];
+    __shared__ T V[BLOCKDIMY];
 
-    __shared__ typename Tr::ft wl[BLOCKDIMX];
+    __shared__ T wl[BLOCKDIMX];
 
     int i;
 
@@ -99,10 +99,10 @@ void rime_gauss_B_sum_impl(
     if(threadIdx.y == 0 && threadIdx.z == 0)
         { wl[threadIdx.x] = wavelength[CHAN]; }
 
-    typename Tr::ft Isum = 0.0;
-    typename Tr::ft Qsum = 0.0;
-    typename Tr::ft Usum = 0.0;
-    typename Tr::ft Vsum = 0.0;
+    T Isum = 0.0;
+    T Qsum = 0.0;
+    T Usum = 0.0;
+    T Vsum = 0.0;
 
     for(int SRC=0;SRC<NSRC;++SRC)
     {
@@ -128,13 +128,13 @@ void rime_gauss_B_sum_impl(
         __syncthreads();
 
         // Calculate the gaussian
-        typename Tr::ft scale_uv = T(GAUSS_SCALE)/wl[threadIdx.x];
+        T scale_uv = T(GAUSS_SCALE)/wl[threadIdx.x];
 
-        typename Tr::ft u1 = (u[threadIdx.z][threadIdx.y]*em[0] -
+        T u1 = (u[threadIdx.z][threadIdx.y]*em[0] -
             v[threadIdx.z][threadIdx.y]*el[0])*eR[0]*scale_uv;
-        typename Tr::ft v1 = (u[threadIdx.z][threadIdx.y]*el[0] +
+        T v1 = (u[threadIdx.z][threadIdx.y]*el[0] +
             v[threadIdx.z][threadIdx.y]*em[0])*scale_uv;
-        typename Tr::ft exp = Po::exp(-(u1*u1 +v1*v1));
+        T exp = Po::exp(-(u1*u1 +v1*v1));
 
         // Get the complex scalars for antenna one and multiply
         // in the exponent term
@@ -146,7 +146,7 @@ void rime_gauss_B_sum_impl(
         typename Tr::ct ant_two = jones_EK_scalar[i];
 
         // Divide the first antenna scalar by the second
-        typename Tr::ft mult = T(1.0)/ant_two.x*ant_two.x + ant_two.y*ant_two.y;
+        T mult = T(1.0)/ant_two.x*ant_two.x + ant_two.y*ant_two.y;
         typename Tr::ct value = Po::make_ct(
             (ant_one.x*ant_two.x + ant_one.y*ant_two.y)*mult,
             (ant_one.y*ant_two.x - ant_one.x*ant_two.y)*mult);
