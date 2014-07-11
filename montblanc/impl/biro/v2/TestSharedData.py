@@ -73,6 +73,10 @@ class TestSharedData(BiroSharedData):
         weight_vector = make_random(sd.weight_vector_shape,
             sd.weight_vector_dtype)
 
+        # Generate random jones scalar values
+        jones_scalar = make_random(sd.jones_scalar_shape,
+            sd.jones_scalar_dtype)
+
         # Copy the uvw, lm and brightness data to the gpu
         sd.transfer_uvw(uvw)
         sd.transfer_ant_pairs(sd.get_default_ant_pairs())
@@ -82,6 +86,7 @@ class TestSharedData(BiroSharedData):
         sd.transfer_wavelength(wavelength)
         sd.transfer_point_errors(point_errors)
         sd.transfer_weight_vector(weight_vector)
+        sd.transfer_jones_scalar(jones_scalar)
 
         vis = make_random(sd.vis_shape, sd.vis_dtype) + \
             make_random(sd.vis_shape, sd.vis_dtype)*1j
