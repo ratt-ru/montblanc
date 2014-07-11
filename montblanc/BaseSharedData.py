@@ -544,10 +544,8 @@ class BaseSharedData(SharedData):
         # based on the number of antenna. 
         sd = self
 
-        tmp = np.int32(np.triu_indices(sd.na,1))
-        tmp = np.tile(tmp,sd.ntime).reshape(2,sd.ntime,sd.nbl)
-        tmp = np.rollaxis(tmp, axis=2, start=1)
-        return tmp.copy()
+        return np.repeat(np.int32(np.triu_indices(sd.na,1)),
+            sd.ntime).reshape(2,sd.nbl,sd.ntime)
 
     def gen_array_descriptions(self):
         """ Generator generating strings describing each registered array """
