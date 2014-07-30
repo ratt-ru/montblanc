@@ -9,8 +9,8 @@ from montblanc.node import Node
 FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
     'BLOCKDIMY' : 8,    # Number of timesteps
-    'BLOCKDIMZ' : 4,    # Number of baselines
-    'maxregs'   : 32    # Maximum number of registers
+    'BLOCKDIMZ' : 1,    # Number of baselines
+    'maxregs'   : 40    # Maximum number of registers
 }
 
 DOUBLE_PARAMS = {
@@ -21,6 +21,7 @@ DOUBLE_PARAMS = {
 }
 
 KERNEL_TEMPLATE = string.Template("""
+#include <cstdio>
 #include \"math_constants.h\"
 #include <montblanc/include/abstraction.cuh>
 
@@ -51,7 +52,8 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * wavelength,
     int * ant_pairs,
     typename Tr::ct * jones_EK_scalar,
-    typename Tr::ct * visibilities)
+    typename Tr::ct * visibilities,
+    typename Tr::ct * output)
 {
     int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
@@ -99,10 +101,10 @@ void rime_gauss_B_sum_impl(
     if(threadIdx.y == 0 && threadIdx.z == 0)
         { wl[threadIdx.x] = wavelength[CHAN]; }
 
-    T Isum = 0.0;
-    T Qsum = 0.0;
-    T Usum = 0.0;
-    T Vsum = 0.0;
+    typename Tr::ct Isum = Po::make_ct(0.0, 0.0);
+    typename Tr::ct Qsum = Po::make_ct(0.0, 0.0);
+    typename Tr::ct Usum = Po::make_ct(0.0, 0.0);
+    typename Tr::ct Vsum = Po::make_ct(0.0, 0.0);
 
     for(int SRC=0;SRC<NSRC;++SRC)
     {
@@ -117,6 +119,7 @@ void rime_gauss_B_sum_impl(
             i += NTIME*NSRC;      V[threadIdx.y] = brightness[i];
         }
 
+        /*
         // gaussian shape only varies by source.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
@@ -124,9 +127,11 @@ void rime_gauss_B_sum_impl(
             i += NSRC; em[0] = gauss_shape[i];
             i += NSRC; eR[0] = gauss_shape[i];
         }
+        */
 
         __syncthreads();
 
+        /*
         // Calculate the gaussian
         T scale_uv = T(GAUSS_SCALE)/wl[threadIdx.x];
 
@@ -135,39 +140,50 @@ void rime_gauss_B_sum_impl(
         T v1 = (u[threadIdx.z][threadIdx.y]*el[0] +
             v[threadIdx.z][threadIdx.y]*em[0])*scale_uv;
         T exp = Po::exp(-(u1*u1 +v1*v1));
+        */
 
         // Get the complex scalars for antenna one and multiply
         // in the exponent term
         i = (ANT1*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i];
-        ant_one.x *= exp; ant_one.y *= exp;
+        //ant_one.x *= exp; ant_one.y *= exp;
         // Get the complex scalars for antenna two
         i = (ANT2*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
 
         // Divide the first antenna scalar by the second
-        T mult = T(1.0)/ant_two.x*ant_two.x + ant_two.y*ant_two.y;
+        T div = (ant_two.x*ant_two.x + ant_two.y*ant_two.y);
         typename Tr::ct value = Po::make_ct(
-            (ant_one.x*ant_two.x + ant_one.y*ant_two.y)*mult,
-            (ant_one.y*ant_two.x - ant_one.x*ant_two.y)*mult);
+            (ant_one.x*ant_two.x + ant_one.y*ant_two.y)/div,
+            (ant_one.y*ant_two.x - ant_one.x*ant_two.y)/div);
 
-        Isum += value.x*I[threadIdx.y];
-        Qsum += value.x*Q[threadIdx.y];
-        Usum += value.x*U[threadIdx.y];
-        Vsum += value.y*V[threadIdx.y];
+        i = (BL*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        output[i] = value;
+
+        Isum.x += (I[threadIdx.y]+Q[threadIdx.y])*value.x + 0.0*value.y;
+        Isum.y += (I[threadIdx.y]+Q[threadIdx.y])*value.y + 0.0*value.x;
+
+        Qsum.x += (I[threadIdx.y]-Q[threadIdx.y])*value.x - 0.0*value.y;
+        Qsum.y += (I[threadIdx.y]-Q[threadIdx.y])*value.y - 0.0*value.x;
+
+        Usum.x += U[threadIdx.y]*value.x - -V[threadIdx.y]*value.y;
+        Usum.y += U[threadIdx.y]*value.y + -V[threadIdx.y]*value.x;
+
+        Vsum.x += U[threadIdx.y]*value.x - V[threadIdx.y]*value.y;
+        Vsum.y += U[threadIdx.y]*value.y + V[threadIdx.y]*value.x;
     }
 
     i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
-    visibilities[i] = Po::make_ct(Isum + Qsum, 0.0);
+    visibilities[i] = Isum;
 
-    i += NBL*NTIME*NCHAN;
-    visibilities[i] = Po::make_ct(Usum, Vsum);
+    i += 3*NBL*NTIME*NCHAN;
+    visibilities[i] = Qsum;
 
-    i += NBL*NTIME*NCHAN;
-    visibilities[i] = Po::make_ct(Usum, -Vsum);
+    i -= NBL*NTIME*NCHAN;
+    visibilities[i] = Usum;
 
-    i += NBL*NTIME*NCHAN;
-    visibilities[i] = Po::make_ct(Isum - Qsum, 0.0);
+    i -= NBL*NTIME*NCHAN;
+    visibilities[i] = Vsum;
 }
 
 extern "C" {
@@ -183,10 +199,11 @@ rime_gauss_B_sum_ ## ft( \
     ft * wavelength, \
     int * ant_pairs, \
     ct * jones_EK_scalar, \
-    ct * visibilities) \
+    ct * visibilities, \
+    ct * output) \
 { \
     rime_gauss_B_sum_impl<ft>(uvw, brightness, gauss_shape, \
-        wavelength, ant_pairs, jones_EK_scalar, visibilities); \
+        wavelength, ant_pairs, jones_EK_scalar, visibilities, output); \
 }
 
 stamp_gauss_b_sum_fn(float, float2)
@@ -248,7 +265,8 @@ class RimeGaussBSum(Node):
         sd = shared_data
 
         self.kernel(sd.uvw_gpu, sd.brightness_gpu, sd.gauss_shape_gpu, 
-            sd.wavelength_gpu, sd.ant_pairs_gpu, sd.jones_scalar_gpu, sd.vis_gpu,
+            sd.wavelength_gpu, sd.ant_pairs_gpu, sd.jones_scalar_gpu,
+            sd.vis_gpu, sd.output_gpu,
             **self.get_kernel_params(sd))
 
     def post_execution(self, shared_data):

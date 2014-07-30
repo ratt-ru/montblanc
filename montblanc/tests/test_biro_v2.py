@@ -56,10 +56,7 @@ class TestBiroV2(unittest.TestCase):
         rime_ek.execute(sd)
         rime_ek.shutdown(sd)
 
-        jones_scalar_cpu = \
-            rime_cpu.compute_k_jones_scalar_per_ant() * \
-            rime_cpu.compute_e_jones_scalar_per_ant()
-
+        jones_scalar_cpu = rime_cpu.compute_ek_jones_scalar_per_ant()
         jones_scalar_gpu = sd.jones_scalar_gpu.get()
 
         # Test that the jones CPU calculation matches that of the GPU calculation
@@ -79,18 +76,51 @@ class TestBiroV2(unittest.TestCase):
 
         self.EK_test_impl(sd)
 
-    def gauss_B_sum_test_impl(self, sd):
-        rime_gauss_B_sum = RimeGaussBSum()
+    def gauss_B_sum_test_impl(self, sd, cmp=None):
+        if cmp is None: cmp = {}
 
-        rime_gauss_B_sum.initialise(sd)
-        rime_gauss_B_sum.execute(sd)
-        rime_gauss_B_sum.shutdown(sd)
+        rime_ek = RimeEK()
+        rime_gauss_B_sum = RimeGaussBSum()
+        rime_cpu = RimeCPU(sd)
+
+        kernels = [rime_gauss_B_sum]
+
+        for k in kernels: k.initialise(sd)
+        for k in kernels: k.execute(sd)
+        for k in kernels: k.shutdown(sd)
+
+        ebk_vis_cpu = rime_cpu.compute_ebk_vis()
+        ebk_vis_gpu = sd.vis_gpu.get()
+
+        """
+        #ebk_vis_gpu = sd.output_gpu.get()
+
+        d = (ebk_vis_gpu - ebk_vis_cpu).flatten()
+        div = (ebk_vis_gpu / ebk_vis_cpu).flatten()
+
+        #print 'CPU', ebk_vis_cpu
+        #print 'GPU', ebk_vis_gpu
+        #print ebk_vis_cpu.shape
+        mask = np.argsort(np.abs(d))
+
+        dtmp = np.abs(d[mask])
+        print 'ebk_vis_cpu size', ebk_vis_cpu.size
+        print 'dtmp size', dtmp.size
+        print 'ebk_vis_cpu', ebk_vis_cpu.flatten()[mask]
+        print 'ebk_vis_gpu', ebk_vis_gpu.flatten()[mask]
+
+        print 'd', dtmp
+        print 'DIV', div
+        """
+
+        self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
 
     def test_gauss_B_sum_float(self):
         """ """
         sd = TestSharedData(na=10,nchan=64,ntime=96,npsrc=50,ngsrc=50,
             dtype=np.float32, device=pycuda.autoinit.device)      
 
+#        self.gauss_B_sum_test_impl(sd, cmp={'rtol' : 1e-5, 'atol' : 1e-8})
         self.gauss_B_sum_test_impl(sd)
 
     def test_gauss_B_sum_double(self):

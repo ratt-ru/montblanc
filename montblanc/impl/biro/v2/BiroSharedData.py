@@ -84,3 +84,5 @@ class BiroSharedData(BaseSharedData):
         reg(name='jones_scalar', shape=jones_scalar_shape, dtype=ct)
         reg(name='vis', shape=(4,nbl,ntime,nchan), dtype=ct)
         reg(name='chi_sqrd_result', shape=(nbl,ntime,nchan), dtype=ft)
+
+        reg(name='output', shape=(nbl,ntime,nsrc,nchan), dtype=ct)

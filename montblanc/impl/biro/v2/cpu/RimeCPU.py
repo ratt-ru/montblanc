@@ -108,16 +108,14 @@ class RimeCPU(object):
         sd = self.shared_data
 
         try:
-            uvw = sd.uvw_cpu[:,0:sd.na,:]
-            assert uvw.shape == (3, sd.na, sd.ntime)
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
             n = np.sqrt(1. - sd.lm_cpu[0]**2 - sd.lm_cpu[1]**2) - 1.
 
             # u*l+v*m+w*n. Outer product creates array of dim na x ntime x nsrcs
-            phase = (np.outer(uvw[0], sd.lm_cpu[0]) + \
-                np.outer(uvw[1], sd.lm_cpu[1]) + \
-                np.outer(uvw[2],n))\
+            phase = (np.outer(sd.uvw_cpu[0], sd.lm_cpu[0]) + \
+                np.outer(sd.uvw_cpu[1], sd.lm_cpu[1]) + \
+                np.outer(sd.uvw_cpu[2],n))\
                     .reshape(sd.na, sd.ntime, sd.nsrc)
             assert phase.shape == (sd.na, sd.ntime, sd.nsrc)            
 
@@ -296,11 +294,21 @@ class RimeCPU(object):
 
         return self.compute_k_jones_scalar()*self.compute_e_jones_scalar()
 
+    def compute_ek_jones_scalar_per_ant(self):
+        """
+        Computes the scalar EK (phase*cos^3) term of the RIME.
+
+        Return a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        """
+        sd = self.shared_data
+
+        return self.compute_k_jones_scalar_per_ant()*self.compute_e_jones_scalar_per_ant()
+
     def compute_b_jones(self):
         """
         Computes the B term of the RIME.
 
-        Returns a (4,nsrc) matrix of complex scalars.
+        Returns a (4,ntime,nsrc) matrix of complex scalars.
         """
         sd = self.shared_data
 
@@ -318,52 +326,52 @@ class RimeCPU(object):
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
-    def compute_bk_jones(self):
-        """
-        Computes the BK term of the RIME.
-
-        Returns a (4,nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        sd = self.shared_data
-
-        # Compute the K and B terms
-        scalar_K = self.compute_k_jones_scalar()
-        B = self.compute_b_jones()
-
-        # This works due to broadcast! Multiplies phase and brightness along
-        # srcs axis of brightness. Dim 4 x nbl x nchan x ntime x nsrcs.
-        jones_cpu = (scalar_K[np.newaxis,:,:,:,:]* \
-            B[:,np.newaxis, np.newaxis,:,:])#\
-            #.reshape((4, sd.nbl, sd.nchan, sd.ntime, sd.nsrc))
-        assert jones_cpu.shape == sd.jones_shape
-
-        return jones_cpu 
-
-    def compute_ebk_jones(self):
-        """
-        Computes the BK term of the RIME.
-
-        Returns a (4,nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        return self.compute_bk_jones()*self.compute_e_jones_scalar()
-
-    def compute_bk_vis(self):
-        """
-        Computes the complex visibilities based on the
-        scalar K term and the 2x2 B term.
-
-        Returns a (4,nbl,nchan,ntime) matrix of complex scalars.
-        """
-        return np.add.reduce(self.compute_bk_jones(), axis=4)        
-
     def compute_ebk_vis(self):
         """
         Computes the complex visibilities based on the
         scalar EK term and the 2x2 B term.
 
-        Returns a (4,nbl,nchan,ntime) matrix of complex scalars.
+        Returns a (4,nbl,ntime,nchan) matrix of complex scalars.
         """
-        return np.add.reduce(self.compute_ebk_jones(), axis=4)        
+        sd = self.shared_data
+
+
+        # The flattened antenna pair array will look something like this.
+        # It is based on 2 x nbl x ntime. Here we have 3 baselines and
+        # 4 timesteps.
+        #
+        #            timestep
+        #       0 1 2 3 0 1 2 3 0 1 2 3
+        #
+        # ant1: 0 0 0 0 0 0 0 0 1 1 1 1
+        # ant2: 1 1 1 1 2 2 2 2 2 2 2 2
+
+        # Create indexes into the scalar EK terms from the antenna pairs.
+        # Scalar EK is 2 x na x ntime x nsrc x nchan.
+        ap = np.int32(np.triu_indices(sd.na,1))
+        tcs = sd.ntime*sd.nchan*sd.nsrc
+
+        ant1 = np.repeat(ap[0],tcs)*tcs + np.tile(np.arange(tcs), sd.nbl)
+        ant2 = np.repeat(ap[1],tcs)*tcs + np.tile(np.arange(tcs), sd.nbl)
+
+        ek_scalar = sd.jones_scalar_cpu.ravel()
+
+        per_bl_ek_scalar = (ek_scalar[ant1]/ek_scalar[ant2])\
+            .reshape(sd.nbl,sd.ntime,sd.nsrc,sd.nchan)
+        b_jones = self.compute_b_jones()
+
+        jones = per_bl_ek_scalar[np.newaxis,:,:,:,:]*\
+            b_jones[:,np.newaxis,:,:,np.newaxis]
+
+        assert jones.shape == (4,sd.nbl,sd.ntime,sd.nsrc,sd.nchan)
+
+        #return per_bl_ek_scalar
+
+        vis = np.add.reduce(jones,axis=3)
+
+        assert vis.shape == (4, sd.nbl, sd.ntime, sd.nchan)
+
+        return vis
 
     def compute_chi_sqrd_sum_terms(self, weight_vector=False):
         """
