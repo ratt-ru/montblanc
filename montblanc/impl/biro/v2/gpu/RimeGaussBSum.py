@@ -15,9 +15,9 @@ FLOAT_PARAMS = {
 
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 8,    # Number of timesteps
+    'BLOCKDIMY' : 4,    # Number of timesteps
     'BLOCKDIMZ' : 1,    # Number of baselines
-    'maxregs'   : 48    # Maximum number of registers
+    'maxregs'   : 64    # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -29,6 +29,8 @@ KERNEL_TEMPLATE = string.Template("""
 #define NBL ${nbl}
 #define NCHAN ${nchan}
 #define NTIME ${ntime}
+#define NPSRC ${npsrc}
+#define NGSRC ${ngsrc}
 #define NSRC ${nsrc}
 
 #define BLOCKDIMX ${BLOCKDIMX}
@@ -106,7 +108,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ct Usum = Po::make_ct(0.0, 0.0);
     typename Tr::ct Vsum = Po::make_ct(0.0, 0.0);
 
-    for(int SRC=0;SRC<NSRC;++SRC)
+    for(int SRC=0;SRC<NPSRC;++SRC)
     {
         // The following loads effect the global load efficiency.
 
@@ -119,34 +121,12 @@ void rime_gauss_B_sum_impl(
             i += NTIME*NSRC;      V[threadIdx.y] = brightness[i];
         }
 
-        /*
-        // gaussian shape only varies by source.
-        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
-        {
-            i = SRC;   el[0] = gauss_shape[i];
-            i += NSRC; em[0] = gauss_shape[i];
-            i += NSRC; eR[0] = gauss_shape[i];
-        }
-        */
-
         __syncthreads();
-
-        /*
-        // Calculate the gaussian
-        T scale_uv = T(GAUSS_SCALE)/wl[threadIdx.x];
-
-        T u1 = (u[threadIdx.z][threadIdx.y]*em[0] -
-            v[threadIdx.z][threadIdx.y]*el[0])*eR[0]*scale_uv;
-        T v1 = (u[threadIdx.z][threadIdx.y]*el[0] +
-            v[threadIdx.z][threadIdx.y]*em[0])*scale_uv;
-        T exp = Po::exp(-(u1*u1 +v1*v1));
-        */
 
         // Get the complex scalars for antenna one and multiply
         // in the exponent term
         i = (ANT1*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i];
-        //ant_one.x *= exp; ant_one.y *= exp;
         // Get the complex scalars for antenna two
         i = (ANT2*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
@@ -172,6 +152,72 @@ void rime_gauss_B_sum_impl(
         Vsum.x += U[threadIdx.y]*value.x - V[threadIdx.y]*value.y;
         Vsum.y += U[threadIdx.y]*value.y + V[threadIdx.y]*value.x;
     }
+
+    for(int SRC=NPSRC;SRC<NSRC;++SRC)
+    {
+        // The following loads effect the global load efficiency.
+
+        // brightness varies by time (and source), not baseline or channel
+        if(threadIdx.x == 0 && threadIdx.z == 0)
+        {
+            i = TIME*NSRC + SRC;  I[threadIdx.y] = brightness[i];
+            i += NTIME*NSRC;      Q[threadIdx.y] = brightness[i];
+            i += NTIME*NSRC;      U[threadIdx.y] = brightness[i];
+            i += NTIME*NSRC;      V[threadIdx.y] = brightness[i];
+        }
+
+        // gaussian shape only varies by source. Shape parameters
+        // thus apply to the entire block and we can load them with
+        // only the first thread.
+        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+        {
+            i = SRC-NPSRC; el[0] = gauss_shape[i];
+            i += NGSRC;     em[0] = gauss_shape[i];
+            i += NGSRC;     eR[0] = gauss_shape[i];
+        }
+
+        __syncthreads();
+
+        // Calculate the gaussian
+        T scale_uv = T(GAUSS_SCALE)/wl[threadIdx.x];
+
+        T u1 = (u[threadIdx.z][threadIdx.y]*em[0] -
+            v[threadIdx.z][threadIdx.y]*el[0])*eR[0]*scale_uv;
+        T v1 = (u[threadIdx.z][threadIdx.y]*el[0] +
+            v[threadIdx.z][threadIdx.y]*em[0])*scale_uv;
+        T exp = Po::exp(-(u1*u1 +v1*v1));
+
+        // Get the complex scalars for antenna one and multiply
+        // in the exponent term
+        i = (ANT1*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_one = jones_EK_scalar[i];
+        ant_one.x *= exp; ant_one.y *= exp;
+        // Get the complex scalars for antenna two
+        i = (ANT2*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_two = jones_EK_scalar[i];
+
+        // Divide the first antenna scalar by the second
+        T div = (ant_two.x*ant_two.x + ant_two.y*ant_two.y);
+        typename Tr::ct value = Po::make_ct(
+            (ant_one.x*ant_two.x + ant_one.y*ant_two.y)/div,
+            (ant_one.y*ant_two.x - ant_one.x*ant_two.y)/div);
+
+        i = (BL*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        output[i] = value;
+
+        Isum.x += (I[threadIdx.y]+Q[threadIdx.y])*value.x + 0.0*value.y;
+        Isum.y += (I[threadIdx.y]+Q[threadIdx.y])*value.y + 0.0*value.x;
+
+        Qsum.x += (I[threadIdx.y]-Q[threadIdx.y])*value.x - 0.0*value.y;
+        Qsum.y += (I[threadIdx.y]-Q[threadIdx.y])*value.y - 0.0*value.x;
+
+        Usum.x += U[threadIdx.y]*value.x - -V[threadIdx.y]*value.y;
+        Usum.y += U[threadIdx.y]*value.y + -V[threadIdx.y]*value.x;
+
+        Vsum.x += U[threadIdx.y]*value.x - V[threadIdx.y]*value.y;
+        Vsum.y += U[threadIdx.y]*value.y + V[threadIdx.y]*value.x;
+    }
+
 
     i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
     visibilities[i] = Isum;

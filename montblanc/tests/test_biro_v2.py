@@ -92,32 +92,12 @@ class TestBiroV2(unittest.TestCase):
         ebk_vis_cpu = rime_cpu.compute_ebk_vis()
         ebk_vis_gpu = sd.vis_gpu.get()
 
-        """
-        #ebk_vis_gpu = sd.output_gpu.get()
-
-        d = (ebk_vis_gpu - ebk_vis_cpu).flatten()
-        div = (ebk_vis_gpu / ebk_vis_cpu).flatten()
-
-        #print 'CPU', ebk_vis_cpu
-        #print 'GPU', ebk_vis_gpu
-        #print ebk_vis_cpu.shape
-        mask = np.argsort(np.abs(d))
-
-        dtmp = np.abs(d[mask])
-        print 'ebk_vis_cpu size', ebk_vis_cpu.size
-        print 'dtmp size', dtmp.size
-        print 'ebk_vis_cpu', ebk_vis_cpu.flatten()[mask]
-        print 'ebk_vis_gpu', ebk_vis_gpu.flatten()[mask]
-
-        print 'd', dtmp
-        print 'DIV', div
-        """
-
         self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
 
     def test_gauss_B_sum_float(self):
         """ """
         sd = TestSharedData(na=10,nchan=64,ntime=96,npsrc=50,ngsrc=50,
+        #sd = TestSharedData(na=5,nchan=4,ntime=4,npsrc=2,ngsrc=2,
             dtype=np.float32, device=pycuda.autoinit.device)      
 
 #        self.gauss_B_sum_test_impl(sd, cmp={'rtol' : 1e-5, 'atol' : 1e-8})

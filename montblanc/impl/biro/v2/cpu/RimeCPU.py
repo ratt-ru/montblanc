@@ -14,20 +14,45 @@ class RimeCPU(object):
         """
         Compute the shape values for the gaussian sources.
 
-        Returns a (nbl, nchan, ntime, ngsrc) matrix of floating point scalars.
+        Returns a (nbl, ntime, ngsrc, nchan) matrix of floating point scalars.
         """
 
         sd = self.shared_data
 
+        # The flattened antenna pair array will look something like this.
+        # It is based on 2 x nbl x ntime. Here we have 3 baselines and
+        # 4 timesteps.
+        #
+        #            timestep
+        #       0 1 2 3 0 1 2 3 0 1 2 3
+        #
+        # ant1: 0 0 0 0 0 0 0 0 1 1 1 1
+        # ant2: 1 1 1 1 2 2 2 2 2 2 2 2
+
+        # Create indexes into the scalar EK terms from the antenna pairs.
+        # Scalar EK is 2 x na x ntime x nsrc x nchan.
+        ap = np.int32(np.triu_indices(sd.na,1))
+
+        ant1 = np.repeat(ap[0],sd.ntime)*sd.ntime + \
+            np.tile(np.arange(sd.ntime), sd.nbl)
+        ant2 = np.repeat(ap[1],sd.ntime)*sd.ntime + \
+            np.tile(np.arange(sd.ntime), sd.nbl)
+
         try:
+            uvw = sd.uvw_cpu.reshape(3,sd.na*sd.ntime)
+            u = (uvw[0][ant1] - uvw[0][ant2]).reshape(sd.nbl, sd.ntime)
+            v = (uvw[1][ant1] - uvw[1][ant2]).reshape(sd.nbl, sd.ntime)
+            w = (uvw[2][ant1] - uvw[2][ant2]).reshape(sd.nbl, sd.ntime)
+
+            el = sd.gauss_shape_cpu[0]
+            em = sd.gauss_shape_cpu[1]
+
             # OK, try obtain the same results with the fwhm factored out!
             # u1 = u*em - v*el
             # v1 = u*el + v*em
-            u1 = (np.outer(sd.uvw_cpu[0], sd.gauss_shape_cpu[1]) - \
-                 np.outer(sd.uvw_cpu[1], sd.gauss_shape_cpu[0])) \
+            u1 = (np.outer(u, em) - np.outer(v, el)) \
                 .reshape(sd.nbl,sd.ntime,sd.ngsrc)
-            v1 = (np.outer(sd.uvw_cpu[0], sd.gauss_shape_cpu[0]) + \
-                np.outer(sd.uvw_cpu[1], sd.gauss_shape_cpu[1])) \
+            v1 = (np.outer(u, el) + np.outer(v, em)) \
                 .reshape(sd.nbl,sd.ntime,sd.ngsrc)
 
             # Obvious given the above reshape
@@ -36,15 +61,14 @@ class RimeCPU(object):
 
             # Construct the scaling factor, this includes the wavelength/frequency
             # into the mix.
-            scale_uv = sd.gauss_scale/sd.wavelength_cpu[:,np.newaxis]
-            # Should produce nchan x 1
-            assert scale_uv.shape == (sd.nchan,1)
+            scale_uv = sd.gauss_scale/sd.wavelength_cpu
+            assert scale_uv.shape == (sd.nchan,)
 
-            # u1 *= R, the ratio of the gaussian axis
-            u1 *= sd.gauss_shape_cpu[2][np.newaxis,np.newaxis,:]
             # Multiply u1 and v1 by the scaling factor
-            u1 = u1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
-            v1 = v1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
+            u1 = u1[:,:,:,np.newaxis]*scale_uv[np.newaxis,np.newaxis,np.newaxis,:]
+            v1 = v1[:,:,:,np.newaxis]*scale_uv[np.newaxis,np.newaxis,np.newaxis,:]
+            # u1 *= R, the ratio of the gaussian axis
+            u1 *= sd.gauss_shape_cpu[2][np.newaxis,np.newaxis,:,np.newaxis]
 
             return np.exp(-(u1**2 + v1**2))
 
@@ -335,7 +359,6 @@ class RimeCPU(object):
         """
         sd = self.shared_data
 
-
         # The flattened antenna pair array will look something like this.
         # It is based on 2 x nbl x ntime. Here we have 3 baselines and
         # 4 timesteps.
@@ -358,18 +381,19 @@ class RimeCPU(object):
 
         per_bl_ek_scalar = (ek_scalar[ant1]/ek_scalar[ant2])\
             .reshape(sd.nbl,sd.ntime,sd.nsrc,sd.nchan)
+
+        # Multiply the gaussian sources by their shape terms.
+        if sd.ngsrc > 0:
+            per_bl_ek_scalar[:,:,sd.npsrc:,:] *= self.compute_gaussian_shape()
+
         b_jones = self.compute_b_jones()
 
         jones = per_bl_ek_scalar[np.newaxis,:,:,:,:]*\
             b_jones[:,np.newaxis,:,:,np.newaxis]
-
         assert jones.shape == (4,sd.nbl,sd.ntime,sd.nsrc,sd.nchan)
 
-        #return per_bl_ek_scalar
-
         vis = np.add.reduce(jones,axis=3)
-
-        assert vis.shape == (4, sd.nbl, sd.ntime, sd.nchan)
+        assert vis.shape == (4,sd.nbl,sd.ntime,sd.nchan)
 
         return vis
 
