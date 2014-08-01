@@ -10,14 +10,14 @@ FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
     'BLOCKDIMY' : 8,    # Number of timesteps
     'BLOCKDIMZ' : 1,    # Number of baselines
-    'maxregs'   : 40    # Maximum number of registers
+    'maxregs'   : 48    # Maximum number of registers
 }
 
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 4,    # Number of timesteps
+    'BLOCKDIMY' : 2,    # Number of timesteps
     'BLOCKDIMZ' : 1,    # Number of baselines
-    'maxregs'   : 64    # Maximum number of registers
+    'maxregs'   : 63    # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -54,8 +54,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * wavelength,
     int * ant_pairs,
     typename Tr::ct * jones_EK_scalar,
-    typename Tr::ct * visibilities,
-    typename Tr::ct * output)
+    typename Tr::ct * visibilities)
 {
     int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
@@ -137,9 +136,6 @@ void rime_gauss_B_sum_impl(
             (ant_one.x*ant_two.x + ant_one.y*ant_two.y)/div,
             (ant_one.y*ant_two.x - ant_one.x*ant_two.y)/div);
 
-        i = (BL*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
-        output[i] = value;
-
         Isum.x += (I[threadIdx.y]+Q[threadIdx.y])*value.x + 0.0*value.y;
         Isum.y += (I[threadIdx.y]+Q[threadIdx.y])*value.y + 0.0*value.x;
 
@@ -171,7 +167,7 @@ void rime_gauss_B_sum_impl(
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC-NPSRC; el[0] = gauss_shape[i];
+            i = SRC-NPSRC;  el[0] = gauss_shape[i];
             i += NGSRC;     em[0] = gauss_shape[i];
             i += NGSRC;     eR[0] = gauss_shape[i];
         }
@@ -201,9 +197,6 @@ void rime_gauss_B_sum_impl(
         typename Tr::ct value = Po::make_ct(
             (ant_one.x*ant_two.x + ant_one.y*ant_two.y)/div,
             (ant_one.y*ant_two.x - ant_one.x*ant_two.y)/div);
-
-        i = (BL*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
-        output[i] = value;
 
         Isum.x += (I[threadIdx.y]+Q[threadIdx.y])*value.x + 0.0*value.y;
         Isum.y += (I[threadIdx.y]+Q[threadIdx.y])*value.y + 0.0*value.x;
@@ -245,11 +238,10 @@ rime_gauss_B_sum_ ## ft( \
     ft * wavelength, \
     int * ant_pairs, \
     ct * jones_EK_scalar, \
-    ct * visibilities, \
-    ct * output) \
+    ct * visibilities) \
 { \
     rime_gauss_B_sum_impl<ft>(uvw, brightness, gauss_shape, \
-        wavelength, ant_pairs, jones_EK_scalar, visibilities, output); \
+        wavelength, ant_pairs, jones_EK_scalar, visibilities); \
 }
 
 stamp_gauss_b_sum_fn(float, float2)
@@ -312,8 +304,7 @@ class RimeGaussBSum(Node):
 
         self.kernel(sd.uvw_gpu, sd.brightness_gpu, sd.gauss_shape_gpu, 
             sd.wavelength_gpu, sd.ant_pairs_gpu, sd.jones_scalar_gpu,
-            sd.vis_gpu, sd.output_gpu,
-            **self.get_kernel_params(sd))
+            sd.vis_gpu, **self.get_kernel_params(sd))
 
     def post_execution(self, shared_data):
         pass
