@@ -8,7 +8,7 @@ import montblanc
 import montblanc.BaseSharedData
 
 from montblanc.BaseSharedData import get_nr_of_baselines
-from montblanc.impl.biro.v1.BiroSharedData import BiroSharedData
+from montblanc.impl.biro.v2.BiroSharedData import BiroSharedData
 
 class MeasurementSetSharedData(BiroSharedData):
     ANTENNA_TABLE = "ANTENNA"
@@ -60,8 +60,10 @@ class MeasurementSetSharedData(BiroSharedData):
         if expected_uvw_shape != uvw.shape:
             raise ValueError, 'uvw.shape %s != expected %s' % (uvw.shape,expected_uvw_shape)
 
-        # Reshape the flatten array
-        uvw = uvw.reshape(self.uvw_shape).copy()
+        # Reshape the flattened array, and then only use the na baselines
+        # of the uvw array at each timestep. The remaining baselines will be
+        # calculated by linear combination. u_pq = u_p - u_q.
+        uvw = uvw.reshape(3,nbl,ntime)[:,0:na,:].copy()
 
         # Determine the wavelengths
         wavelength = (montblanc.constants.C/f[0]).astype(self.ft)
@@ -77,12 +79,9 @@ class MeasurementSetSharedData(BiroSharedData):
             vis_data = t.getcol('DATA')
 
             # Shift the dim 4 axis to the front,
-            # reshape to separate nbl and ntime, and then
-            # swap channel and time
-            vis_data=np.rollaxis(
-                np.rollaxis(vis_data,axis=2,start=0).reshape(
-                    4,nbl,ntime,nchan),
-                axis=3,start=2).astype(self.ct).copy()
+            # reshape to separate nbl and ntime
+            vis_data = np.rollaxis(vis_data,axis=2,start=0) \
+                .reshape(4,nbl,ntime,nchan).copy()
             self.transfer_bayes_data(vis_data)
 
         # Should we initialise our weights from the MS data?
@@ -142,12 +141,9 @@ class MeasurementSetSharedData(BiroSharedData):
             assert weight_vector.shape == (nbl*ntime, nchan, 4)
 
             # Shift the dim 4 axis to the front,
-            # reshape to separate nbl and ntime, and then
-            # swap channel and time
-            weight_vector=np.rollaxis(
-                np.rollaxis(weight_vector,axis=2,start=0).reshape(
-                    4,nbl,ntime,nchan),
-                axis=3,start=2).astype(self.ft).copy()
+            # reshape to separate nbl and ntime
+            weight_vector=np.rollaxis(weight_vector,axis=2,start=0) \
+                .reshape(4,nbl,ntime,nchan)
 
             self.transfer_weight_vector(weight_vector)
 
