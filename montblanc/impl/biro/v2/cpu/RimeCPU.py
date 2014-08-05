@@ -413,7 +413,6 @@ class RimeCPU(object):
             # Take the difference between the visibilities and the model
             # (4,nbl,nchan,ntime)
             d = sd.vis_cpu - sd.bayes_data_cpu
-
             assert d.shape == (4, sd.nbl, sd.ntime, sd.nchan)
 
             # Square of the real and imaginary components
@@ -432,7 +431,6 @@ class RimeCPU(object):
             # for the final result.
             chi_sqrd_terms = np.add.reduce(real_term,axis=0) + \
                 np.add.reduce(imag_term,axis=0)
-
             assert chi_sqrd_terms.shape == (sd.nbl, sd.ntime, sd.nchan)
 
             return chi_sqrd_terms

@@ -1,6 +1,7 @@
 import numpy as np
 import string
 
+import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 
 import montblanc
@@ -15,7 +16,7 @@ FLOAT_PARAMS = {
 
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 2,    # Number of timesteps
+    'BLOCKDIMY' : 4,    # Number of timesteps
     'BLOCKDIMZ' : 1,    # Number of baselines
     'maxregs'   : 63    # Maximum number of registers
 }
@@ -44,6 +45,7 @@ KERNEL_TEMPLATE = string.Template("""
 
 template <
     typename T,
+    bool apply_weights=false,
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
@@ -54,6 +56,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * wavelength,
     int * ant_pairs,
     typename Tr::ct * jones_EK_scalar,
+    typename Tr::ft * weight_vector,
     typename Tr::ct * visibilities,
     typename Tr::ct * data_vis,
     typename Tr::ft * chi_sqrd_result)
@@ -218,6 +221,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ct delta = data_vis[i];
     delta.x -= Isum.x; delta.y -= Isum.y;
     delta.x *= delta.x; delta.y *= delta.y;
+    if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x = delta.x; Isum.y = delta.y;
 
     i += 3*NBL*NTIME*NCHAN;
@@ -225,6 +229,7 @@ void rime_gauss_B_sum_impl(
     delta = data_vis[i];
     delta.x -= Qsum.x; delta.y -= Qsum.y;
     delta.x *= delta.x; delta.y *= delta.y;
+    if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
     i -= NBL*NTIME*NCHAN;
@@ -232,6 +237,7 @@ void rime_gauss_B_sum_impl(
     delta = data_vis[i];
     delta.x -= Usum.x; delta.y -= Usum.y;
     delta.x *= delta.x; delta.y *= delta.y;
+    if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
     i -= NBL*NTIME*NCHAN;
@@ -239,6 +245,7 @@ void rime_gauss_B_sum_impl(
     delta = data_vis[i];
     delta.x -= Vsum.x; delta.y -= Vsum.y;
     delta.x *= delta.x; delta.y *= delta.y;
+    if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
     i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
@@ -249,33 +256,44 @@ extern "C" {
 
 // Macro that stamps out different kernels, depending
 // on whether we're handling floats or doubles
-#define stamp_gauss_b_sum_fn(ft, ct) \
+// Arguments
+// - ft: The floating point type. Should be float/double.
+// - ct: The complex type. Should be float2/double2.
+// - apply_weights: boolean indicating whether we're weighting our visibilities
+// - symbol: u or w depending on whether we're handling unweighted/weighted visibilities.
+
+#define stamp_gauss_b_sum_fn(ft, ct, apply_weights, symbol) \
 __global__ void \
-rime_gauss_B_sum_ ## ft( \
+rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * uvw, \
     ft * brightness, \
     ft * gauss_shape, \
     ft * wavelength, \
     int * ant_pairs, \
     ct * jones_EK_scalar, \
+    ft * weight_vector, \
     ct * visibilities, \
     ct * data_vis, \
     ft * chi_sqrd_result) \
 { \
-    rime_gauss_B_sum_impl<ft>(uvw, brightness, gauss_shape, \
-        wavelength, ant_pairs, jones_EK_scalar, visibilities, data_vis, \
+    rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, \
+        wavelength, ant_pairs, jones_EK_scalar, \
+        weight_vector, visibilities, data_vis, \
         chi_sqrd_result); \
 }
 
-stamp_gauss_b_sum_fn(float, float2)
-stamp_gauss_b_sum_fn(double, double2)
+stamp_gauss_b_sum_fn(float, float2, false, u)
+stamp_gauss_b_sum_fn(float, float2, true, w)
+stamp_gauss_b_sum_fn(double, double2, false, u)
+stamp_gauss_b_sum_fn(double, double2, true, w)
 
 } // extern "C" {
 """)
 
 class RimeGaussBSum(Node):
-    def __init__(self):
+    def __init__(self, weight_vector=False):
         super(RimeGaussBSum, self).__init__()
+        self.weight_vector = weight_vector
 
     def initialise(self, shared_data):
         sd = shared_data
@@ -286,15 +304,15 @@ class RimeGaussBSum(Node):
         regs = str(FLOAT_PARAMS['maxregs'] \
             if sd.is_float() else DOUBLE_PARAMS['maxregs'])
 
+        kname = 'rime_gauss_B_sum_' + \
+            ('w' if self.weight_vector else 'u') + 'chi_' + \
+            ('float' if sd.is_float() is True else 'double')
+
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
             options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
-
-        kname = 'rime_gauss_B_sum_float' \
-            if sd.is_float() is True else \
-            'rime_gauss_B_sum_double'
 
         self.kernel = self.mod.get_function(kname)
 
@@ -327,8 +345,20 @@ class RimeGaussBSum(Node):
 
         self.kernel(sd.uvw_gpu, sd.brightness_gpu, sd.gauss_shape_gpu, 
             sd.wavelength_gpu, sd.ant_pairs_gpu, sd.jones_scalar_gpu,
+            sd.weight_vector_gpu,
             sd.vis_gpu, sd.bayes_data_gpu, sd.chi_sqrd_result_gpu,
             **self.get_kernel_params(sd))
+
+        # If we're not catering for a weight vector,
+        # call the simple reduction and divide by sigma squared.
+        # Otherwise, the kernel will incorporate the weight vector
+        # (and thus the sigma squared) into the sum
+        gpu_sum = gpuarray.sum(sd.chi_sqrd_result_gpu).get()
+
+        if not self.weight_vector:
+            sd.set_X2(gpu_sum/sd.sigma_sqrd)
+        else:
+            sd.set_X2(gpu_sum)        
 
     def post_execution(self, shared_data):
         pass

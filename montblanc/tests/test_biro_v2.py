@@ -76,13 +76,13 @@ class TestBiroV2(unittest.TestCase):
 
         self.EK_test_impl(sd)
 
-    def gauss_B_sum_test_impl(self, sd, cmp=None):
+    def gauss_B_sum_test_impl(self, sd, weight_vector=False, cmp=None):
         if cmp is None: cmp = {}
 
-        sd.set_sigma_sqrd(1.0)
+        sd.set_sigma_sqrd(np.random.random(1)[0])
 
         rime_ek = RimeEK()
-        rime_gauss_B_sum = RimeGaussBSum()
+        rime_gauss_B_sum = RimeGaussBSum(weight_vector=weight_vector)
         rime_cpu = RimeCPU(sd)
 
         kernels = [rime_gauss_B_sum]
@@ -96,29 +96,25 @@ class TestBiroV2(unittest.TestCase):
 
         self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
 
-        chi_sqrd_result_cpu = rime_cpu.compute_biro_chi_sqrd(weight_vector=False)
-        chi_sqrd_result_gpu = sd.chi_sqrd_result_gpu.get()
+        chi_sqrd_result_cpu = rime_cpu.compute_biro_chi_sqrd(weight_vector=weight_vector)
 
-        # Compute the Chi Squared using the GPU values
-        X2 = chi_sqrd_result_gpu.sum()/sd.sigma_sqrd
-
-        self.assertTrue(np.allclose(chi_sqrd_result_cpu, X2, **cmp))        
+        self.assertTrue(np.allclose(chi_sqrd_result_cpu, sd.X2, **cmp))        
 
     def test_gauss_B_sum_float(self):
         """ """
         sd = TestSharedData(na=10,nchan=64,ntime=96,npsrc=50,ngsrc=50,
             dtype=np.float32, device=pycuda.autoinit.device)      
 
-        #self.gauss_B_sum_test_impl(sd, cmp={'rtol' : 1e-2})
-        self.gauss_B_sum_test_impl(sd)
+        self.gauss_B_sum_test_impl(sd, weight_vector=False, cmp={'rtol' : 1e-3})
+        self.gauss_B_sum_test_impl(sd, weight_vector=True, cmp={'rtol' : 1e-3})
 
     def test_gauss_B_sum_double(self):
         """ """
         sd = TestSharedData(na=10,nchan=64,ntime=96,npsrc=50,ngsrc=50,
             dtype=np.float64, device=pycuda.autoinit.device)      
 
-        self.gauss_B_sum_test_impl(sd)
-
+        self.gauss_B_sum_test_impl(sd, weight_vector=False)
+        self.gauss_B_sum_test_impl(sd, weight_vector=True)
 
     def multiply_test_impl(self, sd, cmp=None):
         """ Type independent implementation of the multiply test """
