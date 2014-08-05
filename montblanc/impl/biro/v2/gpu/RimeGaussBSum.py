@@ -54,7 +54,9 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * wavelength,
     int * ant_pairs,
     typename Tr::ct * jones_EK_scalar,
-    typename Tr::ct * visibilities)
+    typename Tr::ct * visibilities,
+    typename Tr::ct * data_vis,
+    typename Tr::ft * chi_sqrd_result)
 {
     int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
@@ -211,18 +213,36 @@ void rime_gauss_B_sum_impl(
         Vsum.y += U[threadIdx.y]*value.y + V[threadIdx.y]*value.x;
     }
 
-
     i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
     visibilities[i] = Isum;
+    typename Tr::ct delta = data_vis[i];
+    delta.x -= Isum.x; delta.y -= Isum.y;
+    delta.x *= delta.x; delta.y *= delta.y;
+    Isum.x = delta.x; Isum.y = delta.y;
 
     i += 3*NBL*NTIME*NCHAN;
     visibilities[i] = Qsum;
+    delta = data_vis[i];
+    delta.x -= Qsum.x; delta.y -= Qsum.y;
+    delta.x *= delta.x; delta.y *= delta.y;
+    Isum.x += delta.x; Isum.y += delta.y;
 
     i -= NBL*NTIME*NCHAN;
     visibilities[i] = Usum;
+    delta = data_vis[i];
+    delta.x -= Usum.x; delta.y -= Usum.y;
+    delta.x *= delta.x; delta.y *= delta.y;
+    Isum.x += delta.x; Isum.y += delta.y;
 
     i -= NBL*NTIME*NCHAN;
     visibilities[i] = Vsum;
+    delta = data_vis[i];
+    delta.x -= Vsum.x; delta.y -= Vsum.y;
+    delta.x *= delta.x; delta.y *= delta.y;
+    Isum.x += delta.x; Isum.y += delta.y;
+
+    i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
+    chi_sqrd_result[i] = Isum.x + Isum.y;
 }
 
 extern "C" {
@@ -238,10 +258,13 @@ rime_gauss_B_sum_ ## ft( \
     ft * wavelength, \
     int * ant_pairs, \
     ct * jones_EK_scalar, \
-    ct * visibilities) \
+    ct * visibilities, \
+    ct * data_vis, \
+    ft * chi_sqrd_result) \
 { \
     rime_gauss_B_sum_impl<ft>(uvw, brightness, gauss_shape, \
-        wavelength, ant_pairs, jones_EK_scalar, visibilities); \
+        wavelength, ant_pairs, jones_EK_scalar, visibilities, data_vis, \
+        chi_sqrd_result); \
 }
 
 stamp_gauss_b_sum_fn(float, float2)
@@ -304,7 +327,8 @@ class RimeGaussBSum(Node):
 
         self.kernel(sd.uvw_gpu, sd.brightness_gpu, sd.gauss_shape_gpu, 
             sd.wavelength_gpu, sd.ant_pairs_gpu, sd.jones_scalar_gpu,
-            sd.vis_gpu, **self.get_kernel_params(sd))
+            sd.vis_gpu, sd.bayes_data_gpu, sd.chi_sqrd_result_gpu,
+            **self.get_kernel_params(sd))
 
     def post_execution(self, shared_data):
         pass

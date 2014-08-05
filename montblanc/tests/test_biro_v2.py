@@ -79,6 +79,8 @@ class TestBiroV2(unittest.TestCase):
     def gauss_B_sum_test_impl(self, sd, cmp=None):
         if cmp is None: cmp = {}
 
+        sd.set_sigma_sqrd(1.0)
+
         rime_ek = RimeEK()
         rime_gauss_B_sum = RimeGaussBSum()
         rime_cpu = RimeCPU(sd)
@@ -94,13 +96,20 @@ class TestBiroV2(unittest.TestCase):
 
         self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
 
+        chi_sqrd_result_cpu = rime_cpu.compute_biro_chi_sqrd(weight_vector=False)
+        chi_sqrd_result_gpu = sd.chi_sqrd_result_gpu.get()
+
+        # Compute the Chi Squared using the GPU values
+        X2 = chi_sqrd_result_gpu.sum()/sd.sigma_sqrd
+
+        self.assertTrue(np.allclose(chi_sqrd_result_cpu, X2, **cmp))        
+
     def test_gauss_B_sum_float(self):
         """ """
         sd = TestSharedData(na=10,nchan=64,ntime=96,npsrc=50,ngsrc=50,
-        #sd = TestSharedData(na=5,nchan=4,ntime=4,npsrc=2,ngsrc=2,
             dtype=np.float32, device=pycuda.autoinit.device)      
 
-#        self.gauss_B_sum_test_impl(sd, cmp={'rtol' : 1e-5, 'atol' : 1e-8})
+        #self.gauss_B_sum_test_impl(sd, cmp={'rtol' : 1e-2})
         self.gauss_B_sum_test_impl(sd)
 
     def test_gauss_B_sum_double(self):

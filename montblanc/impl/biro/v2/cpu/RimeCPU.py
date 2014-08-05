@@ -414,6 +414,8 @@ class RimeCPU(object):
             # (4,nbl,nchan,ntime)
             d = sd.vis_cpu - sd.bayes_data_cpu
 
+            assert d.shape == (4, sd.nbl, sd.ntime, sd.nchan)
+
             # Square of the real and imaginary components
             real_term, imag_term = d.real**2, d.imag**2
 
@@ -428,9 +430,10 @@ class RimeCPU(object):
 
             # Sum the real and imaginary terms together
             # for the final result.
-            chi_sqrd_terms = np.add.reduce(real_term,axis=0) + np.add.reduce(imag_term,axis=0)
+            chi_sqrd_terms = np.add.reduce(real_term,axis=0) + \
+                np.add.reduce(imag_term,axis=0)
 
-            assert chi_sqrd_terms.shape == (sd.nbl, sd.nchan, sd.ntime)
+            assert chi_sqrd_terms.shape == (sd.nbl, sd.ntime, sd.nchan)
 
             return chi_sqrd_terms
 
@@ -460,5 +463,5 @@ class RimeCPU(object):
 
     def compute_biro_chi_sqrd(self, weight_vector=False):
         sd = self.shared_data
-        sd.vis_cpu = compute_ebk_vis(sd)
+        sd.vis_cpu = self.compute_ebk_vis()
         return self.compute_chi_sqrd(weight_vector=weight_vector)
