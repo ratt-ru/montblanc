@@ -75,54 +75,6 @@ class RimeCPU(object):
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
-    def compute_gaussian_shape_with_fwhm(self):
-        """
-        Compute the shape values for the gaussian sources with fwhm factored in.
-
-        Returns a (nbl, nchan, ntime, ngsrc) matrix of floating point scalars.
-        """
-        sd = self.shared_data
-
-        try:
-            # 1.0/sqrt(e_l^2 + e_m^2).
-            fwhm_inv = 1.0/np.sqrt(sd.gauss_shape_cpu[0]**2 + sd.gauss_shape_cpu[1]**2)
-            # Vector of ngsrc
-            assert fwhm_inv.shape == (sd.ngsrc,)
-
-            cos_pa = sd.gauss_shape_cpu[1]*fwhm_inv    # em / fwhm
-            sin_pa = sd.gauss_shape_cpu[0]*fwhm_inv    # el / fwhm
-
-            # u1 = u*cos_pa - v*sin_pa
-            # v1 = u*sin_pa + v*cos_pa
-            u1 = (np.outer(sd.uvw_cpu[0],cos_pa) - np.outer(sd.uvw_cpu[1],sin_pa))\
-                .reshape(sd.nbl,sd.ntime,sd.ngsrc)
-            v1 = (np.outer(sd.uvw_cpu[0],sin_pa) + np.outer(sd.uvw_cpu[1],cos_pa))\
-                .reshape(sd.nbl,sd.ntime,sd.ngsrc)
-
-            # Obvious given the above reshape
-            assert u1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
-            assert v1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
-
-            # Construct the scaling factor, this includes the wavelength/frequency
-            # into the mix.
-            scale_uv = sd.gauss_scale/(sd.wavelength_cpu[:,np.newaxis]*fwhm_inv)
-            # Should produce nchan x ngsrc
-            assert scale_uv.shape == (sd.nchan, sd.ngsrc)
-
-            # u1 *= R, the ratio of the gaussian axis
-            u1 *= sd.gauss_shape_cpu[2][np.newaxis,np.newaxis,:]
-            # Multiply u1 and v1 by the scaling factor
-            u1 = u1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
-            v1 = v1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
-
-            assert u1.shape == (sd.nbl, sd.nchan, sd.ntime, sd.ngsrc)
-            assert v1.shape == (sd.nbl, sd.nchan, sd.ntime, sd.ngsrc)
-
-            return np.exp(-(u1**2 + v1**2))
-
-        except AttributeError as e:
-            rethrow_attribute_exception(e)
-
     def compute_k_jones_scalar_per_ant(self):
         """
         Computes the scalar K (phase) term of the RIME using numpy.
@@ -163,51 +115,6 @@ class RimeCPU(object):
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
-    def compute_k_jones_scalar(self):
-        """
-        Computes the scalar K (phase) term of the RIME using numpy.
-
-        Returns a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        sd = self.shared_data
-
-        try:
-            # Repeat the wavelengths along the timesteps for now
-            # dim nchan x ntime. 
-            w = np.repeat(sd.wavelength_cpu,sd.ntime).reshape(sd.nchan, sd.ntime)
-
-            # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
-            n = np.sqrt(1. - sd.lm_cpu[0]**2 - sd.lm_cpu[1]**2) - 1.
-
-            # u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
-            phase = (np.outer(sd.uvw_cpu[0], sd.lm_cpu[0]) + \
-                np.outer(sd.uvw_cpu[1], sd.lm_cpu[1]) + \
-                np.outer(sd.uvw_cpu[2],n))\
-                    .reshape(sd.nbl, sd.ntime, sd.nsrc)
-            assert phase.shape == (sd.nbl, sd.ntime, sd.nsrc)            
-
-            # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
-            phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
-            assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
-
-            # Dim nchan x ntime x nsrcs 
-            power = np.power(sd.ref_wave/w[:,:,np.newaxis],
-                sd.brightness_cpu[4,np.newaxis,:,:])
-            assert power.shape == (sd.nchan, sd.ntime, sd.nsrc)            
-
-            # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
-            phase_term = power*np.exp(phase)
-            assert phase_term.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
-
-            # Multiply the gaussian sources by their shape terms.
-            if sd.ngsrc > 0:
-                phase_term[:,:,:,sd.npsrc:sd.nsrc] *= self.compute_gaussian_shape()
-
-            return phase_term
-
-        except AttributeError as e:
-            rethrow_attribute_exception(e)
-
     def compute_e_jones_scalar_per_ant(self):
         """
         Computes the scalar E (analytic cos^3) term of the RIME per antenna.
@@ -236,87 +143,6 @@ class RimeCPU(object):
             return E_p
         except AttributeError as e:
             rethrow_attribute_exception(e)
-
-    def compute_e_jones_scalar(self):
-        """
-        Computes the scalar E (analytic cos^3) term of the RIME
-
-        returns a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        sd = self.shared_data
-
-        try:
-            # Here we obtain our antenna pairs and pointing errors
-            # TODO: The last dimensions are flattened to make indexing easier
-            # later. There may be a more numpy way to do this but YOLO.
-            ap = sd.get_default_ant_pairs().reshape(2,sd.nbl*sd.ntime)
-            pe = sd.point_errors_cpu.reshape(2,sd.na*sd.ntime)
-
-            # The flattened antenna pair array will look something like this.
-            # It is based on 2 x nbl x ntime. Here we have 3 baselines and
-            # 4 timesteps.
-            #
-            #            timestep
-            #       0 1 2 3 0 1 2 3 0 1 2 3
-            #
-            # ant0: 0 0 0 0 0 0 0 0 1 1 1 1
-            # ant1: 1 1 1 1 2 2 2 2 2 2 2 2
-
-            # Create indexes into the pointing errors from the antenna pairs.
-            # Pointing errors is 2 x na x ntime, thus each index will be
-            # i = ANT*ntime + TIME. The TIME additions need to be padded by nbl.
-            ant0 = ap[0]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
-            ant1 = ap[1]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
-
-            # Get the pointing errors for antenna p and q.
-            d_p = pe[:,ant0].reshape(2,sd.nbl,sd.ntime)
-            d_q = pe[:,ant1].reshape(2,sd.nbl,sd.ntime)
-
-            # Compute the offsets for antenna 0 or p
-            # Broadcasting here produces, nbl x ntime x nsrc
-            l_off = sd.lm_cpu[0] - d_p[0,:,:,np.newaxis]
-            m_off = sd.lm_cpu[1] - d_p[1,:,:,np.newaxis]
-            E_p = np.sqrt(l_off**2 + m_off**2)
-
-            assert E_p.shape == (sd.nbl, sd.ntime, sd.nsrc)
-
-            # Broadcasting here produces, nbl x nchan x ntime x nsrc
-            E_p = sd.beam_width*1e-9*E_p[:,np.newaxis,:,:]*\
-                sd.wavelength_cpu[np.newaxis,:,np.newaxis,np.newaxis]
-            np.clip(E_p, np.finfo(sd.ft).min, sd.beam_clip, E_p)
-            E_p = np.cos(E_p)**3
-
-            assert E_p.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
-
-            # Compute the offsets for antenna 1 or q
-            # Broadcasting here produces, nbl x ntime x nsrc
-            l_off = sd.lm_cpu[0] - d_q[0,:,:,np.newaxis]
-            m_off = sd.lm_cpu[1] - d_q[1,:,:,np.newaxis]
-            E_q = np.sqrt(l_off**2 + m_off**2)
-
-            assert E_q.shape == (sd.nbl, sd.ntime, sd.nsrc)
-
-            # Broadcasting here produces, nbl x nchan x ntime x nsrc
-            E_q = sd.beam_width*1e-9*E_q[:,np.newaxis,:,:]*\
-                sd.wavelength_cpu[np.newaxis,:,np.newaxis,np.newaxis]
-            np.clip(E_q, np.finfo(sd.ft).min, sd.beam_clip, E_q)
-            E_q = np.cos(E_q)**3
-
-            assert E_q.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)
-
-            return E_p/E_q
-        except AttributeError as e:
-            rethrow_attribute_exception(e)
-
-    def compute_ek_jones_scalar(self):
-        """
-        Computes the scalar EK (phase*cos^3) term of the RIME.
-
-        Return a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
-        """
-        sd = self.shared_data
-
-        return self.compute_k_jones_scalar()*self.compute_e_jones_scalar()
 
     def compute_ek_jones_scalar_per_ant(self):
         """
