@@ -160,10 +160,8 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kw
 		return Pipeline(nodes), sd
 
 	if version == 'v1':
-		print 'Version One'
 		return get_v1()
 	elif version == 'v2':
-		print 'Version Two'
 		return get_v2()
 	else:
 		raise ValueError, 'Invalid version %s' % (version)
