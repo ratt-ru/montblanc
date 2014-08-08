@@ -63,7 +63,7 @@ def get_bk_pipeline(msfile, npsrc, ngsrc, device=None):
 
 	return pipeline, sd
 
-def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
+def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kwargs):
 	"""
 	get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs)
 
@@ -78,7 +78,10 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
 		Number of point sources.
 	ngsrc : number
 		Number of gaussian sources.
-	dtype : The floating point data type. Should be np.float32 or np.float64.
+	dtype : The floating point data type.
+		Should be np.float32 or np.float64.
+	version : string
+		Should be either 'v1' or 'v2'
 
 	Keyword Arguments
 	-----------------
@@ -102,41 +105,68 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
 	A (pipeline, shared_data) tuple
 	"""
 
-	from montblanc.impl.biro.v1.gpu.RimeEBK import RimeEBK
-	from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
-	from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
+	valid_versions = ['v1','v2']
 
-	from montblanc.impl.biro.v1.MeasurementSetSharedData import MeasurementSetSharedData
+	if version not in valid_versions:
+		raise ValueError, 'Supplied version %s is not valid. ' \
+			'Should be one of %s', (version, valid_versions)
 
 	if kwargs.get('device') is None:
 		import pycuda.autoinit
 		kwargs['device']=pycuda.autoinit.device
 
-	# Create a shared data object from the Measurement Set file
-	sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=dtype,
-		**kwargs)
-	# Create a pipeline consisting of an EBK kernel, followed by a reduction,
-
-	nodes = []
-
-	# Add a node handling point sources, if any
-	if sd.npsrc > 0:
-		nodes.append(RimeEBK(gaussian=False))
-
-	# Add a node handling gaussian sources, if any
-	if sd.ngsrc > 0:
-		nodes.append(RimeEBK(gaussian=True))
-
 	# Decide whether to use the weight vector
 	use_weight_vector = kwargs.get('weight_vector', False)
 
-	# Followed by a reduction,
-	# a chi squared difference between the Bayesian Model and the Visibilities
-	# and a further reduction to produce the Chi Squared Value
-	nodes.extend([RimeJonesReduce(),
-		RimeChiSquared(weight_vector=use_weight_vector)])
+	def get_v1():
+		from montblanc.impl.biro.v1.gpu.RimeEBK import RimeEBK
+		from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
+		from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
 
-	return Pipeline(nodes), sd
+		from montblanc.impl.biro.v1.MeasurementSetSharedData import MeasurementSetSharedData
+
+		# Create a shared data object from the Measurement Set file
+		sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=dtype,
+			**kwargs)
+		# Create a pipeline consisting of an EBK kernel, followed by a reduction,
+
+		nodes = []
+		# Add a node handling point sources, if any
+		if sd.npsrc > 0: nodes.append(RimeEBK(gaussian=False))
+		# Add a node handling gaussian sources, if any
+		if sd.ngsrc > 0: nodes.append(RimeEBK(gaussian=True))
+
+		# Followed by a reduction,
+		# a chi squared difference between the Bayesian Model and the Visibilities
+		# and a further reduction to produce the Chi Squared Value
+		nodes.extend([RimeJonesReduce(),
+			RimeChiSquared(weight_vector=use_weight_vector)])
+
+		return Pipeline(nodes), sd
+
+	def get_v2():
+		from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
+		from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
+
+		from montblanc.impl.biro.v2.MeasurementSetSharedData import MeasurementSetSharedData
+
+		# Create a shared data object from the Measurement Set file
+		sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=dtype,
+			**kwargs)
+
+		# Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
+		nodes = [RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)]
+
+		return Pipeline(nodes), sd
+
+	if version == 'v1':
+		print 'Version One'
+		return get_v1()
+	elif version == 'v2':
+		print 'Version Two'
+		return get_v2()
+	else:
+		raise ValueError, 'Invalid version %s' % (version)
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """

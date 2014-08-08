@@ -14,6 +14,8 @@ if __name__ == '__main__':
     parser.add_argument('-np','--npsrc',dest='npsrc', type=int, default=10, help='Number of Point Sources')
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')    
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
+    parser.add_argument('-v','--version',dest='version', type=str, default='v1',
+        help='BIRO Pipeline Vesion. Should be either ''v1'' or ''v2''')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -34,7 +36,8 @@ if __name__ == '__main__':
     pipeline, sd = montblanc.get_biro_pipeline(args.msfile,
         npsrc=args.npsrc, ngsrc=args.ngsrc,
         init_weights=None, weight_vector=False,
-        store_cpu=False, device=pycuda.autoinit.device)
+        store_cpu=False, device=pycuda.autoinit.device,
+        version=args.version)
 
     # Initialise the pipeline
     pipeline.initialise(sd)
