@@ -14,8 +14,8 @@ if __name__ == '__main__':
     parser.add_argument('-np','--npsrc',dest='npsrc', type=int, default=10, help='Number of Point Sources')
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')    
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v1',
-        help='BIRO Pipeline Vesion. Should be either ''v1'' or ''v2''')
+    parser.add_argument('-v','--version',dest='version', type=str, default='v1', choices=['v1','v2'],
+        help='BIRO Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 
