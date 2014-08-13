@@ -79,8 +79,6 @@ class BiroSharedData(BaseSharedData):
         reg(name='weight_vector', shape=(4,nbl,ntime,nchan), dtype=ft)
         reg(name='bayes_data', shape=(4,nbl,ntime,nchan), dtype=ct)
 
-        jones_scalar_shape = (na,ntime,nsrc,nchan)
-
-        reg(name='jones_scalar', shape=jones_scalar_shape, dtype=ct)
+        reg(name='jones_scalar', shape=(na,ntime,nsrc,nchan), dtype=ct)
         reg(name='vis', shape=(4,nbl,ntime,nchan), dtype=ct)
         reg(name='chi_sqrd_result', shape=(nbl,ntime,nchan), dtype=ft)
