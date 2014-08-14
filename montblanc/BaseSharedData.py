@@ -12,9 +12,10 @@ import montblanc
 
 class ArrayRecord(object):
     """ Records information about an array """
-    def __init__(self, name, shape, dtype, registrant, has_cpu_ary, has_gpu_ary):
+    def __init__(self, name, shape, nshape, dtype, registrant, has_cpu_ary, has_gpu_ary):
         self.name = name
         self.shape = shape
+        self.nshape = nshape
         self.dtype = dtype
         self.registrant = registrant
         self.has_cpu_ary = has_cpu_ary
@@ -273,9 +274,38 @@ class BaseSharedData(SharedData):
         """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
         return np.product(shape)*np.dtype(dtype).itemsize
 
+    def get_numeric_shape(self, shape):
+        """
+        Substitutes string values in the supplied shape parameter
+        with properties registered on this BaseSharedData object.
+
+        >>> print self.get_numeric_shape((4,'na','ntime'))
+        (4, 3, 10)
+        """
+        D = self.get_properties()
+
+        def tup_str_replace(string):
+            """ Replace strings in a tuple with the supplied dictionary value """
+            try:
+                value = D[string]
+            except KeyError:
+                if type(string) is str:
+                    raise KeyError, ('Unable to replace %s in shape %s. ',
+                        'No such property is registered on the BaseSharedData object') % \
+                        (string, shape, )
+                value = string
+
+            if type(value) is not int and not np.issubdtype(type(value), np.integer):
+                raise ValueError, ('Value substituted for ''%s'' in shape %s is not integral',
+                    ' but of type %s') % (string, shape, type(value),)
+
+            return value
+
+        return tuple([tup_str_replace(v) for v in shape])
+
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
-        return np.sum([BaseSharedData.array_bytes(a.shape,a.dtype) 
+        return np.sum([BaseSharedData.array_bytes(a.nshape,a.dtype) 
             for a in self.arrays.itervalues()])
 
     def mem_required(self):
@@ -289,10 +319,10 @@ class BaseSharedData(SharedData):
         """
         record = self.arrays[record_key]
 
-        if record.shape != ary.shape:
+        if record.nshape != ary.shape:
             raise ValueError, \
                 '%s\'s shape %s is different from the shape %s of the supplied argument.' \
-                % (record.name, record.shape, ary.shape)
+                % (record.name, record.nshape, ary.shape)
 
         if record.dtype != ary.dtype:
             raise TypeError, \
@@ -313,13 +343,13 @@ class BaseSharedData(SharedData):
             return
 
         # Check that the shapes are the same
-        if old.shape != new.shape:
+        if old.nshape != new.nshape:
             raise Warning, ('\'%s\' array ws already registered by '
                 '\'%s\ with shape %s different to the supplied %s.') % \
                 (old.name,
                 old.registrant,
-                old.shape,
-                new.shape,)
+                old.nshape,
+                new.nshape,)
 
         # Check that the types are the same
         if old.dtype != new.dtype:
@@ -376,10 +406,14 @@ class BaseSharedData(SharedData):
             has_cpu_ary = has_cpu_ary or cpu_ary_exists or self.store_cpu is True
             has_gpu_ary = has_gpu_ary or gpu_ary_exists
 
+        # Figure out the actual integral shape
+        nshape = self.get_numeric_shape(shape)
+
         # Create a new record
         new = ArrayRecord(
             name=name,
             shape=shape,
+            nshape=nshape,
             dtype=dtype,
             registrant=registrant,
             has_cpu_ary=has_cpu_ary,
@@ -410,14 +444,14 @@ class BaseSharedData(SharedData):
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
         if cpu_ary_exists is not True and has_cpu_ary is True:
-            cpu_ary = np.empty(shape=shape, dtype=dtype)
+            cpu_ary = np.empty(shape=nshape, dtype=dtype)
             setattr(self, cpu_name, cpu_ary)
 
         # Create an empty gpu array if it doesn't exist
         # and set it on the object instance
         # Also create a transfer method for tranferring data to the GPU
         if gpu_ary_exists is not True and has_gpu_ary is True:
-            gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
+            gpu_ary = gpuarray.empty(shape=nshape, dtype=dtype)
             setattr(self, gpu_name, gpu_ary)
 
             # Create the transfer method
@@ -440,7 +474,7 @@ class BaseSharedData(SharedData):
         # Set up a member describing the shape
         if kwargs.get('shape_member', False) is True:
             shape_name = BaseSharedData.__shape_name(name)
-            setattr(self, shape_name, shape)
+            setattr(self, shape_name, nshape)
 
         # Set up a member describing the dtype
         if kwargs.get('dtype_member', False) is True:
@@ -556,11 +590,11 @@ class BaseSharedData(SharedData):
 
         for a in self.arrays.itervalues():
             yield BaseSharedData.fmt_array_line(a.name,
-                BaseSharedData.fmt_bytes(BaseSharedData.array_bytes(a.shape, a.dtype)),
+                BaseSharedData.fmt_bytes(BaseSharedData.array_bytes(a.nshape, a.dtype)),
                 np.dtype(a.dtype).name,
                 'Y' if a.has_cpu_ary else 'N',
                 'Y' if a.has_gpu_ary else 'N',
-                a.shape)
+                a.nshape)
 
     def gen_property_descriptions(self):
         """ Generator generating string describing each registered property """
@@ -577,10 +611,10 @@ class BaseSharedData(SharedData):
 
     def __str__(self):
         """ Outputs a string representation of this object """
-        n_cpu_bytes = np.sum([BaseSharedData.array_bytes(a.shape,a.dtype)
+        n_cpu_bytes = np.sum([BaseSharedData.array_bytes(a.nshape,a.dtype)
             for a in self.arrays.itervalues() if a.has_cpu_ary is True])
 
-        n_gpu_bytes = np.sum([BaseSharedData.array_bytes(a.shape,a.dtype)
+        n_gpu_bytes = np.sum([BaseSharedData.array_bytes(a.nshape,a.dtype)
             for a in self.arrays.itervalues() if a.has_gpu_ary is True])
 
         w = 20
