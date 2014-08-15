@@ -274,34 +274,75 @@ class BaseSharedData(SharedData):
         """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
         return np.product(shape)*np.dtype(dtype).itemsize
 
-    def get_numeric_shape(self, shape):
+    def get_numeric_shape(self, shape, ignore=None):
         """
         Substitutes string values in the supplied shape parameter
         with properties registered on this BaseSharedData object.
 
-        >>> print self.get_numeric_shape((4,'na','ntime'))
-        (4, 3, 10)
+        Parameters
+        ----------
+            shape : tuple composed of integers and strings.
+                The strings should related to integral properties
+                registered with this SharedData object
+            ignore : list
+                A list of tuple strings to ignore
+
+        >>> print self.get_numeric_shape((4,'na','ntime'),ignore=['ntime'])
+        (4, 3)
         """
         D = self.get_properties()
+        if ignore is None: ignore = []
+        
+        if type(shape) is not tuple:
+            raise TypeError, 'shape argument must be a tuple'
 
-        def tup_str_replace(string):
+        if type(ignore) is not list:
+            raise TypeError, 'ignore argument must be a list'
+
+        def tup_replace(value):
             """ Replace strings in a tuple with the supplied dictionary value """
             try:
-                value = D[string]
+                replace_value = D[value]
             except KeyError:
-                if type(string) is str:
-                    raise KeyError, ('Unable to replace %s in shape %s. ',
-                        'No such property is registered on the BaseSharedData object') % \
-                        (string, shape, )
-                value = string
+                if not np.issubdtype(type(value), np.integer):
+                    raise KeyError, ('Unable to replace %s in shape %s ',
+                        'with a suitable integral value.') % \
+                        (value, shape, )
+                replace_value = value
 
-            if type(value) is not int and not np.issubdtype(type(value), np.integer):
-                raise ValueError, ('Value substituted for ''%s'' in shape %s is not integral',
-                    ' but of type %s') % (string, shape, type(value),)
+            return replace_value
 
-            return value
+        return tuple([tup_replace(v) for v in shape if v not in ignore])
 
-        return tuple([tup_str_replace(v) for v in shape])
+    def viable_timesteps(self, bytes_available):
+        """
+        Returns the number of timesteps possible, given the registered arrays
+        and a memory budget defined by bytes_available
+        """
+
+        # Figure out which arrays have an ntime dimension
+        has_time = np.array([ \
+            t.shape.count('ntime') > 0 for t in self.arrays.values()])
+
+        # Get the shape product of each array, EXCLUDING any ntime dimension,
+        # multiplied by the size of the array type in bytes.
+        products = np.array([ \
+            np.product(self.get_numeric_shape(t.shape, ignore=['ntime'])) * \
+            np.dtype(t.dtype).itemsize \
+            for t in self.arrays.values()])
+
+        # Determine a linear expression for the bytes
+        # required which varies by timestep. y = a + b*x
+        a = np.sum(np.logical_not(has_time)*products)
+        b = np.sum(has_time*products)
+
+        # Check that if we substitute ntime for x, we agree on the
+        # memory requirements
+        assert a + b*self.ntime == self.bytes_required()
+
+        # Given the number of bytes available,
+        # how many timesteps can we fit in our budget?
+        return (bytes_available - a + b - 1) // b
 
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
