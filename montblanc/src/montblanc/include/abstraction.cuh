@@ -23,7 +23,7 @@ public:
 
 public:
 	const static bool is_implemented = true;
-	const static float cuda_pi = CUDART_PI;
+	const static float cuda_pi = CUDART_PI_F;
 };
 
 template <> class kernel_policies<float>

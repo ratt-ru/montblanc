@@ -211,7 +211,11 @@ setup(name='montblanc',
         'montblanc.impl.biro',
         'montblanc.impl.biro.v1',
         'montblanc.impl.biro.v1.gpu',
-        'montblanc.impl.biro.v1.cpu'],
+        'montblanc.impl.biro.v1.cpu',
+        'montblanc.impl.biro.v2',
+        'montblanc.impl.biro.v2.gpu',
+        'montblanc.impl.biro.v2.cpu'],
+
       install_requires=[
       	'numpy',
       	'pycuda',
