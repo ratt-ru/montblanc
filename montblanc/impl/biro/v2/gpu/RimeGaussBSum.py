@@ -179,13 +179,13 @@ void rime_gauss_B_sum_impl(
 
         __syncthreads();
 
-        // Calculate the gaussian
-        T scale_uv = T(GAUSS_SCALE)/wl[threadIdx.x];
-
         T u1 = (u[threadIdx.z][threadIdx.y]*em[0] -
-            v[threadIdx.z][threadIdx.y]*el[0])*eR[0]*scale_uv;
+            v[threadIdx.z][threadIdx.y]*el[0]);
+        u1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
+        u1 *= eR[0];
         T v1 = (u[threadIdx.z][threadIdx.y]*el[0] +
-            v[threadIdx.z][threadIdx.y]*em[0])*scale_uv;
+            v[threadIdx.z][threadIdx.y]*em[0]);
+        v1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
         // Get the complex scalars for antenna one and multiply
