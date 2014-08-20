@@ -385,8 +385,8 @@ class BaseSharedData(SharedData):
 
         # Check that the shapes are the same
         if old.nshape != new.nshape:
-            raise Warning, ('\'%s\' array ws already registered by '
-                '\'%s\ with shape %s different to the supplied %s.') % \
+            raise ValueError, ('\'%s\' array is already registered by '
+                '\'%s\' with shape %s different to the supplied %s.') % \
                 (old.name,
                 old.registrant,
                 old.nshape,
@@ -394,7 +394,7 @@ class BaseSharedData(SharedData):
 
         # Check that the types are the same
         if old.dtype != new.dtype:
-            raise Warning, ('\'%s\' array is already registered by '
+            raise ValueError, ('\'%s\' array is already registered by '
                 '\'%s\' with type %s different to the supplied %s.') % \
                     (old.name, old.registrant,
                     np.dtype(old.dtype).name,
@@ -435,17 +435,18 @@ class BaseSharedData(SharedData):
         # Try and find an existing version of this array
         old = self.arrays.get(name, None)
 
-        has_cpu_ary = kwargs.get('cpu', False)
-        has_gpu_ary = kwargs.get('gpu', True)
+        # Should we create arrays?
+        create_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
+        create_gpu_ary = kwargs.get('gpu', True)
 
-        # Assume that we don't have any arrays yet
-        cpu_ary_exists = gpu_ary_exists = False
+        # Have we already created arrays?
+        cpu_ary_exists = True if old is not None and old.has_cpu_ary else False
+        gpu_ary_exists = True if old is not None and old.has_gpu_ary else False
 
-        if old is not None:
-            cpu_ary_exists = old.has_cpu_ary
-            gpu_ary_exist = old.has_gpu_ary
-            has_cpu_ary = has_cpu_ary or cpu_ary_exists or self.store_cpu is True
-            has_gpu_ary = has_gpu_ary or gpu_ary_exists
+        # Determine whether the new record we're creating will have
+        # CPU or GPU arrays
+        has_cpu_ary = cpu_ary_exists or create_cpu_ary
+        has_gpu_ary = gpu_ary_exists or create_gpu_ary
 
         # Figure out the actual integral shape
         nshape = self.get_numeric_shape(shape)
@@ -479,19 +480,27 @@ class BaseSharedData(SharedData):
         #
         # sd.blah_cpu = ...
         #
-        setattr(BaseSharedData, cpu_name, CPUArrayDescriptor(record_key=name))
-        setattr(BaseSharedData, gpu_name, GPUArrayDescriptor(record_key=name))
+
+        # TODO, there's probably a better way of figuring out if a descriptor
+        # is set on the class
+        #if not hasattr(BaseSharedData, cpu_name):
+        if not BaseSharedData.__dict__.has_key(cpu_name):
+            setattr(BaseSharedData, cpu_name, CPUArrayDescriptor(record_key=name))
+
+        #if not hasattr(BaseSharedData, gpu_name):
+        if not BaseSharedData.__dict__.has_key(gpu_name):
+            setattr(BaseSharedData, gpu_name, GPUArrayDescriptor(record_key=name))
 
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
-        if cpu_ary_exists is not True and has_cpu_ary is True:
+        if cpu_ary_exists is not True and create_cpu_ary is True:
             cpu_ary = np.empty(shape=nshape, dtype=dtype)
             setattr(self, cpu_name, cpu_ary)
 
         # Create an empty gpu array if it doesn't exist
         # and set it on the object instance
         # Also create a transfer method for tranferring data to the GPU
-        if gpu_ary_exists is not True and has_gpu_ary is True:
+        if gpu_ary_exists is not True and create_gpu_ary is True:
             gpu_ary = gpuarray.empty(shape=nshape, dtype=dtype)
             setattr(self, gpu_name, gpu_ary)
 
