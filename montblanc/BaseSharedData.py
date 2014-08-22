@@ -644,7 +644,7 @@ class BaseSharedData(SharedData):
                 np.dtype(a.dtype).name,
                 'Y' if a.has_cpu_ary else 'N',
                 'Y' if a.has_gpu_ary else 'N',
-                a.nshape)
+                a.shape)
 
     def gen_property_descriptions(self):
         """ Generator generating string describing each registered property """
