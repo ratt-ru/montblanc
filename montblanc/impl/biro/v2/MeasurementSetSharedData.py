@@ -63,7 +63,9 @@ class MeasurementSetSharedData(BiroSharedData):
         # Reshape the flattened array, and then only use the na baselines
         # of the uvw array at each timestep. The remaining baselines will be
         # calculated by linear combination. u_pq = u_p - u_q.
-        uvw = uvw.reshape(3,nbl,ntime)[:,0:na,:].copy()
+        ant_uvw = uvw.reshape(3,nbl,ntime)[:,0:na,:]
+		# Normalise relative to antenna 0
+        ant_uvw = ant_uvw - ant_uvw[:,0,np.newaxis,:]
 
         # Determine the wavelengths
         wavelength = (montblanc.constants.C/f[0]).astype(self.ft)
@@ -158,7 +160,7 @@ class MeasurementSetSharedData(BiroSharedData):
         ant_pairs = np.vstack((ant1,ant2)).reshape(self.ant_pairs_shape)
 
         # Transfer the uvw coordinates, antenna pairs and wavelengths to the GPU
-        self.transfer_uvw(uvw)
+        self.transfer_uvw(ant_uvw.copy())
         self.transfer_ant_pairs(ant_pairs)
         self.transfer_wavelength(wavelength)
 

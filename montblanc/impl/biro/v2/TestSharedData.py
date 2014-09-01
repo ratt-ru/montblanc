@@ -39,6 +39,9 @@ class TestSharedData(BiroSharedData):
         uvw = shape_list([3.*r, 2.*r, 1.*r],
             shape=sd.uvw_shape, dtype=sd.uvw_dtype)
 
+		# Normalise UVW coordinates relative to antenna 0
+        uvw = uvw - uvw[:,0,np.newaxis,:]
+
         # Point source coordinates in the l,m,n (sky image) domain
         l=ft(np.random.random(nsrc)*0.1)
         m=ft(np.random.random(nsrc)*0.1)
