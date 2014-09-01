@@ -83,7 +83,7 @@ class MeasurementSetSharedData(BiroSharedData):
             # Shift the dim 4 axis to the front,
             # reshape to separate nbl and ntime
             vis_data = np.rollaxis(vis_data,axis=2,start=0) \
-                .reshape(4,nbl,ntime,nchan).copy()
+                .reshape(4,nbl,ntime,nchan).astype(self.ct).copy()
             self.transfer_bayes_data(vis_data)
 
         # Should we initialise our weights from the MS data?
