@@ -195,11 +195,13 @@ class RimeCPU(object):
 
         # Create indexes into the scalar EK terms from the antenna pairs.
         # Scalar EK is 2 x na x ntime x nsrc x nchan.
-        ap = np.int32(np.triu_indices(sd.na,1))
-        tcs = sd.ntime*sd.nchan*sd.nsrc
+        ap = sd.ant_pairs_cpu.reshape(2,sd.nbl*sd.ntime)
 
-        ant1 = np.repeat(ap[0],tcs)*tcs + np.tile(np.arange(tcs), sd.nbl)
-        ant2 = np.repeat(ap[1],tcs)*tcs + np.tile(np.arange(tcs), sd.nbl)
+        cs = sd.nchan*sd.nsrc
+        tcs = sd.ntime*cs
+
+        ant1 = np.repeat(ap[0],cs)*tcs + np.tile(np.arange(tcs), sd.nbl)
+        ant2 = np.repeat(ap[1],cs)*tcs + np.tile(np.arange(tcs), sd.nbl)
 
         ek_scalar = sd.jones_scalar_cpu.ravel()
 
