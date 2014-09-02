@@ -43,10 +43,10 @@ class MeasurementSetSharedData(BiroSharedData):
         f=tf.getcol("CHAN_FREQ").astype(dtype)
 
         # Determine the problem dimensions
-        na = len(ta.getcol("NAME"))
+        na = ta.nrows()
         nbl = get_nr_of_baselines(na)
         nchan = f.size
-        ntime = uvw.shape[1] // nbl
+        ntime = t.nrows() // nbl
 
         super(MeasurementSetSharedData, self).__init__(\
             na=na,nchan=nchan,ntime=ntime,npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
@@ -60,29 +60,24 @@ class MeasurementSetSharedData(BiroSharedData):
         if expected_uvw_shape != uvw.shape:
             raise ValueError, 'uvw.shape %s != expected %s' % (uvw.shape,expected_uvw_shape)
 
-        # Reshape the flatten array
-        uvw = uvw.reshape(self.uvw_shape).copy()
+        # Read in UVW
+        # Reshape the array and correct the axes
+        uvw = np.transpose(t.getcol('UVW').reshape(ntime,nbl,3), (2,1,0))\
+            .astype(self.ft).copy()
 
         # Determine the wavelengths
         wavelength = (montblanc.constants.C/f[0]).astype(self.ft)
 
-        # Get the baseline antenna pairs
-        ant1 = t.getcol('ANTENNA1')
-        ant2 = t.getcol('ANTENNA2')
+        # Get the baseline antenna pairs and correct the axes
+        ant1 = np.transpose(t.getcol('ANTENNA1').reshape(ntime,nbl), (1,0))
+        ant2 = np.transpose(t.getcol('ANTENNA2').reshape(ntime,nbl), (1,0))
 
         # Load in visibility data, if it exists.
         if t.colnames().count('DATA') > 0:
             # Obtain visibilities stored in the DATA column
-            # This comes in as (nbl*ntime,nchan,4)
-            vis_data = t.getcol('DATA')
-
-            # Shift the dim 4 axis to the front,
-            # reshape to separate nbl and ntime, and then
-            # swap channel and time
-            vis_data=np.rollaxis(
-                np.rollaxis(vis_data,axis=2,start=0).reshape(
-                    4,nbl,ntime,nchan),
-                axis=3,start=2).astype(self.ct).copy()
+            # This comes in as (ntime*ntime,nchan,4)
+            vis_data = np.transpose(t.getcol('DATA').reshape(ntime,nbl,nchan,4),
+                (3,1,2,0)).astype(self.ct).copy()
             self.transfer_bayes_data(vis_data)
 
         # Should we initialise our weights from the MS data?
@@ -139,19 +134,14 @@ class MeasurementSetSharedData(BiroSharedData):
             else:
                 raise Exception, 'init_weights used incorrectly!'
 
-            assert weight_vector.shape == (nbl*ntime, nchan, 4)
+            assert weight_vector.shape == (ntime*nbl, nchan, 4)
 
-            # Shift the dim 4 axis to the front,
-            # reshape to separate nbl and ntime, and then
-            # swap channel and time
-            weight_vector=np.rollaxis(
-                np.rollaxis(weight_vector,axis=2,start=0).reshape(
-                    4,nbl,ntime,nchan),
-                axis=3,start=2).astype(self.ft).copy()
+            weight_vector = np.transpose(weight_vector.reshape(ntime,nbl,nchan,4),
+                (3,1,2,0)).astype(self.ft)
 
             self.transfer_weight_vector(weight_vector)
 
-        expected_ant_shape = (nbl*ntime,)
+        expected_ant_shape = (nbl, ntime)
         
         if expected_ant_shape != ant1.shape:
             raise ValueError, 'ANTENNA1 shape is %s != expected %s' % (ant1.shape,expected_ant_shape)
@@ -159,7 +149,7 @@ class MeasurementSetSharedData(BiroSharedData):
         if expected_ant_shape != ant2.shape:
             raise ValueError, 'ANTENNA2 shape is %s != expected %s' % (ant2.shape,expected_ant_shape)
 
-        ant_pairs = np.vstack((ant1,ant2)).reshape(self.ant_pairs_shape)
+        ant_pairs = np.vstack((ant1,ant2)).reshape(self.ant_pairs_shape).copy()
 
         # Transfer the uvw coordinates, antenna pairs and wavelengths to the GPU
         self.transfer_uvw(uvw)
