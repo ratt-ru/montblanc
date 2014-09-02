@@ -19,26 +19,24 @@ class RimeCPU(object):
 
         sd = self.shared_data
 
-        # The flattened antenna pair array will look something like this.
-        # It is based on 2 x nbl x ntime. Here we have 3 baselines and
-        # 4 timesteps.
-        #
-        #            timestep
-        #       0 1 2 3 0 1 2 3 0 1 2 3
-        #
-        # ant1: 0 0 0 0 0 0 0 0 1 1 1 1
-        # ant2: 1 1 1 1 2 2 2 2 2 2 2 2
-
-        # Create indexes into the scalar EK terms from the antenna pairs.
-        # Scalar EK is 2 x na x ntime x nsrc x nchan.
-        ap = np.int32(np.triu_indices(sd.na,1))
-
-        ant1 = np.repeat(ap[0],sd.ntime)*sd.ntime + \
-            np.tile(np.arange(sd.ntime), sd.nbl)
-        ant2 = np.repeat(ap[1],sd.ntime)*sd.ntime + \
-            np.tile(np.arange(sd.ntime), sd.nbl)
-
         try:
+            # The flattened antenna pair array will look something like this.
+            # It is based on 2 x nbl x ntime. Here we have 3 baselines and
+            # 4 timesteps.
+            #
+            #            timestep
+            #       0 1 2 3 0 1 2 3 0 1 2 3
+            #
+            # ant1: 0 0 0 0 0 0 0 0 1 1 1 1
+            # ant2: 1 1 1 1 2 2 2 2 2 2 2 2
+
+            # Create indexes into the scalar EK terms from the antenna pairs.
+            # Scalar EK is 2 x na x ntime x nsrc x nchan.
+            ap = sd.ant_pairs_cpu.reshape(2,sd.nbl*sd.ntime)
+
+            ant1 = ap[0]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
+            ant2 = ap[1]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
+
             uvw = sd.uvw_cpu.reshape(3,sd.na*sd.ntime)
             u = (uvw[0][ant1] - uvw[0][ant2]).reshape(sd.nbl, sd.ntime)
             v = (uvw[1][ant1] - uvw[1][ant2]).reshape(sd.nbl, sd.ntime)
