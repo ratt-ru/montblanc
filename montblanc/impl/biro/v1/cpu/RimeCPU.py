@@ -20,14 +20,18 @@ class RimeCPU(object):
         sd = self.shared_data
 
         try:
+            u = sd.uvw_cpu[0]
+            v = sd.uvw_cpu[1]
+            w = sd.uvw_cpu[2]
+            el = sd.gauss_shape_cpu[0]
+            em = sd.gauss_shape_cpu[1]
+
             # OK, try obtain the same results with the fwhm factored out!
             # u1 = u*em - v*el
             # v1 = u*el + v*em
-            u1 = (np.outer(sd.uvw_cpu[0], sd.gauss_shape_cpu[1]) - \
-                 np.outer(sd.uvw_cpu[1], sd.gauss_shape_cpu[0])) \
+            u1 = (np.outer(u, em) - np.outer(v, el)) \
                 .reshape(sd.nbl,sd.ntime,sd.ngsrc)
-            v1 = (np.outer(sd.uvw_cpu[0], sd.gauss_shape_cpu[0]) + \
-                np.outer(sd.uvw_cpu[1], sd.gauss_shape_cpu[1])) \
+            v1 = (np.outer(u, el) + np.outer(v, em)) \
                 .reshape(sd.nbl,sd.ntime,sd.ngsrc)
 
             # Obvious given the above reshape
@@ -36,15 +40,15 @@ class RimeCPU(object):
 
             # Construct the scaling factor, this includes the wavelength/frequency
             # into the mix.
-            scale_uv = sd.gauss_scale/sd.wavelength_cpu[:,np.newaxis]
+            scale_uv = sd.gauss_scale/sd.wavelength_cpu
             # Should produce nchan x 1
-            assert scale_uv.shape == (sd.nchan,1)
+            assert scale_uv.shape == (sd.nchan,)
 
-            # u1 *= R, the ratio of the gaussian axis
-            u1 *= sd.gauss_shape_cpu[2][np.newaxis,np.newaxis,:]
             # Multiply u1 and v1 by the scaling factor
-            u1 = u1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
-            v1 = v1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,:]
+            u1 = u1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,np.newaxis]
+            v1 = v1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,np.newaxis]
+            # u1 *= R, the ratio of the gaussian axis
+            u1 *= sd.gauss_shape_cpu[2][np.newaxis,np.newaxis,np.newaxis,:]
 
             return np.exp(-(u1**2 + v1**2))
 
