@@ -162,7 +162,7 @@ void rime_jones_EBK_impl(
     phase += u[j]*l[threadIdx.x]; // u*l
 
     // Multiply by 2*pi/wave[threadIdx.y]
-    phase *= (2. * Tr::cuda_pi);
+    phase *= (T(-2.0) * Tr::cuda_pi);
     phase /= wave[threadIdx.y];
 
     // Calculate the complex exponential from the phase

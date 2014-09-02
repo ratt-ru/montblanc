@@ -120,7 +120,7 @@ void rime_jones_EK_impl(
 			+ v[threadIdx.z][threadIdx.y]*m[0]
 			+ u[threadIdx.z][threadIdx.y]*l[0];
 
-	    phase *= (T(2.0) * Tr::cuda_pi / wl[threadIdx.x]);
+	    phase *= (T(-2.0) * Tr::cuda_pi / wl[threadIdx.x]);
 
 		T real, imag;
 		Po::sincos(phase, &imag, &real);

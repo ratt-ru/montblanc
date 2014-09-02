@@ -127,7 +127,7 @@ class RimeCPU(object):
             assert phase.shape == (sd.nbl, sd.ntime, sd.nsrc)            
 
             # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
-            phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
+            phase = (-2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
             assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
 
             # Dim nchan x ntime x nsrcs 
