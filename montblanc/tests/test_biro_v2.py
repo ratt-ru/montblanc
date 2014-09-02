@@ -81,10 +81,11 @@ class TestBiroV2(unittest.TestCase):
 
         sd.set_sigma_sqrd(np.random.random(1)[0])
 
+        rime_ek = RimeEK()
         rime_gauss_B_sum = RimeGaussBSum(weight_vector=weight_vector)
         rime_cpu = RimeCPU(sd)
 
-        kernels = [rime_gauss_B_sum]
+        kernels = [rime_ek, rime_gauss_B_sum]
 
         for k in kernels: k.initialise(sd)
         for k in kernels: k.execute(sd)

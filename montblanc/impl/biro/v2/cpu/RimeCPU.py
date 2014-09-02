@@ -203,7 +203,7 @@ class RimeCPU(object):
         ant1 = np.repeat(ap[0],cs)*tcs + np.tile(np.arange(tcs), sd.nbl)
         ant2 = np.repeat(ap[1],cs)*tcs + np.tile(np.arange(tcs), sd.nbl)
 
-        ek_scalar = sd.jones_scalar_cpu.ravel()
+        ek_scalar = self.compute_ek_jones_scalar_per_ant().ravel()
 
         per_bl_ek_scalar = (ek_scalar[ant1]/ek_scalar[ant2])\
             .reshape(sd.nbl,sd.ntime,sd.nsrc,sd.nchan)
