@@ -34,9 +34,6 @@ class RimeCPU(object):
             # Scalar EK is 2 x na x ntime x nsrc x nchan.
             ap = sd.ant_pairs_cpu.reshape(2,sd.nbl*sd.ntime)
 
-            # Create 1D indices from the flattened antenna pair array.
-            # Multiply it by size constant and add tiling corresponding
-            # to the indexing.
             ant1 = ap[0]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
             ant2 = ap[1]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
 
@@ -97,7 +94,7 @@ class RimeCPU(object):
             assert phase.shape == (sd.na, sd.ntime, sd.nsrc)            
 
             # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. na x ntime x nchan x nsrcs 
-            phase = (-2*np.pi*1j*phase)[:,:,:,np.newaxis]/ \
+            phase = (2*np.pi*1j*phase)[:,:,:,np.newaxis]/ \
                 sd.wavelength_cpu[np.newaxis,np.newaxis,np.newaxis,:]
             assert phase.shape == (sd.na, sd.ntime, sd.nsrc, sd.nchan)
 
@@ -203,10 +200,6 @@ class RimeCPU(object):
         cs = sd.nchan*sd.nsrc
         tcs = sd.ntime*cs
 
-        # Create 1D indices from the flattened antenna pair array.
-        # (1) Repeat it over the channel and source dimensions
-        # (2) Multiply it by size constant and add tiling corresponding
-        #     to the indexing.
         ant1 = np.repeat(ap[0],cs)*tcs + np.tile(np.arange(tcs), sd.nbl)
         ant2 = np.repeat(ap[1],cs)*tcs + np.tile(np.arange(tcs), sd.nbl)
 

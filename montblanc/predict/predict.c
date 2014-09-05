@@ -268,7 +268,7 @@ static PyObject *predictSolsPol(PyObject *self, PyObject *args)
   /* Do the calculation. */
   double phase,l,m,n,u,v,w;
   double complex c0,c1,result;
-  c0=-2.*3.141592*I;
+  c0=2.*3.141592*I;
   double complex *p0;
   double *p1;
   p0=VisIn;
