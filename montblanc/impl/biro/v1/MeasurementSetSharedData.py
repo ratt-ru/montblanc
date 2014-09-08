@@ -52,14 +52,14 @@ class MeasurementSetSharedData(BiroSharedData):
         assert nbl == self.nbl
 
         # Check that we're getting the correct shape...
-        expected_uvw_shape = (3, nbl*ntime)
+        expected_uvw_shape = (3, ntime*nbl)
 
         # Read in UVW
         # Reshape the array and correct the axes
         ms_uvw = t.getcol('UVW')
-        assert ms_uvw.shape == (nbl*ntime, 3), \
+        assert ms_uvw.shape == (ntime*nbl, 3), \
             'MS UVW shape %s != expected %s' % (ms_uvw.shape,expected_uvw_shape)
-        uvw = ms_uvw.reshape(nbl, ntime, 3).transpose(2,0,1) \
+        uvw = ms_uvw.reshape(ntime, nbl, 3).transpose(2,1,0) \
             .astype(self.ft)
         self.transfer_uvw(np.ascontiguousarray(uvw))
 
@@ -72,10 +72,10 @@ class MeasurementSetSharedData(BiroSharedData):
         self.set_ref_wave(montblanc.constants.C/tf.getcol('REF_FREQUENCY')[0])
 
         # Get the baseline antenna pairs and correct the axes
-        ant1 = t.getcol('ANTENNA1')
-        ant2 = t.getcol('ANTENNA2')
+        ant1 = t.getcol('ANTENNA1').reshape(ntime,nbl).transpose(1,0)
+        ant2 = t.getcol('ANTENNA2').reshape(ntime,nbl).transpose(1,0)
 
-        expected_ant_shape = (nbl*ntime,)
+        expected_ant_shape = (nbl,ntime)
         
         assert expected_ant_shape == ant1.shape, \
             'ANTENNA1 shape is %s != expected %s' % (ant1.shape,expected_ant_shape)
@@ -91,9 +91,9 @@ class MeasurementSetSharedData(BiroSharedData):
         # Load in visibility data, if it exists.
         if t.colnames().count('DATA') > 0:
             # Obtain visibilities stored in the DATA column
-            # This comes in as (nbl*ntime,nchan,4)
-            vis_data = t.getcol('DATA').reshape(nbl,ntime,nchan,4) \
-                .transpose(3,0,2,1).astype(self.ct).copy()
+            # This comes in as (ntime*nbl,nchan,4)
+            vis_data = t.getcol('DATA').reshape(ntime,nbl,nchan,4) \
+                .transpose(3,1,2,0).astype(self.ct)
             self.transfer_bayes_data(np.ascontiguousarray(vis_data))
 
         # Should we initialise our weights from the MS data?
@@ -119,11 +119,11 @@ class MeasurementSetSharedData(BiroSharedData):
                 # Obtain weighting information from WEIGHT_SPECTRUM
                 # preferably, otherwise WEIGHT.
                 if t.colnames().count('WEIGHT_SPECTRUM') > 0:
-                    # Try obtain the weightings from 'WEIGHT_SPECTRUM' first.
+                    # Try obtain the weightings from WEIGHT_SPECTRUM first.
                     # It has the same dimensions as 'FLAG'
                     weight_vector = flag*t.getcol('WEIGHT_SPECTRUM')
                 elif t.colnames().count('WEIGHT') > 0:
-                    # Otherwise we should try obtain the weightings from 'WEIGHT.
+                    # Otherwise we should try obtain the weightings from WEIGHT.
                     # This doesn't have per-channel weighting, so we introduce
                     # this with a broadcast
                     weight_vector = flag * \
@@ -135,11 +135,11 @@ class MeasurementSetSharedData(BiroSharedData):
                 # Obtain weighting information from SIGMA_SPECTRUM
                 # preferably, otherwise SIGMA.
                 if t.colnames().count('SIGMA_SPECTRUM') > 0:
-                    # Try obtain the weightings from 'WEIGHT_SPECTRUM' first.
+                    # Try obtain the weightings from WEIGHT_SPECTRUM first.
                     # It has the same dimensions as 'FLAG'
                     weight_vector = flag*t.getcol('SIGMA_SPECTRUM')
                 elif t.colnames().count('SIGMA') > 0:
-                    # Otherwise we should try obtain the weightings from 'WEIGHT.
+                    # Otherwise we should try obtain the weightings from WEIGHT.
                     # This doesn't have per-channel weighting, so we introduce
                     # this with a broadcast
                     weight_vector = flag * \
@@ -152,8 +152,8 @@ class MeasurementSetSharedData(BiroSharedData):
 
             assert weight_vector.shape == (ntime*nbl, nchan, 4)
 
-            weight_vector = weight_vector.reshape(nbl,ntime,nchan,4) \
-                .transpose(3,0,2,1).astype(self.ft)
+            weight_vector = weight_vector.reshape(ntime,nbl,nchan,4) \
+                .transpose(3,1,2,0).astype(self.ft)
 
             self.transfer_weight_vector(np.ascontiguousarray(weight_vector))
 
