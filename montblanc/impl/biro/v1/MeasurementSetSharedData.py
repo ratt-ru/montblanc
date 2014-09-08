@@ -30,9 +30,6 @@ class MeasurementSetSharedData(BiroSharedData):
         # Strip out all auto-correlated baselines
         t = ms.query('ANTENNA1 != ANTENNA2')
 
-        # Get the UVW coordinates
-        uvw=t.getcol("UVW").T.astype(dtype)
-
         # Open the antenna table
         ant_path = os.path.join(self.ms_file, MeasurementSetSharedData.ANTENNA_TABLE)
         ta=table(ant_path, ack=False)
@@ -57,27 +54,46 @@ class MeasurementSetSharedData(BiroSharedData):
         # Check that we're getting the correct shape...
         expected_uvw_shape = (3, nbl*ntime)
 
-        if expected_uvw_shape != uvw.shape:
-            raise ValueError, 'uvw.shape %s != expected %s' % (uvw.shape,expected_uvw_shape)
-
         # Read in UVW
         # Reshape the array and correct the axes
-        uvw = np.transpose(t.getcol('UVW').reshape(ntime,nbl,3), (2,1,0))\
+        ms_uvw = t.getcol('UVW')
+        assert ms_uvw.shape == (nbl*ntime, 3), \
+            'MS UVW shape %s != expected %s' % (ms_uvw.shape,expected_uvw_shape)
+        uvw = np.transpose(ms_uvw.reshape(nbl, ntime, 3), (2,0,1))\
             .astype(self.ft).copy()
+        self.transfer_uvw(uvw)
 
         # Determine the wavelengths
         wavelength = (montblanc.constants.C/f[0]).astype(self.ft)
+        self.transfer_wavelength(wavelength)
+
+        # First dimension also seems to be of size 1 here...
+        # Divide speed of light by frequency to get the wavelength here.
+        self.set_ref_wave(montblanc.constants.C/tf.getcol('REF_FREQUENCY')[0])
 
         # Get the baseline antenna pairs and correct the axes
-        ant1 = np.transpose(t.getcol('ANTENNA1').reshape(ntime,nbl), (1,0))
-        ant2 = np.transpose(t.getcol('ANTENNA2').reshape(ntime,nbl), (1,0))
+        ant1 = t.getcol('ANTENNA1')
+        ant2 = t.getcol('ANTENNA2')
+
+        expected_ant_shape = (nbl*ntime,)
+        
+        assert expected_ant_shape == ant1.shape, \
+            'ANTENNA1 shape is %s != expected %s' % (ant1.shape,expected_ant_shape)
+
+        assert expected_ant_shape == ant2.shape, \
+            'ANTENNA2 shape is %s != expected %s' % (ant2.shape,expected_ant_shape)
+
+        ant_pairs = np.vstack((ant1,ant2)).reshape(self.ant_pairs_shape)
+
+        # Transfer the uvw coordinates, antenna pairs and wavelengths to the GPU
+        self.transfer_ant_pairs(ant_pairs)
 
         # Load in visibility data, if it exists.
         if t.colnames().count('DATA') > 0:
             # Obtain visibilities stored in the DATA column
-            # This comes in as (ntime*ntime,nchan,4)
-            vis_data = np.transpose(t.getcol('DATA').reshape(ntime,nbl,nchan,4),
-                (3,1,2,0)).astype(self.ct).copy()
+            # This comes in as (nbl*ntime,nchan,4)
+            vis_data = np.transpose(t.getcol('DATA').reshape(nbl,ntime,nchan,4),
+                (3,0,2,1)).astype(self.ct).copy()
             self.transfer_bayes_data(vis_data)
 
         # Should we initialise our weights from the MS data?
@@ -136,29 +152,10 @@ class MeasurementSetSharedData(BiroSharedData):
 
             assert weight_vector.shape == (ntime*nbl, nchan, 4)
 
-            weight_vector = np.transpose(weight_vector.reshape(ntime,nbl,nchan,4),
-                (3,1,2,0)).astype(self.ft)
+            weight_vector = np.transpose(weight_vector.reshape(nbl,ntime,nchan,4),
+                (3,0,2,1)).astype(self.ft)
 
             self.transfer_weight_vector(weight_vector)
-
-        expected_ant_shape = (nbl, ntime)
-        
-        if expected_ant_shape != ant1.shape:
-            raise ValueError, 'ANTENNA1 shape is %s != expected %s' % (ant1.shape,expected_ant_shape)
-
-        if expected_ant_shape != ant2.shape:
-            raise ValueError, 'ANTENNA2 shape is %s != expected %s' % (ant2.shape,expected_ant_shape)
-
-        ant_pairs = np.vstack((ant1,ant2)).reshape(self.ant_pairs_shape).copy()
-
-        # Transfer the uvw coordinates, antenna pairs and wavelengths to the GPU
-        self.transfer_uvw(uvw)
-        self.transfer_ant_pairs(ant_pairs)
-        self.transfer_wavelength(wavelength)
-
-        # First dimension also seems to be of size 1 here...
-        # Divide speed of light by frequency to get the wavelength here.
-        self.set_ref_wave(montblanc.constants.C/tf.getcol('REF_FREQUENCY')[0])
 
         t.close()
         ta.close()
