@@ -59,9 +59,9 @@ class MeasurementSetSharedData(BiroSharedData):
         ms_uvw = t.getcol('UVW')
         assert ms_uvw.shape == (nbl*ntime, 3), \
             'MS UVW shape %s != expected %s' % (ms_uvw.shape,expected_uvw_shape)
-        uvw = np.transpose(ms_uvw.reshape(nbl, ntime, 3), (2,0,1))\
-            .astype(self.ft).copy()
-        self.transfer_uvw(uvw)
+        uvw = ms_uvw.reshape(nbl, ntime, 3).transpose(2,0,1) \
+            .astype(self.ft)
+        self.transfer_uvw(np.ascontiguousarray(uvw))
 
         # Determine the wavelengths
         wavelength = (montblanc.constants.C/f[0]).astype(self.ft)
@@ -86,15 +86,15 @@ class MeasurementSetSharedData(BiroSharedData):
         ant_pairs = np.vstack((ant1,ant2)).reshape(self.ant_pairs_shape)
 
         # Transfer the uvw coordinates, antenna pairs and wavelengths to the GPU
-        self.transfer_ant_pairs(ant_pairs)
+        self.transfer_ant_pairs(np.ascontiguousarray(ant_pairs))
 
         # Load in visibility data, if it exists.
         if t.colnames().count('DATA') > 0:
             # Obtain visibilities stored in the DATA column
             # This comes in as (nbl*ntime,nchan,4)
-            vis_data = np.transpose(t.getcol('DATA').reshape(nbl,ntime,nchan,4),
-                (3,0,2,1)).astype(self.ct).copy()
-            self.transfer_bayes_data(vis_data)
+            vis_data = t.getcol('DATA').reshape(nbl,ntime,nchan,4) \
+                .transpose(3,0,2,1).astype(self.ct).copy()
+            self.transfer_bayes_data(np.ascontiguousarray(vis_data))
 
         # Should we initialise our weights from the MS data?
         init_weights = kwargs.get('init_weights', None)
@@ -152,10 +152,10 @@ class MeasurementSetSharedData(BiroSharedData):
 
             assert weight_vector.shape == (ntime*nbl, nchan, 4)
 
-            weight_vector = np.transpose(weight_vector.reshape(nbl,ntime,nchan,4),
-                (3,0,2,1)).astype(self.ft)
+            weight_vector = weight_vector.reshape(nbl,ntime,nchan,4) \
+                .transpose(3,0,2,1).astype(self.ft)
 
-            self.transfer_weight_vector(weight_vector)
+            self.transfer_weight_vector(np.ascontiguousarray(weight_vector))
 
         t.close()
         ta.close()
