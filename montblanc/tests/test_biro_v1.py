@@ -439,7 +439,9 @@ class TestBiroV1(unittest.TestCase):
         No time variability
         """
 
+
         # Settings
+        from montblanc.impl.biro.v1.BiroSharedData import BiroSharedData
         import scipy as sc
         from math import sqrt
         sqrtTwo=sqrt(2.0)
@@ -447,18 +449,18 @@ class TestBiroV1(unittest.TestCase):
         # Montblanc settings
         loggingLevel=logging.WARN                      # Logging level
         msfile=None # Input MS file
+        mb_params={'store_cpu':False,'use_noise_vector':False,'dtype':np.float32}
         store_cpu=False         # Carry out the calculation on the CPU
         use_noise_vector=False                         # Varying noise level
         dtype=np.float32                               # or np.float64
         # Sky
         n_params=8
-        npsrc=0                                        # no. point sources
-        ngsrc=1                                        # no. gaussians
+        sky_params={'npsrc':0,'ngsrc':1}
         # Telescope
         tel='WSRT'
         tel_params={'WSRT':{'nant':14,'nchan':1}}
         # Observation
-        ntime=72
+        obs_params={'ntime':72}
         uvw_f='uvw_coords.txt'
         sigmaSim=0.1 # Conventional noise per visibility
         sigmaFit=None # If None, fit for sigma, otherwise specify here
@@ -476,65 +478,71 @@ class TestBiroV1(unittest.TestCase):
         multimodal=False
         mode_tolerance=-1e90 # (Beware the old PyMultinest bug)
 
-        # Simulate the target source(s) here
-        l_sim=sd.ft(0.0); m_sim=sd.ft(0.0)
-        lm_sim=shape_list([l_sim,m_sim], sd.lm_shape, sd.lm_dtype)
-        fI_sim=sd.ft(numpy.random.normal(1.0,sigmaSim,ntime*nsrc))
-
-        fQ_sim=sd.ft(np.ones(ntime*nsrc)*0.0) # Unpolarized
-        fU_sim=sd.ft(np.ones(ntime*nsrc)*0.0)
-        fV_sim=sd.ft(np.ones(ntime*nsrc)*0.0)
-        alpha_sim=sd.ft(np.ones(ntime*nsrc)*0.0) # Flat
-        brightness_sim = shape_list([fI_sim,fQ_sim,fU_sim,fV_sim,alpha_sim],
-            sd.brightness_shape, sd.brightness_dtype)
-
-        el_sim = sd.ft(np.ones(ngsrc)*0.5)
-        em_sim = sd.ft(np.ones(ngsrc)*0.5)
-        R_sim = sd.ft(np.ones(ngsrc)*100.0)
-        gauss_shape = shape_list([el_sim,em_sim,R_sim],
-            sd.gauss_shape_shape, sd.gauss_shape_dtype)
-
-        # Generate nchan frequencies/wavelengths
-    	frequencies = sd.ft(np.linspace(1e6,2e6,nchan))
-        wavelength = sd.ft(montblanc.constants.C/frequencies)
-        sd.set_ref_wave(wavelength[nchan//2])
-
         # Set up the priors
-        from priors import Priors
-        pri=None
+        from montblanc.tests.priors import Priors
+        sampler={}; sampler['pri']=None
+        # http://stackoverflow.com/questions/11987358/why-nested-functions-can-access-variables-from-outer-functions-but-are-not-allo
         def myprior(cube, ndim, nparams):
-            global pri
-            if pri is None: pri=Priors()
-            cube[0] = pri.GeneralPrior(cube[0],'U',-720.0*arcsec2rad,720.0*arcsec2rad)
-            cube[1] = pri.GeneralPrior(cube[1],'U',-720.0*arcsec2rad,720.0*arcsec2rad)
-            cube[2] = pri.GeneralPrior(cube[2],'LOG',1.0e-2,5.0)
-            cube[3] = pri.GeneralPrior(cube[3],'U',1.0e-2,1.0)
-            cube[4] = pri.GeneralPrior(cube[4],'U',-5.0,5.0)
-            cube[5] = pri.GeneralPrior(cube[5],'U',1.0*arcsec2rad,60.0*arcsec2rad)
-            cube[6] = pri.GeneralPrior(cube[6],'U',1.0*arcsec2rad,60.0*arcsec2rad)
-            cube[7] = pri.GeneralPrior(cube[7],'U',0.0,sc.pi)
+            if sampler['pri'] is None: sampler['pri']=Priors()
+            cube[0] = sampler['pri'].GeneralPrior(cube[0],'U',-720.0*arcsec2rad,720.0*arcsec2rad)
+            cube[1] = sampler['pri'].GeneralPrior(cube[1],'U',-720.0*arcsec2rad,720.0*arcsec2rad)
+            cube[2] = sampler['pri'].GeneralPrior(cube[2],'LOG',1.0e-2,5.0)
+            cube[3] = sampler['pri'].GeneralPrior(cube[3],'U',1.0e-2,1.0)
+            cube[4] = sampler['pri'].GeneralPrior(cube[4],'U',-5.0,5.0)
+            cube[5] = sampler['pri'].GeneralPrior(cube[5],'U',1.0*arcsec2rad,60.0*arcsec2rad)
+            cube[6] = sampler['pri'].GeneralPrior(cube[6],'U',1.0*arcsec2rad,60.0*arcsec2rad)
+            cube[7] = sampler['pri'].GeneralPrior(cube[7],'U',0.0,sc.pi)
             return
 
         #-----------------------------------------------------------------------
 
         # And the likelihood
-        pipeline=None
+        sampler['pipeline']=None
         def myloglike(cube, ndim, nparams):
-            global pipeline,sd,store_cpu,dtype,use_noise_vector,npsrc,ngsrc,ndata
+            global sd,ndata#,store_cpu,use_noise_vector
             # Initialize pipeline once (from file or self-simulation)
-            if pipeline is None:
+            if sampler['pipeline'] is None:
                 montblanc.log.setLevel(loggingLevel)
                 sd = BiroSharedData(na=tel_params[tel]['nant'],\
                                     nchan=tel_params[tel]['nchan'],\
-                                    ntime=ntime,npsrc=npsrc,ngsrc=ngsrc,\
-                     			    dtype=dtype)
-                uvw = np.genfromtxt(uvw_f)
+                                    ntime=obs_params['ntime'],\
+                                        npsrc=sky_params['npsrc'],\
+                                        ngsrc=sky_params['ngsrc'],\
+                     			    dtype=mb_params['dtype'])
+                # Set up the observation
+                uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
                 sd.transfer_uvw(uvw)
 
-                wavelength = None
+
+                frequencies = sd.ft(np.linspace(1e6,2e6,sd.nchan))
+                wavelength = sd.ft(montblanc.constants.C/frequencies)
+                sd.set_ref_wave(wavelength[sd.nchan//2])
                 sd.transfer_wavelength(wavelength)
 
-                pipeline.initialise(sd)
+                # Simulate the target source(s) here
+                lm_sim=sd.ft(np.array([0.0,0.0]).reshape(sd.lm_shape))
+                fI_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*1.0)
+                fQ_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0) # Unpolarized
+                fU_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0)
+                fV_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0)
+                alpha_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0) # Flat
+                brightness_sim=np.array([fI_sim,fQ_sim,fU_sim,fV_sim,alpha_sim]).reshape(sd.brightness_shape)
+                sd.transfer_brightness(brightness_sim)
+
+                el_sim = sd.ft(np.ones(sd.ngsrc)*0.5)
+                em_sim = sd.ft(np.ones(sd.ngsrc)*0.5)
+                R_sim = sd.ft(np.ones(sd.ngsrc)*100.0)
+                gauss_shape_sim = np.array([el_sim,em_sim,R_sim]).reshape(sd.gauss_shape_shape)
+                sd.transfer_gauss_shape(gauss_shape_sim)
+                sampler['pipeline'].initialise(sd)
+                sampler['pipeline'].execute(sd)
+                # Fetch the simulated visibilities and add noise
+                vis_sim=sd.vis_gpu.get()
+                noise_sim=numpy.random.normal(0.0,sigmaSim,sd.ntime*sd.nsrc,shape=sd.vis_shape,dtype=sd.vis_dtype)
+                vis_sim+=noise_sim
+
+                # Initialize the pipeline
+                sampler['pipeline'].initialise(sd)
                 print sd
                 # Carry out calculations on the CPU (as opposed to GPU)
                 if store_cpu:
@@ -589,7 +597,7 @@ class TestBiroV1(unittest.TestCase):
                 sd.set_sigma_sqrd((sigma[0]**2))
 
             # Execute the pipeline; cube[:] -> sd.X2
-            pipeline.execute(sd)
+            sampler['pipeline'].execute(sd)
             if store_cpu:
                 chi2=sd.compute_biro_chi_sqrd()
             else:
@@ -602,10 +610,11 @@ class TestBiroV1(unittest.TestCase):
         #-----------------------------------------------------------------------
 
         # Now run multinest
-        import time
+        import os,time
+        from mpi4py import MPI
         import pymultinest
         outdir = 'chains-hypo%i' % hypo
-        os.mkdir(outdir)
+        if not os.path.exists(outdir): os.mkdir(outdir)
         outstem = os.path.join(outdir,'%s-'%hypo)
 
         print 'Calling PyMultinest...'
@@ -619,9 +628,9 @@ class TestBiroV1(unittest.TestCase):
         tend = time.time()
 
         print 'PyMultinest took ', (tend-tstart)/60.0, ' minutes to run\n'
-        print 'Avg. execution time %gms' % pipeline.avg_execution_time
-        print 'Last execution time %gms' % pipeline.last_execution_time
-        print 'No. of executions %d.' % pipeline.nr_of_executions
+        print 'Avg. execution time %gms' % sampler['pipeline'].avg_execution_time
+        print 'Last execution time %gms' % sampler['pipeline'].last_execution_time
+        print 'No. of executions %d.' % sampler['pipeline'].nr_of_executions
         print sd
 
         #-----------------------------------------------------------------------
