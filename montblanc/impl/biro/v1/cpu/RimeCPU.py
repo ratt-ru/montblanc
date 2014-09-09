@@ -112,27 +112,28 @@ class RimeCPU(object):
         sd = self.shared_data
 
         try:
-            # Repeat the wavelengths along the timesteps for now
-            # dim nchan x ntime. 
-            w = np.repeat(sd.wavelength_cpu,sd.ntime).reshape(sd.nchan, sd.ntime)
+            wave = sd.wavelength_cpu
+
+            u, v, w = sd.uvw_cpu[0], sd.uvw_cpu[1], sd.uvw_cpu[2]
+            l, m = sd.lm_cpu[0], sd.lm_cpu[1]
+            alpha =sd.brightness_cpu[4]
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x nbl.
-            n = np.sqrt(1. - sd.lm_cpu[0]**2 - sd.lm_cpu[1]**2) - 1.
+            n = np.sqrt(1. - l**2 - m**2) - 1.
 
             # u*l+v*m+w*n. Outer product creates array of dim nbl x ntime x nsrcs
-            phase = (np.outer(sd.uvw_cpu[0], sd.lm_cpu[0]) + \
-                np.outer(sd.uvw_cpu[1], sd.lm_cpu[1]) + \
-                np.outer(sd.uvw_cpu[2],n))\
+            phase = (np.outer(u,l) + np.outer(v,m) + np.outer(w,n))\
                     .reshape(sd.nbl, sd.ntime, sd.nsrc)
             assert phase.shape == (sd.nbl, sd.ntime, sd.nsrc)            
 
             # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. nbl x nchan x ntime x nsrcs 
-            phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:]/w[np.newaxis,:,:,np.newaxis]
+            phase = (2*np.pi*1j*phase)[:,np.newaxis,:,:] \
+                / wave[np.newaxis,:,np.newaxis,np.newaxis]
             assert phase.shape == (sd.nbl, sd.nchan, sd.ntime, sd.nsrc)            
 
             # Dim nchan x ntime x nsrcs 
-            power = np.power(sd.ref_wave/w[:,:,np.newaxis],
-                sd.brightness_cpu[4,np.newaxis,:,:])
+            power = np.power(sd.ref_wave/wave[:,np.newaxis,np.newaxis],
+                alpha[np.newaxis,:,:])
             assert power.shape == (sd.nchan, sd.ntime, sd.nsrc)            
 
             # This works due to broadcast! Dim nbl x nchan x ntime x nsrcs
