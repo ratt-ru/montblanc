@@ -432,22 +432,199 @@ class TestBiroV1(unittest.TestCase):
 
         rime_sum.shutdown(sd)
 
-	def test_real_problem(self):
+	def demo_real_problem(self):
 
-		sd = BiroSharedData(na=3,nchan=4,ntime=4,npsrc=1,ngsrc=0,
-			dtype=np.float32)
+        """
+        Method to demonstrate a pymultinest 'real world' problem
+        No pointing errors
+        No time variability
+        """
 
-		with open('uvw_coords.txt') as f:
-			uvw = f.read()
+        # Settings
+        sqrtTwo=sqrt(2.0)
+        arcsec2rad = sc.pi / 180.0 / 3600.0
+        # Montblanc settings
+        loggingLevel=logging.WARN                      # Logging level
+        msfile=None # Input MS file
+        store_cpu=False         # Carry out the calculation on the CPU
+        use_noise_vector=False                         # Varying noise level
+        dtype=np.float32                               # or np.float64
+        # Sky
+        n_params=8
+        npsrc=0                                        # no. point sources
+        ngsrc=1                                        # no. gaussians
+        # Telescope
+        tel='WSRT'
+        tel_params=dict('WSRT':{'nant':14,'nchan':1}\
+                        )
+        # Observation
+        ntime=72
+        uvw_f='uvw_coords.txt'
+        sigmaSim=0.1 # Conventional noise per visibility
+        sigmaFit=None # If None, fit for sigma, otherwise specify here
 
-		uvw = ...
-		sd.transfer_uvw(uvw)
+        # Multinest settings
+        hypo=1 # Run number
+        verbose=True # Helpful print statements in the output
+        nlive=1000 # Number of live points for MultiNest
+        evtol=0.5 # Evidence tolerance for MultiNest
+        efr=0.1   # Target sampling efficiency
+        resume=False # Resume interrrupted MultiNest runs
+        seed=4747 # Random no. generator seed (-ve for system clock)
+        ins=False # Use Importance Nested Sampling? (Multinest)
+        maxiter=0 # maximum number of iterations for multinest
+        multimodal=False
+        mode_tolerance=-1e90 # (Beware the old PyMultinest bug)
 
-		wavelength = ...
-		sd.transfer_wavelength(wavelength)
+        # Simulate the target source(s) here
+        l_sim=sd.ft(0.0); m_sim=sd.ft(0.0)
+        lm_sim=shape_list([l_sim,m_sim], sd.lm_shape, sd.lm_dtype)
+        fI_sim=sd.ft(numpy.random.normal(1.0,sigmaSim,ntime*nsrc))
 
-		import multinest
-		
+        fQ_sim=sd.ft(np.ones(ntime*nsrc)*0.0) # Unpolarized
+        fU_sim=sd.ft(np.ones(ntime*nsrc)*0.0)
+        fV_sim=sd.ft(np.ones(ntime*nsrc)*0.0)
+        alpha_sim=sd.ft(np.ones(ntime*nsrc)*0.0) # Flat
+        brightness_sim = shape_list([fI_sim,fQ_sim,fU_sim,fV_sim,alpha_sim],
+            sd.brightness_shape, sd.brightness_dtype)
+
+        el_sim = sd.ft(np.ones(ngsrc)*0.5)
+        em_sim = sd.ft(np.ones(ngsrc)*0.5)
+        R_sim = sd.ft(np.ones(ngsrc)*100.0)
+        gauss_shape = shape_list([el_sim,em_sim,R_sim],
+            sd.gauss_shape_shape, sd.gauss_shape_dtype)
+
+        # Generate nchan frequencies/wavelengths
+    	frequencies = sd.ft(np.linspace(1e6,2e6,nchan))
+        wavelength = sd.ft(montblanc.constants.C/frequencies)
+        sd.set_ref_wave(wavelength[nchan//2])
+
+        # Set up the priors
+        from priors import Priors
+        pri=None
+        def myprior(cube, ndim, nparams):
+            global pri
+            if pri is None: pri=Priors()
+            cube[0] = pri.GeneralPrior(cube[0],'U',-720.0*arcsec2rad,720.0*arcsec2rad)
+            cube[1] = pri.GeneralPrior(cube[1],'U',-720.0*arcsec2rad,720.0*arcsec2rad)
+            cube[2] = pri.GeneralPrior(cube[2],'LOG',1.0e-2,5.0)
+            cube[3] = pri.GeneralPrior(cube[3],'U',1.0e-2,1.0)
+            cube[4] = pri.GeneralPrior(cube[4],'U',-5.0,5.0)
+            cube[5] = pri.GeneralPrior(cube[5],'U',1.0*arcsec2rad,60.0*arcsec2rad)
+            cube[6] = pri.GeneralPrior(cube[6],'U',1.0*arcsec2rad,60.0*arcsec2rad)
+            cube[7] = pri.GeneralPrior(cube[7],'U',0.0,sc.pi)
+            return
+
+        #-----------------------------------------------------------------------
+
+        # And the likelihood
+        pipeline=None
+        def myloglike(cube, ndim, nparams):
+            global pipeline,sd,store_cpu,dtype,use_noise_vector,npsrc,ngsrc,ndata
+            # Initialize pipeline once (from file or self-simulation)
+            if pipeline is None:
+                montblanc.log.setLevel(loggingLevel)
+		        sd = BiroSharedData(na=tel_params[tel]['nant'],\
+                                    nchan=tel_params[tel]['nchan'],\
+                                    ntime=ntime,npsrc=npsrc,ngsrc=ngsrc,\
+                     			    dtype=dtype)
+        	    uvw = np.genfromtxt(uvw_f)
+		        sd.transfer_uvw(uvw)
+
+        		wavelength = ...
+		        sd.transfer_wavelength(wavelength)
+
+                pipeline.initialise(sd)
+                print sd
+                # Carry out calculations on the CPU (as opposed to GPU)
+                if store_cpu:
+                    point_errors = np.zeros(2*sd.na*sd.ntime)\
+                        .astype(sd.ft).reshape((2,sd.na,sd.ntime))
+                    sd.transfer_point_errors(point_errors)
+
+                 # Set up the antenna table if noise depends on this
+                 if use_noise_vector:
+                     bl2ants=sd.get_default_ant_pairs()
+
+                 # Find total number of visibilities
+                 ndata=8*sd.nbl*sd.nchan*sd.ntime
+            # End of setup
+
+            # Do next lines on every iteration
+
+            # Now set up the model vis for this iteration
+            lm=np.array([cube[0],cube[1]], dtype=sd.ft).reshape(sd.lm_shape)
+
+            fI=cube[2]*np.ones((sd.ntime,sd.nsrc,),dtype=sd.ft)
+            fQ=cube[4]*np.ones((sd.ntime,sd.nsrc),dtype=sd.ft)
+            fU=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
+            fV=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
+            alpha=     np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
+            brightness = np.array([fI,fQ,fU,fV,alpha],dtype=sd.ft)\
+                .reshape(sd.brightness_shape)
+
+            # Push cube parameters for this iteration to the GPU
+            sd.transfer_lm(lm)
+            sd.transfer_brightness(brightness)
+
+            if sd.ngsrc > 0:
+                if cube[5]>cube[6]: return -1.0e99 # Catch oblates(?)
+                gauss_shape = np.array([[cube[6]*np.sin(cube[7]),\
+                              cube[6]*np.cos(cube[7]),cube[5]/cube[6]]],dtype=sd.ft)\
+                              .reshape(sd.gauss_shape_shape)
+                sd.transfer_gauss_shape(gauss_shape)
+
+            # Set the noise
+            if sigmaFit is not None:
+                sigma=sigmaFit*np.ones(1).astype(sd.ft)
+            else:
+                sigma=cube[3]*np.ones(1).astype(sd.ft)
+
+            if use_noise_vector:
+                noise_vector=sigma[0]**2**np.ones(ndata/8).astype(sd.ft)\
+                    .reshape(sd.noise_vector_shape)
+
+                sd.transfer_noise_vector(noise_vector)
+            else:
+                sd.set_sigma_sqrd((sigma[0]**2))
+
+            # Execute the pipeline; cube[:] -> sd.X2
+            pipeline.execute(sd)
+            if store_cpu:
+                chi2=sd.compute_biro_chi_sqrd()
+            else:
+                chi2=sd.X2
+
+            loglike=-chi2/2.0 - ndata*0.5*np.log(2.0*sc.pi*sigma[0]**2.0)
+
+            return loglike
+
+        #-----------------------------------------------------------------------
+
+        # Now run multinest
+        import time
+        import pymultinest
+        outdir = 'chains-hypo%i' % hypo
+        os.mkdir(outdir)
+        outstem = os.path.join(outdir,'%s-'%hypo)
+
+        print 'Calling PyMultinest...'
+        tstart = time.time()
+        pymultinest.run(myloglike,myprior,n_params,evidence_tolerance=evtol,\
+                        resume=resume,verbose=True,multimodal=multimodal,\
+                        write_output=True,mode_tolerance=mode_tolerance,\
+                        n_live_points=nlive,outputfiles_basename=outstem,\
+                        init_MPI=False,importance_nested_sampling=ins,seed=seed,\
+                        sampling_efficiency=efr,max_iter=maxiter)
+        tend = time.time()
+
+        print 'PyMultinest took ', (tend-tstart)/60.0, ' minutes to run\n'
+        print 'Avg. execution time %gms' % pipeline.avg_execution_time
+        print 'Last execution time %gms' % pipeline.last_execution_time
+        print 'No. of executions %d.' % pipeline.nr_of_executions
+        print sd
+
+        #-----------------------------------------------------------------------
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV1)
