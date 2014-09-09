@@ -432,6 +432,23 @@ class TestBiroV1(unittest.TestCase):
 
         rime_sum.shutdown(sd)
 
+	def test_real_problem(self):
+
+		sd = BiroSharedData(na=3,nchan=4,ntime=4,npsrc=1,ngsrc=0,
+			dtype=np.float32)
+
+		with open('uvw_coords.txt') as f:
+			uvw = f.read()
+
+		uvw = ...
+		sd.transfer_uvw(uvw)
+
+		wavelength = ...
+		sd.transfer_wavelength(wavelength)
+
+		import multinest
+		
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV1)
     unittest.TextTestRunner(verbosity=2).run(suite)
