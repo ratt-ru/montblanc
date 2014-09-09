@@ -432,8 +432,7 @@ class TestBiroV1(unittest.TestCase):
 
         rime_sum.shutdown(sd)
 
-	def demo_real_problem(self):
-
+    def demo_real_problem(self):
         """
         Method to demonstrate a pymultinest 'real world' problem
         No pointing errors
@@ -441,6 +440,8 @@ class TestBiroV1(unittest.TestCase):
         """
 
         # Settings
+        import scipy as sc
+        from math import sqrt
         sqrtTwo=sqrt(2.0)
         arcsec2rad = sc.pi / 180.0 / 3600.0
         # Montblanc settings
@@ -455,8 +456,7 @@ class TestBiroV1(unittest.TestCase):
         ngsrc=1                                        # no. gaussians
         # Telescope
         tel='WSRT'
-        tel_params=dict('WSRT':{'nant':14,'nchan':1}\
-                        )
+        tel_params={'WSRT':{'nant':14,'nchan':1}}
         # Observation
         ntime=72
         uvw_f='uvw_coords.txt'
@@ -524,15 +524,15 @@ class TestBiroV1(unittest.TestCase):
             # Initialize pipeline once (from file or self-simulation)
             if pipeline is None:
                 montblanc.log.setLevel(loggingLevel)
-		        sd = BiroSharedData(na=tel_params[tel]['nant'],\
+                sd = BiroSharedData(na=tel_params[tel]['nant'],\
                                     nchan=tel_params[tel]['nchan'],\
                                     ntime=ntime,npsrc=npsrc,ngsrc=ngsrc,\
                      			    dtype=dtype)
-        	    uvw = np.genfromtxt(uvw_f)
-		        sd.transfer_uvw(uvw)
+                uvw = np.genfromtxt(uvw_f)
+                sd.transfer_uvw(uvw)
 
-        		wavelength = ...
-		        sd.transfer_wavelength(wavelength)
+                wavelength = None
+                sd.transfer_wavelength(wavelength)
 
                 pipeline.initialise(sd)
                 print sd
@@ -542,12 +542,12 @@ class TestBiroV1(unittest.TestCase):
                         .astype(sd.ft).reshape((2,sd.na,sd.ntime))
                     sd.transfer_point_errors(point_errors)
 
-                 # Set up the antenna table if noise depends on this
-                 if use_noise_vector:
+                # Set up the antenna table if noise depends on this
+                if use_noise_vector:
                      bl2ants=sd.get_default_ant_pairs()
 
-                 # Find total number of visibilities
-                 ndata=8*sd.nbl*sd.nchan*sd.ntime
+                # Find total number of visibilities
+                ndata=8*sd.nbl*sd.nchan*sd.ntime
             # End of setup
 
             # Do next lines on every iteration
