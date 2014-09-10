@@ -24,7 +24,7 @@ def check_biro_shared_data_type(sd_type):
 		raise ValueError, 'Supplied shared data type %s is not valid. ' \
 			'Should be one of %s', (sd_type, valid_biro_shared_data_types)
 
-def get_bk_pipeline():
+def get_bk_pipeline(**kwargs):
 	from montblanc.pipeline import Pipeline
 	from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
 	from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
