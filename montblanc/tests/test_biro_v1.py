@@ -546,10 +546,12 @@ class TestBiroV1(unittest.TestCase):
         #-------------------------------------------------------------------
         # Now begin the likelihood calculation proper
         sampler['pipeline']=None
+        sampler['sd']=None
+        sampler['ndata']=None
         def myloglike(cube, ndim, nparams):
             # Initialize the pipeline
             if sampler['pipeline'] is None:
-                sd=factory.get_biro_shared_data(sd_type='biro',\
+                sampler['sd']=factory.get_biro_shared_data(sd_type='biro',\
                     na=tel_params[tel]['nant'],\
                     nchan=tel_params[tel]['nchan'],ntime=obs_params['ntime'],\
                     npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
@@ -559,7 +561,7 @@ class TestBiroV1(unittest.TestCase):
                     weight_vector=mb_params['use_weight_vector'],\
                     dtype=mb_params['dtype'],\
                     store_cpu=mb_params['store_cpu'])
-
+                sd=sampler['sd']
                 # Set up the observation (again - probably unnecessary)
                 uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
                 sd.transfer_uvw(uvw)
@@ -586,13 +588,14 @@ class TestBiroV1(unittest.TestCase):
 
                 # Find total number of visibilities
                 # complex x [XX,XY,YX,YY] x nbl x nchan x ntime
-                ndata=2*4*sd.nbl*sd.nchan*sd.ntime
+                sampler['ndata']=2*4*sd.nbl*sd.nchan*sd.ntime
             # End of setup
 
             #-------------------------------------------------------------------
             # Do next lines on every iteration
 
             # Now set up the model vis for this iteration
+            sd=sampler['sd']; ndata=sampler['ndata']
             lm=np.array([cube[0],cube[1]], dtype=sd.ft).reshape(sd.lm_shape)
 
             fI=cube[2]*np.ones((sd.ntime,sd.nsrc,),dtype=sd.ft)
