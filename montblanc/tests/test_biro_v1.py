@@ -461,11 +461,11 @@ class TestBiroV1(unittest.TestCase):
         # Sky
         n_params=8
         sky_params={'npsrc':0,'ngsrc':1}
-        source_params=dict('I':1.0,'Q':0.0,'U':0.0,'V':0.0,\
+        source_params={'I':1.0,'Q':0.0,'U':0.0,'V':0.0,\
                                'x':0.0,'y':0.0,'alpha':0.0,\
                                'lproj':0.5*arcsec2rad,\
                                'mproj':0.5*arcsec2rad,\
-                               'radius':100.0*arcsec2rad)
+                               'radius':100.0*arcsec2rad}
         # Telescope
         tel='WSRT'
         tel_params={'WSRT':{'nant':14,'nchan':1},\
@@ -518,7 +518,7 @@ class TestBiroV1(unittest.TestCase):
         sd.transfer_wavelength(wavelength)
 
         # Simulate the target source(s) here
-        lm_sim=sd.ft(np.array([x,y]).reshape(sd.lm_shape))
+        lm_sim=sd.ft(np.array([source_params['x'],source_params['y']]).reshape(sd.lm_shape))
         fI_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['I'])
         fQ_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['Q'])
         fU_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['U'])
