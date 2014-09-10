@@ -602,7 +602,8 @@ class TestBiroV1(unittest.TestCase):
                      bl2ants=sd.get_default_ant_pairs()
 
                 # Find total number of visibilities
-                ndata=8*sd.nbl*sd.nchan*sd.ntime
+                # complex x [XX,XY,YX,YY] x nbl x nchan x ntime
+                ndata=2*4*sd.nbl*sd.nchan*sd.ntime
             # End of setup
 
             #-------------------------------------------------------------------
@@ -637,6 +638,7 @@ class TestBiroV1(unittest.TestCase):
                 sigma=cube[3]*np.ones(1).astype(sd.ft)
 
             if mb_params['use_weight_vector']:
+                # One weight element per set of polarizations
                 weight_vector=np.ones(ndata/8).astype(sd.ft)\
                     .reshape(sd.weight_vector_shape)/sigma[0]**2
 
@@ -651,7 +653,12 @@ class TestBiroV1(unittest.TestCase):
             else:
                 chi2=sd.X2
 
-            loglike=-chi2/2.0 - ndata*0.5*np.log(2.0*sc.pi*sigma[0]**2.0)
+            if mb_params['use_weight_vector']:
+                # I think there needs to be a factor of 8 here because
+                # weight_vector is per complex Stokes vector
+                loglike=-chi2/2.0 - 8*0.5*np.log(2.0*sc.pi/weight_vector).sum()
+            else:
+                loglike=-chi2/2.0 - ndata*0.5*np.log(2.0*sc.pi*sigma[0]**2.0)
 
             return loglike
 
