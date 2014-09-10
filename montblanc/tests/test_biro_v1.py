@@ -450,7 +450,7 @@ class TestBiroV1(unittest.TestCase):
                                'pa':45.0*deg2rad}
         # Telescope
         tel='WSRT'
-        tel_params={'WSRT':{'nant':14,'nchan':1},\
+        tel_params={'WSRT':{'nant':14,'nchan':8},\
                         'ATCA':{'nant':-1,'nchan':-1}}
         # Observation
         obs_params={'ntime':72}
@@ -524,7 +524,7 @@ class TestBiroV1(unittest.TestCase):
 
         # Fetch the simulated visibilities back and add noise
         vis_sim=sd.vis_gpu.get()
-        noise_sim=sd.ct((np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.ntime*sd.nsrc)+1j*np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.ntime*sd.nsrc)).reshape(sd.vis_shape))
+        noise_sim=sd.ct((np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.nchan*sd.ntime*sd.nsrc)+1j*np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.nchan*sd.ntime*sd.nsrc)).reshape(sd.vis_shape))
         vis_sim+=noise_sim
         sampler['simulator'].shutdown(sd)
         sampler['simulator']=vis_sim
@@ -544,7 +544,7 @@ class TestBiroV1(unittest.TestCase):
             cube[4] = sampler['pri'].GeneralPrior(cube[4],'U',-5.0,5.0) # alpha
             cube[5] = sampler['pri'].GeneralPrior(cube[5],'U',1.0*arcsec2rad,60.0*arcsec2rad) # lproj
             cube[6] = sampler['pri'].GeneralPrior(cube[6],'U',1.0*arcsec2rad,60.0*arcsec2rad) # mproj
-            cube[7] = sampler['pri'].GeneralPrior(cube[7],'U',0.0,sc.pi) # ratio
+            cube[7] = sampler['pri'].GeneralPrior(cube[7],'U',0.0,4.0) # ratio
             return
 
         #-------------------------------------------------------------------
