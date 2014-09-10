@@ -14,28 +14,28 @@ class MeasurementSetSharedData(BiroSharedData):
     ANTENNA_TABLE = "ANTENNA"
     SPECTRAL_WINDOW = "SPECTRAL_WINDOW"
 
-    def __init__(self, ms_file, npsrc, ngsrc, dtype=np.float64, **kwargs):
+    def __init__(self, msfile, npsrc, ngsrc, dtype=np.float64, **kwargs):
         # Do some checks on the supplied filename
-        if not isinstance(ms_file, str):
-            raise TypeError, 'ms_file is not a string'
+        if not isinstance(msfile, str):
+            raise TypeError, 'msfile is not a string'
 
-        if not os.path.isdir(ms_file):
-            raise ValueError, '%s does not appear to be a valid measurement set' % ms_file
+        if not os.path.isdir(msfile):
+            raise ValueError, '%s does not appear to be a valid measurement set' % msfile
 
         # Store the measurement set filename
-        self.ms_file = ms_file
+        self.msfile = msfile
 
         # Open the measurement set
-        ms = table(self.ms_file, ack=False)
+        ms = table(self.msfile, ack=False)
         # Strip out all auto-correlated baselines
         t = ms.query('ANTENNA1 != ANTENNA2')
 
         # Open the antenna table
-        ant_path = os.path.join(self.ms_file, MeasurementSetSharedData.ANTENNA_TABLE)
+        ant_path = os.path.join(self.msfile, MeasurementSetSharedData.ANTENNA_TABLE)
         ta=table(ant_path, ack=False)
 
         # Open the spectral window table
-        freq_path = os.path.join(self.ms_file, MeasurementSetSharedData.SPECTRAL_WINDOW)
+        freq_path = os.path.join(self.msfile, MeasurementSetSharedData.SPECTRAL_WINDOW)
         tf=table(freq_path, ack=False)
         f=tf.getcol("CHAN_FREQ").astype(dtype)
 

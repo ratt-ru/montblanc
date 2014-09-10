@@ -9,10 +9,6 @@ import os
 # Hooray for python
 import montblanc
 
-from montblanc.node import Node, NullNode
-from montblanc.pipeline import Pipeline
-from montblanc.BaseSharedData import BaseSharedData
-
 def get_montblanc_path():
 	""" Return the current path in which montblanc is installed """
 	return os.path.dirname(inspect.getfile(montblanc))
@@ -20,7 +16,7 @@ def get_montblanc_path():
 def get_source_path():
 	return os.path.join(get_montblanc_path(), 'src')
 
-def get_bk_pipeline(msfile, npsrc, ngsrc, device=None):
+def get_bk_pipeline(msfile, npsrc, ngsrc, **kwargs):
 	"""
 	get_bk_pipeline(msfile, npsrc, device=None)
 
@@ -43,23 +39,11 @@ def get_bk_pipeline(msfile, npsrc, ngsrc, device=None):
 	A (pipeline, shared_data) tuple
 	"""
 
-	from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
-	from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
-	from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
+	import montblanc.factory
 
-	from montblanc.impl.biro.v1.MeasurementSetSharedData import MeasurementSetSharedData
-
-	if device is None:
-		import pycuda.autoinit
-		device=pycuda.autoinit.device
-
-	# Create a shared data object from the Measurement Set file
-	sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=np.float32,
-		device=device)
-	# Create a pipeline consisting of an BK kernel, followed by a reduction.
-	pipeline = Pipeline([
-		RimeBK(),
-		RimeJonesReduce()])
+	pipeline = montblanc.factory.get_bk_pipeline()
+	sd = montblanc.factory.get_biro_shared_data(sd_type='ms', msfile=msfile,
+		npsrc=npsrc, ngsrc=ngsrc, dtype=np.float32, **kwargs)
 
 	return pipeline, sd
 
@@ -105,66 +89,16 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kw
 	A (pipeline, shared_data) tuple
 	"""
 
-	valid_versions = ['v1','v2']
+	import montblanc.factory
 
-	if version not in valid_versions:
-		raise ValueError, 'Supplied version %s is not valid. ' \
-			'Should be one of %s', (version, valid_versions)
+	montblanc.factory.check_biro_version(version)
+	pipeline = montblanc.factory.get_biro_pipeline(
+		npsrc=npsrc, ngsrc=ngsrc, version=version, **kwargs)
 
-	if kwargs.get('device') is None:
-		import pycuda.autoinit
-		kwargs['device']=pycuda.autoinit.device
+	sd = montblanc.factory.get_biro_shared_data(sd_type='ms', msfile=msfile,
+		npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, version=version, **kwargs)
 
-	# Decide whether to use the weight vector
-	use_weight_vector = kwargs.get('weight_vector', False)
-
-	def get_v1():
-		from montblanc.impl.biro.v1.gpu.RimeEBK import RimeEBK
-		from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
-		from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
-
-		from montblanc.impl.biro.v1.MeasurementSetSharedData import MeasurementSetSharedData
-
-		# Create a shared data object from the Measurement Set file
-		sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=dtype,
-			**kwargs)
-		# Create a pipeline consisting of an EBK kernel, followed by a reduction,
-
-		nodes = []
-		# Add a node handling point sources, if any
-		if sd.npsrc > 0: nodes.append(RimeEBK(gaussian=False))
-		# Add a node handling gaussian sources, if any
-		if sd.ngsrc > 0: nodes.append(RimeEBK(gaussian=True))
-
-		# Followed by a reduction,
-		# a chi squared difference between the Bayesian Model and the Visibilities
-		# and a further reduction to produce the Chi Squared Value
-		nodes.extend([RimeJonesReduce(),
-			RimeChiSquared(weight_vector=use_weight_vector)])
-
-		return Pipeline(nodes), sd
-
-	def get_v2():
-		from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
-		from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
-
-		from montblanc.impl.biro.v2.MeasurementSetSharedData import MeasurementSetSharedData
-
-		# Create a shared data object from the Measurement Set file
-		sd = MeasurementSetSharedData(msfile, npsrc=npsrc, ngsrc=ngsrc, dtype=dtype,
-			**kwargs)
-
-		# Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
-		nodes = [RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)]
-
-		return Pipeline(nodes), sd
-
-	if version == 'v1':
-		return get_v1()
-	elif version == 'v2':
-		return get_v2()
-	else:
-		raise ValueError, 'Invalid version %s' % (version)
+	return pipeline, sd
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """
