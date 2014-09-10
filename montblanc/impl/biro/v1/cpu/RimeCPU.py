@@ -25,6 +25,7 @@ class RimeCPU(object):
             w = sd.uvw_cpu[2]
             el = sd.gauss_shape_cpu[0]
             em = sd.gauss_shape_cpu[1]
+            R = sd.gauss_shape_cpu[2]
 
             # OK, try obtain the same results with the fwhm factored out!
             # u1 = u*em - v*el
@@ -48,7 +49,7 @@ class RimeCPU(object):
             u1 = u1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,np.newaxis]
             v1 = v1[:,np.newaxis,:,:]*scale_uv[np.newaxis,:,np.newaxis,np.newaxis]
             # u1 *= R, the ratio of the gaussian axis
-            u1 *= sd.gauss_shape_cpu[2][np.newaxis,np.newaxis,np.newaxis,:]
+            u1 *= R[np.newaxis,np.newaxis,np.newaxis,:]
 
             return np.exp(-(u1**2 + v1**2))
 

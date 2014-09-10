@@ -16,6 +16,7 @@ class TestSharedData(BiroSharedData):
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
         npsrc=DEFAULT_NPSRC, ngsrc=0, dtype=np.float32, **kwargs):
 
+        # Store CPU arrays
         kwargs['store_cpu'] = True
 
         super(TestSharedData, self).__init__(na=na, nchan=nchan, ntime=ntime,

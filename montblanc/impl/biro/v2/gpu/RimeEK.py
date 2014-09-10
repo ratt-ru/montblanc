@@ -8,8 +8,8 @@ from montblanc.node import Node
 
 FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 8,    # Number of timesteps
-    'BLOCKDIMZ' : 2,    # Number of antennas
+    'BLOCKDIMY' : 8,    # Number of antennas
+    'BLOCKDIMZ' : 2,    # Number of timesteps
     'maxregs'   : 32    # Maximum number of registers
 }
 
@@ -17,8 +17,8 @@ FLOAT_PARAMS = {
 # local memory
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 4,    # Number of timesteps
-    'BLOCKDIMZ' : 1,    # Number of antennas
+    'BLOCKDIMY' : 4,    # Number of antennas
+    'BLOCKDIMZ' : 1,    # Number of timesteps
     'maxregs'   : 44    # Maximum number of registers
 }
 
@@ -54,8 +54,8 @@ void rime_jones_EK_impl(
     typename Tr::ct * jones_scalar)
 {
 	int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
-	int TIME = blockIdx.y*blockDim.y + threadIdx.y;
-	int ANT = blockIdx.z*blockDim.z + threadIdx.z;
+    int ANT = blockIdx.y*blockDim.y + threadIdx.y;
+	int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
 	if(ANT >= NA || TIME >= NTIME || CHAN >= NCHAN)
 		return;
@@ -72,8 +72,6 @@ void rime_jones_EK_impl(
 	__shared__ T ld[BLOCKDIMZ][BLOCKDIMY];
 	__shared__ T md[BLOCKDIMZ][BLOCKDIMY];
 
-	__shared__ T a[BLOCKDIMY];
-
 	__shared__ T wl[BLOCKDIMX];
 
 	int i;
@@ -81,7 +79,7 @@ void rime_jones_EK_impl(
 	// UVW coordinates vary by antenna and time, but not channel
 	if(threadIdx.x == 0)
 	{
-		i = ANT*NTIME + TIME;
+		i = TIME*NA + ANT;
 		u[threadIdx.z][threadIdx.y] = uvw[i];
 		ld[threadIdx.z][threadIdx.y] = point_errors[i];
 		i += NA*NTIME;
@@ -98,17 +96,10 @@ void rime_jones_EK_impl(
 	for(int SRC=0;SRC<NSRC;++SRC)
 	{
 		// LM coordinates vary only by source, not antenna and time
-		if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+		if(threadIdx.x == 0 && threadIdx.y == 0)
 		{
 			i = SRC;   l[0] = lm[i];
 			i += NSRC; m[0] = lm[i];
-		}
-
-		// brightness varies by time (and source), not baseline or channel
-		if(threadIdx.x == 0 && threadIdx.z == 0)
-		{
-			i = TIME*NSRC + SRC + 4*NTIME*NSRC;
-			a[threadIdx.y] = brightness[i];
 		}
 
 		__syncthreads();
@@ -116,7 +107,7 @@ void rime_jones_EK_impl(
 		// Calculate the phase term for this antenna
 		T phase = Po::sqrt(T(1.0) - l[0]*l[0] - m[0]*m[0]) - T(1.0);
 
-		phase = phase*w[threadIdx.z][threadIdx.y]
+		phase = w[threadIdx.z][threadIdx.y]*phase
 			+ v[threadIdx.z][threadIdx.y]*m[0]
 			+ u[threadIdx.z][threadIdx.y]*l[0];
 
@@ -124,9 +115,6 @@ void rime_jones_EK_impl(
 
 		T real, imag;
 		Po::sincos(phase, &imag, &real);
-
-		phase = Po::pow(REFWAVE/wl[threadIdx.x], a[threadIdx.y]);
-		real *= phase; imag *= phase;
 
 		// Calculate the beam term for this antenna
 		T diff = l[0] - ld[threadIdx.z][threadIdx.y];
@@ -139,12 +127,10 @@ void rime_jones_EK_impl(
 		E = Po::cos(E);
 		E = E*E*E;
 
-		// Multiply phase and beam values together
-		real *= E; imag *= E;
-
-		// Write out the scalar.
-		i = (ANT*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
-		jones_scalar[i] = Po::make_ct(real, imag);
+		// Write out the phase and beam values multiplied together
+        i = (TIME*NA*NSRC + ANT*NSRC + SRC)*NCHAN + CHAN;
+		jones_scalar[i] = Po::make_ct(real*E, imag*E);
+        __syncthreads();
 	}
 }
 
@@ -215,16 +201,16 @@ class RimeEK(Node):
         D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
 
         chans_per_block = D['BLOCKDIMX'] if sd.nchan > D['BLOCKDIMX'] else sd.nchan
-        times_per_block = D['BLOCKDIMY'] if sd.ntime > D['BLOCKDIMY'] else sd.ntime
-        ants_per_block = D['BLOCKDIMZ'] if sd.na > D['BLOCKDIMZ'] else sd.na
+        ants_per_block = D['BLOCKDIMY'] if sd.na > D['BLOCKDIMY'] else sd.na
+        times_per_block = D['BLOCKDIMZ'] if sd.ntime > D['BLOCKDIMZ'] else sd.ntime
 
         chan_blocks = self.blocks_required(sd.nchan, chans_per_block)
-        time_blocks = self.blocks_required(sd.ntime, times_per_block)
         ant_blocks = self.blocks_required(sd.na, ants_per_block)
+        time_blocks = self.blocks_required(sd.ntime, times_per_block)
 
         return {
-            'block' : (chans_per_block, times_per_block, ants_per_block),
-            'grid'  : (chan_blocks, time_blocks, ant_blocks), 
+            'block' : (chans_per_block, ants_per_block, times_per_block),
+            'grid'  : (chan_blocks, ant_blocks, time_blocks), 
         }
 
     def execute(self, shared_data):

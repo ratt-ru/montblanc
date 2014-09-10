@@ -174,7 +174,7 @@ class TestSharedData(unittest.TestCase):
 
     def test_register_array_create_existing(self):
         """  Test array registration of existing arrays """
-        sd = BaseSharedData(na=3,nchan=32,ntime=10,npsrc=10,ngsrc=10)
+        sd = BaseSharedData(na=14,nchan=32,ntime=10,npsrc=10,ngsrc=10)
 
         name='uvw'
         shape=(3, sd.nbl, sd.ntime)
@@ -260,14 +260,14 @@ class TestSharedData(unittest.TestCase):
         self.assertTrue(getattr(sd, gpu_name) == gpu_ary)
 
         # Check exception gets thrown if we try reregister with
-        # a diffferent shape.
+        # a different shape.
         with self.assertRaises(ValueError) as cm:
             # Register the array again
             sd.register_array(name=name, shape=(2,sd.nbl, sd.ntime), dtype=np.float32,
                 registrant='BaseSharedData', cpu=True, gpu=True)
 
         self.assertTrue(cm.exception.message.find(
-            'shape (3, 3, 10) different to the supplied (2, 3, 10)') != -1)
+            'shape (3, 105, 10) different to the supplied (2, 105, 10)') != -1)
 
         # uvw_gpu should return a GPUArray and should still be the same array
         # uvw_cpu should return an ndarray and should still be the same array
@@ -314,6 +314,53 @@ class TestSharedData(unittest.TestCase):
     	self.assertTrue(getattr(sd, cpu_name) is None)
     	self.assertTrue(getattr(sd, shape_name) == shape)
     	self.assertTrue(getattr(sd, dtype_name) == dtype)
+
+    def test_auto_correlation(self):
+        """
+        Test the configuring our shared data object with auto auto-correlations
+        provides the correct number of baselines
+        """
+        na, ntime, nchan, npsrc, ngsrc = 14, 5, 16, 2, 2
+
+        # Should have 105 baselines for 14 antenna with auto-correlations on
+        autocor = True
+        sd = BaseSharedData(na=na,ntime=5,nchan=16,npsrc=2,ngsrc=2,auto_correlations=autocor)
+        self.assertTrue(sd.nbl == montblanc.nr_of_baselines(na,autocor))
+        self.assertTrue(sd.nbl == 105)
+
+        # Should have 91 baselines for 14 antenna with auto-correlations on
+        autocor = False
+        sd = BaseSharedData(na=na,ntime=5,nchan=16,npsrc=2,ngsrc=2,auto_correlations=autocor)
+        self.assertTrue(sd.nbl == montblanc.nr_of_baselines(na,autocor))
+        self.assertTrue(sd.nbl == 91)
+
+    def test_viable_timesteps(self):
+        """
+        Tests that various parts of the functionality for obtaining the
+        number of viable timesteps work
+        """
+        ntime, nchan, npsrc, ngsrc = 5, 16, 2, 2
+        sd = BaseSharedData(na=14,ntime=ntime,nchan=nchan,npsrc=npsrc,ngsrc=ngsrc)
+
+        shape_one = (5,'ntime','nchan')
+        shape_two = (10, 'nsrc')
+
+        self.assertTrue(sd.get_numeric_shape(shape_one) == (5,ntime,nchan))
+        self.assertTrue(sd.get_numeric_shape(shape_two) == (10,npsrc+ngsrc))
+
+        self.assertTrue(sd.get_numeric_shape(shape_one, ignore=['ntime']) == (5,nchan))
+        self.assertTrue(sd.get_numeric_shape(shape_two, ignore=['ntime']) == (10,npsrc+ngsrc))
+
+        sd.register_array(name='ary_one',shape=(5,'ntime', 'nchan'), dtype=np.float64,
+            registrant='test_shared_data', cpu=False, gpu=False)
+
+        sd.register_array(name='ary_two',shape=(10,'nsrc'), dtype=np.float64,
+            registrant='test_shared_data', cpu=False, gpu=False)
+
+        # How many timesteps can we accommodate with 2GB ?
+        # Don't bother with the actual value, the assert in viable_timesteps
+        # actually tests things quite well
+        sd.viable_timesteps(2*1024*1024*1024)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSharedData)

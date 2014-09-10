@@ -9,6 +9,13 @@ import os
 # Hooray for python
 import montblanc
 
+def nr_of_baselines(na, auto_correlations=False):
+    """ Compute the number of baselines for the 
+    given number of antenna. Can specify whether
+    auto-correlations should be taken into
+    account """
+    return (na*(na-1))//2 if auto_correlations is False else (na*(na+1)/2)
+
 def get_montblanc_path():
 	""" Return the current path in which montblanc is installed """
 	return os.path.dirname(inspect.getfile(montblanc))

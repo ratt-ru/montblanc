@@ -5,15 +5,12 @@ import time
 import sys
 
 import montblanc.ext.crimes
+import montblanc.ext.predict
 
 from montblanc.impl.biro.v2.TestSharedData import TestSharedData
 
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
-
-from montblanc.impl.biro.v2.gpu.RimeJonesReduce import RimeJonesReduce
-from montblanc.impl.biro.v2.gpu.RimeMultiply import RimeMultiply
-from montblanc.impl.biro.v2.gpu.RimeChiSquared import RimeChiSquared
 
 from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
 
@@ -43,6 +40,10 @@ class TestBiroV2(unittest.TestCase):
         """ Type independent implementaiton of the EK test """
         if cmp is None: cmp = {}
 
+        # This beam width produces reasonable values
+        # for testing the E term
+        sd.set_beam_width(65*1e5)
+
         rime_ek = RimeEK()
         rime_cpu = RimeCPU(sd)
 
@@ -51,27 +52,30 @@ class TestBiroV2(unittest.TestCase):
         rime_ek.execute(sd)
         rime_ek.shutdown(sd)
 
-        jones_scalar_cpu = rime_cpu.compute_ek_jones_scalar_per_ant()
-        jones_scalar_gpu = sd.jones_scalar_gpu.get()
+        ek_cpu = rime_cpu.compute_ek_jones_scalar_per_ant()
+        ek_gpu = sd.jones_scalar_gpu.get()
 
         # Test that the jones CPU calculation matches that of the GPU calculation
-        self.assertTrue(np.allclose(jones_scalar_cpu, jones_scalar_gpu,**cmp))
+        self.assertTrue(np.allclose(ek_cpu, ek_gpu,**cmp))
 
     def test_EK_float(self):
         """ Single precision EK test """
-        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=10,dtype=np.float32)      
+        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,dtype=np.float32)      
 
         self.EK_test_impl(sd)
 
     def test_EK_double(self):
         """ Double precision EK test """
-        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=10,dtype=np.float64)      
+        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,dtype=np.float64)      
 
         self.EK_test_impl(sd)
 
     def gauss_B_sum_test_impl(self, sd, weight_vector=False, cmp=None):
         if cmp is None: cmp = {}
 
+        # This beam width produces reasonable values
+        # for testing the E term
+        sd.set_beam_width(65*1e5)
         sd.set_sigma_sqrd(np.random.random(1)[0])
 
         rime_ek = RimeEK()
@@ -95,7 +99,7 @@ class TestBiroV2(unittest.TestCase):
 
     def test_gauss_B_sum_float(self):
         """ """
-        sd = TestSharedData(na=10,nchan=48,ntime=10,npsrc=10,ngsrc=10,
+        sd = TestSharedData(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20,
             dtype=np.float32)      
 
         self.gauss_B_sum_test_impl(sd, weight_vector=False, cmp={'rtol' : 1e-3})
@@ -103,75 +107,11 @@ class TestBiroV2(unittest.TestCase):
 
     def test_gauss_B_sum_double(self):
         """ """
-        sd = TestSharedData(na=10,nchan=48,ntime=10,npsrc=10,ngsrc=10,
+        sd = TestSharedData(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20,
             dtype=np.float64)      
 
         self.gauss_B_sum_test_impl(sd, weight_vector=False)
         self.gauss_B_sum_test_impl(sd, weight_vector=True)
-
-    def multiply_test_impl(self, sd, cmp=None):
-        """ Type independent implementation of the multiply test """
-        if cmp is None: cmp = {}
-
-        rime_multiply = RimeMultiply()
-
-        rime_multiply.initialise(sd)
-
-        # Output jones matrix
-        njones = sd.nbl*sd.npsrc*sd.nchan*sd.ntime
-        jsize = np.product(sd.jones_shape) # Number of complex  numbers
-        # Create some random jones matrices to multiply together
-        jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
-            .astype(sd.ct).reshape(sd.jones_shape)
-        jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
-            .astype(sd.ct).reshape(sd.jones_shape)
-
-        jones_lhs_gpu = gpuarray.to_gpu(jones_lhs)
-        jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
-
-        rime_multiply.kernel(jones_lhs_gpu, jones_rhs_gpu, sd.jones_gpu,
-            np.int32(njones), **rime_multiply.get_kernel_params(sd))
-
-        # Shutdown the rime node, we don't need it any more
-        rime_multiply.shutdown(sd)
-
-        # Get the result off the gpu
-        jones_output_gpu = sd.jones_gpu.get()
-
-        # Perform the calculation on the CPU
-        jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=sd.ct)
-
-        # TODO: There must be a more numpy way to do this
-        # Its dog slow...
-        # Possible alternative to use with np.rollaxis:
-        # from numpy.core.umath_tests import matrix_multiply
-        # Doesn't work with complex numbers tho
-        for bl in range(sd.nbl):
-            for ch in range(sd.nchan):
-                for t in range(sd.ntime):               
-                    for src in range(sd.npsrc):
-                        jones_output_cpu[:,bl,ch,t,src] = np.dot(
-                        jones_lhs[:,bl,ch,t,src].reshape(2,2),
-                        jones_rhs[:,bl,ch,t,src].reshape(2,2)).reshape(4)
-
-        # Confirm similar results
-        self.assertTrue(np.allclose(jones_output_gpu, jones_output_cpu,**cmp))
-
-    @unittest.skipIf(True, 'test_multiply_double numpy code is somewhat inefficient')
-    def test_multiply_double(self):
-        """ double precision multiplication test """
-        # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10, dtype=np.float64)
-        
-        self.multiply_test_impl(sd)
-
-    @unittest.skipIf(True, 'test_multiply_float numpy code is somewhat inefficient')
-    def test_multiply_float(self):
-        """ single precision multiplication test """
-        # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10, dtype=np.float32)
-        
-        self.multiply_test_impl(sd)
 
     def time_predict(self, sd):
         na=sd.na          # Number of antenna
@@ -185,8 +125,13 @@ class TestBiroV2(unittest.TestCase):
 
         # Visibilities ! has to have double complex
         Vis=np.complex128(np.zeros((nbl,nchan,4)))
-        # UVW coordinates
-        uvw=sd.uvw_cpu.T.astype(np.float64).copy()
+
+        # Determine the per baseline UVW coordinates
+        # from the per antenna UVW coordinates
+        ant0, ant1 = sd.get_flat_ap_idx()
+        uvw_per_ant = sd.uvw_cpu.reshape(3,sd.ntime*sd.na)
+        uvw_per_bl = (uvw_per_ant[:,ant1] - uvw_per_ant[:,ant0])\
+            .astype(np.float64).T.copy()
 
         # Frequencies in Hz
         WaveL = sd.wavelength_cpu.astype(np.float64)
@@ -211,56 +156,36 @@ class TestBiroV2(unittest.TestCase):
         # Call Cyrils' predict code
         predict_start = time.time()
         P1=montblanc.ext.predict.predictSolsPol(
-            Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
+            Vis, A0, A1, uvw_per_bl, lms, WaveL, Sols, Info)
         predict_end = time.time()
-
-        montblanc.log.info('predict start: %fs end: %fs elapsed time: %fs',
-            predict_start, predict_end, predict_end - predict_start)
 
         return Vis
     
     def do_predict_test(self, shared_data):
-        sd = shared_data        
-        rime_bk = RimeBK()
-        rime_reduce = RimeJonesReduce()
+        sd = shared_data  
+        from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
 
-        # Initialise the node
-        rime_bk.initialise(sd)
+        # This beam width produces reasonable values
+        # for testing the E term
+        sd.set_beam_width(65*1e5)        
+        sd.transfer_point_errors(np.zeros(
+            shape=sd.point_errors_shape,
+            dtype=sd.point_errors_dtype))
 
-        vis_predict_cpu = self.time_predict(sd)
+        rime_cpu = RimeCPU(sd)
 
-        montblanc.log.info(sd)
-
-        kernels_start, kernels_end = cuda.Event(), cuda.Event()
-        kernels_start.record()
-
-        # Invoke the kernel
-        rime_bk.execute(sd)
-        rime_reduce.execute(sd)
-
-        kernels_end.record()
-        kernels_end.synchronize()
-
-        montblanc.log.info('kernels: elapsed time: %fs',
-            kernels_start.time_till(kernels_end)*1e-3)
-
-        # Shutdown the rime node, we don't need it any more
-        rime_bk.shutdown(sd)
-
-        # Shift the gpu jones matrices so they are on the last axis
-        vis_gpu = np.rollaxis(sd.vis_gpu.get(),0,len(sd.jones_shape)-2).squeeze()
+        vis_predict_cyril = self.time_predict(sd).transpose(2,0,1)
+        vis_predict_cpu = rime_cpu.compute_bk_vis().squeeze()
 
         # Compare the GPU solution with Cyril's predict code
-        self.assertTrue(np.allclose(vis_gpu, vis_predict_cpu))
+        self.assertTrue(np.allclose(vis_predict_cyril, vis_predict_cpu))
 
-    @unittest.skip('ignore for now')
     def test_predict_double(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float64)
 
         self.do_predict_test(sd)
 
-    @unittest.skip('ignore for now')
     def test_predict_float(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float32)
