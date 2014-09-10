@@ -489,7 +489,7 @@ class TestBiroV1(unittest.TestCase):
                     store_cpu=mb_params['store_cpu'])
 
         print sd
-	print sampler['simulator']
+	#print sampler['simulator']
 
         # Set up the observation
         uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
@@ -517,11 +517,10 @@ class TestBiroV1(unittest.TestCase):
         sd.transfer_gauss_shape(gauss_shape_sim)
         sampler['simulator'].initialise(sd)
         sampler['simulator'].execute(sd)
-        sampler['simulator'].shutdown(sd)
 
         # Fetch the simulated visibilities back and add noise
         vis_sim=sd.vis_gpu.get()
-        noise_sim=numpy.random.normal(0.0,sigmaSim,sd.ntime*sd.nsrc,shape=sd.vis_shape,dtype=sd.vis_dtype)
+        noise_sim=sd.ct((np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.ntime*sd.nsrc)+1j*np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.ntime*sd.nsrc)).reshape(sd.vis_shape))
         vis_sim+=noise_sim
         sampler['simulator'].shutdown(sd)
         sampler['simulator']=vis_sim
@@ -550,17 +549,17 @@ class TestBiroV1(unittest.TestCase):
         def myloglike(cube, ndim, nparams):
             # Initialize the pipeline
             if sampler['pipeline'] is None:
-                sampler['pipeline'],ms_sd = montblanc.get_biro_pipeline(msfile,\
+                sd=factory.get_biro_shared_data(sd_type='biro',\
+                    na=tel_params[tel]['nant'],\
+                    nchan=tel_params[tel]['nchan'],ntime=obs_params['ntime'],\
+                    npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
+                    dtype=mb_params['dtype'])
+                sampler['pipeline'] = factory.get_biro_pipeline(\
                     npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
                     weight_vector=mb_params['use_weight_vector'],\
                     dtype=mb_params['dtype'],\
                     store_cpu=mb_params['store_cpu'])
-                sd = BiroSharedData(na=tel_params[tel]['nant'],\
-                                    nchan=tel_params[tel]['nchan'],\
-                                    ntime=obs_params['ntime'],\
-                                        npsrc=sky_params['npsrc'],\
-                                        ngsrc=sky_params['ngsrc'],\
-                                            dtype=mb_params['dtype'])
+
                 # Set up the observation (again - probably unnecessary)
                 uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
                 sd.transfer_uvw(uvw)
