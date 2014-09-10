@@ -4,11 +4,6 @@ import numpy as np
 import time
 import sys
 
-import pycuda.autoinit
-import pycuda.driver as cuda
-import pycuda.gpuarray as gpuarray
-
-import montblanc.ext.predict
 import montblanc.ext.crimes
 
 from montblanc.impl.biro.v2.TestSharedData import TestSharedData
@@ -64,15 +59,13 @@ class TestBiroV2(unittest.TestCase):
 
     def test_EK_float(self):
         """ Single precision EK test """
-        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=10,
-            dtype=np.float32, device=pycuda.autoinit.device)      
+        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=10,dtype=np.float32)      
 
         self.EK_test_impl(sd)
 
     def test_EK_double(self):
         """ Double precision EK test """
-        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=10,
-            dtype=np.float64, device=pycuda.autoinit.device)      
+        sd = TestSharedData(na=64,nchan=64,ntime=10,npsrc=10,dtype=np.float64)      
 
         self.EK_test_impl(sd)
 
@@ -103,7 +96,7 @@ class TestBiroV2(unittest.TestCase):
     def test_gauss_B_sum_float(self):
         """ """
         sd = TestSharedData(na=10,nchan=48,ntime=10,npsrc=10,ngsrc=10,
-            dtype=np.float32, device=pycuda.autoinit.device)      
+            dtype=np.float32)      
 
         self.gauss_B_sum_test_impl(sd, weight_vector=False, cmp={'rtol' : 1e-3})
         self.gauss_B_sum_test_impl(sd, weight_vector=True, cmp={'rtol' : 1e-3})
@@ -111,7 +104,7 @@ class TestBiroV2(unittest.TestCase):
     def test_gauss_B_sum_double(self):
         """ """
         sd = TestSharedData(na=10,nchan=48,ntime=10,npsrc=10,ngsrc=10,
-            dtype=np.float64, device=pycuda.autoinit.device)      
+            dtype=np.float64)      
 
         self.gauss_B_sum_test_impl(sd, weight_vector=False)
         self.gauss_B_sum_test_impl(sd, weight_vector=True)
@@ -168,8 +161,7 @@ class TestBiroV2(unittest.TestCase):
     def test_multiply_double(self):
         """ double precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,
-            dtype=np.float64, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10, dtype=np.float64)
         
         self.multiply_test_impl(sd)
 
@@ -177,8 +169,7 @@ class TestBiroV2(unittest.TestCase):
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,
-            dtype=np.float32, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10, dtype=np.float32)
         
         self.multiply_test_impl(sd)
 
@@ -265,14 +256,14 @@ class TestBiroV2(unittest.TestCase):
     @unittest.skip('ignore for now')
     def test_predict_double(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float64, device=pycuda.autoinit.device)
+            dtype=np.float64)
 
         self.do_predict_test(sd)
 
     @unittest.skip('ignore for now')
     def test_predict_float(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float32, device=pycuda.autoinit.device)
+            dtype=np.float32)
 
         self.do_predict_test(sd)
 

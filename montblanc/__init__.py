@@ -41,10 +41,10 @@ def get_bk_pipeline(msfile, npsrc, ngsrc, **kwargs):
 
 	import montblanc.factory
 
-	pipeline = montblanc.factory.get_bk_pipeline()
-
 	sd = montblanc.factory.get_biro_shared_data(sd_type='ms', msfile=msfile,
 		npsrc=npsrc, ngsrc=ngsrc, dtype=np.float32, **kwargs)
+
+	pipeline = montblanc.factory.get_bk_pipeline()
 
 	return pipeline, sd
 
@@ -92,11 +92,11 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kw
 
 	import montblanc.factory
 
-	pipeline = montblanc.factory.get_biro_pipeline(
-		npsrc=npsrc, ngsrc=ngsrc, version=version, **kwargs)
-
 	sd = montblanc.factory.get_biro_shared_data(sd_type='ms', msfile=msfile,
 		npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, version=version, **kwargs)
+
+	pipeline = montblanc.factory.get_biro_pipeline(
+		npsrc=npsrc, ngsrc=ngsrc, version=version, **kwargs)
 
 	return pipeline, sd
 

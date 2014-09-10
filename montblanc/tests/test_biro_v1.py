@@ -4,11 +4,6 @@ import numpy as np
 import time
 import sys
 
-import pycuda.autoinit
-import pycuda.driver as cuda
-import pycuda.gpuarray as gpuarray
-
-#import montblanc
 import montblanc.ext.predict
 import montblanc.ext.crimes
 
@@ -67,15 +62,13 @@ class TestBiroV1(unittest.TestCase):
 
     def test_BK_float(self):
         """ single precision BK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            dtype=np.float32, device=pycuda.autoinit.device)      
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200, dtype=np.float32)      
 
         self.BK_test_impl(sd)
 
     def test_BK_double(self):
         """ double precision BK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            dtype=np.float64, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float64)
 
         self.BK_test_impl(sd)
 
@@ -102,15 +95,13 @@ class TestBiroV1(unittest.TestCase):
 
     def test_pEBK_double(self):
         """ double precision EBK test for point sources only """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            dtype=np.float64, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float64)
 
         self.EBK_test_impl(sd)
 
     def test_pEBK_float(self):
         """ single precision EBK test for point sources only """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,
-            dtype=np.float32, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float32)
 
         # Hmmm, we don't need this tolerance now? I wonder why it's working...
         #self.EBK_test_impl(sd, cmp={'rtol' : 1e-2,'atol' : 1e-2})
@@ -119,20 +110,20 @@ class TestBiroV1(unittest.TestCase):
     def test_pgEBK_double(self):
         """ double precision EBK test for point and gaussian sources """
         #sd = TestSharedData(na=2,nchan=2,ntime=1,npsrc=2,ngsrc=1,
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
-            dtype=np.float64, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,dtype=np.float64)
 
         self.EBK_test_impl(sd)
 
     def test_pgEBK_float(self):
         """ single precision EBK test for point and gaussian sources """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
-            dtype=np.float32, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,dtype=np.float32)
 
         self.EBK_test_impl(sd, cmp={'rtol' : 1e-2})
 
     def multiply_test_impl(self, sd, cmp=None):
         """ Type independent implementation of the multiply test """
+        import pycuda.gpuarray as gpuarray
+
         if cmp is None: cmp = {}
 
         rime_multiply = RimeMultiply()
@@ -183,8 +174,7 @@ class TestBiroV1(unittest.TestCase):
     def test_multiply_double(self):
         """ double precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,
-            dtype=np.float64, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float64)
         
         self.multiply_test_impl(sd)
 
@@ -192,8 +182,7 @@ class TestBiroV1(unittest.TestCase):
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,
-            dtype=np.float32, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32)
         
         self.multiply_test_impl(sd)
 
@@ -223,29 +212,25 @@ class TestBiroV1(unittest.TestCase):
 
     def test_chi_squared_double(self):
         """ double precision chi squared test """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
-            dtype=np.float64, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64)
 
         self.chi_squared_test_impl(sd)
 
     def test_chi_squared_float(self):
         """ single precision chi squared test """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
-            dtype=np.float32, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32)
 
         self.chi_squared_test_impl(sd, cmp={'rtol' : 1e-4})
 
     def test_chi_squared_weight_vector_double(self):
         """ double precision chi squared test with noise vector """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
-            dtype=np.float64, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64)
 
         self.chi_squared_test_impl(sd, weight_vector=True)
 
     def test_chi_squared_weight_vector_float(self):
         """ single precision chi squared test with noise vector """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,
-            dtype=np.float32, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32)
 
         self.chi_squared_test_impl(sd, weight_vector=True, cmp={'rtol' : 1e-3 })
 
@@ -283,15 +268,13 @@ class TestBiroV1(unittest.TestCase):
 
     def test_reduce_double(self):
         """ double precision reduction test """
-        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,
-            dtype=np.float64, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,dtype=np.float64)
 
         self.reduce_test_impl(sd)
 
     def test_reduce_float(self):
         """ single precision reduction test """
-        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,
-            dtype=np.float32, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,dtype=np.float32)
 
         self.reduce_test_impl(sd)
 
@@ -308,15 +291,13 @@ class TestBiroV1(unittest.TestCase):
 
     def test_gauss_double(self):
         """ Gaussian with fwhm and without is the same """
-        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=10, ngsrc=10,
-            dtype=np.float64, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float64)
 
         self.gauss_test_impl(sd)
 
     def test_gauss_float(self):
         """ Gaussian with fwhm and without is the same """
-        sd = TestSharedData(na=10, nchan=32, ntime=10,npsrc=10, ngsrc=10, \
-            dtype=np.float32, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float32)
 
         self.gauss_test_impl(sd, cmp={'rtol' : 1e-4 })
 
@@ -366,7 +347,9 @@ class TestBiroV1(unittest.TestCase):
 
         return Vis
     
-    def do_predict_test(self, shared_data):
+    def predict_test_impl(self, shared_data):
+        import pycuda.driver as cuda
+
         sd = shared_data        
         rime_bk = RimeBK()
         rime_reduce = RimeJonesReduce()
@@ -402,19 +385,18 @@ class TestBiroV1(unittest.TestCase):
 
     def test_predict_double(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float64, device=pycuda.autoinit.device)
+            dtype=np.float64)
 
-        self.do_predict_test(sd)
+        self.predict_test_impl(sd)
 
     def test_predict_float(self):
         sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float32, device=pycuda.autoinit.device)
+            dtype=np.float32)
 
-        self.do_predict_test(sd)
+        self.predict_test_impl(sd)
 
     def test_sum_float(self):
-        sd = TestSharedData(na=14,nchan=32,ntime=36,npsrc=100,
-            dtype=np.float32, device=pycuda.autoinit.device)
+        sd = TestSharedData(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32)
 
         jones_cpu = (np.random.random(np.product(sd.jones_shape)) + \
             np.random.random(np.product(sd.jones_shape))*1j)\

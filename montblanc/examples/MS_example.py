@@ -1,8 +1,6 @@
 import logging
 import numpy as np
 
-import pycuda.autoinit
-import pycuda.driver as cuda
 import montblanc
 
 if __name__ == '__main__':
@@ -36,7 +34,7 @@ if __name__ == '__main__':
     pipeline, sd = montblanc.get_biro_pipeline(args.msfile,
         npsrc=args.npsrc, ngsrc=args.ngsrc,
         init_weights=None, weight_vector=False,
-        store_cpu=False, device=pycuda.autoinit.device,
+        store_cpu=False,
         version=args.version)
 
     # Initialise the pipeline

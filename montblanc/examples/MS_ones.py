@@ -1,6 +1,4 @@
 import numpy as np
-import pycuda.autoinit
-import pycuda.driver as cuda
 import montblanc
 
 if __name__ == '__main__':
@@ -16,8 +14,7 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     # Get the BK pipeline and shared data.
-    pipeline, sd = montblanc.get_bk_pipeline(args.msfile, npsrc=args.npsrc, ngsrc=args.ngsrc,
-        device=pycuda.autoinit.device)
+    pipeline, sd = montblanc.get_bk_pipeline(args.msfile, npsrc=args.npsrc, ngsrc=args.ngsrc)
 
     # Create point sources at zeros
     l=sd.ft(np.zeros(sd.nsrc))
