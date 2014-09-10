@@ -430,7 +430,7 @@ class TestBiroV1(unittest.TestCase):
         print 'Using GPU #%i' % int(os.environ.get('CUDA_DEVICE'))
 
         # Settings
-        from montblanc.impl.biro.v1.BiroSharedData import BiroSharedData
+        import montblanc.factory as factory
         import scipy as sc
         from math import sqrt
         sqrtTwo=sqrt(2.0)
@@ -438,7 +438,6 @@ class TestBiroV1(unittest.TestCase):
 
         # Montblanc settings
         loggingLevel=logging.WARN                      # Logging level
-        msfile='/home/zwart/biro/montblanc-testing/gaussian-off-centre-20x16at45/WSRT.MS'
         mb_params={'store_cpu':False,'use_weight_vector':False,'dtype':np.float32}
         # Sky
         n_params=8
@@ -458,37 +457,39 @@ class TestBiroV1(unittest.TestCase):
         sigmaSim=0.1 # Conventional noise per visibility
         sigmaFit=None # If None, fit for sigma, otherwise specify here
 
-        # Multinest settings
+        # MultiNest settings
         hypo=1 # Run number
         verbose=True # Helpful print statements in the output
-        nlive=1000 # Number of live points for MultiNest
-        evtol=0.5 # Evidence tolerance for MultiNest
+        nlive=1000 # Number of live points
+        evtol=0.5 # Evidence tolerance
         efr=0.1   # Target sampling efficiency
-        resume=False # Resume interrrupted MultiNest runs
+        resume=False # Resume interrrupted runs
         seed=4747 # Random no. generator seed (-ve for system clock)
-        ins=False # Use Importance Nested Sampling? (Multinest)
-        maxiter=0 # maximum number of iterations for multinest
+        ins=False # Use Importance Nested Sampling?
+        maxiter=0 # maximum number of iterations
         multimodal=False
         mode_tolerance=-1e90 # (Beware the old PyMultinest bug)
 
         # http://stackoverflow.com/questions/11987358/why-nested-functions-can-access-variables-from-outer-functions-but-are-not-allo
-        sampler={} # This is mutable to allow semi-globals(!)
+        sampler={} # This is a mutable to permit semi-globals(!)
 
         #-----------------------------------------------------------------------
 
         # Simulate some data
         montblanc.log.setLevel(loggingLevel)
-        sampler['simulator'],ms_sd = montblanc.get_biro_pipeline(msfile,\
+        sd=factory.get_biro_shared_data(sd_type='biro',\
+                    na=tel_params[tel]['nant'],\
+                    nchan=tel_params[tel]['nchan'],ntime=obs_params['ntime'],\
+                    npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
+                    dtype=mb_params['dtype'])
+        sampler['simulator'] = factory.get_biro_pipeline(\
                     npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
                     weight_vector=mb_params['use_weight_vector'],\
-                    device=pycuda.autoinit.device,dtype=mb_params['dtype'],\
+                    dtype=mb_params['dtype'],\
                     store_cpu=mb_params['store_cpu'])
-        sd = BiroSharedData(na=tel_params[tel]['nant'],\
-                                    nchan=tel_params[tel]['nchan'],\
-                                    ntime=obs_params['ntime'],\
-                                        npsrc=sky_params['npsrc'],\
-                                        ngsrc=sky_params['ngsrc'],\
-                     			    dtype=mb_params['dtype'])
+
+        print sd
+	print sampler['simulator']
 
         # Set up the observation
         uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
@@ -516,6 +517,7 @@ class TestBiroV1(unittest.TestCase):
         sd.transfer_gauss_shape(gauss_shape_sim)
         sampler['simulator'].initialise(sd)
         sampler['simulator'].execute(sd)
+        sampler['simulator'].shutdown(sd)
 
         # Fetch the simulated visibilities back and add noise
         vis_sim=sd.vis_gpu.get()
@@ -551,7 +553,7 @@ class TestBiroV1(unittest.TestCase):
                 sampler['pipeline'],ms_sd = montblanc.get_biro_pipeline(msfile,\
                     npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
                     weight_vector=mb_params['use_weight_vector'],\
-                    device=pycuda.autoinit.device,dtype=mb_params['dtype'],\
+                    dtype=mb_params['dtype'],\
                     store_cpu=mb_params['store_cpu'])
                 sd = BiroSharedData(na=tel_params[tel]['nant'],\
                                     nchan=tel_params[tel]['nchan'],\
