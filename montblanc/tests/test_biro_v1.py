@@ -453,6 +453,7 @@ class TestBiroV1(unittest.TestCase):
         from math import sqrt
         sqrtTwo=sqrt(2.0)
         arcsec2rad = sc.pi / 180.0 / 3600.0
+
         # Montblanc settings
         loggingLevel=logging.WARN                      # Logging level
         msfile='/home/zwart/biro/montblanc-testing/gaussian-off-centre-20x16at45/WSRT.MS'
@@ -460,9 +461,15 @@ class TestBiroV1(unittest.TestCase):
         # Sky
         n_params=8
         sky_params={'npsrc':0,'ngsrc':1}
+        source_params=dict('I':1.0,'Q':0.0,'U':0.0,'V':0.0,\
+                               'x':0.0,'y':0.0,'alpha':0.0,\
+                               'lproj':0.5*arcsec2rad,\
+                               'mproj':0.5*arcsec2rad,\
+                               'radius':100.0*arcsec2rad)
         # Telescope
         tel='WSRT'
-        tel_params={'WSRT':{'nant':14,'nchan':1}}
+        tel_params={'WSRT':{'nant':14,'nchan':1},\
+                        'ATCA':{'nant':-1,'nchan':-1}}
         # Observation
         obs_params={'ntime':72}
         uvw_f='uvw_coords.txt'
@@ -482,13 +489,13 @@ class TestBiroV1(unittest.TestCase):
         multimodal=False
         mode_tolerance=-1e90 # (Beware the old PyMultinest bug)
 
-        montblanc.log.setLevel(loggingLevel)
         # http://stackoverflow.com/questions/11987358/why-nested-functions-can-access-variables-from-outer-functions-but-are-not-allo
         sampler={} # This is mutable to allow semi-globals(!)
 
         #-----------------------------------------------------------------------
 
         # Simulate some data
+        montblanc.log.setLevel(loggingLevel)
         sampler['simulator'],ms_sd = montblanc.get_biro_pipeline(msfile,\
                     npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
                     weight_vector=mb_params['use_weight_vector'],\
@@ -500,6 +507,7 @@ class TestBiroV1(unittest.TestCase):
                                         npsrc=sky_params['npsrc'],\
                                         ngsrc=sky_params['ngsrc'],\
                      			    dtype=mb_params['dtype'])
+
         # Set up the observation
         uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
         sd.transfer_uvw(uvw)
@@ -510,18 +518,18 @@ class TestBiroV1(unittest.TestCase):
         sd.transfer_wavelength(wavelength)
 
         # Simulate the target source(s) here
-        lm_sim=sd.ft(np.array([0.0,0.0]).reshape(sd.lm_shape))
-        fI_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*1.0)
-        fQ_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0) # Unpolarized
-        fU_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0)
-        fV_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0)
-        alpha_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0) # Flat
+        lm_sim=sd.ft(np.array([x,y]).reshape(sd.lm_shape))
+        fI_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['I'])
+        fQ_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['Q'])
+        fU_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['U'])
+        fV_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['V'])
+        alpha_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['alpha'])
         brightness_sim=np.array([fI_sim,fQ_sim,fU_sim,fV_sim,alpha_sim]).reshape(sd.brightness_shape)
         sd.transfer_brightness(brightness_sim)
 
-        el_sim = sd.ft(np.ones(sd.ngsrc)*0.5)
-        em_sim = sd.ft(np.ones(sd.ngsrc)*0.5)
-        R_sim = sd.ft(np.ones(sd.ngsrc)*100.0)
+        el_sim = sd.ft(np.ones(sd.ngsrc)*source_params['lproj'])
+        em_sim = sd.ft(np.ones(sd.ngsrc)*source_params['mproj'])
+        R_sim = sd.ft(np.ones(sd.ngsrc)*source_params['radius'])
         gauss_shape_sim = np.array([el_sim,em_sim,R_sim]).reshape(sd.gauss_shape_shape)
         sd.transfer_gauss_shape(gauss_shape_sim)
         sampler['simulator'].initialise(sd)
