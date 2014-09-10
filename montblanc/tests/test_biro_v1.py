@@ -455,8 +455,8 @@ class TestBiroV1(unittest.TestCase):
         arcsec2rad = sc.pi / 180.0 / 3600.0
         # Montblanc settings
         loggingLevel=logging.WARN                      # Logging level
-        msfile=None # Input MS file
-        mb_params={'store_cpu':False,'use_noise_vector':False,'dtype':np.float32}
+        msfile='/home/zwart/biro/montblanc-testing/gaussian-off-centre-20x16at45/WSRT.MS'
+        mb_params={'store_cpu':False,'use_weight_vector':False,'dtype':np.float32}
         # Sky
         n_params=8
         sky_params={'npsrc':0,'ngsrc':1}
@@ -482,10 +482,64 @@ class TestBiroV1(unittest.TestCase):
         multimodal=False
         mode_tolerance=-1e90 # (Beware the old PyMultinest bug)
 
+        montblanc.log.setLevel(loggingLevel)
+        # http://stackoverflow.com/questions/11987358/why-nested-functions-can-access-variables-from-outer-functions-but-are-not-allo
+        sampler={} # This is mutable to allow semi-globals(!)
+
+        #-----------------------------------------------------------------------
+
+        # Simulate some data
+        sampler['simulator'],ms_sd = montblanc.get_biro_pipeline(msfile,\
+                    npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
+                    weight_vector=mb_params['use_weight_vector'],\
+                    device=pycuda.autoinit.device,dtype=mb_params['dtype'],\
+                    store_cpu=mb_params['store_cpu'])
+        sd = BiroSharedData(na=tel_params[tel]['nant'],\
+                                    nchan=tel_params[tel]['nchan'],\
+                                    ntime=obs_params['ntime'],\
+                                        npsrc=sky_params['npsrc'],\
+                                        ngsrc=sky_params['ngsrc'],\
+                     			    dtype=mb_params['dtype'])
+        # Set up the observation
+        uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
+        sd.transfer_uvw(uvw)
+
+        frequencies = sd.ft(np.linspace(1e6,2e6,sd.nchan))
+        wavelength = sd.ft(montblanc.constants.C/frequencies)
+        sd.set_ref_wave(wavelength[sd.nchan//2])
+        sd.transfer_wavelength(wavelength)
+
+        # Simulate the target source(s) here
+        lm_sim=sd.ft(np.array([0.0,0.0]).reshape(sd.lm_shape))
+        fI_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*1.0)
+        fQ_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0) # Unpolarized
+        fU_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0)
+        fV_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0)
+        alpha_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0) # Flat
+        brightness_sim=np.array([fI_sim,fQ_sim,fU_sim,fV_sim,alpha_sim]).reshape(sd.brightness_shape)
+        sd.transfer_brightness(brightness_sim)
+
+        el_sim = sd.ft(np.ones(sd.ngsrc)*0.5)
+        em_sim = sd.ft(np.ones(sd.ngsrc)*0.5)
+        R_sim = sd.ft(np.ones(sd.ngsrc)*100.0)
+        gauss_shape_sim = np.array([el_sim,em_sim,R_sim]).reshape(sd.gauss_shape_shape)
+        sd.transfer_gauss_shape(gauss_shape_sim)
+        sampler['simulator'].initialise(sd)
+        sampler['simulator'].execute(sd)
+
+        # Fetch the simulated visibilities back and add noise
+        vis_sim=sd.vis_gpu.get()
+        noise_sim=numpy.random.normal(0.0,sigmaSim,sd.ntime*sd.nsrc,shape=sd.vis_shape,dtype=sd.vis_dtype)
+        vis_sim+=noise_sim
+        sampler['simulator'].shutdown(sd)
+        sampler['simulator']=vis_sim
+        # End of simulation step
+
+        #-------------------------------------------------------------------
+
         # Set up the priors
         from montblanc.tests.priors import Priors
-        sampler={}; sampler['pri']=None
-        # http://stackoverflow.com/questions/11987358/why-nested-functions-can-access-variables-from-outer-functions-but-are-not-allo
+        sampler['pri']=None
         def myprior(cube, ndim, nparams):
             if sampler['pri'] is None: sampler['pri']=Priors()
             cube[0] = sampler['pri'].GeneralPrior(cube[0],'U',-720.0*arcsec2rad,720.0*arcsec2rad)
@@ -498,22 +552,24 @@ class TestBiroV1(unittest.TestCase):
             cube[7] = sampler['pri'].GeneralPrior(cube[7],'U',0.0,sc.pi)
             return
 
-        #-----------------------------------------------------------------------
-
-        # And the likelihood
-        sampler['pipeline']=None; sampler['simulator']=None
+        #-------------------------------------------------------------------
+        # Now begin the likelihood calculation proper
+        sampler['pipeline']=None
         def myloglike(cube, ndim, nparams):
-            #global sd,ndata#,store_cpu,use_noise_vector
-            # Initialize pipeline once (from file or self-simulation)
-            if sampler['simulator'] is None:
-                montblanc.log.setLevel(loggingLevel)
+            # Initialize the pipeline
+            if sampler['pipeline'] is None:
+                sampler['pipeline'],ms_sd = montblanc.get_biro_pipeline(msfile,\
+                    npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
+                    weight_vector=mb_params['use_weight_vector'],\
+                    device=pycuda.autoinit.device,dtype=mb_params['dtype'],\
+                    store_cpu=mb_params['store_cpu'])
                 sd = BiroSharedData(na=tel_params[tel]['nant'],\
                                     nchan=tel_params[tel]['nchan'],\
                                     ntime=obs_params['ntime'],\
                                         npsrc=sky_params['npsrc'],\
                                         ngsrc=sky_params['ngsrc'],\
-                     			    dtype=mb_params['dtype'])
-                # Set up the observation
+                                            dtype=mb_params['dtype'])
+                # Set up the observation (again - probably unnecessary)
                 uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
                 sd.transfer_uvw(uvw)
 
@@ -522,54 +578,8 @@ class TestBiroV1(unittest.TestCase):
                 sd.set_ref_wave(wavelength[sd.nchan//2])
                 sd.transfer_wavelength(wavelength)
 
-                # Simulate the target source(s) here
-                lm_sim=sd.ft(np.array([0.0,0.0]).reshape(sd.lm_shape))
-                fI_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*1.0)
-                fQ_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0) # Unpolarized
-                fU_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0)
-                fV_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0)
-                alpha_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*0.0) # Flat
-                brightness_sim=np.array([fI_sim,fQ_sim,fU_sim,fV_sim,alpha_sim]).reshape(sd.brightness_shape)
-                sd.transfer_brightness(brightness_sim)
-
-                el_sim = sd.ft(np.ones(sd.ngsrc)*0.5)
-                em_sim = sd.ft(np.ones(sd.ngsrc)*0.5)
-                R_sim = sd.ft(np.ones(sd.ngsrc)*100.0)
-                gauss_shape_sim = np.array([el_sim,em_sim,R_sim]).reshape(sd.gauss_shape_shape)
-                sd.transfer_gauss_shape(gauss_shape_sim)
-                sampler['simulator'].initialise(sd)
-                sampler['simulator'].execute(sd)
-
-                # Fetch the simulated visibilities back and add noise
-                vis_sim=sd.vis_gpu.get()
-                noise_sim=numpy.random.normal(0.0,sigmaSim,sd.ntime*sd.nsrc,shape=sd.vis_shape,dtype=sd.vis_dtype)
-                vis_sim+=noise_sim
-                sampler['simulator'].shutdown(sd)
-                sampler['simulator']=1 # Necessary or not?
-            # End of simulation step
-
-            #-------------------------------------------------------------------
-            # Now begin the likelihood calculation proper
-            # Initialize the pipeline
-            if sampler['pipeline'] is None:
-                sd = BiroSharedData(na=tel_params[tel]['nant'],\
-                                    nchan=tel_params[tel]['nchan'],\
-                                    ntime=obs_params['ntime'],\
-                                        npsrc=sky_params['npsrc'],\
-                                        ngsrc=sky_params['ngsrc'],\
-                                            dtype=mb_params['dtype'])
-                # Set up the observation (again - probably unnecessary)
-                uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntim\
-e'])))
-                sd.transfer_uvw(uvw)
-
-                frequencies = sd.ft(np.linspace(1e6,2e6,sd.nchan))
-                wavelength = sd.ft(montblanc.constants.C/frequencies)
-                sd.set_ref_wave(wavelength[sd.nchan//2])
-                sd.transfer_wavelength(wavelength)
-
                 # Transfer the simulated vis into sd
-                sd.transfer_bayes_data(vis_sim)
+                sd.transfer_bayes_data(sampler['simulator'])
 
                 sampler['pipeline'].initialise(sd)
                 print sd
@@ -580,7 +590,7 @@ e'])))
                     sd.transfer_point_errors(point_errors)
 
                 # Set up the antenna table if noise depends on this
-                if mb_params['use_noise_vector']:
+                if mb_params['use_weight_vector']:
                      bl2ants=sd.get_default_ant_pairs()
 
                 # Find total number of visibilities
@@ -618,11 +628,11 @@ e'])))
             else:
                 sigma=cube[3]*np.ones(1).astype(sd.ft)
 
-            if mb_params['use_noise_vector']:
-                noise_vector=sigma[0]**2**np.ones(ndata/8).astype(sd.ft)\
-                    .reshape(sd.noise_vector_shape)
+            if mb_params['use_weight_vector']:
+                weight_vector=np.ones(ndata/8).astype(sd.ft)\
+                    .reshape(sd.weight_vector_shape)/sigma[0]**2
 
-                sd.transfer_noise_vector(noise_vector)
+                sd.transfer_weight_vector(weight_vector)
             else:
                 sd.set_sigma_sqrd((sigma[0]**2))
 
