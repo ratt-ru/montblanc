@@ -437,8 +437,15 @@ class TestBiroV1(unittest.TestCase):
         Method to demonstrate a pymultinest 'real world' problem
         No pointing errors
         No time variability
+        Run as
+        cd montblanc/tests/
+        python -m unittest test_biro_v1.TestBiroV1.demo_real_problem
         """
 
+        import os,random
+        cuda_device = os.environ.get('CUDA_DEVICE',int(random.getrandbits(1)))
+        os.environ['CUDA_DEVICE']=str(cuda_device)
+        print 'Using GPU #%i' % int(os.environ.get('CUDA_DEVICE'))
 
         # Settings
         from montblanc.impl.biro.v1.BiroSharedData import BiroSharedData
@@ -450,9 +457,6 @@ class TestBiroV1(unittest.TestCase):
         loggingLevel=logging.WARN                      # Logging level
         msfile=None # Input MS file
         mb_params={'store_cpu':False,'use_noise_vector':False,'dtype':np.float32}
-        store_cpu=False         # Carry out the calculation on the CPU
-        use_noise_vector=False                         # Varying noise level
-        dtype=np.float32                               # or np.float64
         # Sky
         n_params=8
         sky_params={'npsrc':0,'ngsrc':1}
@@ -497,11 +501,11 @@ class TestBiroV1(unittest.TestCase):
         #-----------------------------------------------------------------------
 
         # And the likelihood
-        sampler['pipeline']=None
+        sampler['pipeline']=None; sampler['simulator']=None
         def myloglike(cube, ndim, nparams):
-            global sd,ndata#,store_cpu,use_noise_vector
+            #global sd,ndata#,store_cpu,use_noise_vector
             # Initialize pipeline once (from file or self-simulation)
-            if sampler['pipeline'] is None:
+            if sampler['simulator'] is None:
                 montblanc.log.setLevel(loggingLevel)
                 sd = BiroSharedData(na=tel_params[tel]['nant'],\
                                     nchan=tel_params[tel]['nchan'],\
@@ -512,7 +516,6 @@ class TestBiroV1(unittest.TestCase):
                 # Set up the observation
                 uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
                 sd.transfer_uvw(uvw)
-
 
                 frequencies = sd.ft(np.linspace(1e6,2e6,sd.nchan))
                 wavelength = sd.ft(montblanc.constants.C/frequencies)
@@ -534,40 +537,67 @@ class TestBiroV1(unittest.TestCase):
                 R_sim = sd.ft(np.ones(sd.ngsrc)*100.0)
                 gauss_shape_sim = np.array([el_sim,em_sim,R_sim]).reshape(sd.gauss_shape_shape)
                 sd.transfer_gauss_shape(gauss_shape_sim)
-                sampler['pipeline'].initialise(sd)
-                sampler['pipeline'].execute(sd)
-                # Fetch the simulated visibilities and add noise
+                sampler['simulator'].initialise(sd)
+                sampler['simulator'].execute(sd)
+
+                # Fetch the simulated visibilities back and add noise
                 vis_sim=sd.vis_gpu.get()
                 noise_sim=numpy.random.normal(0.0,sigmaSim,sd.ntime*sd.nsrc,shape=sd.vis_shape,dtype=sd.vis_dtype)
                 vis_sim+=noise_sim
+                sampler['simulator'].shutdown(sd)
+                sampler['simulator']=1 # Necessary or not?
+            # End of simulation step
 
-                # Initialize the pipeline
+            #-------------------------------------------------------------------
+            # Now begin the likelihood calculation proper
+            # Initialize the pipeline
+            if sampler['pipeline'] is None:
+                sd = BiroSharedData(na=tel_params[tel]['nant'],\
+                                    nchan=tel_params[tel]['nchan'],\
+                                    ntime=obs_params['ntime'],\
+                                        npsrc=sky_params['npsrc'],\
+                                        ngsrc=sky_params['ngsrc'],\
+                                            dtype=mb_params['dtype'])
+                # Set up the observation (again - probably unnecessary)
+                uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntim\
+e'])))
+                sd.transfer_uvw(uvw)
+
+                frequencies = sd.ft(np.linspace(1e6,2e6,sd.nchan))
+                wavelength = sd.ft(montblanc.constants.C/frequencies)
+                sd.set_ref_wave(wavelength[sd.nchan//2])
+                sd.transfer_wavelength(wavelength)
+
+                # Transfer the simulated vis into sd
+                sd.transfer_bayes_data(vis_sim)
+
                 sampler['pipeline'].initialise(sd)
                 print sd
                 # Carry out calculations on the CPU (as opposed to GPU)
-                if store_cpu:
+                if mb_params['store_cpu']:
                     point_errors = np.zeros(2*sd.na*sd.ntime)\
                         .astype(sd.ft).reshape((2,sd.na,sd.ntime))
                     sd.transfer_point_errors(point_errors)
 
                 # Set up the antenna table if noise depends on this
-                if use_noise_vector:
+                if mb_params['use_noise_vector']:
                      bl2ants=sd.get_default_ant_pairs()
 
                 # Find total number of visibilities
                 ndata=8*sd.nbl*sd.nchan*sd.ntime
             # End of setup
 
+            #-------------------------------------------------------------------
             # Do next lines on every iteration
 
             # Now set up the model vis for this iteration
             lm=np.array([cube[0],cube[1]], dtype=sd.ft).reshape(sd.lm_shape)
 
             fI=cube[2]*np.ones((sd.ntime,sd.nsrc,),dtype=sd.ft)
-            fQ=cube[4]*np.ones((sd.ntime,sd.nsrc),dtype=sd.ft)
+            fQ=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
             fU=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
             fV=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
-            alpha=     np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
+            alpha=cube[4]*np.ones((sd.ntime,sd.nsrc),dtype=sd.ft)
             brightness = np.array([fI,fQ,fU,fV,alpha],dtype=sd.ft)\
                 .reshape(sd.brightness_shape)
 
@@ -588,7 +618,7 @@ class TestBiroV1(unittest.TestCase):
             else:
                 sigma=cube[3]*np.ones(1).astype(sd.ft)
 
-            if use_noise_vector:
+            if mb_params['use_noise_vector']:
                 noise_vector=sigma[0]**2**np.ones(ndata/8).astype(sd.ft)\
                     .reshape(sd.noise_vector_shape)
 
@@ -598,7 +628,7 @@ class TestBiroV1(unittest.TestCase):
 
             # Execute the pipeline; cube[:] -> sd.X2
             sampler['pipeline'].execute(sd)
-            if store_cpu:
+            if mb_params['store_cpu']:
                 chi2=sd.compute_biro_chi_sqrd()
             else:
                 chi2=sd.X2
@@ -627,11 +657,13 @@ class TestBiroV1(unittest.TestCase):
                         sampling_efficiency=efr,max_iter=maxiter)
         tend = time.time()
 
+        #-----------------------------------------------------------------------
         print 'PyMultinest took ', (tend-tstart)/60.0, ' minutes to run\n'
         print 'Avg. execution time %gms' % sampler['pipeline'].avg_execution_time
         print 'Last execution time %gms' % sampler['pipeline'].last_execution_time
         print 'No. of executions %d.' % sampler['pipeline'].nr_of_executions
         print sd
+        sampler['pipeline'].shutdown(sd)
 
         #-----------------------------------------------------------------------
 
