@@ -451,7 +451,7 @@ class TestBiroV1(unittest.TestCase):
                                'pa':45.0*deg2rad}
         # Telescope
         tel='WSRT'
-        tel_params={'WSRT':{'nant':14,'nchan':1,'freq':1.4e9,'BW':16.0e6},\
+        tel_params={'WSRT':{'nant':14,'nchan':8,'freq':1.4e9,'BW':16.0e6},\
                         'ATCA':{'nant':-1,'nchan':-1}}
         # Observation
         obs_params={'ntime':72}
@@ -498,7 +498,9 @@ class TestBiroV1(unittest.TestCase):
         uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
         sd.transfer_uvw(uvw)
 
-        frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+sd.nchan*tel_params[tel]['BW'],sd.nchan))
+        #frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+(sd.nchan-1)*tel_params[tel]['BW'],sd.nchan))
+        frequencies = sd.ft(np.linspace(1.4e9,1.5e9,sd.nchan))
+        print frequencies
         wavelength = sd.ft(montblanc.constants.C/frequencies)
         sd.set_ref_wave(wavelength[sd.nchan//2])
         sd.transfer_wavelength(wavelength)
@@ -579,7 +581,8 @@ class TestBiroV1(unittest.TestCase):
                 uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
                 sd.transfer_uvw(uvw)
 
-                frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+sd.nchan*tel_params[tel]['BW'],sd.nchan))
+                #frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+(sd.nchan-1)*tel_params[tel]['BW'],sd.nchan))
+                frequencies = sd.ft(np.linspace(1.4e9,1.5e9,sd.nchan))
                 wavelength = sd.ft(montblanc.constants.C/frequencies)
                 sd.set_ref_wave(wavelength[sd.nchan//2])
                 sd.transfer_wavelength(wavelength)
@@ -610,7 +613,7 @@ class TestBiroV1(unittest.TestCase):
             # Now set up the model vis for this iteration
             sd=sampler['sd']; ndata=sampler['ndata']
             lm=np.array([cube[0],cube[1]], dtype=sd.ft).reshape(sd.lm_shape)
-            fI=cube[2]*np.ones((sd.ntime,sd.nsrc,),dtype=sd.ft)
+            fI=cube[2]*np.ones((sd.ntime,sd.nsrc),dtype=sd.ft)
             fQ=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
             fU=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
             fV=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
