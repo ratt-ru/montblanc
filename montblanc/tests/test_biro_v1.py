@@ -440,13 +440,13 @@ class TestBiroV1(unittest.TestCase):
         loggingLevel=logging.WARN                      # Logging level
         mb_params={'store_cpu':False,'use_weight_vector':False,'dtype':np.float32}
         # Sky
-        params_to_fit=['I','x','y','alpha','emaj','emin','pa','sigma']
+        params_to_fit=['x','y','I','alpha','lproj','mproj','ratio','sigma']
         n_params=len(params_to_fit)
         sky_params={'npsrc':0,'ngsrc':1}
         source_params={'I':1.0,'Q':0.0,'U':0.0,'V':0.0,\
                                'x':0.0,'y':0.0,'alpha':0.0,\
-                               'emaj':20.0*arcsec2rad,\
                                'emin':10.0*arcsec2rad,\
+                               'emaj':20.0*arcsec2rad,\
                                'pa':45.0*deg2rad}
         # Telescope
         tel='WSRT'
@@ -548,9 +548,9 @@ class TestBiroV1(unittest.TestCase):
             #cube[2] = sampler['pri'].GeneralPrior(cube[2],'LOG',1.0e-2,4.0) # I
             #cube[3] = sampler['pri'].GeneralPrior(cube[3],'U',1.0e-2,1.0) # noise
             #cube[4] = sampler['pri'].GeneralPrior(cube[4],'U',-3.0,3.0) # alpha
-            cube[5] = sampler['pri'].GeneralPrior(cube[5],'U',1.0*arcsec2rad,60.0*arcsec2rad) # emaj
-            cube[6] = sampler['pri'].GeneralPrior(cube[6],'U',1.0*arcsec2rad,60.0*arcsec2rad) # emin
-            cube[7] = sampler['pri'].GeneralPrior(cube[7],'U',0.0,180.0*deg2rad) # pa
+            cube[5] = sampler['pri'].GeneralPrior(cube[5],'U',1.0*arcsec2rad,30.0*arcsec2rad) # lproj
+            cube[6] = sampler['pri'].GeneralPrior(cube[6],'U',1.0*arcsec2rad,30.0*arcsec2rad) # mproj
+            cube[7] = sampler['pri'].GeneralPrior(cube[7],'U',0.0,1.0) # ratio
             return
 
         #-------------------------------------------------------------------
@@ -620,10 +620,10 @@ class TestBiroV1(unittest.TestCase):
             sd.transfer_brightness(brightness)
 
             if sd.ngsrc > 0:
-                if cube[5]>cube[6]: return -1.0e99 # Catch oblates(?)
-                gauss_shape = np.array([[cube[6]*np.sin(cube[7]),\
-                              cube[6]*np.cos(cube[7]),cube[5]/cube[6]]],dtype=sd.ft)\
-                              .reshape(sd.gauss_shape_shape)
+                #if cube[5]>cube[6]: return -1.0e99 # Catch oblates(?)
+                #gauss_shape = np.array([[cube[6]*np.sin(cube[7]),\
+                #              cube[6]*np.cos(cube[7]),cube[5]/cube[6]]],dtype=sd.ft).reshape(sd.gauss_shape_shape)
+                gauss_shape = np.array([cube[5],cube[6],cube[7]],dtype=sd.ft).reshape(sd.gauss_shape_shape)
                 sd.transfer_gauss_shape(gauss_shape)
 
             # Set the noise
