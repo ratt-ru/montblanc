@@ -444,7 +444,8 @@ class TestBiroV1(unittest.TestCase):
         n_params=len(params_to_fit)
         sky_params={'npsrc':0,'ngsrc':1}
         source_params={'I':1.0,'Q':0.0,'U':0.0,'V':0.0,\
-                               'x':0.0,'y':0.0,'alpha':0.0,\
+                               'x':-80.0*arcsec2rad,'y':-100.0*arcsec2rad,\
+                               'alpha':-0.7,\
                                'emin':10.0*arcsec2rad,\
                                'emaj':20.0*arcsec2rad,\
                                'pa':45.0*deg2rad}
@@ -545,8 +546,8 @@ class TestBiroV1(unittest.TestCase):
             #cube[2]=source_params['I']
             #cube[3]=sigmaSim
             #cube[4]=source_params['alpha']
-            cube[0] = sampler['pri'].GeneralPrior(cube[0],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # x
-            cube[1] = sampler['pri'].GeneralPrior(cube[1],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # y
+            cube[0] = sampler['pri'].GeneralPrior(cube[0],'U',-360.0*arcsec2rad,360.0*arcsec2rad) # x
+            cube[1] = sampler['pri'].GeneralPrior(cube[1],'U',-360.0*arcsec2rad,360.0*arcsec2rad) # y
             cube[2] = sampler['pri'].GeneralPrior(cube[2],'LOG',1.0e-2,4.0) # I
             cube[3] = sampler['pri'].GeneralPrior(cube[3],'U',1.0e-2,1.0) # noise
             cube[4] = sampler['pri'].GeneralPrior(cube[4],'U',-3.0,3.0) # alpha
