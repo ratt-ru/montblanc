@@ -450,13 +450,14 @@ class TestBiroV1(unittest.TestCase):
                                'pa':45.0*deg2rad}
         # Telescope
         tel='WSRT'
-        tel_params={'WSRT':{'nant':14,'nchan':8},\
+        tel_params={'WSRT':{'nant':14,'nchan':1,'freq':1.4e9,'BW':16.0e6},\
                         'ATCA':{'nant':-1,'nchan':-1}}
         # Observation
         obs_params={'ntime':72}
         uvw_f='uvw_coords.txt'
         sigmaSim=0.1 # Conventional noise per visibility
         sigmaFit=None # If None, fit for sigma, otherwise specify here
+        noise_seed=1234
 
         # MultiNest settings
         hypo=1 # Run number
@@ -496,7 +497,7 @@ class TestBiroV1(unittest.TestCase):
         uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
         sd.transfer_uvw(uvw)
 
-        frequencies = sd.ft(np.linspace(1e6,2e6,sd.nchan))
+        frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+sd.nchan*tel_params[tel]['BW'],sd.nchan))
         wavelength = sd.ft(montblanc.constants.C/frequencies)
         sd.set_ref_wave(wavelength[sd.nchan//2])
         sd.transfer_wavelength(wavelength)
@@ -525,6 +526,7 @@ class TestBiroV1(unittest.TestCase):
 
         # Fetch the simulated visibilities back and add noise
         vis_sim=sd.vis_gpu.get()
+        np.random.seed(noise_seed)
         noise_sim=sd.ct((np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.nchan*sd.ntime*sd.nsrc)+1j*np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.nchan*sd.ntime*sd.nsrc)).reshape(sd.vis_shape))
         vis_sim+=noise_sim
         sampler['simulator'].shutdown(sd)
@@ -538,16 +540,16 @@ class TestBiroV1(unittest.TestCase):
         sampler['pri']=None
         def myprior(cube, ndim, nparams):
             if sampler['pri'] is None: sampler['pri']=Priors()
-            cube[0]=source_params['x']
-            cube[1]=source_params['y']
-            cube[2]=source_params['I']
-            cube[3]=sigmaSim
-            cube[4]=source_params['alpha']
-            #cube[0] = sampler['pri'].GeneralPrior(cube[0],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # x
-            #cube[1] = sampler['pri'].GeneralPrior(cube[1],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # y
-            #cube[2] = sampler['pri'].GeneralPrior(cube[2],'LOG',1.0e-2,4.0) # I
-            #cube[3] = sampler['pri'].GeneralPrior(cube[3],'U',1.0e-2,1.0) # noise
-            #cube[4] = sampler['pri'].GeneralPrior(cube[4],'U',-3.0,3.0) # alpha
+            #cube[0]=source_params['x']
+            #cube[1]=source_params['y']
+            #cube[2]=source_params['I']
+            #cube[3]=sigmaSim
+            #cube[4]=source_params['alpha']
+            cube[0] = sampler['pri'].GeneralPrior(cube[0],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # x
+            cube[1] = sampler['pri'].GeneralPrior(cube[1],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # y
+            cube[2] = sampler['pri'].GeneralPrior(cube[2],'LOG',1.0e-2,4.0) # I
+            cube[3] = sampler['pri'].GeneralPrior(cube[3],'U',1.0e-2,1.0) # noise
+            cube[4] = sampler['pri'].GeneralPrior(cube[4],'U',-3.0,3.0) # alpha
             cube[5] = sampler['pri'].GeneralPrior(cube[5],'U',1.0*arcsec2rad,30.0*arcsec2rad) # lproj
             cube[6] = sampler['pri'].GeneralPrior(cube[6],'U',1.0*arcsec2rad,30.0*arcsec2rad) # mproj
             cube[7] = sampler['pri'].GeneralPrior(cube[7],'U',0.0,1.0) # ratio
@@ -576,7 +578,7 @@ class TestBiroV1(unittest.TestCase):
                 uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
                 sd.transfer_uvw(uvw)
 
-                frequencies = sd.ft(np.linspace(1e6,2e6,sd.nchan))
+                frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+sd.nchan*tel_params[tel]['BW'],sd.nchan))
                 wavelength = sd.ft(montblanc.constants.C/frequencies)
                 sd.set_ref_wave(wavelength[sd.nchan//2])
                 sd.transfer_wavelength(wavelength)
@@ -661,7 +663,7 @@ class TestBiroV1(unittest.TestCase):
 
         # Now run multinest
         import os,time
-        from mpi4py import MPI
+        from mpi4py import MPI # This is necessary simply to init (unused) MPI
         import pymultinest
         outdir = 'chains-hypo%i' % hypo
         if not os.path.exists(outdir): os.mkdir(outdir)
@@ -685,6 +687,12 @@ class TestBiroV1(unittest.TestCase):
         #print sd
         sampler['pipeline'].shutdown(sd)
         print source_params
+        lproj=source_params['emaj']*np.sin(source_params['pa'])
+        mproj=source_params['emaj']*np.cos(source_params['pa'])
+        ratio=source_params['emin']/source_params['emaj']
+        print lproj
+        print mproj
+        print ratio
 
         #-----------------------------------------------------------------------
 
