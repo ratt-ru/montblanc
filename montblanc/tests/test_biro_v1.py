@@ -451,7 +451,7 @@ class TestBiroV1(unittest.TestCase):
                                'pa':45.0*deg2rad}
         # Telescope
         tel='WSRT'
-        tel_params={'WSRT':{'nant':14,'nchan':8,'freq':1.4e9,'BW':16.0e6},\
+        tel_params={'WSRT':{'nant':14,'nchan':8,'freq':1.4e9,'BW':8*16.0e6},\
                         'ATCA':{'nant':-1,'nchan':-1}}
         # Observation
         obs_params={'ntime':72}
@@ -498,9 +498,8 @@ class TestBiroV1(unittest.TestCase):
         uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
         sd.transfer_uvw(uvw)
 
-        #frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+(sd.nchan-1)*tel_params[tel]['BW'],sd.nchan))
-        frequencies = sd.ft(np.linspace(1.4e9,1.5e9,sd.nchan))
-        print frequencies
+        frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+tel_params[tel]['BW'],sd.nchan))
+        #frequencies = sd.ft(np.linspace(1.4e9,1.5e9,sd.nchan))
         wavelength = sd.ft(montblanc.constants.C/frequencies)
         sd.set_ref_wave(wavelength[sd.nchan//2])
         sd.transfer_wavelength(wavelength)
@@ -581,8 +580,8 @@ class TestBiroV1(unittest.TestCase):
                 uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
                 sd.transfer_uvw(uvw)
 
-                #frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+(sd.nchan-1)*tel_params[tel]['BW'],sd.nchan))
-                frequencies = sd.ft(np.linspace(1.4e9,1.5e9,sd.nchan))
+                frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+tel_params[tel]['BW'],sd.nchan))
+                #frequencies = sd.ft(np.linspace(1.4e9,1.5e9,sd.nchan))
                 wavelength = sd.ft(montblanc.constants.C/frequencies)
                 sd.set_ref_wave(wavelength[sd.nchan//2])
                 sd.transfer_wavelength(wavelength)
@@ -688,15 +687,15 @@ class TestBiroV1(unittest.TestCase):
         print 'Avg. execution time %gms' % sampler['pipeline'].avg_execution_time
         print 'Last execution time %gms' % sampler['pipeline'].last_execution_time
         print 'No. of executions %d.' % sampler['pipeline'].nr_of_executions
-        #print sd
+        print sd
         sampler['pipeline'].shutdown(sd)
         print source_params
-        lproj=source_params['emaj']*np.sin(source_params['pa'])
-        mproj=source_params['emaj']*np.cos(source_params['pa'])
-        ratio=source_params['emin']/source_params['emaj']
-        print lproj
-        print mproj
-        print ratio
+        lproj_sim=source_params['emaj']*np.sin(source_params['pa'])
+        mproj_sim=source_params['emaj']*np.cos(source_params['pa'])
+        ratio_sim=source_params['emin']/source_params['emaj']
+        print lproj_sim
+        print mproj_sim
+        print ratio_sim
 
         #-----------------------------------------------------------------------
 
