@@ -432,8 +432,7 @@ class TestBiroV1(unittest.TestCase):
         # Settings
         import montblanc.factory as factory
         import scipy as sc
-        from math import sin,cos,sqrt
-        sqrtTwo=sqrt(2.0)
+        sqrtTwo=np.sqrt(2.0)
         arcsec2rad = sc.pi / 180.0 / 3600.0
         deg2rad = sc.pi / 180.0
 
@@ -441,7 +440,8 @@ class TestBiroV1(unittest.TestCase):
         loggingLevel=logging.WARN                      # Logging level
         mb_params={'store_cpu':False,'use_weight_vector':False,'dtype':np.float32}
         # Sky
-        n_params=8
+        params_to_fit=['I','x','y','alpha','emaj','emin','pa','sigma']
+        n_params=len(params_to_fit)
         sky_params={'npsrc':0,'ngsrc':1}
         source_params={'I':1.0,'Q':0.0,'U':0.0,'V':0.0,\
                                'x':0.0,'y':0.0,'alpha':0.0,\
@@ -503,6 +503,7 @@ class TestBiroV1(unittest.TestCase):
 
         # Simulate the target source(s) here
         lm_sim=sd.ft(np.array([source_params['x'],source_params['y']]).reshape(sd.lm_shape))
+        sd.transfer_lm(lm_sim)
         fI_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['I'])
         fQ_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['Q'])
         fU_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['U'])
@@ -511,8 +512,8 @@ class TestBiroV1(unittest.TestCase):
         brightness_sim=np.array([fI_sim,fQ_sim,fU_sim,fV_sim,alpha_sim]).reshape(sd.brightness_shape)
         sd.transfer_brightness(brightness_sim)
 
-        e1=source_params['emaj']*sin(source_params['pa'])
-        e2=source_params['emaj']*cos(source_params['pa'])
+        e1=source_params['emaj']*np.sin(source_params['pa'])
+        e2=source_params['emaj']*np.cos(source_params['pa'])
         r=source_params['emin']/source_params['emaj']
         el_sim = sd.ft(np.ones(sd.ngsrc)*e1)
         em_sim = sd.ft(np.ones(sd.ngsrc)*e2)
@@ -537,14 +538,19 @@ class TestBiroV1(unittest.TestCase):
         sampler['pri']=None
         def myprior(cube, ndim, nparams):
             if sampler['pri'] is None: sampler['pri']=Priors()
-            cube[0] = sampler['pri'].GeneralPrior(cube[0],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # x
-            cube[1] = sampler['pri'].GeneralPrior(cube[1],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # y
-            cube[2] = sampler['pri'].GeneralPrior(cube[2],'LOG',1.0e-2,5.0) # I
-            cube[3] = sampler['pri'].GeneralPrior(cube[3],'U',1.0e-2,1.0) # noise
-            cube[4] = sampler['pri'].GeneralPrior(cube[4],'U',-5.0,5.0) # alpha
-            cube[5] = sampler['pri'].GeneralPrior(cube[5],'U',1.0*arcsec2rad,60.0*arcsec2rad) # lproj
-            cube[6] = sampler['pri'].GeneralPrior(cube[6],'U',1.0*arcsec2rad,60.0*arcsec2rad) # mproj
-            cube[7] = sampler['pri'].GeneralPrior(cube[7],'U',0.0,4.0) # ratio
+            cube[0]=source_params['x']
+            cube[1]=source_params['y']
+            cube[2]=source_params['I']
+            cube[3]=sigmaSim
+            cube[4]=source_params['alpha']
+            #cube[0] = sampler['pri'].GeneralPrior(cube[0],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # x
+            #cube[1] = sampler['pri'].GeneralPrior(cube[1],'U',-720.0*arcsec2rad,720.0*arcsec2rad) # y
+            #cube[2] = sampler['pri'].GeneralPrior(cube[2],'LOG',1.0e-2,4.0) # I
+            #cube[3] = sampler['pri'].GeneralPrior(cube[3],'U',1.0e-2,1.0) # noise
+            #cube[4] = sampler['pri'].GeneralPrior(cube[4],'U',-3.0,3.0) # alpha
+            cube[5] = sampler['pri'].GeneralPrior(cube[5],'U',1.0*arcsec2rad,60.0*arcsec2rad) # emaj
+            cube[6] = sampler['pri'].GeneralPrior(cube[6],'U',1.0*arcsec2rad,60.0*arcsec2rad) # emin
+            cube[7] = sampler['pri'].GeneralPrior(cube[7],'U',0.0,180.0*deg2rad) # pa
             return
 
         #-------------------------------------------------------------------
@@ -601,7 +607,6 @@ class TestBiroV1(unittest.TestCase):
             # Now set up the model vis for this iteration
             sd=sampler['sd']; ndata=sampler['ndata']
             lm=np.array([cube[0],cube[1]], dtype=sd.ft).reshape(sd.lm_shape)
-
             fI=cube[2]*np.ones((sd.ntime,sd.nsrc,),dtype=sd.ft)
             fQ=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
             fU=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
@@ -677,8 +682,9 @@ class TestBiroV1(unittest.TestCase):
         print 'Avg. execution time %gms' % sampler['pipeline'].avg_execution_time
         print 'Last execution time %gms' % sampler['pipeline'].last_execution_time
         print 'No. of executions %d.' % sampler['pipeline'].nr_of_executions
-        print sd
+        #print sd
         sampler['pipeline'].shutdown(sd)
+        print source_params
 
         #-----------------------------------------------------------------------
 
