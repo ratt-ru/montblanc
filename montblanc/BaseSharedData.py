@@ -501,6 +501,10 @@ class BaseSharedData(SharedData):
         # and set it on the object instance
         # Also create a transfer method for tranferring data to the GPU
         if gpu_ary_exists is not True and create_gpu_ary is True:
+            # We don't use gpuarray.zeros, since it fails for
+            # a zero-length array. This is kind of bad since
+            # the gpuarray returned by gpuarray.empty() doesn't
+            # have GPU memory allocated to it.
             gpu_ary = gpuarray.empty(shape=nshape, dtype=dtype)
             setattr(self, gpu_name, gpu_ary)
 
@@ -520,6 +524,10 @@ class BaseSharedData(SharedData):
             Transfers the npary numpy array to the %s gpuarray.
             npary and %s must be the same shape and type.
             """ % (gpu_name,gpu_name)
+
+            # Zero the array, if it has non-zero length
+            if np.product(nshape) > 0:
+                gpu_ary.fill(dtype(0))
 
         # Set up a member describing the shape
         if kwargs.get('shape_member', False) is True:
