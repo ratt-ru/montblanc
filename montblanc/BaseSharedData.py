@@ -597,6 +597,9 @@ class BaseSharedData(SharedData):
             raise TypeError, ('setter keyword argument set',
                 ' to an invalid type %s' % (type(setter)))
 
+    def get_array_record(self, name):
+        return self.arrays[name]
+
     def get_properties(self):
         """
         Returns a dictionary of properties related to this SharedData object.
