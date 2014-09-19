@@ -35,6 +35,10 @@ class BiroSharedData(BaseSharedData):
                 if True, store cpu versions of the kernel arrays
                 within the GPUSharedData object.
         """
+
+        # Turn off auto_correlations
+        kwargs['auto_correlations'] = False
+
         super(BiroSharedData, self).__init__(na=na, nchan=nchan, ntime=ntime,
             npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, **kwargs)
 
@@ -84,7 +88,7 @@ class BiroSharedData(BaseSharedData):
         reg(name='chi_sqrd_result', shape=('nbl','nchan','ntime'), dtype=ft)
 
         # Get the numeric jones shape, so that we can calculate the key array size
-        njones_shape = self.get_array_record('jones').nshape
+        njones_shape = self.get_array_record('jones').shape
 
         # Create the key positions. This snippet creates an array
         # equal to the list of positions of the last array element timestep)
@@ -94,3 +98,15 @@ class BiroSharedData(BaseSharedData):
         reg(name='keys', shape=keys.shape, dtype=np.int32)
 
         sd.transfer_keys(keys)
+
+    def get_default_ant_pairs(self):
+        """
+        Return an np.array(shape=(2, nbl, ntime), dtype=np.int32]) containing the
+        default antenna pairs for each baseline at each timestep.
+        """
+        # Create the antenna pair mapping, from upper triangle indices
+        # based on the number of antenna. 
+        sd = self
+
+        return np.repeat(np.int32(np.triu_indices(sd.na,1)),
+            sd.ntime).reshape(2,sd.nbl,sd.ntime)

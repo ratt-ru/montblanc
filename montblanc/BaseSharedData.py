@@ -12,10 +12,10 @@ import montblanc
 
 class ArrayRecord(object):
     """ Records information about an array """
-    def __init__(self, name, shape, nshape, dtype, registrant, has_cpu_ary, has_gpu_ary):
+    def __init__(self, name, sshape, shape, dtype, registrant, has_cpu_ary, has_gpu_ary):
         self.name = name
+        self.sshape = sshape
         self.shape = shape
-        self.nshape = nshape
         self.dtype = dtype
         self.registrant = registrant
         self.has_cpu_ary = has_cpu_ary
@@ -97,11 +97,6 @@ class Parameter(object):
     def __delete__(self, instance):
         del self.data[instance]
 
-def get_nr_of_baselines(na):
-    """ Compute the number of baselines for the 
-    given number of antenna """
-    return (na*(na-1))//2
-
 class SharedData(object):
     """ Base class for data shared amongst pipeline nodes.
 
@@ -112,7 +107,7 @@ class SharedData(object):
     pass
 
 DEFAULT_NA=3
-DEFAULT_NBL=get_nr_of_baselines(DEFAULT_NA)
+DEFAULT_NBL=montblanc.nr_of_baselines(DEFAULT_NA)
 DEFAULT_NCHAN=4
 DEFAULT_NTIME=10
 DEFAULT_NPSRC=2
@@ -156,9 +151,14 @@ class BaseSharedData(SharedData):
             store_cpu: boolean
                 if True, store cpu versions of the kernel arrays
                 within the GPUSharedData object.
+            auto_correlations: boolean
+                if True, take auto-correlations into account when
+                calculating the number of baselines
         """
 
         super(BaseSharedData, self).__init__()
+
+        autocor = kwargs.get('auto_correlations',True)
 
         # Configure our problem dimensions. Number of
         # - antenna
@@ -168,7 +168,7 @@ class BaseSharedData(SharedData):
         # - point sources
         # - gaussian sources
         self.na = na
-        self.nbl = nbl = get_nr_of_baselines(na)
+        self.nbl = nbl = montblanc.nr_of_baselines(na,autocor)
         self.nchan = nchan
         self.ntime = ntime
         self.npsrc = npsrc
@@ -274,14 +274,14 @@ class BaseSharedData(SharedData):
         """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
         return np.product(shape)*np.dtype(dtype).itemsize
 
-    def get_numeric_shape(self, shape, ignore=None):
+    def get_numeric_shape(self, sshape, ignore=None):
         """
         Substitutes string values in the supplied shape parameter
         with properties registered on this BaseSharedData object.
 
         Parameters
         ----------
-            shape : tuple composed of integers and strings.
+            sshape : tuple composed of integers and strings.
                 The strings should related to integral properties
                 registered with this SharedData object
             ignore : list
@@ -293,7 +293,7 @@ class BaseSharedData(SharedData):
         D = self.get_properties()
         if ignore is None: ignore = []
         
-        if type(shape) is not tuple:
+        if type(sshape) is not tuple:
             raise TypeError, 'shape argument must be a tuple'
 
         if type(ignore) is not list:
@@ -307,12 +307,12 @@ class BaseSharedData(SharedData):
                 if not np.issubdtype(type(value), np.integer):
                     raise KeyError, ('Unable to replace %s in shape %s ',
                         'with a suitable integral value.') % \
-                        (value, shape, )
+                        (value, sshape, )
                 replace_value = value
 
             return replace_value
 
-        return tuple([tup_replace(v) for v in shape if v not in ignore])
+        return tuple([tup_replace(v) for v in sshape if v not in ignore])
 
     def viable_timesteps(self, bytes_available):
         """
@@ -322,12 +322,12 @@ class BaseSharedData(SharedData):
 
         # Figure out which arrays have an ntime dimension
         has_time = np.array([ \
-            t.shape.count('ntime') > 0 for t in self.arrays.values()])
+            t.sshape.count('ntime') > 0 for t in self.arrays.values()])
 
         # Get the shape product of each array, EXCLUDING any ntime dimension,
         # multiplied by the size of the array type in bytes.
         products = np.array([ \
-            np.product(self.get_numeric_shape(t.shape, ignore=['ntime'])) * \
+            np.product(self.get_numeric_shape(t.sshape, ignore=['ntime'])) * \
             np.dtype(t.dtype).itemsize \
             for t in self.arrays.values()])
 
@@ -346,7 +346,7 @@ class BaseSharedData(SharedData):
 
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
-        return np.sum([BaseSharedData.array_bytes(a.nshape,a.dtype) 
+        return np.sum([BaseSharedData.array_bytes(a.shape,a.dtype) 
             for a in self.arrays.itervalues()])
 
     def mem_required(self):
@@ -360,10 +360,10 @@ class BaseSharedData(SharedData):
         """
         record = self.arrays[record_key]
 
-        if record.nshape != ary.shape:
+        if record.shape != ary.shape:
             raise ValueError, \
                 '%s\'s shape %s is different from the shape %s of the supplied argument.' \
-                % (record.name, record.nshape, ary.shape)
+                % (record.name, record.shape, ary.shape)
 
         if record.dtype != ary.dtype:
             raise TypeError, \
@@ -384,13 +384,13 @@ class BaseSharedData(SharedData):
             return
 
         # Check that the shapes are the same
-        if old.nshape != new.nshape:
+        if old.shape != new.shape:
             raise ValueError, ('\'%s\' array is already registered by '
                 '\'%s\' with shape %s different to the supplied %s.') % \
                 (old.name,
                 old.registrant,
-                old.nshape,
-                new.nshape,)
+                old.shape,
+                new.shape,)
 
         # Check that the types are the same
         if old.dtype != new.dtype:
@@ -408,7 +408,7 @@ class BaseSharedData(SharedData):
         ----------
             name : string
                 name of the array.
-            shape : integer or tuple of integers
+            shape : integer/string or tuple of integers/strings
                 Shape of the array.
             dtype : data-type
                 The data-type for the array.
@@ -449,13 +449,14 @@ class BaseSharedData(SharedData):
         has_gpu_ary = gpu_ary_exists or create_gpu_ary
 
         # Figure out the actual integral shape
-        nshape = self.get_numeric_shape(shape)
+        sshape = shape
+        shape = self.get_numeric_shape(sshape)
 
         # Create a new record
         new = ArrayRecord(
             name=name,
+            sshape=sshape,
             shape=shape,
-            nshape=nshape,
             dtype=dtype,
             registrant=registrant,
             has_cpu_ary=has_cpu_ary,
@@ -494,7 +495,7 @@ class BaseSharedData(SharedData):
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
         if cpu_ary_exists is not True and create_cpu_ary is True:
-            cpu_ary = np.empty(shape=nshape, dtype=dtype)
+            cpu_ary = np.empty(shape=shape, dtype=dtype)
             setattr(self, cpu_name, cpu_ary)
 
         # Create an empty gpu array if it doesn't exist
@@ -505,7 +506,7 @@ class BaseSharedData(SharedData):
             # a zero-length array. This is kind of bad since
             # the gpuarray returned by gpuarray.empty() doesn't
             # have GPU memory allocated to it.
-            gpu_ary = gpuarray.empty(shape=nshape, dtype=dtype)
+            gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
             setattr(self, gpu_name, gpu_ary)
 
             # Create the transfer method
@@ -526,13 +527,13 @@ class BaseSharedData(SharedData):
             """ % (gpu_name,gpu_name)
 
             # Zero the array, if it has non-zero length
-            if np.product(nshape) > 0:
+            if np.product(shape) > 0:
                 gpu_ary.fill(dtype(0))
 
         # Set up a member describing the shape
         if kwargs.get('shape_member', False) is True:
             shape_name = BaseSharedData.__shape_name(name)
-            setattr(self, shape_name, nshape)
+            setattr(self, shape_name, shape)
 
         # Set up a member describing the dtype
         if kwargs.get('dtype_member', False) is True:
@@ -630,18 +631,6 @@ class BaseSharedData(SharedData):
     def is_double(self):
         return self.ft == np.float64
 
-    def get_default_ant_pairs(self):
-        """
-        Return an np.array(shape=(2, nbl, ntime), dtype=np.int32]) containing the
-        default antenna pairs for each baseline at each timestep.
-        """
-        # Create the antenna pair mapping, from upper triangle indices
-        # based on the number of antenna. 
-        sd = self
-
-        return np.repeat(np.int32(np.triu_indices(sd.na,1)),
-            sd.ntime).reshape(2,sd.nbl,sd.ntime)
-
     def gen_array_descriptions(self):
         """ Generator generating strings describing each registered array """
         yield 'Registered Arrays'
@@ -651,11 +640,11 @@ class BaseSharedData(SharedData):
 
         for a in self.arrays.itervalues():
             yield BaseSharedData.fmt_array_line(a.name,
-                BaseSharedData.fmt_bytes(BaseSharedData.array_bytes(a.nshape, a.dtype)),
+                BaseSharedData.fmt_bytes(BaseSharedData.array_bytes(a.shape, a.dtype)),
                 np.dtype(a.dtype).name,
                 'Y' if a.has_cpu_ary else 'N',
                 'Y' if a.has_gpu_ary else 'N',
-                a.shape)
+                a.sshape)
 
     def gen_property_descriptions(self):
         """ Generator generating string describing each registered property """
@@ -672,10 +661,10 @@ class BaseSharedData(SharedData):
 
     def __str__(self):
         """ Outputs a string representation of this object """
-        n_cpu_bytes = np.sum([BaseSharedData.array_bytes(a.nshape,a.dtype)
+        n_cpu_bytes = np.sum([BaseSharedData.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_cpu_ary is True])
 
-        n_gpu_bytes = np.sum([BaseSharedData.array_bytes(a.nshape,a.dtype)
+        n_gpu_bytes = np.sum([BaseSharedData.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_gpu_ary is True])
 
         w = 20

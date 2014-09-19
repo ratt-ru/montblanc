@@ -7,7 +7,6 @@ from pyrap.tables import table
 import montblanc
 import montblanc.BaseSharedData
 
-from montblanc.BaseSharedData import get_nr_of_baselines
 from montblanc.impl.biro.v1.BiroSharedData import BiroSharedData
 
 class MeasurementSetSharedData(BiroSharedData):
@@ -25,10 +24,8 @@ class MeasurementSetSharedData(BiroSharedData):
         # Store the measurement set filename
         self.msfile = msfile
 
-        # Open the measurement set
-        ms = table(self.msfile, ack=False)
-        # Strip out all auto-correlated baselines
-        t = ms.query('ANTENNA1 != ANTENNA2')
+        # Open the measurement set, trip out all auto-correlated baselines
+        t = table(self.msfile, ack=False).query('ANTENNA1 != ANTENNA2')
 
         # Open the antenna table
         ant_path = os.path.join(self.msfile, MeasurementSetSharedData.ANTENNA_TABLE)
@@ -39,9 +36,12 @@ class MeasurementSetSharedData(BiroSharedData):
         tf=table(freq_path, ack=False)
         f=tf.getcol("CHAN_FREQ").astype(dtype)
 
+        # Turn off auto_correlations
+        kwargs['auto_correlations'] = False
+
         # Determine the problem dimensions
         na = ta.nrows()
-        nbl = get_nr_of_baselines(na)
+        nbl = montblanc.nr_of_baselines(na, kwargs['auto_correlations'])
         nchan = f.size
         ntime = t.nrows() // nbl
 
@@ -52,12 +52,12 @@ class MeasurementSetSharedData(BiroSharedData):
         assert nbl == self.nbl
 
         # Check that we're getting the correct shape...
-        expected_uvw_shape = (3, ntime*nbl)
+        uvw_shape = (ntime*nbl, 3)
 
         # Read in UVW
         # Reshape the array and correct the axes
         ms_uvw = t.getcol('UVW')
-        assert ms_uvw.shape == (ntime*nbl, 3), \
+        assert ms_uvw.shape == uvw_shape, \
             'MS UVW shape %s != expected %s' % (ms_uvw.shape,expected_uvw_shape)
         uvw = ms_uvw.reshape(ntime, nbl, 3).transpose(2,1,0) \
             .astype(self.ft)
@@ -69,7 +69,9 @@ class MeasurementSetSharedData(BiroSharedData):
 
         # First dimension also seems to be of size 1 here...
         # Divide speed of light by frequency to get the wavelength here.
-        self.set_ref_wave(montblanc.constants.C/tf.getcol('REF_FREQUENCY')[0])
+        ref_freq = tf.getcol('REF_FREQUENCY')[0]
+        ref_wave = montblanc.constants.C/ref_freq
+        self.set_ref_wave(ref_wave)
 
         # Get the baseline antenna pairs and correct the axes
         ant1 = t.getcol('ANTENNA1').reshape(ntime,nbl).transpose(1,0)

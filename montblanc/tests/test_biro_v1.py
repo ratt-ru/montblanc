@@ -76,6 +76,8 @@ class TestBiroV1(unittest.TestCase):
         """ Type independent implementation of the EBK test """
         if cmp is None: cmp = {}
 
+        # This beam width produces reasonable values
+        # for testing the E term
         sd.set_beam_width(65*1e5)
 
         kernels = []

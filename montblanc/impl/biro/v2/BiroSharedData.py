@@ -35,6 +35,10 @@ class BiroSharedData(BaseSharedData):
                 if True, store cpu versions of the kernel arrays
                 within the GPUSharedData object.
         """
+
+        # Turn off auto_correlations
+        kwargs['auto_correlations'] = False
+
         super(BiroSharedData, self).__init__(na=na, nchan=nchan, ntime=ntime,
             npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, **kwargs)
 
@@ -67,18 +71,77 @@ class BiroSharedData(BaseSharedData):
         reg_prop('beam_width', ft, 65)
         reg_prop('beam_clip', ft, 1.0881)
 
-        reg(name='uvw', shape=(3,'na','ntime'), dtype=ft)
-        reg(name='ant_pairs', shape=(2,'nbl','ntime'), dtype=np.int32)
+        reg(name='uvw', shape=(3,'ntime','na'), dtype=ft)
+        reg(name='ant_pairs', shape=(2,'ntime','nbl'), dtype=np.int32)
 
         reg(name='lm', shape=(2,'nsrc'), dtype=ft)
         reg(name='brightness', shape=(5,'ntime','nsrc'), dtype=ft)
         reg(name='gauss_shape', shape=(3, 'ngsrc'), dtype=ft)
 
         reg(name='wavelength', shape=('nchan',), dtype=ft)
-        reg(name='point_errors', shape=(2,'na','ntime'), dtype=ft)
-        reg(name='weight_vector', shape=(4,'nbl','ntime','nchan'), dtype=ft)
-        reg(name='bayes_data', shape=(4,'nbl','ntime','nchan'), dtype=ct)
+        reg(name='point_errors', shape=(2,'ntime','na'), dtype=ft)
+        reg(name='weight_vector', shape=(4,'ntime','nbl','nchan'), dtype=ft)
+        reg(name='bayes_data', shape=(4,'ntime','nbl','nchan'), dtype=ct)
 
-        reg(name='jones_scalar', shape=('na','ntime','nsrc','nchan'), dtype=ct)
-        reg(name='vis', shape=(4,'nbl','ntime','nchan'), dtype=ct)
-        reg(name='chi_sqrd_result', shape=('nbl','ntime','nchan'), dtype=ft)
+        reg(name='jones_scalar', shape=('ntime','na','nsrc','nchan'), dtype=ct)
+        reg(name='vis', shape=(4,'ntime','nbl','nchan'), dtype=ct)
+        reg(name='chi_sqrd_result', shape=('ntime','nbl','nchan'), dtype=ft)
+
+    def get_default_ant_pairs(self):
+        """
+        Return an np.array(shape=(2, ntime, nbl), dtype=np.int32]) containing the
+        default antenna pairs for each timestep at each baseline.
+        """
+        # Create the antenna pair mapping, from upper triangle indices
+        # based on the number of antenna. 
+        sd = self
+
+        return np.tile(np.int32(np.triu_indices(sd.na,1)),
+            sd.ntime).reshape(2,sd.ntime,sd.nbl)
+
+    def get_flat_ap_idx(self, src=False, chan=False):
+        """
+        Returns a flattened antenna pair index
+
+        Parameters
+        ----------
+        src : boolean
+            Expand the index over the source dimension
+        chan : boolean
+            Expand the index over the channel dimension
+        """
+        # TODO: Test for src=False and chan=True, and src=True and chan=False
+        # This works for
+        # - src=True and chan=True.
+        # - src=False and chan=False.
+
+        # The flattened antenna pair array will look something like this.
+        # It is based on 2 x ntime x nbl. Here we have 3 baselines and
+        # 4 timesteps.
+        #
+        #            timestep
+        #       0 0 0 1 1 1 2 2 2 3 3 3
+        #
+        # ant1: 0 0 1 0 0 1 0 0 1 0 0 1
+        # ant2: 1 2 2 1 2 2 1 2 2 1 2 2
+
+        sd = self        
+        ap = sd.get_default_ant_pairs().reshape(2,sd.ntime*sd.nbl)
+
+        C = 1
+
+        if src is True: C *= sd.nsrc
+        if chan is True: C *= sd.nchan
+
+        repeat = np.repeat(np.arange(sd.ntime),sd.nbl)*sd.na*C
+
+        ant0 = ap[0]*C + repeat
+        ant1 = ap[1]*C + repeat
+
+        if src is True or chan is True:
+            tile = np.tile(np.arange(C),sd.ntime*sd.nbl) 
+
+            ant0 = np.repeat(ant0, C) + tile
+            ant1 = np.repeat(ant1, C) + tile
+
+        return ant0, ant1

@@ -9,15 +9,15 @@ from montblanc.node import Node
 
 FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 8,    # Number of timesteps
-    'BLOCKDIMZ' : 1,    # Number of baselines
+    'BLOCKDIMY' : 8,    # Number of baselines
+    'BLOCKDIMZ' : 1,    # Number of timesteps
     'maxregs'   : 48    # Maximum number of registers
 }
 
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 4,    # Number of timesteps
-    'BLOCKDIMZ' : 1,    # Number of baselines
+    'BLOCKDIMY' : 4,    # Number of baselines
+    'BLOCKDIMZ' : 1,    # Number of timesteps
     'maxregs'   : 63    # Maximum number of registers
 }
 
@@ -62,8 +62,8 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * chi_sqrd_result)
 {
     int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
-    int TIME = blockIdx.y*blockDim.y + threadIdx.y;
-    int BL = blockIdx.z*blockDim.z + threadIdx.z;
+    int BL = blockIdx.y*blockDim.y + threadIdx.y;
+    int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
     if(BL >= NBL || TIME >= NTIME || CHAN >= NCHAN)
         return;   
@@ -80,25 +80,25 @@ void rime_gauss_B_sum_impl(
     __shared__ T Q[BLOCKDIMY];
     __shared__ T U[BLOCKDIMY];
     __shared__ T V[BLOCKDIMY];
+    __shared__ T a[BLOCKDIMY];
 
     __shared__ T wl[BLOCKDIMX];
 
     int i;
 
     // Figure out the antenna pairs
-    i = BL*NTIME + TIME; int ANT1 = ant_pairs[i];
+    i = TIME*NBL + BL;   int ANT1 = ant_pairs[i];
     i += NBL*NTIME;      int ANT2 = ant_pairs[i];
 
     // UVW coordinates vary by baseline and time, but not channel
     if(threadIdx.x == 0)
     {
         // UVW, calculated from u_pq = u_p - u_q
-        // baseline x BLOCKDIMY + TIME;
-        i = ANT1*NTIME + TIME; u[threadIdx.z][threadIdx.y] = uvw[i];
+        i = TIME*NA + ANT1;    u[threadIdx.z][threadIdx.y] = uvw[i];
         i += NA*NTIME;         v[threadIdx.z][threadIdx.y] = uvw[i];
         i += NA*NTIME;         w[threadIdx.z][threadIdx.y] = uvw[i];
 
-        i = ANT2*NTIME + TIME; u[threadIdx.z][threadIdx.y] -= uvw[i];
+        i = TIME*NA + ANT2;    u[threadIdx.z][threadIdx.y] -= uvw[i];
         i += NA*NTIME;         v[threadIdx.z][threadIdx.y] -= uvw[i];
         i += NA*NTIME;         w[threadIdx.z][threadIdx.y] -= uvw[i];
     }
@@ -123,23 +123,27 @@ void rime_gauss_B_sum_impl(
             i += NTIME*NSRC;      Q[threadIdx.y] = brightness[i];
             i += NTIME*NSRC;      U[threadIdx.y] = brightness[i];
             i += NTIME*NSRC;      V[threadIdx.y] = brightness[i];
+            i += NTIME*NSRC;      a[threadIdx.y] = brightness[i];
         }
 
         __syncthreads();
 
-        // Get the complex scalars for antenna one and multiply
+        // Get the complex scalars for antenna two and multiply
         // in the exponent term
-        i = (ANT1*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i];
-        // Get the complex scalars for antenna two
-        i = (ANT2*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
+        // Multiply in the power term
+        T power = Po::pow(T(REFWAVE)/wl[threadIdx.x], a[threadIdx.y]);
+        ant_two.x *= power; ant_two.y *= power;
+        // Get the complex scalar for antenna one and conjugate it
+        i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
 
-        // Divide the first antenna scalar by the second
-        T div = (ant_two.x*ant_two.x + ant_two.y*ant_two.y);
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        // a = ant_two.x b=ant_two.y c=ant_one.x d = ant_one.y
         typename Tr::ct value = Po::make_ct(
-            (ant_one.x*ant_two.x + ant_one.y*ant_two.y)/div,
-            (ant_one.y*ant_two.x - ant_one.x*ant_two.y)/div);
+            ant_two.x*ant_one.x - ant_two.y*ant_one.y,
+            ant_two.x*ant_one.y + ant_two.y*ant_one.x);
 
         Isum.x += (I[threadIdx.y]+Q[threadIdx.y])*value.x + 0.0*value.y;
         Isum.y += (I[threadIdx.y]+Q[threadIdx.y])*value.y + 0.0*value.x;
@@ -152,6 +156,8 @@ void rime_gauss_B_sum_impl(
 
         Vsum.x += U[threadIdx.y]*value.x - V[threadIdx.y]*value.y;
         Vsum.y += U[threadIdx.y]*value.y + V[threadIdx.y]*value.x;
+
+        __syncthreads();
     }
 
     for(int SRC=NPSRC;SRC<NSRC;++SRC)
@@ -165,6 +171,7 @@ void rime_gauss_B_sum_impl(
             i += NTIME*NSRC;      Q[threadIdx.y] = brightness[i];
             i += NTIME*NSRC;      U[threadIdx.y] = brightness[i];
             i += NTIME*NSRC;      V[threadIdx.y] = brightness[i];
+            i += NTIME*NSRC;      a[threadIdx.y] = brightness[i];
         }
 
         // gaussian shape only varies by source. Shape parameters
@@ -188,21 +195,24 @@ void rime_gauss_B_sum_impl(
         v1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
-        // Get the complex scalars for antenna one and multiply
+        // Multiply in the power term
+        exp *= Po::pow(T(REFWAVE)/wl[threadIdx.x], a[threadIdx.y]);
+
+        // Get the complex scalar for antenna two and multiply
         // in the exponent term
-        i = (ANT1*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i];
-        ant_one.x *= exp; ant_one.y *= exp;
-        // Get the complex scalars for antenna two
-        i = (ANT2*NTIME*NSRC + TIME*NSRC + SRC)*NCHAN + CHAN;
+        i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
+        ant_two.x *= exp; ant_two.y *= exp;
+        // Get the complex scalar for antenna one and conjugate it
+        i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
 
-        // Divide the first antenna scalar by the second
-        T div = (ant_two.x*ant_two.x + ant_two.y*ant_two.y);
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        // a = ant_two.x b=ant_two.y c=ant_one.x d = ant_one.y
         typename Tr::ct value = Po::make_ct(
-            (ant_one.x*ant_two.x + ant_one.y*ant_two.y)/div,
-            (ant_one.y*ant_two.x - ant_one.x*ant_two.y)/div);
-
+            ant_two.x*ant_one.x - ant_two.y*ant_one.y,
+            ant_two.x*ant_one.y + ant_two.y*ant_one.x);
+  
         Isum.x += (I[threadIdx.y]+Q[threadIdx.y])*value.x + 0.0*value.y;
         Isum.y += (I[threadIdx.y]+Q[threadIdx.y])*value.y + 0.0*value.x;
 
@@ -214,9 +224,12 @@ void rime_gauss_B_sum_impl(
 
         Vsum.x += U[threadIdx.y]*value.x - V[threadIdx.y]*value.y;
         Vsum.y += U[threadIdx.y]*value.y + V[threadIdx.y]*value.x;
+
+        __syncthreads();
     }
 
-    i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
+    //i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
+    i = (TIME*NBL + BL)*NCHAN + CHAN;
     visibilities[i] = Isum;
     typename Tr::ct delta = data_vis[i];
     delta.x -= Isum.x; delta.y -= Isum.y;
@@ -224,7 +237,7 @@ void rime_gauss_B_sum_impl(
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x = delta.x; Isum.y = delta.y;
 
-    i += 3*NBL*NTIME*NCHAN;
+    i += 3*NTIME*NBL*NCHAN;
     visibilities[i] = Qsum;
     delta = data_vis[i];
     delta.x -= Qsum.x; delta.y -= Qsum.y;
@@ -232,7 +245,7 @@ void rime_gauss_B_sum_impl(
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
-    i -= NBL*NTIME*NCHAN;
+    i -= NTIME*NBL*NCHAN;
     visibilities[i] = Usum;
     delta = data_vis[i];
     delta.x -= Usum.x; delta.y -= Usum.y;
@@ -240,7 +253,7 @@ void rime_gauss_B_sum_impl(
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
-    i -= NBL*NTIME*NCHAN;
+    i -= NTIME*NBL*NCHAN;
     visibilities[i] = Vsum;
     delta = data_vis[i];
     delta.x -= Vsum.x; delta.y -= Vsum.y;
@@ -248,7 +261,8 @@ void rime_gauss_B_sum_impl(
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
-    i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
+    //i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
+    i = (TIME*NBL + BL)*NCHAN + CHAN;    
     chi_sqrd_result[i] = Isum.x + Isum.y;
 }
 
@@ -328,22 +342,27 @@ class RimeGaussBSum(Node):
         D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
 
         chans_per_block = D['BLOCKDIMX'] if sd.nchan > D['BLOCKDIMX'] else sd.nchan
-        times_per_block = D['BLOCKDIMY'] if sd.ntime > D['BLOCKDIMY'] else sd.ntime
-        bl_per_block = D['BLOCKDIMZ'] if sd.nbl > D['BLOCKDIMZ'] else sd.nbl
+        bl_per_block = D['BLOCKDIMY'] if sd.nbl > D['BLOCKDIMY'] else sd.nbl
+        times_per_block = D['BLOCKDIMZ'] if sd.ntime > D['BLOCKDIMZ'] else sd.ntime
 
         chan_blocks = self.blocks_required(sd.nchan, chans_per_block)
-        time_blocks = self.blocks_required(sd.ntime, times_per_block)
         bl_blocks = self.blocks_required(sd.nbl, bl_per_block)
+        time_blocks = self.blocks_required(sd.ntime, times_per_block)
 
         return {
-            'block' : (chans_per_block, times_per_block, bl_per_block),
-            'grid'  : (chan_blocks, time_blocks, bl_blocks), 
+            'block' : (chans_per_block, bl_per_block, times_per_block),
+            'grid'  : (chan_blocks, bl_blocks, time_blocks), 
         }
 
     def execute(self, shared_data):
         sd = shared_data
 
-        self.kernel(sd.uvw_gpu, sd.brightness_gpu, sd.gauss_shape_gpu, 
+        # The gaussian shape array can conceivably be empty if
+        # no gaussian points were specified.
+        gauss = np.intp(0) if np.product(sd.gauss_shape_shape) == 0 \
+            else sd.gauss_shape_gpu
+
+        self.kernel(sd.uvw_gpu, sd.brightness_gpu, gauss, 
             sd.wavelength_gpu, sd.ant_pairs_gpu, sd.jones_scalar_gpu,
             sd.weight_vector_gpu,
             sd.vis_gpu, sd.bayes_data_gpu, sd.chi_sqrd_result_gpu,

@@ -16,6 +16,7 @@ class TestSharedData(BiroSharedData):
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
         npsrc=DEFAULT_NPSRC, ngsrc=0, dtype=np.float32, **kwargs):
 
+        # Store CPU arrays
         kwargs['store_cpu'] = True
 
         super(TestSharedData, self).__init__(na=na, nchan=nchan, ntime=ntime,
@@ -39,12 +40,13 @@ class TestSharedData(BiroSharedData):
         uvw = shape_list([3.*r, 2.*r, 1.*r],
             shape=sd.uvw_shape, dtype=sd.uvw_dtype)
 
-		# Normalise UVW coordinates relative to antenna 0
-        uvw = uvw - uvw[:,0,np.newaxis,:]
+		# Normalise Antenna 0
+        uvw[:,:,0] = 0
 
         # Point source coordinates in the l,m,n (sky image) domain
-        l=ft(np.random.random(nsrc)*0.1)
-        m=ft(np.random.random(nsrc)*0.1)
+        # 1e-4 ~ 20 arcseconds
+        l=ft(np.random.random(nsrc)*1e-4)
+        m=ft(np.random.random(nsrc)*1e-4)
         lm=shape_list([l,m], sd.lm_shape, sd.lm_dtype)
 
         # Brightness matrix for the point sources

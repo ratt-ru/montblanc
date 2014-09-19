@@ -14,48 +14,34 @@ class RimeCPU(object):
         """
         Compute the shape values for the gaussian sources.
 
-        Returns a (nbl, ntime, ngsrc, nchan) matrix of floating point scalars.
+        Returns a (ntime, nbl, ngsrc, nchan) matrix of floating point scalars.
         """
 
         sd = self.shared_data
 
         try:
-            # The flattened antenna pair array will look something like this.
-            # It is based on 2 x nbl x ntime. Here we have 3 baselines and
-            # 4 timesteps.
-            #
-            #            timestep
-            #       0 1 2 3 0 1 2 3 0 1 2 3
-            #
-            # ant1: 0 0 0 0 0 0 0 0 1 1 1 1
-            # ant2: 1 1 1 1 2 2 2 2 2 2 2 2
+            ant0, ant1 = sd.get_flat_ap_idx()
 
-            # Create indexes into the scalar EK terms from the antenna pairs.
-            # Scalar EK is 2 x na x ntime x nsrc x nchan.
-            ap = sd.ant_pairs_cpu.reshape(2,sd.nbl*sd.ntime)
-
-            ant1 = ap[0]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
-            ant2 = ap[1]*sd.ntime + np.tile(np.arange(sd.ntime), sd.nbl)
-
-            uvw = sd.uvw_cpu.reshape(3,sd.na*sd.ntime)
-            u = (uvw[0][ant1] - uvw[0][ant2]).reshape(sd.nbl, sd.ntime)
-            v = (uvw[1][ant1] - uvw[1][ant2]).reshape(sd.nbl, sd.ntime)
-            w = (uvw[2][ant1] - uvw[2][ant2]).reshape(sd.nbl, sd.ntime)
+            uvw = sd.uvw_cpu.reshape(3,sd.ntime*sd.na)
+            u = (uvw[0][ant1] - uvw[0][ant0]).reshape(sd.ntime, sd.nbl)
+            v = (uvw[1][ant1] - uvw[1][ant0]).reshape(sd.ntime, sd.nbl)
+            w = (uvw[2][ant1] - uvw[2][ant0]).reshape(sd.ntime, sd.nbl)
 
             el = sd.gauss_shape_cpu[0]
             em = sd.gauss_shape_cpu[1]
+            R = sd.gauss_shape_cpu[2]
 
             # OK, try obtain the same results with the fwhm factored out!
             # u1 = u*em - v*el
             # v1 = u*el + v*em
             u1 = (np.outer(u, em) - np.outer(v, el)) \
-                .reshape(sd.nbl,sd.ntime,sd.ngsrc)
+                .reshape(sd.ntime,sd.nbl,sd.ngsrc)
             v1 = (np.outer(u, el) + np.outer(v, em)) \
-                .reshape(sd.nbl,sd.ntime,sd.ngsrc)
+                .reshape(sd.ntime,sd.nbl,sd.ngsrc)
 
             # Obvious given the above reshape
-            assert u1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
-            assert v1.shape == (sd.nbl, sd.ntime, sd.ngsrc)
+            assert u1.shape == (sd.ntime, sd.nbl, sd.ngsrc)
+            assert v1.shape == (sd.ntime, sd.nbl, sd.ngsrc)
 
             # Construct the scaling factor, this includes the wavelength/frequency
             # into the mix.
@@ -66,7 +52,7 @@ class RimeCPU(object):
             u1 = u1[:,:,:,np.newaxis]*scale_uv[np.newaxis,np.newaxis,np.newaxis,:]
             v1 = v1[:,:,:,np.newaxis]*scale_uv[np.newaxis,np.newaxis,np.newaxis,:]
             # u1 *= R, the ratio of the gaussian axis
-            u1 *= sd.gauss_shape_cpu[2][np.newaxis,np.newaxis,:,np.newaxis]
+            u1 *= R[np.newaxis,np.newaxis,:,np.newaxis]
 
             return np.exp(-(u1**2 + v1**2))
 
@@ -75,70 +61,113 @@ class RimeCPU(object):
 
     def compute_k_jones_scalar_per_ant(self):
         """
-        Computes the scalar K (phase) term of the RIME using numpy.
+        Computes the scalar K (phase) term of the RIME per antenna.
 
-        Returns a (na,ntime,nsrc,nchan) matrix of complex scalars.
+        Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
         sd = self.shared_data
 
         try:
+            wave = sd.wavelength_cpu
+
+            u, v, w = sd.uvw_cpu[0], sd.uvw_cpu[1], sd.uvw_cpu[2]
+            l, m = sd.lm_cpu[0], sd.lm_cpu[1]
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
             n = np.sqrt(1. - sd.lm_cpu[0]**2 - sd.lm_cpu[1]**2) - 1.
 
-            # u*l+v*m+w*n. Outer product creates array of dim na x ntime x nsrcs
-            phase = (np.outer(sd.uvw_cpu[0], sd.lm_cpu[0]) + \
-                np.outer(sd.uvw_cpu[1], sd.lm_cpu[1]) + \
-                np.outer(sd.uvw_cpu[2],n))\
-                    .reshape(sd.na, sd.ntime, sd.nsrc)
-            assert phase.shape == (sd.na, sd.ntime, sd.nsrc)            
+            # w*n+v*m+u*l. Outer product creates array of dim ntime x na x nsrcs
+            phase = (np.outer(w,n) + np.outer(v, m) + np.outer(u, l)) \
+                    .reshape(sd.ntime, sd.na, sd.nsrc)
+            assert phase.shape == (sd.ntime, sd.na, sd.nsrc)            
 
             # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. na x ntime x nchan x nsrcs 
             phase = (2*np.pi*1j*phase)[:,:,:,np.newaxis]/ \
-                sd.wavelength_cpu[np.newaxis,np.newaxis,np.newaxis,:]
-            assert phase.shape == (sd.na, sd.ntime, sd.nsrc, sd.nchan)
+                wave[np.newaxis,np.newaxis,np.newaxis,:]
+            assert phase.shape == (sd.ntime, sd.na, sd.nsrc, sd.nchan)
+
+            return np.exp(phase)
+
+        except AttributeError as e:
+            rethrow_attribute_exception(e)
+
+    def compute_k_jones_scalar_per_bl(self):
+        """
+        Computes the scalar K (phase) term of the RIME per baseline.
+
+        Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
+        """
+        sd = self.shared_data
+
+        try:
+            ant0, ant1 = sd.get_flat_ap_idx(src=True,chan=True)
+            k_jones = self.compute_k_jones_scalar_per_ant().flatten()
+
+            k_jones_per_bl = (k_jones[ant1]*k_jones[ant0].conj())\
+                .reshape(sd.ntime,sd.nbl,sd.nsrc,sd.nchan)
+
+            wave = sd.wavelength_cpu
+            alpha =sd.brightness_cpu[4]
 
             # Dimension ntime x nsrc x nchan
-            power = np.power(sd.ref_wave/sd.wavelength_cpu[np.newaxis,np.newaxis,:],
-                sd.brightness_cpu[4,:,:,np.newaxis])
-            assert power.shape == (sd.ntime,sd.nsrc,sd.nchan)
+            power = np.power(sd.ref_wave/wave[np.newaxis,np.newaxis,:],
+                alpha[:,:,np.newaxis])
+            assert power.shape == (sd.ntime, sd.nsrc, sd.nchan)
 
-            # Combine the power and phase together. Broadcast
-            # just works here
-            phase_term = power*np.exp(phase)
-            assert phase_term.shape == (sd.na, sd.ntime, sd.nsrc, sd.nchan)
+            # Add in the K power term
+            k_jones_per_bl *= power[:,np.newaxis,:,:]
 
-            return phase_term
+            # Add in the shape terms of the gaussian sources.
+            if sd.ngsrc > 0:
+                k_jones_per_bl[:,:,sd.npsrc:,:] *= self.compute_gaussian_shape()
 
+            return k_jones_per_bl
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
     def compute_e_jones_scalar_per_ant(self):
         """
-        Computes the scalar E (analytic cos^3) term of the RIME per antenna.
+        Computes the scalar E (analytic cos^3) term per antenna.
 
-        returns a (na,nchan,ntime,nsrc) matrix of complex scalars.
+        Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
         sd = self.shared_data
 
         try:
             # Compute the offsets for different antenna
-            # Broadcasting here produces, na x ntime x nsrc
+            # Broadcasting here produces, ntime x na x  nsrc
             l_diff = sd.lm_cpu[0] - sd.point_errors_cpu[0,:,:,np.newaxis]
             m_diff = sd.lm_cpu[1] - sd.point_errors_cpu[1,:,:,np.newaxis]
             E_p = np.sqrt(l_diff**2 + m_diff**2)
 
-            assert E_p.shape == (sd.na, sd.ntime, sd.nsrc)
+            assert E_p.shape == (sd.ntime, sd.na, sd.nsrc)
 
-            # Broadcasting here produces, nbl x nchan x ntime x nsrc
-            E_p = sd.beam_width*1e-9*E_p[:,:,:,np.newaxis] *\
+            # Broadcasting here produces, ntime x nbl x nsrc x nchan
+            E_p = E_p[:,:,:,np.newaxis]*sd.beam_width*1e-9*\
                 sd.wavelength_cpu[np.newaxis,np.newaxis,np.newaxis,:]
             np.clip(E_p, np.finfo(sd.ft).min, sd.beam_clip, E_p)
             E_p = np.cos(E_p)**3
 
-            assert E_p.shape == (sd.na, sd.ntime, sd.nsrc, sd.nchan)
+            assert E_p.shape == (sd.ntime, sd.na, sd.nsrc, sd.nchan)
 
             return E_p
+        except AttributeError as e:
+            rethrow_attribute_exception(e)
+
+    def compute_e_jones_scalar_per_bl(self):
+        """
+        Computes the scalar E (analytic cos^3) term per baseline.
+
+        Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
+        """
+        sd = self.shared_data
+
+        try:
+            ant0, ant1 = sd.get_flat_ap_idx(src=True,chan=True)
+            e_jones = self.compute_e_jones_scalar_per_ant().flatten()
+
+            return (e_jones[ant1]*e_jones[ant0].conj())\
+                .reshape(sd.ntime,sd.nbl,sd.nsrc,sd.nchan)
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
@@ -146,11 +175,22 @@ class RimeCPU(object):
         """
         Computes the scalar EK (phase*cos^3) term of the RIME.
 
-        Return a (nbl,nchan,ntime,nsrc) matrix of complex scalars.
+        Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
+        """
+        return self.compute_k_jones_scalar_per_ant()*self.compute_e_jones_scalar_per_ant()
+
+    def compute_ek_jones_scalar_per_bl(self):
+        """
+        Computes the scalar EK (phase*cos^3) term of the RIME.
+
+        Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
         sd = self.shared_data
 
-        return self.compute_k_jones_scalar_per_ant()*self.compute_e_jones_scalar_per_ant()
+        per_bl_ek_scalar = self.compute_k_jones_scalar_per_bl() * \
+            self.compute_e_jones_scalar_per_bl()
+
+        return per_bl_ek_scalar
 
     def compute_b_jones(self):
         """
@@ -174,52 +214,69 @@ class RimeCPU(object):
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
+    def compute_ebk_jones(self):
+        """
+        Computes the jones matrices based on the
+        scalar EK term and the 2x2 B term.
+
+        Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
+        """
+        sd = self.shared_data
+        
+        per_bl_ek_scalar = self.compute_ek_jones_scalar_per_bl()
+        b_jones = self.compute_b_jones()
+
+        jones = per_bl_ek_scalar[np.newaxis,:,:,:,:]*\
+            b_jones[:,:,np.newaxis,:,np.newaxis]
+        assert jones.shape == (4,sd.ntime,sd.nbl,sd.nsrc,sd.nchan)
+
+        return jones
+
+    def compute_bk_jones(self):
+        """
+        Computes the jones matrices based on the
+        scalar EK term and the 2x2 B term.
+
+        Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
+        """
+        sd = self.shared_data
+        
+        per_bl_k_scalar = self.compute_k_jones_scalar_per_bl()
+        b_jones = self.compute_b_jones()
+
+        jones = per_bl_k_scalar[np.newaxis,:,:,:,:]*\
+            b_jones[:,:,np.newaxis,:,np.newaxis]
+        assert jones.shape == (4,sd.ntime,sd.nbl,sd.nsrc,sd.nchan)
+
+        return jones
+
     def compute_ebk_vis(self):
         """
         Computes the complex visibilities based on the
         scalar EK term and the 2x2 B term.
 
-        Returns a (4,nbl,ntime,nchan) matrix of complex scalars.
+        Returns a (4,ntime,nbl,nchan) matrix of complex scalars.
         """
+
         sd = self.shared_data
 
-        # The flattened antenna pair array will look something like this.
-        # It is based on 2 x nbl x ntime. Here we have 3 baselines and
-        # 4 timesteps.
-        #
-        #            timestep
-        #       0 1 2 3 0 1 2 3 0 1 2 3
-        #
-        # ant1: 0 0 0 0 0 0 0 0 1 1 1 1
-        # ant2: 1 1 1 1 2 2 2 2 2 2 2 2
+        vis = np.add.reduce(self.compute_ebk_jones(),axis=3)
+        assert vis.shape == (4,sd.ntime,sd.nbl,sd.nchan)
 
-        # Create indexes into the scalar EK terms from the antenna pairs.
-        # Scalar EK is 2 x na x ntime x nsrc x nchan.
-        ap = sd.ant_pairs_cpu.reshape(2,sd.nbl*sd.ntime)
+        return vis
 
-        cs = sd.nchan*sd.nsrc
-        tcs = sd.ntime*cs
+    def compute_bk_vis(self):
+        """
+        Computes the complex visibilities based on the
+        scalar K term and the 2x2 B term.
 
-        ant1 = np.repeat(ap[0],cs)*tcs + np.tile(np.arange(tcs), sd.nbl)
-        ant2 = np.repeat(ap[1],cs)*tcs + np.tile(np.arange(tcs), sd.nbl)
+        Returns a (4,ntime,nbl,nchan) matrix of complex scalars.
+        """
 
-        ek_scalar = self.compute_ek_jones_scalar_per_ant().ravel()
+        sd = self.shared_data
 
-        per_bl_ek_scalar = (ek_scalar[ant1]/ek_scalar[ant2])\
-            .reshape(sd.nbl,sd.ntime,sd.nsrc,sd.nchan)
-
-        # Multiply the gaussian sources by their shape terms.
-        if sd.ngsrc > 0:
-            per_bl_ek_scalar[:,:,sd.npsrc:,:] *= self.compute_gaussian_shape()
-
-        b_jones = self.compute_b_jones()
-
-        jones = per_bl_ek_scalar[np.newaxis,:,:,:,:]*\
-            b_jones[:,np.newaxis,:,:,np.newaxis]
-        assert jones.shape == (4,sd.nbl,sd.ntime,sd.nsrc,sd.nchan)
-
-        vis = np.add.reduce(jones,axis=3)
-        assert vis.shape == (4,sd.nbl,sd.ntime,sd.nchan)
+        vis = np.add.reduce(self.compute_bk_jones(),axis=3)
+        assert vis.shape == (4,sd.ntime,sd.nbl,sd.nchan)
 
         return vis
 
@@ -231,7 +288,7 @@ class RimeCPU(object):
             weight_vector : boolean
                 True if the chi squared test terms should be computed with a noise vector
 
-        Returns a (nbl,nchan,ntime) matrix of floating point scalars.
+        Returns a (ntime,nbl,nchan) matrix of floating point scalars.
         """
         sd = self.shared_data
 
@@ -239,7 +296,7 @@ class RimeCPU(object):
             # Take the difference between the visibilities and the model
             # (4,nbl,nchan,ntime)
             d = sd.vis_cpu - sd.bayes_data_cpu
-            assert d.shape == (4, sd.nbl, sd.ntime, sd.nchan)
+            assert d.shape == (4,sd.ntime,sd.nbl,sd.nchan)
 
             # Square of the real and imaginary components
             real_term, imag_term = d.real**2, d.imag**2
@@ -257,7 +314,7 @@ class RimeCPU(object):
             # for the final result.
             chi_sqrd_terms = np.add.reduce(real_term,axis=0) + \
                 np.add.reduce(imag_term,axis=0)
-            assert chi_sqrd_terms.shape == (sd.nbl, sd.ntime, sd.nchan)
+            assert chi_sqrd_terms.shape == (sd.ntime,sd.nbl,sd.nchan)
 
             return chi_sqrd_terms
 
