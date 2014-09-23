@@ -13,6 +13,7 @@ from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
 
 from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
+from montblanc.pipeline import Pipeline
 
 class TestBiroV2(unittest.TestCase):
     """
@@ -44,13 +45,10 @@ class TestBiroV2(unittest.TestCase):
         # for testing the E term
         slvr.set_beam_width(65*1e5)
 
-        rime_ek = RimeEK()
         rime_cpu = RimeCPU(slvr)
 
-        # Initialise the BK float kernel
-        rime_ek.initialise(slvr)
-        rime_ek.execute(slvr)
-        rime_ek.shutdown(slvr)
+        # Call the GPU solver
+        slvr.solve()
 
         ek_cpu = rime_cpu.compute_ek_jones_scalar_per_ant()
         ek_gpu = slvr.jones_scalar_gpu.get()
@@ -60,15 +58,17 @@ class TestBiroV2(unittest.TestCase):
 
     def test_EK_float(self):
         """ Single precision EK test """
-        slvr = TestSolver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,dtype=np.float32)      
+        with TestSolver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
+            dtype=np.float32,pipeline=Pipeline([RimeEK()])) as slvr:
 
-        self.EK_test_impl(slvr)
+            self.EK_test_impl(slvr)
 
     def test_EK_double(self):
         """ Double precision EK test """
-        slvr = TestSolver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,dtype=np.float64)      
+        with TestSolver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
+            dtype=np.float64,pipeline=Pipeline([RimeEK()])) as slvr:
 
-        self.EK_test_impl(slvr)
+            self.EK_test_impl(slvr)
 
     def gauss_B_sum_test_impl(self, slvr, weight_vector=False, cmp=None):
         if cmp is None: cmp = {}
@@ -78,15 +78,10 @@ class TestBiroV2(unittest.TestCase):
         slvr.set_beam_width(65*1e5)
         slvr.set_sigma_sqrd(np.random.random(1)[0])
 
-        rime_ek = RimeEK()
-        rime_gauss_B_sum = RimeGaussBSum(weight_vector=weight_vector)
         rime_cpu = RimeCPU(slvr)
 
-        kernels = [rime_ek, rime_gauss_B_sum]
-
-        for k in kernels: k.initialise(slvr)
-        for k in kernels: k.execute(slvr)
-        for k in kernels: k.shutdown(slvr)
+        # Call the GPU solver
+        slvr.solve()
 
         ebk_vis_cpu = rime_cpu.compute_ebk_vis()
         ebk_vis_gpu = slvr.vis_gpu.get()
@@ -99,19 +94,19 @@ class TestBiroV2(unittest.TestCase):
 
     def test_gauss_B_sum_float(self):
         """ """
-        slvr = TestSolver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20,
-            dtype=np.float32)      
+        for w in [True,False]:
+            with TestSolver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
+                pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
 
-        self.gauss_B_sum_test_impl(slvr, weight_vector=False, cmp={'rtol' : 1e-3})
-        self.gauss_B_sum_test_impl(slvr, weight_vector=True, cmp={'rtol' : 1e-3})
-
+                self.gauss_B_sum_test_impl(slvr, weight_vector=w, cmp={'rtol' : 1e-3})
+        
     def test_gauss_B_sum_double(self):
         """ """
-        slvr = TestSolver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20,
-            dtype=np.float64)      
+        for w in [True,False]:
+            with TestSolver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
+                pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
 
-        self.gauss_B_sum_test_impl(slvr, weight_vector=False)
-        self.gauss_B_sum_test_impl(slvr, weight_vector=True)
+                self.gauss_B_sum_test_impl(slvr, weight_vector=w, cmp={'rtol' : 1e-3})
 
     def time_predict(self, slvr):
         na=slvr.na          # Number of antenna
@@ -181,16 +176,16 @@ class TestBiroV2(unittest.TestCase):
         self.assertTrue(np.allclose(vis_predict_cyril, vis_predict_cpu))
 
     def test_predict_double(self):
-        slvr = TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float64)
+        with TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+            dtype=np.float64) as slvr:
 
-        self.do_predict_test(slvr)
+            self.do_predict_test(slvr)
 
     def test_predict_float(self):
-        slvr = TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float32)
+        with TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+            dtype=np.float32) as slvr:
 
-        self.do_predict_test(slvr)
+            self.do_predict_test(slvr)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV2)

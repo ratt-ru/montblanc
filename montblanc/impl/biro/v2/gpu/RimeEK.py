@@ -36,10 +36,6 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMY ${BLOCKDIMY}
 #define BLOCKDIMZ ${BLOCKDIMZ}
 
-#define REFWAVE ${ref_wave}
-#define BEAMCLIP ${beam_clip}
-#define BEAMWIDTH ${beam_width}
-
 template <
     typename T,
     typename Tr=montblanc::kernel_traits<T>,
@@ -51,7 +47,9 @@ void rime_jones_EK_impl(
     T * brightness,
     T * wavelength,
     T * point_errors,
-    typename Tr::ct * jones_scalar)
+    typename Tr::ct * jones_scalar,
+    T beam_width,
+    T beam_clip)
 {
 	int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
@@ -122,8 +120,8 @@ void rime_jones_EK_impl(
 		diff = m[0] - md[threadIdx.z][threadIdx.y];
 		E += diff*diff;
 		E = Po::sqrt(E);
-		E *= T(BEAMWIDTH*1e-9)*wl[threadIdx.x];
-		E = Po::min(E, T(BEAMCLIP));
+		E *= beam_width*1e-9*wl[threadIdx.x];
+		E = Po::min(E, beam_clip);
 		E = Po::cos(E);
 		E = E*E*E;
 
@@ -142,10 +140,12 @@ __global__ void rime_jones_EK_float(
     float * brightness,
     float * wavelength,
     float * point_errors,
-    float2 * jones)
+    float2 * jones,
+    float beam_width,
+    float beam_clip)
 {
     rime_jones_EK_impl<float>(UVW, LM, brightness, wavelength,
-        point_errors, jones);
+        point_errors, jones, beam_width, beam_clip);
 }
 
 
@@ -155,10 +155,12 @@ __global__ void rime_jones_EK_double(
     double * brightness,
     double * wavelength,
     double * point_errors,
-    double2 * jones)
+    double2 * jones,
+    double beam_width,
+    double beam_clip)
 {
     rime_jones_EK_impl<double>(UVW, LM, brightness, wavelength,
-        point_errors, jones);
+        point_errors, jones, beam_width, beam_clip);
 }
 
 } // extern "C" {
@@ -218,6 +220,7 @@ class RimeEK(Node):
 
         self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
             slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_scalar_gpu,
+            slvr.beam_width, slvr.beam_clip,
             **self.get_kernel_params(slvr))
 
     def post_execution(self, solver):

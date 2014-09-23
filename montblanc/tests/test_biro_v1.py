@@ -18,6 +18,8 @@ from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
 
 from montblanc.impl.biro.v1.cpu.RimeCPU import RimeCPU
 
+from montblanc.pipeline import Pipeline
+
 class TestBiroV1(unittest.TestCase):
     """
     TestRimes class defining the unit test cases for montblanc
@@ -44,12 +46,8 @@ class TestBiroV1(unittest.TestCase):
         """ Type independent implementation of the BK test """
         if cmp is None: cmp = {}
 
-        rime_bk = RimeBK()
-
-        # Initialise the BK float kernel
-        rime_bk.initialise(slvr)
-        rime_bk.execute(slvr)
-        rime_bk.shutdown(slvr)
+        # Call the GPU solver
+        slvr.solve()
 
         # Compute the jones matrix on the CPU
         jones_cpu = RimeCPU(slvr).compute_bk_jones()
@@ -62,15 +60,17 @@ class TestBiroV1(unittest.TestCase):
 
     def test_BK_float(self):
         """ single precision BK test """
-        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=200, dtype=np.float32)      
+        with TestSolver(na=10,nchan=32,ntime=10,npsrc=200,
+            pipeline=Pipeline([RimeBK()]), dtype=np.float32) as slvr:
 
-        self.BK_test_impl(slvr)
+            self.BK_test_impl(slvr)
 
     def test_BK_double(self):
         """ double precision BK test """
-        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float64)
+        with TestSolver(na=10,nchan=32,ntime=10,npsrc=200,
+            pipeline=Pipeline([RimeBK()]), dtype=np.float64) as slvr:
 
-        self.BK_test_impl(slvr)
+            self.BK_test_impl(slvr)
 
     def EBK_test_impl(self,slvr,cmp=None):
         """ Type independent implementation of the EBK test """
@@ -80,15 +80,8 @@ class TestBiroV1(unittest.TestCase):
         # for testing the E term
         slvr.set_beam_width(65*1e5)
 
-        kernels = []
-
-        if slvr.npsrc > 0: kernels.append(RimeEBK(gaussian=False))
-        if slvr.ngsrc > 0: kernels.append(RimeEBK(gaussian=True))
-
-        # Invoke the EBK kernels
-        for k in kernels: k.initialise(slvr)
-        for k in kernels: k.execute(slvr)
-        for k in kernels: k.shutdown(slvr)
+        # Call the GPU solver
+        slvr.solve()
 
         jones_gpu = slvr.jones_gpu.get()
         jones_cpu = RimeCPU(slvr).compute_ebk_jones()
@@ -97,30 +90,35 @@ class TestBiroV1(unittest.TestCase):
 
     def test_pEBK_double(self):
         """ double precision EBK test for point sources only """
-        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float64)
+        with TestSolver(na=10,nchan=32,ntime=10,npsrc=200,ngsrc=0,
+            dtype=np.float64, pipeline=Pipeline([RimeEBK(gaussian=False)])) as slvr:
 
-        self.EBK_test_impl(slvr)
+            self.EBK_test_impl(slvr)
 
     def test_pEBK_float(self):
         """ single precision EBK test for point sources only """
-        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float32)
+        with TestSolver(na=10,nchan=32,ntime=10,npsrc=200,ngsrc=0,
+            dtype=np.float32, pipeline=Pipeline([RimeEBK(gaussian=False)])) as slvr:
 
-        # Hmmm, we don't need this tolerance now? I wonder why it's working...
-        #self.EBK_test_impl(slvr, cmp={'rtol' : 1e-2,'atol' : 1e-2})
-        self.EBK_test_impl(slvr)
+            # Hmmm, we don't need this tolerance now? I wonder why it's working...
+            #self.EBK_test_impl(slvr, cmp={'rtol' : 1e-2,'atol' : 1e-2})
+            self.EBK_test_impl(slvr)
 
     def test_pgEBK_double(self):
         """ double precision EBK test for point and gaussian sources """
-        #slvr = TestSolver(na=2,nchan=2,ntime=1,npsrc=2,ngsrc=1,
-        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,dtype=np.float64)
+        with TestSolver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
+            dtype=np.float64,
+            pipeline=Pipeline([RimeEBK(gaussian=False), RimeEBK(gaussian=True)])) as slvr:
 
-        self.EBK_test_impl(slvr)
+            self.EBK_test_impl(slvr)
 
     def test_pgEBK_float(self):
         """ single precision EBK test for point and gaussian sources """
-        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,dtype=np.float32)
-
-        self.EBK_test_impl(slvr, cmp={'rtol' : 1e-2})
+        with TestSolver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
+            dtype=np.float64,
+            pipeline=Pipeline([RimeEBK(gaussian=False), RimeEBK(gaussian=True)])) as slvr:
+    
+            self.EBK_test_impl(slvr, cmp={'rtol' : 1e-2})
 
     def multiply_test_impl(self, slvr, cmp=None):
         """ Type independent implementation of the multiply test """
@@ -176,28 +174,24 @@ class TestBiroV1(unittest.TestCase):
     def test_multiply_double(self):
         """ double precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        slvr = TestSolver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float64)
+        with TestSolver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float64) as slvr:
         
-        self.multiply_test_impl(slvr)
+            self.multiply_test_impl(slvr)
 
     @unittest.skipIf(False, 'test_multiply_float numpy code is somewhat inefficient')
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        slvr = TestSolver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32)
+        with TestSolver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32) as slvr:
         
-        self.multiply_test_impl(slvr)
+            self.multiply_test_impl(slvr)
 
     def chi_squared_test_impl(self, slvr, weight_vector=False, cmp=None):
         """ Type independent implementation of the chi squared test """
         if cmp is None: cmp = {}
 
-        kernels = [RimeChiSquared(weight_vector=weight_vector)]
-
-        # Initialise, execute and shutdown the kernels
-        for k in kernels: k.initialise(slvr)
-        for k in kernels: k.execute(slvr)
-        for k in kernels: k.shutdown(slvr)
+        # Call the GPU solver
+        slvr.solve()
 
         # Compute the chi squared sum values
         chi_sqrd_cpu = RimeCPU(slvr).compute_chi_sqrd_sum_terms(weight_vector=weight_vector)
@@ -214,35 +208,36 @@ class TestBiroV1(unittest.TestCase):
 
     def test_chi_squared_double(self):
         """ double precision chi squared test """
-        slvr = TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64)
+        with TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64,
+            pipeline=Pipeline([RimeChiSquared(weight_vector=False)])) as slvr:
 
-        self.chi_squared_test_impl(slvr)
+            self.chi_squared_test_impl(slvr)
 
     def test_chi_squared_float(self):
         """ single precision chi squared test """
-        slvr = TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32)
+        with TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64,
+            pipeline=Pipeline([RimeChiSquared(weight_vector=False)])) as slvr:
 
-        self.chi_squared_test_impl(slvr, cmp={'rtol' : 1e-4})
+            self.chi_squared_test_impl(slvr, cmp={'rtol' : 1e-4})
 
     def test_chi_squared_weight_vector_double(self):
         """ double precision chi squared test with noise vector """
-        slvr = TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64)
+        with TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64,
+            pipeline=Pipeline([RimeChiSquared(weight_vector=True)])) as slvr:
 
-        self.chi_squared_test_impl(slvr, weight_vector=True)
+            self.chi_squared_test_impl(slvr, weight_vector=True)
 
     def test_chi_squared_weight_vector_float(self):
         """ single precision chi squared test with noise vector """
-        slvr = TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32)
+        with TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32,
+            pipeline=Pipeline([RimeChiSquared(weight_vector=True)])) as slvr:
 
-        self.chi_squared_test_impl(slvr, weight_vector=True, cmp={'rtol' : 1e-3 })
+            self.chi_squared_test_impl(slvr,
+                weight_vector=True, cmp={'rtol' : 1e-3 })
 
     def reduce_test_impl(self, slvr, cmp=None):
         """ Type independent implementation of the reduction tests """
         if cmp is None: cmp = {}
-
-        rime_reduce = RimeJonesReduce()
-
-        rime_reduce.initialise(slvr)
 
         # Create the jones matrices
         jsize = np.product(slvr.jones_shape)
@@ -253,11 +248,8 @@ class TestBiroV1(unittest.TestCase):
         # the visibilities.
         slvr.transfer_jones(jones_cpu)
 
-        # Compute the reduction
-        rime_reduce.execute(slvr)
-
-        # Shutdown the rime node, we don't need it any more
-        rime_reduce.shutdown(slvr)
+        # Call the GPU solver
+        slvr.solve()
 
         # Add everything along the last axis (time)
         vis_cpu = np.sum(jones_cpu,axis=len(slvr.jones_shape)-1)
@@ -270,15 +262,17 @@ class TestBiroV1(unittest.TestCase):
 
     def test_reduce_double(self):
         """ double precision reduction test """
-        slvr = TestSolver(na=10, nchan=32, ntime=10, npsrc=200,dtype=np.float64)
+        with TestSolver(na=10, nchan=32, ntime=10, npsrc=200,
+            dtype=np.float64, pipeline=Pipeline([RimeJonesReduce()])) as slvr:
 
-        self.reduce_test_impl(slvr)
+            self.reduce_test_impl(slvr)
 
     def test_reduce_float(self):
         """ single precision reduction test """
-        slvr = TestSolver(na=10, nchan=32, ntime=10, npsrc=200,dtype=np.float32)
+        with TestSolver(na=10, nchan=32, ntime=10, npsrc=200,
+            dtype=np.float32, pipeline=Pipeline([RimeJonesReduce()])) as slvr:
 
-        self.reduce_test_impl(slvr)
+            self.reduce_test_impl(slvr)
 
     def gauss_test_impl(self, solver, cmp=None):
         """ Type independent implementation of the gaussian tests """
@@ -353,11 +347,6 @@ class TestBiroV1(unittest.TestCase):
         import pycuda.driver as cuda
 
         slvr = solver        
-        rime_bk = RimeBK()
-        rime_reduce = RimeJonesReduce()
-
-        # Initialise the node
-        rime_bk.initialise(slvr)
 
         vis_predict_cpu = self.time_predict(slvr)
 
@@ -366,18 +355,14 @@ class TestBiroV1(unittest.TestCase):
         kernels_start, kernels_end = cuda.Event(), cuda.Event()
         kernels_start.record()
 
-        # Invoke the kernel
-        rime_bk.execute(slvr)
-        rime_reduce.execute(slvr)
+        # Call the GPU solver
+        slvr.solve()
 
         kernels_end.record()
         kernels_end.synchronize()
 
         montblanc.log.info('kernels: elapsed time: %fs',
             kernels_start.time_till(kernels_end)*1e-3)
-
-        # Shutdown the rime node, we don't need it any more
-        rime_bk.shutdown(slvr)
 
         # Shift the gpu jones matrices so they are on the last axis
         vis_gpu = np.rollaxis(slvr.vis_gpu.get(),0,len(slvr.jones_shape)-2).squeeze()
@@ -386,16 +371,16 @@ class TestBiroV1(unittest.TestCase):
         self.assertTrue(np.allclose(vis_gpu, vis_predict_cpu))
 
     def test_predict_double(self):
-        slvr = TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float64)
+        with TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+            dtype=np.float64, pipeline=Pipeline([RimeBK(), RimeJonesReduce()])) as slvr:
 
-        self.predict_test_impl(slvr)
+            self.predict_test_impl(slvr)
 
     def test_predict_float(self):
-        slvr = TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float32)
+        with TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+            dtype=np.float32, pipeline=Pipeline([RimeBK(), RimeJonesReduce()])) as slvr:
 
-        self.predict_test_impl(slvr)
+            self.predict_test_impl(slvr)
 
     def test_sum_float(self):
         slvr = TestSolver(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32)

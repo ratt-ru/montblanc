@@ -32,11 +32,8 @@ class Pipeline:
         self.pipeline = node_list
         self.initialised = False
 
-        self.nr_of_executions = 0
-        self.sum_execution_time = 0.0
-        self.last_execution_time = 0.0
-        self.pipeline_start = cuda.Event()
-        self.pipeline_end = cuda.Event()
+    def is_initialised(self):
+        return self.initialised
 
     def initialise(self, solver):
         """
@@ -70,6 +67,11 @@ class Pipeline:
         montblanc.log.debug('Initialisation of pipeline complete')
 
         self.initialised = True
+        self.nr_of_executions = 0
+        self.sum_execution_time = 0.0
+        self.last_execution_time = 0.0
+        self.pipeline_start = cuda.Event()
+        self.pipeline_end = cuda.Event()        
         return self.initialised
 
     def execute(self, solver):
@@ -86,9 +88,10 @@ class Pipeline:
 
         montblanc.log.debug('Executing pipeline')
 
-        if not self.initialised:
+        if not self.is_initialised():
             montblanc.log.error('Pipeline was not initialised!')
-            return False
+            if not self.initialise():
+                return False
 
         try:
             # Record start of pipeline

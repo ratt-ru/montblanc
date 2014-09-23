@@ -14,29 +14,26 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     # Get the BK pipeline and shared data.
-    pipeline, slvr = montblanc.get_bk_pipeline(args.msfile, npsrc=args.npsrc, ngsrc=args.ngsrc)
+    with montblanc.get_bk_solver(args.msfile, npsrc=args.npsrc, ngsrc=args.ngsrc) as slvr:
 
-    # Create point sources at zeros
-    l=slvr.ft(np.zeros(slvr.nsrc))
-    m=slvr.ft(np.zeros(slvr.nsrc))
-    lm=np.array([l,m], dtype=slvr.ft)
+        # Create point sources at zeros
+        l=slvr.ft(np.zeros(slvr.nsrc))
+        m=slvr.ft(np.zeros(slvr.nsrc))
+        lm=np.array([l,m], dtype=slvr.ft)
 
-    # Create 1Jy point sources
-    fI=slvr.ft(np.ones(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
-    fQ=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
-    fU=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
-    fV=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
-    alpha=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
-    brightness = np.array([fI,fQ,fU,fV,alpha], dtype=slvr.ft)
+        # Create 1Jy point sources
+        fI=slvr.ft(np.ones(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+        fQ=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+        fU=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+        fV=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+        alpha=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+        brightness = np.array([fI,fQ,fU,fV,alpha], dtype=slvr.ft)
 
-    slvr.transfer_lm(lm)
-    slvr.transfer_brightness(brightness)
+        slvr.transfer_lm(lm)
+        slvr.transfer_brightness(brightness)
 
-    # Initialise the pipeline
-    pipeline.initialise(slvr)
-    pipeline.execute(slvr)
-    pipeline.shutdown(slvr)
+        # Solve the RIME
+        slvr.solve()
 
-    print slvr.vis_gpu.get()
-
-    print slvr
+        print slvr.vis_gpu.get()
+        print slvr

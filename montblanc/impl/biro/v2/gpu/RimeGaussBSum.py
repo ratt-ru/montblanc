@@ -38,9 +38,6 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMY ${BLOCKDIMY}
 #define BLOCKDIMZ ${BLOCKDIMZ}
 
-#define REFWAVE ${ref_wave}
-#define BEAMCLIP ${beam_clip}
-#define BEAMWIDTH ${beam_width}
 #define GAUSS_SCALE ${gauss_scale}
 
 template <
@@ -59,7 +56,8 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * weight_vector,
     typename Tr::ct * visibilities,
     typename Tr::ct * data_vis,
-    typename Tr::ft * chi_sqrd_result)
+    typename Tr::ft * chi_sqrd_result,
+    typename Tr::ft ref_wave)
 {
     int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
@@ -133,7 +131,7 @@ void rime_gauss_B_sum_impl(
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
         // Multiply in the power term
-        T power = Po::pow(T(REFWAVE)/wl[threadIdx.x], a[threadIdx.y]);
+        T power = Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.y]);
         ant_two.x *= power; ant_two.y *= power;
         // Get the complex scalar for antenna one and conjugate it
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
@@ -196,7 +194,7 @@ void rime_gauss_B_sum_impl(
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
         // Multiply in the power term
-        exp *= Po::pow(T(REFWAVE)/wl[threadIdx.x], a[threadIdx.y]);
+        exp *= Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.y]);
 
         // Get the complex scalar for antenna two and multiply
         // in the exponent term
@@ -288,12 +286,13 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * weight_vector, \
     ct * visibilities, \
     ct * data_vis, \
-    ft * chi_sqrd_result) \
+    ft * chi_sqrd_result, \
+    ft ref_wave) \
 { \
     rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, \
         wavelength, ant_pairs, jones_EK_scalar, \
         weight_vector, visibilities, data_vis, \
-        chi_sqrd_result); \
+        chi_sqrd_result, ref_wave); \
 }
 
 stamp_gauss_b_sum_fn(float, float2, false, u)
@@ -366,7 +365,7 @@ class RimeGaussBSum(Node):
             slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
             slvr.weight_vector_gpu,
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
-            **self.get_kernel_params(slvr))
+            slvr.ref_wave, **self.get_kernel_params(slvr))
 
         # If we're not catering for a weight vector,
         # call the simple reduction and divide by sigma squared.

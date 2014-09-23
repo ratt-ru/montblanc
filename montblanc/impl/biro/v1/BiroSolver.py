@@ -11,7 +11,8 @@ from montblanc.BaseSolver import DEFAULT_DTYPE
 class BiroSolver(BaseSolver):
     """ Shared Data implementation for BIRO """
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE, **kwargs):
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE,
+        pipeline=None, **kwargs):
         """
         BiroSolver Constructor
 
@@ -28,6 +29,8 @@ class BiroSolver(BaseSolver):
                 Number of gaussian sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
+            pipeline : list of nodes
+                nodes defining the GPU kernels used to solve this RIME
         Keyword Arguments:
             device : pycuda.device.Device
                 CUDA device to operate on.
@@ -40,7 +43,7 @@ class BiroSolver(BaseSolver):
         kwargs['auto_correlations'] = False
 
         super(BiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, **kwargs)
+            npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, pipeline=pipeline, **kwargs)
 
         slvr = self
         na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime

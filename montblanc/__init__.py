@@ -23,11 +23,11 @@ def get_montblanc_path():
 def get_source_path():
 	return os.path.join(get_montblanc_path(), 'src')
 
-def get_bk_pipeline(msfile, npsrc, ngsrc, **kwargs):
+def get_bk_solver(msfile, npsrc, ngsrc, **kwargs):
 	"""
-	get_bk_pipeline(msfile, npsrc, device=None)
+	get_bk_solver(msfile, npsrc, device=None)
 
-	Returns a pipeline composed of simple brightness and phase terms.
+	Returns a solver composed of simple brightness and phase terms.
 
 	Parameters
 	----------
@@ -43,24 +43,19 @@ def get_bk_pipeline(msfile, npsrc, ngsrc, **kwargs):
 
 	Returns
 	-------
-	A (pipeline, solver) tuple
+	A solver
 	"""
 
 	import montblanc.factory
 
-	slvr = montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
+	return montblanc.factory.get_bk_solver(sd_type='ms', msfile=msfile,
 		npsrc=npsrc, ngsrc=ngsrc, dtype=np.float32, **kwargs)
 
-	pipeline = montblanc.factory.get_bk_pipeline(**kwargs)
-
-	return pipeline, slvr
-
-def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kwargs):
+def get_biro_solver(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kwargs):
 	"""
-	get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs)
+	get_biro_solver(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs)
 
-	Returns a pipeline and shared data tuple defining a pipeline
-	suitable for BIRO.
+	Returns a solver suitable for solving the BIRO RIME.
 
 	Parameters
 	----------
@@ -94,18 +89,13 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kw
 
 	Returns
 	-------
-	A (pipeline, solver) tuple
+	A solver
 	"""
 
 	import montblanc.factory
 
-	slvr = montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
+	return montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
 		npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, version=version, **kwargs)
-
-	pipeline = montblanc.factory.get_biro_pipeline(
-		npsrc=npsrc, ngsrc=ngsrc, version=version, **kwargs)
-
-	return pipeline, slvr
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """

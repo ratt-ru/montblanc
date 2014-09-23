@@ -14,13 +14,13 @@ from montblanc.impl.biro.v2.BiroSolver import BiroSolver
 
 class TestSolver(BiroSolver):
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=0, dtype=np.float32, **kwargs):
+        npsrc=DEFAULT_NPSRC, ngsrc=0, dtype=np.float32, pipeline=None, **kwargs):
 
         # Store CPU arrays
         kwargs['store_cpu'] = True
 
         super(TestSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-			npsrc=npsrc, ngsrc=ngsrc, dtype=dtype,**kwargs)
+			npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, pipeline=pipeline, **kwargs)
 
         slvr = self
         na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime

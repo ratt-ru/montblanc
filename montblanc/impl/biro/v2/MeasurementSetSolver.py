@@ -13,7 +13,8 @@ class MeasurementSetSolver(BiroSolver):
     ANTENNA_TABLE = "ANTENNA"
     SPECTRAL_WINDOW = "SPECTRAL_WINDOW"
 
-    def __init__(self, msfile, npsrc, ngsrc, dtype=np.float64, **kwargs):
+    def __init__(self, msfile, npsrc, ngsrc, dtype=np.float64,
+        pipeline=None,**kwargs):
         # Do some checks on the supplied filename
         if not isinstance(msfile, str):
             raise TypeError, 'msfile is not a string'
@@ -46,7 +47,8 @@ class MeasurementSetSolver(BiroSolver):
         ntime = t.nrows() // nbl
 
         super(MeasurementSetSolver, self).__init__(\
-            na=na,nchan=nchan,ntime=ntime,npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+            na=na,nchan=nchan,ntime=ntime,npsrc=npsrc,ngsrc=ngsrc,
+            dtype=dtype,pipeline=pipeline,**kwargs)
 
         # Check that nbl agrees with version from constructor
         assert nbl == self.nbl
@@ -165,6 +167,12 @@ class MeasurementSetSolver(BiroSolver):
         t.close()
         ta.close()
         tf.close()
+
+    def __enter__(self):
+        return super(BiroSolver,self).__enter__()
+
+    def __exit__(self, type, value, traceback):
+        super(BiroSolver,self).__exit__(type,value,traceback)
 
     def test_uvw_relations(self, msuvw, ant_pairs):
         """ Test that the uvw relation holds """

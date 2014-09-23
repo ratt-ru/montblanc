@@ -9,6 +9,7 @@ import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
 import montblanc
+import montblanc.factory
 
 class ArrayRecord(object):
     """ Records information about an array """
@@ -28,6 +29,20 @@ class PropertyRecord(object):
         self.dtype = dtype
         self.default = default
         self.registrant = registrant
+
+class PipelineDescriptor(object):
+    """ Descriptor class for pipelines """
+    def __init__(self):
+        self.data = WeakKeyDictionary()
+
+    def __get__(self, instance, owner):
+        return self.data.get(instance,None)
+
+    def __set__(self, instance, value):
+        self.data[instance] = value
+
+    def __delete__(self, instance):
+        del self.data[instance]
 
 class PropertyDescriptor(object):
     """ Descriptor class for properties """
@@ -117,7 +132,7 @@ DEFAULT_NVIS=DEFAULT_NBL*DEFAULT_NCHAN*DEFAULT_NTIME
 DEFAULT_DTYPE=np.float32
 
 class BaseSolver(Solver):
-    """ Class defining the RIME Simulation Parameters. """
+    """ Class that holds the elements for solving the RIME """
     na = Parameter(DEFAULT_NA)
     nbl = Parameter(DEFAULT_NBL)
     nchan = Parameter(DEFAULT_NCHAN)
@@ -127,8 +142,11 @@ class BaseSolver(Solver):
     nsrc = Parameter(DEFAULT_NSRC)
     nvis = Parameter(DEFAULT_NVIS)
 
+    pipeline = PipelineDescriptor()
+
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE, **kwargs):
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE,
+        pipeline=None, **kwargs):
         """
         BaseSolver Constructor
 
@@ -208,6 +226,11 @@ class BaseSolver(Solver):
 
         # Should we store CPU versions of the GPU arrays
         self.store_cpu = kwargs.get('store_cpu', False)
+
+        # Configure our solver pipeline
+        if pipeline is None:
+            pipeline = montblanc.factory.get_empty_pipeline()
+        self.pipeline = pipeline
 
     @staticmethod
     def __cpu_name(name):
@@ -657,6 +680,24 @@ class BaseSolver(Solver):
             yield BaseSolver.fmt_property_line(
                 p.name, np.dtype(p.dtype).name,
                 getattr(self, p.name), p.default)
+
+    def solve(self):
+        """ Solve the RIME """        
+        self.pipeline.execute(self)
+
+    def initialise(self):
+        self.pipeline.initialise(self)
+
+    def shutdown(self):
+        """ Stop the RIME solver """
+        self.pipeline.shutdown(self)
+
+    def __enter__(self):
+        self.initialise()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.shutdown()
 
     def __str__(self):
         """ Outputs a string representation of this object """

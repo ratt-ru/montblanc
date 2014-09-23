@@ -1,5 +1,8 @@
 import numpy as np
 
+from montblanc.pipeline import Pipeline
+from montblanc.node import Node, NullNode
+
 VERSION_ONE = 'v1'
 VERSION_TWO = 'v2'
 
@@ -9,6 +12,10 @@ BIRO_SD_TYPE = 'biro'
 
 valid_biro_versions = [VERSION_ONE, VERSION_TWO]
 valid_biro_solver_types = [MS_SD_TYPE, TEST_SD_TYPE, BIRO_SD_TYPE]
+
+def check_msfile(msfile):
+	if msfile is None or not isinstance(msfile, str):
+		raise TypeError, 'Invalid type %s specified for msfile' % type(msfile)
 
 def check_biro_version(version):
 	""" Throws an exception if the supplied version is invalid """
@@ -24,18 +31,31 @@ def check_biro_solver_type(sd_type):
 		raise ValueError, 'Supplied shared data type %s is not valid. ' \
 			'Should be one of %s', (sd_type, valid_biro_solver_types)
 
+def get_empty_pipeline(**kwargs):
+	return Pipeline([])
+
 def get_bk_pipeline(**kwargs):
-	from montblanc.pipeline import Pipeline
 	from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
 	from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
 
 	return Pipeline([RimeBK(), RimeJonesReduce()])
 
+def get_bk_solver(sd_type=None, npsrc=1, ngsrc=1, dtype=np.float32,**kwargs):
+	if kwargs.get('device', None) is None:
+		import pycuda.autoinit
+		kwargs['device']=pycuda.autoinit.device
+
+	pipeline = get_bk_pipeline(**kwargs)
+
+	check_msfile(kwargs.get('msfile', None))
+
+	from montblanc.impl.biro.v1.MeasurementSetSolver import MeasurementSetSolver
+
+	return MeasurementSetSolver(npsrc=npsrc, ngsrc=ngsrc,
+		dtype=dtype, pipeline=pipeline, **kwargs)
+
 def get_biro_pipeline(npsrc=0, ngsrc=0, version=None, **kwargs):
 	if version is None: version='v1'
-
-	from montblanc.node import Node, NullNode
-	from montblanc.pipeline import Pipeline
 
 	check_biro_version(version)
 
@@ -78,6 +98,7 @@ def get_biro_pipeline(npsrc=0, ngsrc=0, version=None, **kwargs):
 
 def get_biro_solver(sd_type=None, npsrc=1, ngsrc=1, dtype=np.float32,
 	version=None, **kwargs):
+
 	if sd_type is None: sd_type=MS_SD_TYPE
 	if version is None: version=VERSION_ONE
 
@@ -87,35 +108,37 @@ def get_biro_solver(sd_type=None, npsrc=1, ngsrc=1, dtype=np.float32,
 		import pycuda.autoinit
 		kwargs['device']=pycuda.autoinit.device
 
-	def check_msfile():
-		msfile = kwargs.get('msfile', None)
-		if msfile is None or not isinstance(msfile, str):
-			raise TypeError, 'Invalid type %s specified for msfile' % type(msfile)
+	pipeline = get_biro_pipeline(npsrc=npsrc, ngsrc=ngsrc,
+		dtype=dtype, version=version, **kwargs)
 
 	if version == VERSION_ONE:
 		if sd_type == MS_SD_TYPE:
-			check_msfile()
+			check_msfile(kwargs.get('msfile', None))
 			from montblanc.impl.biro.v1.MeasurementSetSolver import MeasurementSetSolver
 			return MeasurementSetSolver(npsrc=npsrc, ngsrc=ngsrc,
-				dtype=dtype,**kwargs)
+				dtype=dtype,pipeline=pipeline,**kwargs)
 		elif sd_type == TEST_SD_TYPE:			
 			from montblanc.impl.biro.v1.TestSolver import TestSolver
-			return TestSolver(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+			return TestSolver(npsrc=npsrc,ngsrc=ngsrc,
+				dtype=dtype,pipeline=pipeline,**kwargs)
 		elif sd_type == BIRO_SD_TYPE:
 			from montblanc.impl.biro.v1.BiroSolver import BiroSolver
-			return BiroSolver(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+			return BiroSolver(npsrc=npsrc,ngsrc=ngsrc,
+				dtype=dtype,pipeline=pipeline,**kwargs)
 
 	if version == VERSION_TWO:
 		if sd_type == MS_SD_TYPE:
-			check_msfile()
+			check_msfile(kwargs.get('msfile', None))
 			from montblanc.impl.biro.v2.MeasurementSetSolver import MeasurementSetSolver
 			return MeasurementSetSolver(npsrc=npsrc, ngsrc=ngsrc,
-				dtype=dtype,**kwargs)
+				dtype=dtype,pipeline=pipeline,**kwargs)
 		elif sd_type == TEST_SD_TYPE:			
 			from montblanc.impl.biro.v2.TestSolver import TestSolver
-			return TestSolver(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+			return TestSolver(npsrc=npsrc,ngsrc=ngsrc,
+				dtype=dtype,pipeline=pipeline,**kwargs)
 		elif sd_type == BIRO_SD_TYPE:
 			from montblanc.impl.biro.v2.BiroSolver import BiroSolver
-			return BiroSolver(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+			return BiroSolver(npsrc=npsrc,ngsrc=ngsrc,
+				dtype=dtype,pipeline=pipeline,**kwargs)
 
 	raise Exception, 'Invalid Version %s' % version
