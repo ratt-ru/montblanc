@@ -96,6 +96,30 @@ def get_biro_pipeline(npsrc=0, ngsrc=0, version=None, **kwargs):
 
 	raise Exception, 'Invalid Version %s' % version
 
+def load_from_ms(npsrc=1,ngsrc=0,dtype=np.float32,version=None,
+	pipeline=None, **kwargs):
+	if version is None: version = VERSION_ONE
+	if pipeline is None: pipeline = get_empty_pipeline()
+
+	check_biro_version(version)
+
+	if version == VERSION_TWO:
+		from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
+		from montblanc.impl.biro.v2.BiroSolver import BiroSolver
+	elif version == VERSION_ONE:
+		from montblanc.impl.biro.v1.loaders import MeasurementSetLoader
+		from montblanc.impl.biro.v1.BiroSolver import BiroSolver
+	else:
+		raise Exception, 'Incorrect version %s' % version
+
+	with MeasurementSetLoader(kwargs.get('msfile')) as loader:
+		ntime,na,nchan = loader.get_dims()
+		slvr = BiroSolver(npsrc=npsrc,ngsrc=ngsrc,
+			na=na,ntime=ntime,nchan=nchan,
+			dtype=dtype,pipeline=pipeline,**kwargs)
+		loader.load(slvr)
+		return slvr
+
 def get_biro_solver(sd_type=None, npsrc=1, ngsrc=1, dtype=np.float32,
 	version=None, **kwargs):
 
@@ -113,10 +137,9 @@ def get_biro_solver(sd_type=None, npsrc=1, ngsrc=1, dtype=np.float32,
 
 	if version == VERSION_ONE:
 		if sd_type == MS_SD_TYPE:
-			check_msfile(kwargs.get('msfile', None))
-			from montblanc.impl.biro.v1.MeasurementSetSolver import MeasurementSetSolver
-			return MeasurementSetSolver(npsrc=npsrc, ngsrc=ngsrc,
-				dtype=dtype,pipeline=pipeline,**kwargs)
+			check_msfile(kwargs.get('msfile',None))
+			return load_from_ms(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,
+				version=version,pipeline=pipeline,**kwargs)
 		elif sd_type == TEST_SD_TYPE:			
 			from montblanc.impl.biro.v1.TestSolver import TestSolver
 			return TestSolver(npsrc=npsrc,ngsrc=ngsrc,
@@ -125,13 +148,11 @@ def get_biro_solver(sd_type=None, npsrc=1, ngsrc=1, dtype=np.float32,
 			from montblanc.impl.biro.v1.BiroSolver import BiroSolver
 			return BiroSolver(npsrc=npsrc,ngsrc=ngsrc,
 				dtype=dtype,pipeline=pipeline,**kwargs)
-
 	if version == VERSION_TWO:
 		if sd_type == MS_SD_TYPE:
-			check_msfile(kwargs.get('msfile', None))
-			from montblanc.impl.biro.v2.MeasurementSetSolver import MeasurementSetSolver
-			return MeasurementSetSolver(npsrc=npsrc, ngsrc=ngsrc,
-				dtype=dtype,pipeline=pipeline,**kwargs)
+			check_msfile(kwargs.get('msfile',None))
+			return load_from_ms(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,
+				version=version,pipeline=pipeline,**kwargs)
 		elif sd_type == TEST_SD_TYPE:			
 			from montblanc.impl.biro.v2.TestSolver import TestSolver
 			return TestSolver(npsrc=npsrc,ngsrc=ngsrc,

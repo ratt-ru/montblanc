@@ -107,7 +107,7 @@ crimes_ext = Extension('montblanc.ext.crimes',
 	include_dirs = [
 		numpy_include,
 		'montblanc/moderngpu/include',
-    'montblanc/crimes',
+    	'montblanc/crimes',
 		CUDA['include']]
 )
 
@@ -204,6 +204,8 @@ setup(name='montblanc',
       license='MIT',
       packages=[
       	'montblanc',
+        'montblanc.api',
+        'montblanc.api.loaders',
       	'montblanc.examples',
         'montblanc.ext',
         'montblanc.tests',
@@ -212,10 +214,13 @@ setup(name='montblanc',
         'montblanc.impl.biro.v1',
         'montblanc.impl.biro.v1.gpu',
         'montblanc.impl.biro.v1.cpu',
+        'montblanc.impl.biro.v1.loaders',
         'montblanc.impl.biro.v2',
         'montblanc.impl.biro.v2.gpu',
-        'montblanc.impl.biro.v2.cpu'],
-
+        'montblanc.impl.biro.v2.cpu',
+        'montblanc.impl.biro.v2.loaders',
+        'montblanc.impl.common',
+        'montblanc.impl.common.loaders'],
       install_requires=[
       	'numpy',
       	'pycuda',
