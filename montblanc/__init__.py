@@ -43,17 +43,17 @@ def get_bk_pipeline(msfile, npsrc, ngsrc, **kwargs):
 
 	Returns
 	-------
-	A (pipeline, shared_data) tuple
+	A (pipeline, solver) tuple
 	"""
 
 	import montblanc.factory
 
-	sd = montblanc.factory.get_biro_shared_data(sd_type='ms', msfile=msfile,
+	slvr = montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
 		npsrc=npsrc, ngsrc=ngsrc, dtype=np.float32, **kwargs)
 
 	pipeline = montblanc.factory.get_bk_pipeline(**kwargs)
 
-	return pipeline, sd
+	return pipeline, slvr
 
 def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kwargs):
 	"""
@@ -94,18 +94,18 @@ def get_biro_pipeline(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kw
 
 	Returns
 	-------
-	A (pipeline, shared_data) tuple
+	A (pipeline, solver) tuple
 	"""
 
 	import montblanc.factory
 
-	sd = montblanc.factory.get_biro_shared_data(sd_type='ms', msfile=msfile,
+	slvr = montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
 		npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, version=version, **kwargs)
 
 	pipeline = montblanc.factory.get_biro_pipeline(
 		npsrc=npsrc, ngsrc=ngsrc, version=version, **kwargs)
 
-	return pipeline, sd
+	return pipeline, slvr
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """

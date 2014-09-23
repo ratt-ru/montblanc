@@ -38,16 +38,16 @@ class Pipeline:
         self.pipeline_start = cuda.Event()
         self.pipeline_end = cuda.Event()
 
-    def initialise(self, shared_data):
+    def initialise(self, solver):
         """
         Iterates over each node in the pipeline,
         calling the initialise() method on each one.
 
-        >>> sd = SharedData()
+        >>> slvr = Solver()
         >>> pipeline = PipeLine([Node1(), Node2(), Node3()])
-        >>> pipeline.initialise(sd)
-        >>> pipeline.execute(sd)
-        >>> pipeline.shutdown(sd)
+        >>> pipeline.initialise(slvr)
+        >>> pipeline.execute(slvr)
+        >>> pipeline.shutdown(slvr)
         """
 
         montblanc.log.debug('Initialising pipeline')
@@ -55,7 +55,7 @@ class Pipeline:
         try:
             for node in self.pipeline:
                 montblanc.log.debug('Initialising node \'' + node.description() + '\'')
-                node.initialise(shared_data)
+                node.initialise(solver)
                 montblanc.log.debug('Done')
         except PipeLineError as e:
             montblanc.log.error('Pipeline Error occurred during RIME pipeline initialisation', exc_info=True)
@@ -72,16 +72,16 @@ class Pipeline:
         self.initialised = True
         return self.initialised
 
-    def execute(self, shared_data):
+    def execute(self, solver):
         """
         Iterates over each node in the pipeline,
         calling the execute() method on each one.
 
-        >>> sd = SharedData()
+        >>> slvr = Solver()
         >>> pipeline = PipeLine([Node1(), Node2(), Node3()])
-        >>> pipeline.initialise(sd)
-        >>> pipeline.execute(sd)
-        >>> pipeline.shutdown(sd)
+        >>> pipeline.initialise(slvr)
+        >>> pipeline.execute(slvr)
+        >>> pipeline.shutdown(slvr)
         """
 
         montblanc.log.debug('Executing pipeline')
@@ -97,11 +97,11 @@ class Pipeline:
             for node in self.pipeline:
 
                 montblanc.log.debug('Executing node \'' + node.description() + '\'')
-                node.pre_execution(shared_data)
+                node.pre_execution(solver)
                 montblanc.log.debug('pre')
-                node.execute(shared_data)
+                node.execute(solver)
                 montblanc.log.debug('execute')
-                node.post_execution(shared_data)
+                node.post_execution(solver)
                 montblanc.log.debug('post Done')
 
             # Record pipeline end
@@ -124,16 +124,16 @@ class Pipeline:
         montblanc.log.debug('Execution of pipeline complete')
         return False
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         """
         Iterates over each node in the pipeline,
         calling the shutdown() method on each one.
 
-        >>> sd = SharedData()
+        >>> slvr = Solver()
         >>> pipeline = PipeLine([Node1(), Node2(), Node3()])
-        >>> pipeline.initialise(sd)
-        >>> pipeline.execute(sd)
-        >>> pipeline.shutdown(sd)
+        >>> pipeline.initialise(slvr)
+        >>> pipeline.execute(slvr)
+        >>> pipeline.shutdown(slvr)
         """
 
         montblanc.log.debug('Shutting down pipeline')
@@ -144,7 +144,7 @@ class Pipeline:
         for node in self.pipeline:
             try:
                     montblanc.log.debug('Shutting down node \'' + node.description() + '\'')
-                    node.shutdown(shared_data)
+                    node.shutdown(solver)
                     montblanc.log.debug('Done')
             except PipeLineError as e:
                 montblanc.log.error('Pipeline Error occurred during RIME pipeline shutdown', exc_info=True)

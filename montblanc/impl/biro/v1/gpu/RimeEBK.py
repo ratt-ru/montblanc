@@ -311,11 +311,11 @@ class RimeEBK(Node):
         super(RimeEBK, self).__init__()
         self.gaussian = gaussian
 
-    def initialise(self, shared_data):
-        sd = shared_data
+    def initialise(self, solver):
+        slvr = solver
 
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
-        D.update(sd.get_properties())
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
+        D.update(slvr.get_properties())
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
@@ -327,7 +327,7 @@ class RimeEBK(Node):
         # of choices.
         # - float or double
         # - point or gaussian sources?
-        if sd.is_float() is True:
+        if slvr.is_float() is True:
             kname = 'rime_jones_pEBK_float' \
                 if not self.gaussian \
                 else 'rime_jones_gEBK_float'
@@ -338,49 +338,49 @@ class RimeEBK(Node):
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
 
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
 
-    def get_kernel_params(self, shared_data):
-        sd = shared_data
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
+    def get_kernel_params(self, solver):
+        slvr = solver
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
 
         # Are we dealing with point sources or gaussian sources?
-        nisrc = sd.ngsrc if self.gaussian else sd.npsrc
+        nisrc = slvr.ngsrc if self.gaussian else slvr.npsrc
 
         srcs_per_block = D['BLOCKDIMX'] if nisrc > D['BLOCKDIMX'] else nisrc
         time_chans_per_block = D['BLOCKDIMY']
-        baselines_per_block = D['BLOCKDIMZ'] if sd.nbl > D['BLOCKDIMZ'] else sd.nbl
+        baselines_per_block = D['BLOCKDIMZ'] if slvr.nbl > D['BLOCKDIMZ'] else slvr.nbl
 
         src_blocks = self.blocks_required(nisrc,srcs_per_block)
-        time_chan_blocks = sd.ntime*sd.nchan
-        baseline_blocks = self.blocks_required(sd.nbl,baselines_per_block)
+        time_chan_blocks = slvr.ntime*slvr.nchan
+        baseline_blocks = self.blocks_required(slvr.nbl,baselines_per_block)
 
         return {
             'block' : (srcs_per_block,time_chans_per_block,baselines_per_block),
             'grid'  : (src_blocks,time_chan_blocks,baseline_blocks)
         }
 
-    def execute(self, shared_data):
-        sd = shared_data
+    def execute(self, solver):
+        slvr = solver
 
         # Setup our kernel call, depending on whether we're
         # doing point or gaussian sources, and whether there
         # are indeed sources for us to compute!
-        if not self.gaussian and sd.npsrc > 0:
+        if not self.gaussian and slvr.npsrc > 0:
             # Note the null pointer passed for gauss_shape here.
-            self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu, np.intp(0),
-                sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
-                sd.ref_wave, sd.beam_width, sd.beam_clip,
-    			**self.get_kernel_params(sd))
-        elif self.gaussian and sd.ngsrc > 0:
-            self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu, sd.gauss_shape_gpu,
-                sd.wavelength_gpu, sd.point_errors_gpu, sd.ant_pairs_gpu, sd.jones_gpu,
-                sd.ref_wave, sd.beam_width, sd.beam_clip,
-                **self.get_kernel_params(sd))
+            self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu, np.intp(0),
+                slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.ant_pairs_gpu, slvr.jones_gpu,
+                slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
+    			**self.get_kernel_params(slvr))
+        elif self.gaussian and slvr.ngsrc > 0:
+            self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu, slvr.gauss_shape_gpu,
+                slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.ant_pairs_gpu, slvr.jones_gpu,
+                slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
+                **self.get_kernel_params(slvr))
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

@@ -141,11 +141,11 @@ class RimeMultiply(Node):
     def __init__(self):
         super(RimeMultiply, self).__init__()
 
-    def initialise(self, shared_data):
-        sd = shared_data
+    def initialise(self, solver):
+        slvr = solver
 
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
-        D.update(sd.get_properties())
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
+        D.update(slvr.get_properties())
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
@@ -154,22 +154,22 @@ class RimeMultiply(Node):
             no_extern_c=True)
 
         kname = 'rime_jones_multiply_float' \
-            if sd.is_float() is True else \
+            if slvr.is_float() is True else \
             'rime_jones_multiply_double'
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
 
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
 
-    def get_kernel_params(self, shared_data):
-        sd = shared_data
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
+    def get_kernel_params(self, solver):
+        slvr = solver
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
 
-        njones = sd.nbl*sd.nchan*sd.ntime*sd.nsrc
+        njones = slvr.nbl*slvr.nchan*slvr.ntime*slvr.nsrc
         jones_per_block = D['BLOCKDIMX'] if njones > D['BLOCKDIMX'] else njones
         jones_blocks = self.blocks_required(njones,jones_per_block)
 
@@ -178,27 +178,27 @@ class RimeMultiply(Node):
             'grid'   : (jones_blocks,1,1)
         }
 
-    def execute(self, shared_data):
-        sd = shared_data
+    def execute(self, solver):
+        slvr = solver
 
         # Output jones matrix
-        njones = sd.nbl*sd.nchan*sd.ntime*sd.nsrc
-        jsize = np.product(sd.jones_shape) # Number of complex  numbers
+        njones = slvr.nbl*slvr.nchan*slvr.ntime*slvr.nsrc
+        jsize = np.product(slvr.jones_shape) # Number of complex  numbers
 
         # TODO: This is all wrong and should be replaced with actual gpuarray's
-        # living on the sd object
+        # living on the slvr object
         jones_rhs = (np.random.random(jsize) + \
              1j*np.random.random(jsize)) \
-            .astype(np.complex128).reshape(sd.jones_shape)
+            .astype(np.complex128).reshape(slvr.jones_shape)
 
-        jones_lhs_gpu = sd.jones_gpu
+        jones_lhs_gpu = slvr.jones_gpu
         jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
-        jones_output_gpu = gpuarray.empty(shape=sd.jones_shape, dtype=np.complex128)
+        jones_output_gpu = gpuarray.empty(shape=slvr.jones_shape, dtype=np.complex128)
 
         self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, \
-            **self.get_kernel_params(sd))
+            **self.get_kernel_params(slvr))
             
-        sd.jones_gpu = jones_output_gpu
+        slvr.jones_gpu = jones_output_gpu
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

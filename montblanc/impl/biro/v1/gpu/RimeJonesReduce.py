@@ -5,23 +5,23 @@ import montblanc.ext.crimes
 class RimeJonesReduce(Node):
     def __init__(self):
         super(RimeJonesReduce, self).__init__()
-    def initialise(self, shared_data):
+    def initialise(self, solver):
         pass
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
-    def execute(self, shared_data):
-        sd = shared_data
+    def execute(self, solver):
+        slvr = solver
 
-        if sd.is_float():
+        if slvr.is_float():
             montblanc.ext.crimes.segmented_reduce_complex64_sum(
-                data=sd.jones_gpu, seg_starts=sd.keys_gpu,
-                seg_sums=sd.vis_gpu, cc=sd.cc, device_id=0)
+                data=slvr.jones_gpu, seg_starts=slvr.keys_gpu,
+                seg_sums=slvr.vis_gpu, cc=slvr.cc, device_id=0)
         else:
             montblanc.ext.crimes.segmented_reduce_complex128_sum(
-                data=sd.jones_gpu, seg_starts=sd.keys_gpu,
-                seg_sums=sd.vis_gpu, cc=sd.cc, device_id=0)
+                data=slvr.jones_gpu, seg_starts=slvr.keys_gpu,
+                seg_sums=slvr.vis_gpu, cc=slvr.cc, device_id=0)
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

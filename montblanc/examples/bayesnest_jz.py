@@ -23,35 +23,35 @@ def myloglike(cube, ndim, nparams):
     ndim is the number of dimensions of cube
     nparams (>= ndim) allows extra derived parameters to be carried along
     """
-    global pipeline,sd,store_cpu,dtype,use_noise_vector,npsrc,ngsrc,ndata;
+    global pipeline,slvr,store_cpu,dtype,use_noise_vector,npsrc,ngsrc,ndata;
 
     # Initialize pipeline only once
     if pipeline is None:
         montblanc.log.setLevel(loggingLevel)
-        pipeline, sd = montblanc.get_biro_pipeline(msfile,\
+        pipeline, slvr = montblanc.get_biro_pipeline(msfile,\
                  npsrc=npsrc,ngsrc=ngsrc,\
                  noise_vector=use_noise_vector,\
                  device=pycuda.autoinit.device,dtype=dtype,\
                  store_cpu=store_cpu)
 
-        pipeline.initialise(sd)
-        print sd.ft, sd.ct
-        print sd.vis_shape
-        print sd
+        pipeline.initialise(slvr)
+        print slvr.ft, slvr.ct
+        print slvr.vis_shape
+        print slvr
 
         # Carry out calculations on the CPU (as opposed to GPU)
         if store_cpu:
-            point_errors = np.zeros(2*sd.na*sd.ntime)\
-                .astype(sd.ft).reshape((2, sd.na, sd.ntime))
+            point_errors = np.zeros(2*slvr.na*slvr.ntime)\
+                .astype(slvr.ft).reshape((2, slvr.na, slvr.ntime))
             # And transfer them
-            sd.transfer_point_errors(point_errors)
+            slvr.transfer_point_errors(point_errors)
 
         # Set up the antenna table if noise depends on this
         if use_noise_vector:
-            bl2ants=sd.get_default_ant_pairs()
+            bl2ants=slvr.get_default_ant_pairs()
 
         # Find total number of visibilities
-        ndata=8*sd.nbl*sd.nchan*sd.ntime
+        ndata=8*slvr.nbl*slvr.nchan*slvr.ntime
 
     # End of setup
 
@@ -67,60 +67,60 @@ def myloglike(cube, ndim, nparams):
     #cube[4]=0.198089176046084943E-03
     #cube[4]=0.145782635074809264E-04
     #cube[4]=0.0 # Stokes Q flux
-    lm=np.array([cube[0],cube[1]], dtype=sd.ft).reshape(sd.lm_shape)
+    lm=np.array([cube[0],cube[1]], dtype=slvr.ft).reshape(slvr.lm_shape)
 
-    fI=cube[2]*np.ones((sd.ntime,sd.nsrc,),dtype=sd.ft)
-    fQ=cube[4]*np.ones((sd.ntime,sd.nsrc),dtype=sd.ft)
-    fU=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
-    fV=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
-    alpha=     np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
-    brightness = np.array([fI,fQ,fU,fV,alpha],dtype=sd.ft)\
-        .reshape(sd.brightness_shape)
+    fI=cube[2]*np.ones((slvr.ntime,slvr.nsrc,),dtype=slvr.ft)
+    fQ=cube[4]*np.ones((slvr.ntime,slvr.nsrc),dtype=slvr.ft)
+    fU=        np.zeros((slvr.ntime,slvr.nsrc),dtype=slvr.ft)
+    fV=        np.zeros((slvr.ntime,slvr.nsrc),dtype=slvr.ft)
+    alpha=     np.zeros((slvr.ntime,slvr.nsrc),dtype=slvr.ft)
+    brightness = np.array([fI,fQ,fU,fV,alpha],dtype=slvr.ft)\
+        .reshape(slvr.brightness_shape)
 
     # Push cube parameters for this iteration to the GPU
-    sd.transfer_lm(lm)
-    sd.transfer_brightness(brightness)
+    slvr.transfer_lm(lm)
+    slvr.transfer_brightness(brightness)
     #cube[5]=0.68e-4; cube[6]=0.68e-4
     #cube[7]=0.8
-    if sd.ngsrc > 0:
+    if slvr.ngsrc > 0:
         # lproj, mproj, ratio
-        #gauss_shape=np.array([cube[5],cube[6],cube[7]],dtype=sd.ft)\
-        #    .reshape(sd.gauss_shape_shape)
+        #gauss_shape=np.array([cube[5],cube[6],cube[7]],dtype=slvr.ft)\
+        #    .reshape(slvr.gauss_shape_shape)
         # major, minor, position angle
         # Could this be done by restricting position-angle prior? :
         if cube[5]>cube[6]: return -1.0e99 # Catch oblates(?)
         gauss_shape = np.array([[cube[6]*np.sin(cube[7]),\
-                      cube[6]*np.cos(cube[7]),cube[5]/cube[6]]],dtype=sd.ft)\
-            .reshape(sd.gauss_shape_shape)
-        sd.transfer_gauss_shape(gauss_shape)
+                      cube[6]*np.cos(cube[7]),cube[5]/cube[6]]],dtype=slvr.ft)\
+            .reshape(slvr.gauss_shape_shape)
+        slvr.transfer_gauss_shape(gauss_shape)
 
     # Set the noise
     if sigmaSim is not None:
-        sigma=sigmaSim*np.ones(1).astype(sd.ft)
+        sigma=sigmaSim*np.ones(1).astype(slvr.ft)
     else:
-        sigma=cube[3]*np.ones(1).astype(sd.ft)
+        sigma=cube[3]*np.ones(1).astype(slvr.ft)
 
     if use_noise_vector:
-        noise_vector=sigma[0]**2**np.ones(ndata/8).astype(sd.ft)\
-            .reshape(sd.noise_vector_shape)
+        noise_vector=sigma[0]**2**np.ones(ndata/8).astype(slvr.ft)\
+            .reshape(slvr.noise_vector_shape)
 
         # Noise as a function of baseline (i.e. antenna)
-        #noise_vector=np.zeros(ndata/8).astype(sd.ft)\
-        #    .reshape(sd.noise_vector_shape) # (nbl,nchan,ntime)
+        #noise_vector=np.zeros(ndata/8).astype(slvr.ft)\
+        #    .reshape(slvr.noise_vector_shape) # (nbl,nchan,ntime)
         # Assume for now sig != sig(t,nu)
-        #for ibl in range(sd.nbl):
+        #for ibl in range(slvr.nbl):
         #    ants=bl2ants[:,ibl,0] # (2,nbl,ntime)
         #    noise_vector[ibl,:,:]=sqrt(sigAnt[ants[0]]*sigAnt[ants[1]])
-        sd.transfer_noise_vector(noise_vector)
+        slvr.transfer_noise_vector(noise_vector)
     else:
-        sd.set_sigma_sqrd((sigma[0]**2))
+        slvr.set_sigma_sqrd((sigma[0]**2))
 
-    # Execute the pipeline; cube[:] -> sd.X2
-    pipeline.execute(sd)
+    # Execute the pipeline; cube[:] -> slvr.X2
+    pipeline.execute(slvr)
     if store_cpu:
-        chi2=sd.compute_biro_chi_sqrd()
+        chi2=slvr.compute_biro_chi_sqrd()
     else:
-        chi2=sd.X2
+        chi2=slvr.X2
 
     # Here we need to worry about the chisq prefactor
     loglike=-chi2/2.0 - ndata*0.5*np.log(2.0*sc.pi*sigma[0]**2.0)
@@ -210,7 +210,7 @@ def main():
         print 'Avg. execution time %gms' % pipeline.avg_execution_time
         print 'Last execution time %gms' % pipeline.last_execution_time
         print 'No. of executions %d.' % pipeline.nr_of_executions
-        print sd
+        print slvr
 
     return 0
 

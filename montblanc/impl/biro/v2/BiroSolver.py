@@ -1,19 +1,19 @@
 import numpy as np
 
-from montblanc.BaseSharedData import BaseSharedData
-from montblanc.BaseSharedData import DEFAULT_NA
-from montblanc.BaseSharedData import DEFAULT_NCHAN
-from montblanc.BaseSharedData import DEFAULT_NTIME
-from montblanc.BaseSharedData import DEFAULT_NPSRC
-from montblanc.BaseSharedData import DEFAULT_NGSRC
-from montblanc.BaseSharedData import DEFAULT_DTYPE
+from montblanc.BaseSolver import BaseSolver
+from montblanc.BaseSolver import DEFAULT_NA
+from montblanc.BaseSolver import DEFAULT_NCHAN
+from montblanc.BaseSolver import DEFAULT_NTIME
+from montblanc.BaseSolver import DEFAULT_NPSRC
+from montblanc.BaseSolver import DEFAULT_NGSRC
+from montblanc.BaseSolver import DEFAULT_DTYPE
 
-class BiroSharedData(BaseSharedData):
+class BiroSolver(BaseSolver):
     """ Shared Data implementation for BIRO """
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
         npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE, **kwargs):
         """
-        BiroSharedData Constructor
+        BiroSolver Constructor
 
         Parameters:
             na : integer
@@ -33,29 +33,29 @@ class BiroSharedData(BaseSharedData):
                 CUDA device to operate on.
             store_cpu: boolean
                 if True, store cpu versions of the kernel arrays
-                within the GPUSharedData object.
+                within the GPUSolver object.
         """
 
         # Turn off auto_correlations
         kwargs['auto_correlations'] = False
 
-        super(BiroSharedData, self).__init__(na=na, nchan=nchan, ntime=ntime,
+        super(BiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
             npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, **kwargs)
 
-        sd = self
-        na, nbl, nchan, ntime = sd.na, sd.nbl, sd.nchan, sd.ntime
-        npsrc, ngsrc, nsrc = sd.npsrc, sd.ngsrc, sd.nsrc
-        ft, ct = sd.ft, sd.ct
+        slvr = self
+        na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime
+        npsrc, ngsrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nsrc
+        ft, ct = slvr.ft, slvr.ct
 
         # Curry the register_array function for simplicity
         def reg(name,shape,dtype):
             self.register_array(name=name,shape=shape,dtype=dtype,
-                registrant='BaseSharedData', gpu=True, cpu=False,
+                registrant='BaseSolver', gpu=True, cpu=False,
                 shape_member=True, dtype_member=True)
 
         def reg_prop(name,dtype,default):
             self.register_property(name=name,dtype=dtype,
-                default=default,registrant='BaseSharedData', setter=True)
+                default=default,registrant='BaseSolver', setter=True)
 
         # Set up gaussian scaling parameters
         # Derived from https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L493
@@ -94,10 +94,10 @@ class BiroSharedData(BaseSharedData):
         """
         # Create the antenna pair mapping, from upper triangle indices
         # based on the number of antenna. 
-        sd = self
+        slvr = self
 
-        return np.tile(np.int32(np.triu_indices(sd.na,1)),
-            sd.ntime).reshape(2,sd.ntime,sd.nbl)
+        return np.tile(np.int32(np.triu_indices(slvr.na,1)),
+            slvr.ntime).reshape(2,slvr.ntime,slvr.nbl)
 
     def get_flat_ap_idx(self, src=False, chan=False):
         """
@@ -125,21 +125,21 @@ class BiroSharedData(BaseSharedData):
         # ant1: 0 0 1 0 0 1 0 0 1 0 0 1
         # ant2: 1 2 2 1 2 2 1 2 2 1 2 2
 
-        sd = self        
-        ap = sd.get_default_ant_pairs().reshape(2,sd.ntime*sd.nbl)
+        slvr = self        
+        ap = slvr.get_default_ant_pairs().reshape(2,slvr.ntime*slvr.nbl)
 
         C = 1
 
-        if src is True: C *= sd.nsrc
-        if chan is True: C *= sd.nchan
+        if src is True: C *= slvr.nsrc
+        if chan is True: C *= slvr.nchan
 
-        repeat = np.repeat(np.arange(sd.ntime),sd.nbl)*sd.na*C
+        repeat = np.repeat(np.arange(slvr.ntime),slvr.nbl)*slvr.na*C
 
         ant0 = ap[0]*C + repeat
         ant1 = ap[1]*C + repeat
 
         if src is True or chan is True:
-            tile = np.tile(np.arange(C),sd.ntime*sd.nbl) 
+            tile = np.tile(np.arange(C),slvr.ntime*slvr.nbl) 
 
             ant0 = np.repeat(ant0, C) + tile
             ant1 = np.repeat(ant1, C) + tile

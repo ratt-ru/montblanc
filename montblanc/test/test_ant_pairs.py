@@ -1,6 +1,6 @@
 import numpy as np
-from montblanc.impl.biro.v1.BiroSharedData import BiroSharedData as BSD1
-from montblanc.impl.biro.v2.BiroSharedData import BiroSharedData as BSD2
+from montblanc.impl.biro.v1.BiroSolver import BiroSolver as BSD1
+from montblanc.impl.biro.v2.BiroSolver import BiroSolver as BSD2
 
 class Problem: pass
 
@@ -8,15 +8,15 @@ p1, p2, p3 = Problem(), Problem(), Problem()
 
 na, ntime, nchan, npsrc, ngsrc = 5, 2, 4, 1, 1
 
-p1.sd = BSD1(na=na,ntime=ntime,nchan=nchan,npsrc=npsrc,ngsrc=ngsrc)
-p2.sd = BSD2(na=na,ntime=ntime,nchan=nchan,npsrc=npsrc,ngsrc=ngsrc)
-p3.sd = BSD2(na=na,ntime=ntime,nchan=nchan,npsrc=npsrc,ngsrc=ngsrc)
+p1.slvr = BSD1(na=na,ntime=ntime,nchan=nchan,npsrc=npsrc,ngsrc=ngsrc)
+p2.slvr = BSD2(na=na,ntime=ntime,nchan=nchan,npsrc=npsrc,ngsrc=ngsrc)
+p3.slvr = BSD2(na=na,ntime=ntime,nchan=nchan,npsrc=npsrc,ngsrc=ngsrc)
 
-nbl, nsrc = p1.sd.nbl, p1.sd.nsrc
+nbl, nsrc = p1.slvr.nbl, p1.slvr.nsrc
 
-p1.ap = p1.sd.get_default_ant_pairs()
-p2.ap = p2.sd.get_default_ant_pairs()
-p3.ap = p3.sd.get_default_ant_pairs()
+p1.ap = p1.slvr.get_default_ant_pairs()
+p2.ap = p2.slvr.get_default_ant_pairs()
+p3.ap = p3.slvr.get_default_ant_pairs()
 
 print 'p1.ap[0]', p1.ap[0]
 print 'p1.ap[1]', p1.ap[1]

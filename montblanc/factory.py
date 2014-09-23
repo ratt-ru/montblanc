@@ -8,7 +8,7 @@ TEST_SD_TYPE = 'test'
 BIRO_SD_TYPE = 'biro'
 
 valid_biro_versions = [VERSION_ONE, VERSION_TWO]
-valid_biro_shared_data_types = [MS_SD_TYPE, TEST_SD_TYPE, BIRO_SD_TYPE]
+valid_biro_solver_types = [MS_SD_TYPE, TEST_SD_TYPE, BIRO_SD_TYPE]
 
 def check_biro_version(version):
 	""" Throws an exception if the supplied version is invalid """
@@ -17,12 +17,12 @@ def check_biro_version(version):
 		raise ValueError, 'Supplied version %s is not valid. ' \
 			'Should be one of %s', (version, valid_biro_versions)
 
-def check_biro_shared_data_type(sd_type):
+def check_biro_solver_type(sd_type):
 	""" Throws an exception if the supplied shared data type is invalid """
 
-	if sd_type not in valid_biro_shared_data_types:
+	if sd_type not in valid_biro_solver_types:
 		raise ValueError, 'Supplied shared data type %s is not valid. ' \
-			'Should be one of %s', (sd_type, valid_biro_shared_data_types)
+			'Should be one of %s', (sd_type, valid_biro_solver_types)
 
 def get_bk_pipeline(**kwargs):
 	from montblanc.pipeline import Pipeline
@@ -76,7 +76,7 @@ def get_biro_pipeline(npsrc=0, ngsrc=0, version=None, **kwargs):
 
 	raise Exception, 'Invalid Version %s' % version
 
-def get_biro_shared_data(sd_type=None, npsrc=1, ngsrc=1, dtype=np.float32,
+def get_biro_solver(sd_type=None, npsrc=1, ngsrc=1, dtype=np.float32,
 	version=None, **kwargs):
 	if sd_type is None: sd_type=MS_SD_TYPE
 	if version is None: version=VERSION_ONE
@@ -95,27 +95,27 @@ def get_biro_shared_data(sd_type=None, npsrc=1, ngsrc=1, dtype=np.float32,
 	if version == VERSION_ONE:
 		if sd_type == MS_SD_TYPE:
 			check_msfile()
-			from montblanc.impl.biro.v1.MeasurementSetSharedData import MeasurementSetSharedData
-			return MeasurementSetSharedData(npsrc=npsrc, ngsrc=ngsrc,
+			from montblanc.impl.biro.v1.MeasurementSetSolver import MeasurementSetSolver
+			return MeasurementSetSolver(npsrc=npsrc, ngsrc=ngsrc,
 				dtype=dtype,**kwargs)
 		elif sd_type == TEST_SD_TYPE:			
-			from montblanc.impl.biro.v1.TestSharedData import TestSharedData
-			return TestSharedData(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+			from montblanc.impl.biro.v1.TestSolver import TestSolver
+			return TestSolver(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
 		elif sd_type == BIRO_SD_TYPE:
-			from montblanc.impl.biro.v1.BiroSharedData import BiroSharedData
-			return BiroSharedData(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+			from montblanc.impl.biro.v1.BiroSolver import BiroSolver
+			return BiroSolver(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
 
 	if version == VERSION_TWO:
 		if sd_type == MS_SD_TYPE:
 			check_msfile()
-			from montblanc.impl.biro.v2.MeasurementSetSharedData import MeasurementSetSharedData
-			return MeasurementSetSharedData(npsrc=npsrc, ngsrc=ngsrc,
+			from montblanc.impl.biro.v2.MeasurementSetSolver import MeasurementSetSolver
+			return MeasurementSetSolver(npsrc=npsrc, ngsrc=ngsrc,
 				dtype=dtype,**kwargs)
 		elif sd_type == TEST_SD_TYPE:			
-			from montblanc.impl.biro.v2.TestSharedData import TestSharedData
-			return TestSharedData(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+			from montblanc.impl.biro.v2.TestSolver import TestSolver
+			return TestSolver(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
 		elif sd_type == BIRO_SD_TYPE:
-			from montblanc.impl.biro.v2.BiroSharedData import BiroSharedData
-			return BiroSharedData(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
+			from montblanc.impl.biro.v2.BiroSolver import BiroSolver
+			return BiroSolver(npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
 
 	raise Exception, 'Invalid Version %s' % version

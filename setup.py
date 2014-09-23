@@ -107,7 +107,7 @@ crimes_ext = Extension('montblanc.ext.crimes',
 	include_dirs = [
 		numpy_include,
 		'montblanc/moderngpu/include',
-    	'montblanc/crimes',
+    'montblanc/crimes',
 		CUDA['include']]
 )
 

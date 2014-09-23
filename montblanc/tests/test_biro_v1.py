@@ -7,7 +7,7 @@ import sys
 import montblanc.ext.predict
 import montblanc.ext.crimes
 
-from montblanc.impl.biro.v1.TestSharedData import TestSharedData
+from montblanc.impl.biro.v1.TestSolver import TestSolver
 
 from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
 from montblanc.impl.biro.v1.gpu.RimeEBK import RimeEBK
@@ -40,89 +40,89 @@ class TestBiroV1(unittest.TestCase):
         """ Tear down each test case """
         pass
 
-    def BK_test_impl(self, sd, cmp=None):
+    def BK_test_impl(self, slvr, cmp=None):
         """ Type independent implementation of the BK test """
         if cmp is None: cmp = {}
 
         rime_bk = RimeBK()
 
         # Initialise the BK float kernel
-        rime_bk.initialise(sd)
-        rime_bk.execute(sd)
-        rime_bk.shutdown(sd)
+        rime_bk.initialise(slvr)
+        rime_bk.execute(slvr)
+        rime_bk.shutdown(slvr)
 
         # Compute the jones matrix on the CPU
-        jones_cpu = RimeCPU(sd).compute_bk_jones()
+        jones_cpu = RimeCPU(slvr).compute_bk_jones()
 
         # Get the jones matrices calculated by the GPU
-        jones_gpu = sd.jones_gpu.get()
+        jones_gpu = slvr.jones_gpu.get()
 
         # Test that the jones CPU calculation matches that of the GPU calculation
         self.assertTrue(np.allclose(jones_cpu, jones_gpu,**cmp))
 
     def test_BK_float(self):
         """ single precision BK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200, dtype=np.float32)      
+        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=200, dtype=np.float32)      
 
-        self.BK_test_impl(sd)
+        self.BK_test_impl(slvr)
 
     def test_BK_double(self):
         """ double precision BK test """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float64)
+        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float64)
 
-        self.BK_test_impl(sd)
+        self.BK_test_impl(slvr)
 
-    def EBK_test_impl(self,sd,cmp=None):
+    def EBK_test_impl(self,slvr,cmp=None):
         """ Type independent implementation of the EBK test """
         if cmp is None: cmp = {}
 
         # This beam width produces reasonable values
         # for testing the E term
-        sd.set_beam_width(65*1e5)
+        slvr.set_beam_width(65*1e5)
 
         kernels = []
 
-        if sd.npsrc > 0: kernels.append(RimeEBK(gaussian=False))
-        if sd.ngsrc > 0: kernels.append(RimeEBK(gaussian=True))
+        if slvr.npsrc > 0: kernels.append(RimeEBK(gaussian=False))
+        if slvr.ngsrc > 0: kernels.append(RimeEBK(gaussian=True))
 
         # Invoke the EBK kernels
-        for k in kernels: k.initialise(sd)
-        for k in kernels: k.execute(sd)
-        for k in kernels: k.shutdown(sd)
+        for k in kernels: k.initialise(slvr)
+        for k in kernels: k.execute(slvr)
+        for k in kernels: k.shutdown(slvr)
 
-        jones_gpu = sd.jones_gpu.get()
-        jones_cpu = RimeCPU(sd).compute_ebk_jones()
+        jones_gpu = slvr.jones_gpu.get()
+        jones_cpu = RimeCPU(slvr).compute_ebk_jones()
 
         self.assertTrue(np.allclose(jones_gpu, jones_cpu,**cmp))
 
     def test_pEBK_double(self):
         """ double precision EBK test for point sources only """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float64)
+        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float64)
 
-        self.EBK_test_impl(sd)
+        self.EBK_test_impl(slvr)
 
     def test_pEBK_float(self):
         """ single precision EBK test for point sources only """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float32)
+        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=200,dtype=np.float32)
 
         # Hmmm, we don't need this tolerance now? I wonder why it's working...
-        #self.EBK_test_impl(sd, cmp={'rtol' : 1e-2,'atol' : 1e-2})
-        self.EBK_test_impl(sd)
+        #self.EBK_test_impl(slvr, cmp={'rtol' : 1e-2,'atol' : 1e-2})
+        self.EBK_test_impl(slvr)
 
     def test_pgEBK_double(self):
         """ double precision EBK test for point and gaussian sources """
-        #sd = TestSharedData(na=2,nchan=2,ntime=1,npsrc=2,ngsrc=1,
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,dtype=np.float64)
+        #slvr = TestSolver(na=2,nchan=2,ntime=1,npsrc=2,ngsrc=1,
+        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,dtype=np.float64)
 
-        self.EBK_test_impl(sd)
+        self.EBK_test_impl(slvr)
 
     def test_pgEBK_float(self):
         """ single precision EBK test for point and gaussian sources """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,dtype=np.float32)
+        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,dtype=np.float32)
 
-        self.EBK_test_impl(sd, cmp={'rtol' : 1e-2})
+        self.EBK_test_impl(slvr, cmp={'rtol' : 1e-2})
 
-    def multiply_test_impl(self, sd, cmp=None):
+    def multiply_test_impl(self, slvr, cmp=None):
         """ Type independent implementation of the multiply test """
         import pycuda.gpuarray as gpuarray
 
@@ -130,41 +130,41 @@ class TestBiroV1(unittest.TestCase):
 
         rime_multiply = RimeMultiply()
 
-        rime_multiply.initialise(sd)
+        rime_multiply.initialise(slvr)
 
         # Output jones matrix
-        njones = sd.nbl*sd.npsrc*sd.nchan*sd.ntime
-        jsize = np.product(sd.jones_shape) # Number of complex  numbers
+        njones = slvr.nbl*slvr.npsrc*slvr.nchan*slvr.ntime
+        jsize = np.product(slvr.jones_shape) # Number of complex  numbers
         # Create some random jones matrices to multiply together
         jones_lhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
-            .astype(sd.ct).reshape(sd.jones_shape)
+            .astype(slvr.ct).reshape(slvr.jones_shape)
         jones_rhs = (np.random.random(jsize) + 1j*np.random.random(jsize))\
-            .astype(sd.ct).reshape(sd.jones_shape)
+            .astype(slvr.ct).reshape(slvr.jones_shape)
 
         jones_lhs_gpu = gpuarray.to_gpu(jones_lhs)
         jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
 
-        rime_multiply.kernel(jones_lhs_gpu, jones_rhs_gpu, sd.jones_gpu,
-            np.int32(njones), **rime_multiply.get_kernel_params(sd))
+        rime_multiply.kernel(jones_lhs_gpu, jones_rhs_gpu, slvr.jones_gpu,
+            np.int32(njones), **rime_multiply.get_kernel_params(slvr))
 
         # Shutdown the rime node, we don't need it any more
-        rime_multiply.shutdown(sd)
+        rime_multiply.shutdown(slvr)
 
         # Get the result off the gpu
-        jones_output_gpu = sd.jones_gpu.get()
+        jones_output_gpu = slvr.jones_gpu.get()
 
         # Perform the calculation on the CPU
-        jones_output_cpu = np.empty(shape=sd.jones_shape, dtype=sd.ct)
+        jones_output_cpu = np.empty(shape=slvr.jones_shape, dtype=slvr.ct)
 
         # TODO: There must be a more numpy way to do this
         # Its dog slow...
         # Possible alternative to use with np.rollaxis:
         # from numpy.core.umath_tests import matrix_multiply
         # Doesn't work with complex numbers tho
-        for bl in range(sd.nbl):
-            for ch in range(sd.nchan):
-                for t in range(sd.ntime):               
-                    for src in range(sd.npsrc):
+        for bl in range(slvr.nbl):
+            for ch in range(slvr.nchan):
+                for t in range(slvr.ntime):               
+                    for src in range(slvr.npsrc):
                         jones_output_cpu[:,bl,ch,t,src] = np.dot(
                         jones_lhs[:,bl,ch,t,src].reshape(2,2),
                         jones_rhs[:,bl,ch,t,src].reshape(2,2)).reshape(4)
@@ -176,139 +176,139 @@ class TestBiroV1(unittest.TestCase):
     def test_multiply_double(self):
         """ double precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float64)
+        slvr = TestSolver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float64)
         
-        self.multiply_test_impl(sd)
+        self.multiply_test_impl(slvr)
 
     @unittest.skipIf(False, 'test_multiply_float numpy code is somewhat inefficient')
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        sd = TestSharedData(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32)
+        slvr = TestSolver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32)
         
-        self.multiply_test_impl(sd)
+        self.multiply_test_impl(slvr)
 
-    def chi_squared_test_impl(self, sd, weight_vector=False, cmp=None):
+    def chi_squared_test_impl(self, slvr, weight_vector=False, cmp=None):
         """ Type independent implementation of the chi squared test """
         if cmp is None: cmp = {}
 
         kernels = [RimeChiSquared(weight_vector=weight_vector)]
 
         # Initialise, execute and shutdown the kernels
-        for k in kernels: k.initialise(sd)
-        for k in kernels: k.execute(sd)
-        for k in kernels: k.shutdown(sd)
+        for k in kernels: k.initialise(slvr)
+        for k in kernels: k.execute(slvr)
+        for k in kernels: k.shutdown(slvr)
 
         # Compute the chi squared sum values
-        chi_sqrd_cpu = RimeCPU(sd).compute_chi_sqrd_sum_terms(weight_vector=weight_vector)
-        chi_sqrd_gpu = sd.chi_sqrd_result_gpu.get()
+        chi_sqrd_cpu = RimeCPU(slvr).compute_chi_sqrd_sum_terms(weight_vector=weight_vector)
+        chi_sqrd_gpu = slvr.chi_sqrd_result_gpu.get()
 
         # Check the values inside the sum term of the Chi Squared
         self.assertTrue(np.allclose(chi_sqrd_cpu, chi_sqrd_gpu,**cmp))
 
         # Compute the actual chi squared value
-        X2_cpu = RimeCPU(sd).compute_chi_sqrd(weight_vector=weight_vector)
+        X2_cpu = RimeCPU(slvr).compute_chi_sqrd(weight_vector=weight_vector)
 
         # Check that the result returned by the CPU and GPU are the same,
-        self.assertTrue(np.allclose(np.array([X2_cpu]), np.array([sd.X2]), **cmp))
+        self.assertTrue(np.allclose(np.array([X2_cpu]), np.array([slvr.X2]), **cmp))
 
     def test_chi_squared_double(self):
         """ double precision chi squared test """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64)
+        slvr = TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64)
 
-        self.chi_squared_test_impl(sd)
+        self.chi_squared_test_impl(slvr)
 
     def test_chi_squared_float(self):
         """ single precision chi squared test """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32)
+        slvr = TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32)
 
-        self.chi_squared_test_impl(sd, cmp={'rtol' : 1e-4})
+        self.chi_squared_test_impl(slvr, cmp={'rtol' : 1e-4})
 
     def test_chi_squared_weight_vector_double(self):
         """ double precision chi squared test with noise vector """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64)
+        slvr = TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64)
 
-        self.chi_squared_test_impl(sd, weight_vector=True)
+        self.chi_squared_test_impl(slvr, weight_vector=True)
 
     def test_chi_squared_weight_vector_float(self):
         """ single precision chi squared test with noise vector """
-        sd = TestSharedData(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32)
+        slvr = TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32)
 
-        self.chi_squared_test_impl(sd, weight_vector=True, cmp={'rtol' : 1e-3 })
+        self.chi_squared_test_impl(slvr, weight_vector=True, cmp={'rtol' : 1e-3 })
 
-    def reduce_test_impl(self, sd, cmp=None):
+    def reduce_test_impl(self, slvr, cmp=None):
         """ Type independent implementation of the reduction tests """
         if cmp is None: cmp = {}
 
         rime_reduce = RimeJonesReduce()
 
-        rime_reduce.initialise(sd)
+        rime_reduce.initialise(slvr)
 
         # Create the jones matrices
-        jsize = np.product(sd.jones_shape)
+        jsize = np.product(slvr.jones_shape)
         jones_cpu = (np.random.random(jsize) + 1j*np.random.random(jsize))\
-            .astype(sd.ct).reshape(sd.jones_shape)
+            .astype(slvr.ct).reshape(slvr.jones_shape)
     
         # Send the jones and keys to the gpu, and create the output array for
         # the visibilities.
-        sd.transfer_jones(jones_cpu)
+        slvr.transfer_jones(jones_cpu)
 
         # Compute the reduction
-        rime_reduce.execute(sd)
+        rime_reduce.execute(slvr)
 
         # Shutdown the rime node, we don't need it any more
-        rime_reduce.shutdown(sd)
+        rime_reduce.shutdown(slvr)
 
         # Add everything along the last axis (time)
-        vis_cpu = np.sum(jones_cpu,axis=len(sd.jones_shape)-1)
+        vis_cpu = np.sum(jones_cpu,axis=len(slvr.jones_shape)-1)
 
         # Get the visibilities off the GPU
-        vis_gpu = sd.vis_gpu.get()
+        vis_gpu = slvr.vis_gpu.get()
 
         # Confirm similar results
         self.assertTrue(np.allclose(vis_cpu, vis_gpu, **cmp))
 
     def test_reduce_double(self):
         """ double precision reduction test """
-        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,dtype=np.float64)
+        slvr = TestSolver(na=10, nchan=32, ntime=10, npsrc=200,dtype=np.float64)
 
-        self.reduce_test_impl(sd)
+        self.reduce_test_impl(slvr)
 
     def test_reduce_float(self):
         """ single precision reduction test """
-        sd = TestSharedData(na=10, nchan=32, ntime=10, npsrc=200,dtype=np.float32)
+        slvr = TestSolver(na=10, nchan=32, ntime=10, npsrc=200,dtype=np.float32)
 
-        self.reduce_test_impl(sd)
+        self.reduce_test_impl(slvr)
 
-    def gauss_test_impl(self, shared_data, cmp=None):
+    def gauss_test_impl(self, solver, cmp=None):
         """ Type independent implementation of the gaussian tests """
         if cmp is None: cmp = {}
 
-        sd = shared_data
+        slvr = solver
 
-        gs = RimeCPU(sd).compute_gaussian_shape()
-        gs_with_fwhm = RimeCPU(sd).compute_gaussian_shape_with_fwhm()
+        gs = RimeCPU(slvr).compute_gaussian_shape()
+        gs_with_fwhm = RimeCPU(slvr).compute_gaussian_shape_with_fwhm()
 
         self.assertTrue(np.allclose(gs,gs_with_fwhm, **cmp))
 
     def test_gauss_double(self):
         """ Gaussian with fwhm and without is the same """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float64)
+        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float64)
 
-        self.gauss_test_impl(sd)
+        self.gauss_test_impl(slvr)
 
     def test_gauss_float(self):
         """ Gaussian with fwhm and without is the same """
-        sd = TestSharedData(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float32)
+        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float32)
 
-        self.gauss_test_impl(sd, cmp={'rtol' : 1e-4 })
+        self.gauss_test_impl(slvr, cmp={'rtol' : 1e-4 })
 
-    def time_predict(self, sd):
-        na=sd.na          # Number of antenna
-        nbl=sd.nbl        # Number of baselines
-        nchan=sd.nchan    # Number of channels
-        nsrc=sd.nsrc      # Number of sources
-        ntime=sd.ntime    # Number of timesteps
+    def time_predict(self, slvr):
+        na=slvr.na          # Number of antenna
+        nbl=slvr.nbl        # Number of baselines
+        nchan=slvr.nchan    # Number of channels
+        nsrc=slvr.nsrc      # Number of sources
+        ntime=slvr.ntime    # Number of timesteps
 
         # We only handle a timestep of 1 here, because the predict code doesn't handle time
         assert ntime == 1
@@ -316,16 +316,16 @@ class TestBiroV1(unittest.TestCase):
         # Visibilities ! has to have double complex
         Vis=np.complex128(np.zeros((nbl,nchan,4)))
         # UVW coordinates
-        uvw=sd.uvw_cpu.T.astype(np.float64).copy()
+        uvw=slvr.uvw_cpu.T.astype(np.float64).copy()
 
         # Frequencies in Hz
-        WaveL = sd.wavelength_cpu.astype(np.float64)
+        WaveL = slvr.wavelength_cpu.astype(np.float64)
         # Sky coordinates
         T=0 # We should only have one timestep in this test
 
-        lms=np.array([sd.lm_cpu[0], sd.lm_cpu[1],
-            sd.brightness_cpu[0,T], sd.brightness_cpu[4,T], sd.brightness_cpu[1,T],
-            sd.brightness_cpu[2,T], sd.brightness_cpu[3,T]]).astype(np.float64).T.copy()
+        lms=np.array([slvr.lm_cpu[0], slvr.lm_cpu[1],
+            slvr.brightness_cpu[0,T], slvr.brightness_cpu[4,T], slvr.brightness_cpu[1,T],
+            slvr.brightness_cpu[2,T], slvr.brightness_cpu[3,T]]).astype(np.float64).T.copy()
 
         # Antennas
         A0=np.int64(np.random.rand(nbl)*na)
@@ -336,7 +336,7 @@ class TestBiroV1(unittest.TestCase):
 
         # Matrix containing information, here just the reference frequency
         # to estimate the flux from spectral index
-        Info=np.array([sd.ref_wave],np.float64)
+        Info=np.array([slvr.ref_wave],np.float64)
 
         # Call Cyrils' predict code
         predict_start = time.time()
@@ -349,26 +349,26 @@ class TestBiroV1(unittest.TestCase):
 
         return Vis
     
-    def predict_test_impl(self, shared_data):
+    def predict_test_impl(self, solver):
         import pycuda.driver as cuda
 
-        sd = shared_data        
+        slvr = solver        
         rime_bk = RimeBK()
         rime_reduce = RimeJonesReduce()
 
         # Initialise the node
-        rime_bk.initialise(sd)
+        rime_bk.initialise(slvr)
 
-        vis_predict_cpu = self.time_predict(sd)
+        vis_predict_cpu = self.time_predict(slvr)
 
-        montblanc.log.info(sd)
+        montblanc.log.info(slvr)
 
         kernels_start, kernels_end = cuda.Event(), cuda.Event()
         kernels_start.record()
 
         # Invoke the kernel
-        rime_bk.execute(sd)
-        rime_reduce.execute(sd)
+        rime_bk.execute(slvr)
+        rime_reduce.execute(slvr)
 
         kernels_end.record()
         kernels_end.synchronize()
@@ -377,44 +377,44 @@ class TestBiroV1(unittest.TestCase):
             kernels_start.time_till(kernels_end)*1e-3)
 
         # Shutdown the rime node, we don't need it any more
-        rime_bk.shutdown(sd)
+        rime_bk.shutdown(slvr)
 
         # Shift the gpu jones matrices so they are on the last axis
-        vis_gpu = np.rollaxis(sd.vis_gpu.get(),0,len(sd.jones_shape)-2).squeeze()
+        vis_gpu = np.rollaxis(slvr.vis_gpu.get(),0,len(slvr.jones_shape)-2).squeeze()
 
         # Compare the GPU solution with Cyril's predict code
         self.assertTrue(np.allclose(vis_gpu, vis_predict_cpu))
 
     def test_predict_double(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+        slvr = TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float64)
 
-        self.predict_test_impl(sd)
+        self.predict_test_impl(slvr)
 
     def test_predict_float(self):
-        sd = TestSharedData(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+        slvr = TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float32)
 
-        self.predict_test_impl(sd)
+        self.predict_test_impl(slvr)
 
     def test_sum_float(self):
-        sd = TestSharedData(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32)
+        slvr = TestSolver(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32)
 
-        jones_cpu = (np.random.random(np.product(sd.jones_shape)) + \
-            np.random.random(np.product(sd.jones_shape))*1j)\
-            .reshape(sd.jones_shape).astype(sd.ct)
-        sd.jones_gpu.set(jones_cpu)
+        jones_cpu = (np.random.random(np.product(slvr.jones_shape)) + \
+            np.random.random(np.product(slvr.jones_shape))*1j)\
+            .reshape(slvr.jones_shape).astype(slvr.ct)
+        slvr.jones_gpu.set(jones_cpu)
         
         rime_sum = RimeSumFloat()
-        rime_sum.initialise(sd)
+        rime_sum.initialise(slvr)
 
-        rime_sum.execute(sd)
+        rime_sum.execute(slvr)
 
         vis_cpu = np.add.reduce(jones_cpu,axis=4)
 
-        self.assertTrue(np.allclose(vis_cpu, sd.vis_gpu.get()))
+        self.assertTrue(np.allclose(vis_cpu, slvr.vis_gpu.get()))
 
-        rime_sum.shutdown(sd)
+        rime_sum.shutdown(slvr)
 
     def demo_real_problem(self):
         """
@@ -482,7 +482,7 @@ class TestBiroV1(unittest.TestCase):
 
         # Simulate some data
         montblanc.log.setLevel(loggingLevel)
-        sd=factory.get_biro_shared_data(sd_type='biro',\
+        slvr=factory.get_biro_solver(sd_type='biro',\
                     na=tel_params[tel]['nant'],\
                     nchan=tel_params[tel]['nchan'],ntime=obs_params['ntime'],\
                     npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
@@ -493,47 +493,47 @@ class TestBiroV1(unittest.TestCase):
                     dtype=mb_params['dtype'],\
                     store_cpu=mb_params['store_cpu'])
 
-        print sd
+        print slvr
 	#print sampler['simulator']
 
         # Set up the observation
-        uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
-        sd.transfer_uvw(uvw)
+        uvw = slvr.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
+        slvr.transfer_uvw(uvw)
 
-        frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+tel_params[tel]['BW'],sd.nchan))
-        #frequencies = sd.ft(np.linspace(1.4e9,1.5e9,sd.nchan))
-        wavelength = sd.ft(montblanc.constants.C/frequencies)
-        sd.set_ref_wave(wavelength[sd.nchan//2])
-        sd.transfer_wavelength(wavelength)
+        frequencies = slvr.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+tel_params[tel]['BW'],slvr.nchan))
+        #frequencies = slvr.ft(np.linspace(1.4e9,1.5e9,slvr.nchan))
+        wavelength = slvr.ft(montblanc.constants.C/frequencies)
+        slvr.set_ref_wave(wavelength[slvr.nchan//2])
+        slvr.transfer_wavelength(wavelength)
 
         # Simulate the target source(s) here
-        lm_sim=sd.ft(np.array([source_params['x'],source_params['y']]).reshape(sd.lm_shape))
-        sd.transfer_lm(lm_sim)
-        fI_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['I'])
-        fQ_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['Q'])
-        fU_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['U'])
-        fV_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['V'])
-        alpha_sim=sd.ft(np.ones(sd.ntime*sd.nsrc)*source_params['alpha'])
-        brightness_sim=np.array([fI_sim,fQ_sim,fU_sim,fV_sim,alpha_sim]).reshape(sd.brightness_shape)
-        sd.transfer_brightness(brightness_sim)
+        lm_sim=slvr.ft(np.array([source_params['x'],source_params['y']]).reshape(slvr.lm_shape))
+        slvr.transfer_lm(lm_sim)
+        fI_sim=slvr.ft(np.ones(slvr.ntime*slvr.nsrc)*source_params['I'])
+        fQ_sim=slvr.ft(np.ones(slvr.ntime*slvr.nsrc)*source_params['Q'])
+        fU_sim=slvr.ft(np.ones(slvr.ntime*slvr.nsrc)*source_params['U'])
+        fV_sim=slvr.ft(np.ones(slvr.ntime*slvr.nsrc)*source_params['V'])
+        alpha_sim=slvr.ft(np.ones(slvr.ntime*slvr.nsrc)*source_params['alpha'])
+        brightness_sim=np.array([fI_sim,fQ_sim,fU_sim,fV_sim,alpha_sim]).reshape(slvr.brightness_shape)
+        slvr.transfer_brightness(brightness_sim)
 
         e1=source_params['emaj']*np.sin(source_params['pa'])
         e2=source_params['emaj']*np.cos(source_params['pa'])
         r=source_params['emin']/source_params['emaj']
-        el_sim = sd.ft(np.ones(sd.ngsrc)*e1)
-        em_sim = sd.ft(np.ones(sd.ngsrc)*e2)
-        R_sim = sd.ft(np.ones(sd.ngsrc)*r)
-        gauss_shape_sim = np.array([el_sim,em_sim,R_sim]).reshape(sd.gauss_shape_shape)
-        sd.transfer_gauss_shape(gauss_shape_sim)
-        sampler['simulator'].initialise(sd)
-        sampler['simulator'].execute(sd)
+        el_sim = slvr.ft(np.ones(slvr.ngsrc)*e1)
+        em_sim = slvr.ft(np.ones(slvr.ngsrc)*e2)
+        R_sim = slvr.ft(np.ones(slvr.ngsrc)*r)
+        gauss_shape_sim = np.array([el_sim,em_sim,R_sim]).reshape(slvr.gauss_shape_shape)
+        slvr.transfer_gauss_shape(gauss_shape_sim)
+        sampler['simulator'].initialise(slvr)
+        sampler['simulator'].execute(slvr)
 
         # Fetch the simulated visibilities back and add noise
-        vis_sim=sd.vis_gpu.get()
+        vis_sim=slvr.vis_gpu.get()
         np.random.seed(noise_seed)
-        noise_sim=sd.ct((np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.nchan*sd.ntime*sd.nsrc)+1j*np.random.normal(0.0,sigmaSim,4*sd.nbl*sd.nchan*sd.ntime*sd.nsrc)).reshape(sd.vis_shape))
+        noise_sim=slvr.ct((np.random.normal(0.0,sigmaSim,4*slvr.nbl*slvr.nchan*slvr.ntime*slvr.nsrc)+1j*np.random.normal(0.0,sigmaSim,4*slvr.nbl*slvr.nchan*slvr.ntime*slvr.nsrc)).reshape(slvr.vis_shape))
         vis_sim+=noise_sim
-        sampler['simulator'].shutdown(sd)
+        sampler['simulator'].shutdown(slvr)
         sampler['simulator']=vis_sim
         # End of simulation step
 
@@ -562,12 +562,12 @@ class TestBiroV1(unittest.TestCase):
         #-------------------------------------------------------------------
         # Now begin the likelihood calculation proper
         sampler['pipeline']=None
-        sampler['sd']=None
+        sampler['slvr']=None
         sampler['ndata']=None
         def myloglike(cube, ndim, nparams):
             # Initialize the pipeline
             if sampler['pipeline'] is None:
-                sampler['sd']=factory.get_biro_shared_data(sd_type='biro',\
+                sampler['slvr']=factory.get_biro_solver(sd_type='biro',\
                     na=tel_params[tel]['nant'],\
                     nchan=tel_params[tel]['nchan'],ntime=obs_params['ntime'],\
                     npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
@@ -577,83 +577,83 @@ class TestBiroV1(unittest.TestCase):
                     weight_vector=mb_params['use_weight_vector'],\
                     dtype=mb_params['dtype'],\
                     store_cpu=mb_params['store_cpu'])
-                sd=sampler['sd']
+                slvr=sampler['slvr']
                 # Set up the observation (again - probably unnecessary)
-                uvw = sd.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
-                sd.transfer_uvw(uvw)
+                uvw = slvr.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
+                slvr.transfer_uvw(uvw)
 
-                frequencies = sd.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+tel_params[tel]['BW'],sd.nchan))
-                #frequencies = sd.ft(np.linspace(1.4e9,1.5e9,sd.nchan))
-                wavelength = sd.ft(montblanc.constants.C/frequencies)
-                sd.set_ref_wave(wavelength[sd.nchan//2])
-                sd.transfer_wavelength(wavelength)
+                frequencies = slvr.ft(np.linspace(tel_params[tel]['freq'],tel_params[tel]['freq']+tel_params[tel]['BW'],slvr.nchan))
+                #frequencies = slvr.ft(np.linspace(1.4e9,1.5e9,slvr.nchan))
+                wavelength = slvr.ft(montblanc.constants.C/frequencies)
+                slvr.set_ref_wave(wavelength[slvr.nchan//2])
+                slvr.transfer_wavelength(wavelength)
 
-                # Transfer the simulated vis into sd
-                sd.transfer_bayes_data(sampler['simulator'])
+                # Transfer the simulated vis into slvr
+                slvr.transfer_bayes_data(sampler['simulator'])
 
-                sampler['pipeline'].initialise(sd)
-                print sd
+                sampler['pipeline'].initialise(slvr)
+                print slvr
                 # Carry out calculations on the CPU (as opposed to GPU)
                 if mb_params['store_cpu']:
-                    point_errors = np.zeros(2*sd.na*sd.ntime)\
-                        .astype(sd.ft).reshape((2,sd.na,sd.ntime))
-                    sd.transfer_point_errors(point_errors)
+                    point_errors = np.zeros(2*slvr.na*slvr.ntime)\
+                        .astype(slvr.ft).reshape((2,slvr.na,slvr.ntime))
+                    slvr.transfer_point_errors(point_errors)
 
                 # Set up the antenna table if noise depends on this
                 if mb_params['use_weight_vector']:
-                     bl2ants=sd.get_default_ant_pairs()
+                     bl2ants=slvr.get_default_ant_pairs()
 
                 # Find total number of visibilities
                 # complex x [XX,XY,YX,YY] x nbl x nchan x ntime
-                sampler['ndata']=2*4*sd.nbl*sd.nchan*sd.ntime
+                sampler['ndata']=2*4*slvr.nbl*slvr.nchan*slvr.ntime
             # End of setup
 
             #-------------------------------------------------------------------
             # Do next lines on every iteration
 
             # Now set up the model vis for this iteration
-            sd=sampler['sd']; ndata=sampler['ndata']
-            lm=np.array([cube[0],cube[1]], dtype=sd.ft).reshape(sd.lm_shape)
-            fI=cube[2]*np.ones((sd.ntime,sd.nsrc),dtype=sd.ft)
-            fQ=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
-            fU=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
-            fV=        np.zeros((sd.ntime,sd.nsrc),dtype=sd.ft)
-            alpha=cube[4]*np.ones((sd.ntime,sd.nsrc),dtype=sd.ft)
-            brightness = np.array([fI,fQ,fU,fV,alpha],dtype=sd.ft)\
-                .reshape(sd.brightness_shape)
+            slvr=sampler['slvr']; ndata=sampler['ndata']
+            lm=np.array([cube[0],cube[1]], dtype=slvr.ft).reshape(slvr.lm_shape)
+            fI=cube[2]*np.ones((slvr.ntime,slvr.nsrc),dtype=slvr.ft)
+            fQ=        np.zeros((slvr.ntime,slvr.nsrc),dtype=slvr.ft)
+            fU=        np.zeros((slvr.ntime,slvr.nsrc),dtype=slvr.ft)
+            fV=        np.zeros((slvr.ntime,slvr.nsrc),dtype=slvr.ft)
+            alpha=cube[4]*np.ones((slvr.ntime,slvr.nsrc),dtype=slvr.ft)
+            brightness = np.array([fI,fQ,fU,fV,alpha],dtype=slvr.ft)\
+                .reshape(slvr.brightness_shape)
 
             # Push cube parameters for this iteration to the GPU
-            sd.transfer_lm(lm)
-            sd.transfer_brightness(brightness)
+            slvr.transfer_lm(lm)
+            slvr.transfer_brightness(brightness)
 
-            if sd.ngsrc > 0:
+            if slvr.ngsrc > 0:
                 #if cube[5]>cube[6]: return -1.0e99 # Catch oblates(?)
                 #gauss_shape = np.array([[cube[6]*np.sin(cube[7]),\
-                #              cube[6]*np.cos(cube[7]),cube[5]/cube[6]]],dtype=sd.ft).reshape(sd.gauss_shape_shape)
-                gauss_shape = np.array([cube[5],cube[6],cube[7]],dtype=sd.ft).reshape(sd.gauss_shape_shape)
-                sd.transfer_gauss_shape(gauss_shape)
+                #              cube[6]*np.cos(cube[7]),cube[5]/cube[6]]],dtype=slvr.ft).reshape(slvr.gauss_shape_shape)
+                gauss_shape = np.array([cube[5],cube[6],cube[7]],dtype=slvr.ft).reshape(slvr.gauss_shape_shape)
+                slvr.transfer_gauss_shape(gauss_shape)
 
             # Set the noise
             if sigmaFit is not None:
-                sigma=sigmaFit*np.ones(1).astype(sd.ft)
+                sigma=sigmaFit*np.ones(1).astype(slvr.ft)
             else:
-                sigma=cube[3]*np.ones(1).astype(sd.ft)
+                sigma=cube[3]*np.ones(1).astype(slvr.ft)
 
             if mb_params['use_weight_vector']:
                 # One weight element per set of polarizations
-                weight_vector=np.ones(ndata/8).astype(sd.ft)\
-                    .reshape(sd.weight_vector_shape)/sigma[0]**2
+                weight_vector=np.ones(ndata/8).astype(slvr.ft)\
+                    .reshape(slvr.weight_vector_shape)/sigma[0]**2
 
-                sd.transfer_weight_vector(weight_vector)
+                slvr.transfer_weight_vector(weight_vector)
             else:
-                sd.set_sigma_sqrd((sigma[0]**2))
+                slvr.set_sigma_sqrd((sigma[0]**2))
 
-            # Execute the pipeline; cube[:] -> sd.X2
-            sampler['pipeline'].execute(sd)
+            # Execute the pipeline; cube[:] -> slvr.X2
+            sampler['pipeline'].execute(slvr)
             if mb_params['store_cpu']:
-                chi2=sd.compute_biro_chi_sqrd()
+                chi2=slvr.compute_biro_chi_sqrd()
             else:
-                chi2=sd.X2
+                chi2=slvr.X2
 
             if mb_params['use_weight_vector']:
                 # I think there needs to be a factor of 8 here because
@@ -689,8 +689,8 @@ class TestBiroV1(unittest.TestCase):
         print 'Avg. execution time %gms' % sampler['pipeline'].avg_execution_time
         print 'Last execution time %gms' % sampler['pipeline'].last_execution_time
         print 'No. of executions %d.' % sampler['pipeline'].nr_of_executions
-        print sd
-        sampler['pipeline'].shutdown(sd)
+        print slvr
+        sampler['pipeline'].shutdown(slvr)
         print source_params
         lproj_sim=source_params['emaj']*np.sin(source_params['pa'])
         mproj_sim=source_params['emaj']*np.cos(source_params['pa'])

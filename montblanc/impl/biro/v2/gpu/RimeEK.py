@@ -168,14 +168,14 @@ class RimeEK(Node):
     def __init__(self):
         super(RimeEK, self).__init__()
 
-    def initialise(self, shared_data):
-        sd = shared_data
+    def initialise(self, solver):
+        slvr = solver
 
-        D = sd.get_properties()
-        D.update(FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS)
+        D = slvr.get_properties()
+        D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
-        	if sd.is_float() else DOUBLE_PARAMS['maxregs'])
+        	if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
@@ -184,41 +184,41 @@ class RimeEK(Node):
             no_extern_c=True)
 
         kname = 'rime_jones_EK_float' \
-            if sd.is_float() is True else \
+            if slvr.is_float() is True else \
             'rime_jones_EK_double'
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
 
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
 
-    def get_kernel_params(self, shared_data):
-        sd = shared_data
+    def get_kernel_params(self, solver):
+        slvr = solver
 
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
 
-        chans_per_block = D['BLOCKDIMX'] if sd.nchan > D['BLOCKDIMX'] else sd.nchan
-        ants_per_block = D['BLOCKDIMY'] if sd.na > D['BLOCKDIMY'] else sd.na
-        times_per_block = D['BLOCKDIMZ'] if sd.ntime > D['BLOCKDIMZ'] else sd.ntime
+        chans_per_block = D['BLOCKDIMX'] if slvr.nchan > D['BLOCKDIMX'] else slvr.nchan
+        ants_per_block = D['BLOCKDIMY'] if slvr.na > D['BLOCKDIMY'] else slvr.na
+        times_per_block = D['BLOCKDIMZ'] if slvr.ntime > D['BLOCKDIMZ'] else slvr.ntime
 
-        chan_blocks = self.blocks_required(sd.nchan, chans_per_block)
-        ant_blocks = self.blocks_required(sd.na, ants_per_block)
-        time_blocks = self.blocks_required(sd.ntime, times_per_block)
+        chan_blocks = self.blocks_required(slvr.nchan, chans_per_block)
+        ant_blocks = self.blocks_required(slvr.na, ants_per_block)
+        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
 
         return {
             'block' : (chans_per_block, ants_per_block, times_per_block),
             'grid'  : (chan_blocks, ant_blocks, time_blocks), 
         }
 
-    def execute(self, shared_data):
-        sd = shared_data
+    def execute(self, solver):
+        slvr = solver
 
-        self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.jones_scalar_gpu,
-            **self.get_kernel_params(sd))
+        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
+            slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_scalar_gpu,
+            **self.get_kernel_params(slvr))
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

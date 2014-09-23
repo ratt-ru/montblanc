@@ -31,77 +31,77 @@ if __name__ == '__main__':
     #   compute the chi squared or a single sigma squared value
     # store_cpu : indicates whether copies of the data passed into the
     #   shared data transfer_* methods should be stored on the shared data object
-    pipeline, sd = montblanc.get_biro_pipeline(args.msfile,
+    pipeline, slvr = montblanc.get_biro_pipeline(args.msfile,
         npsrc=args.npsrc, ngsrc=args.ngsrc,
         init_weights=None, weight_vector=False,
         store_cpu=False,
         version=args.version)
 
     # Initialise the pipeline
-    pipeline.initialise(sd)
+    pipeline.initialise(slvr)
 
     # Random point source coordinates in the l,m,n (brightness image) domain
-    l=sd.ft(np.random.random(sd.nsrc)*0.1)
-    m=sd.ft(np.random.random(sd.nsrc)*0.1)
-    lm=np.array([l,m], dtype=sd.ft)
+    l=slvr.ft(np.random.random(slvr.nsrc)*0.1)
+    m=slvr.ft(np.random.random(slvr.nsrc)*0.1)
+    lm=np.array([l,m], dtype=slvr.ft)
 
     # Random brightness matrix for the point sources
-    fI=sd.ft(np.ones((sd.ntime,sd.nsrc,)))
-    fQ=sd.ft(np.random.random(sd.ntime*sd.nsrc)*0.5).reshape(sd.ntime,sd.nsrc)
-    fU=sd.ft(np.random.random(sd.ntime*sd.nsrc)*0.5).reshape(sd.ntime,sd.nsrc)
-    fV=sd.ft(np.random.random(sd.ntime*sd.nsrc)*0.5).reshape(sd.ntime,sd.nsrc)
-    alpha=sd.ft(np.random.random(sd.ntime*sd.nsrc)*0.1).reshape(sd.ntime,sd.nsrc)
-    brightness = np.array([fI,fQ,fU,fV,alpha], dtype=sd.ft)
+    fI=slvr.ft(np.ones((slvr.ntime,slvr.nsrc,)))
+    fQ=slvr.ft(np.random.random(slvr.ntime*slvr.nsrc)*0.5).reshape(slvr.ntime,slvr.nsrc)
+    fU=slvr.ft(np.random.random(slvr.ntime*slvr.nsrc)*0.5).reshape(slvr.ntime,slvr.nsrc)
+    fV=slvr.ft(np.random.random(slvr.ntime*slvr.nsrc)*0.5).reshape(slvr.ntime,slvr.nsrc)
+    alpha=slvr.ft(np.random.random(slvr.ntime*slvr.nsrc)*0.1).reshape(slvr.ntime,slvr.nsrc)
+    brightness = np.array([fI,fQ,fU,fV,alpha], dtype=slvr.ft)
 
     # If there are gaussian sources, create their
     # shape matrix and transfer it.
-    if sd.ngsrc > 0:
-        el = sd.ft(np.random.random(sd.ngsrc)*0.1)
-        em = sd.ft(np.random.random(sd.ngsrc)*0.1)
-        R = sd.ft(np.random.random(sd.ngsrc))
-        gauss_shape = np.array([el,em,R],dtype=sd.ft)
-        sd.transfer_gauss_shape(gauss_shape)
+    if slvr.ngsrc > 0:
+        el = slvr.ft(np.random.random(slvr.ngsrc)*0.1)
+        em = slvr.ft(np.random.random(slvr.ngsrc)*0.1)
+        R = slvr.ft(np.random.random(slvr.ngsrc))
+        gauss_shape = np.array([el,em,R],dtype=slvr.ft)
+        slvr.transfer_gauss_shape(gauss_shape)
 
     # Create a bayesian model and upload it to the GPU
-    nviselements = np.product(sd.vis_shape)
+    nviselements = np.product(slvr.vis_shape)
     bayes_data = (np.random.random(nviselements) + np.random.random(nviselements)*1j)\
-        .astype(sd.ct).reshape(sd.vis_shape)
-    sd.transfer_bayes_data(bayes_data)
+        .astype(slvr.ct).reshape(slvr.vis_shape)
+    slvr.transfer_bayes_data(bayes_data)
 
     # Generate random antenna pointing errors
-    point_errors = np.random.random(np.product(sd.point_errors_shape))\
-        .astype(sd.ft).reshape((sd.point_errors_shape))
+    point_errors = np.random.random(np.product(slvr.point_errors_shape))\
+        .astype(slvr.ft).reshape((slvr.point_errors_shape))
 
     # Generate and transfer a noise vector.
-    weight_vector = np.random.random(np.product(sd.weight_vector_shape))\
-        .astype(sd.ft).reshape((sd.weight_vector_shape))
-    sd.transfer_weight_vector(weight_vector)
+    weight_vector = np.random.random(np.product(slvr.weight_vector_shape))\
+        .astype(slvr.ft).reshape((slvr.weight_vector_shape))
+    slvr.transfer_weight_vector(weight_vector)
 
     # Execute the pipeline
     for i in range(args.count):
         # Set data on the shared data object. Uploads to GPU
-        sd.transfer_lm(lm)
-        sd.transfer_brightness(brightness)
-        sd.transfer_point_errors(point_errors)
+        slvr.transfer_lm(lm)
+        slvr.transfer_brightness(brightness)
+        slvr.transfer_point_errors(point_errors)
         # Change parameters for this run
-        sd.set_sigma_sqrd((np.random.random(1)**2)[0])
+        slvr.set_sigma_sqrd((np.random.random(1)**2)[0])
         # Execute the pipeline
-        pipeline.execute(sd)
+        pipeline.execute(slvr)
 
         # The chi squared result is set on the shared data object
-        print 'Chi Squared Value', sd.X2
+        print 'Chi Squared Value', slvr.X2
 
         # Must use get_biro_pipeline(...,store_cpu=True)
         # for the following to work
-        #X2_cpu = sd.compute_biro_chi_sqrd()
-        #print 'Chi Squared Value', sd.X2, X2_cpu, np.allclose(sd.X2,X2_cpu, rtol=1e-2)
+        #X2_cpu = slvr.compute_biro_chi_sqrd()
+        #print 'Chi Squared Value', slvr.X2, X2_cpu, np.allclose(slvr.X2,X2_cpu, rtol=1e-2)
 
         # Obtain the visibilities  (slow)
-        #V = sd.vis_gpu.get()
+        #V = slvr.vis_gpu.get()
 
     # Print information about the simulation
-    print sd
+    print slvr
     print 'Pipeline: avg execution time: %gms last execution time: %gms executions: %d. ' %\
         (pipeline.avg_execution_time, pipeline.last_execution_time, pipeline.nr_of_executions)
 
-    pipeline.shutdown(sd)
+    pipeline.shutdown(slvr)

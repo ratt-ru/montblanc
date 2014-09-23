@@ -1,19 +1,19 @@
 import numpy as np
 
-from montblanc.BaseSharedData import BaseSharedData
-from montblanc.BaseSharedData import DEFAULT_NA
-from montblanc.BaseSharedData import DEFAULT_NCHAN
-from montblanc.BaseSharedData import DEFAULT_NTIME
-from montblanc.BaseSharedData import DEFAULT_NPSRC
-from montblanc.BaseSharedData import DEFAULT_NGSRC
-from montblanc.BaseSharedData import DEFAULT_DTYPE
+from montblanc.BaseSolver import BaseSolver
+from montblanc.BaseSolver import DEFAULT_NA
+from montblanc.BaseSolver import DEFAULT_NCHAN
+from montblanc.BaseSolver import DEFAULT_NTIME
+from montblanc.BaseSolver import DEFAULT_NPSRC
+from montblanc.BaseSolver import DEFAULT_NGSRC
+from montblanc.BaseSolver import DEFAULT_DTYPE
 
-class BiroSharedData(BaseSharedData):
+class BiroSolver(BaseSolver):
     """ Shared Data implementation for BIRO """
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
         npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE, **kwargs):
         """
-        BiroSharedData Constructor
+        BiroSolver Constructor
 
         Parameters:
             na : integer
@@ -33,29 +33,29 @@ class BiroSharedData(BaseSharedData):
                 CUDA device to operate on.
             store_cpu: boolean
                 if True, store cpu versions of the kernel arrays
-                within the GPUSharedData object.
+                within the GPUSolver object.
         """
 
         # Turn off auto_correlations
         kwargs['auto_correlations'] = False
 
-        super(BiroSharedData, self).__init__(na=na, nchan=nchan, ntime=ntime,
+        super(BiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
             npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, **kwargs)
 
-        sd = self
-        na, nbl, nchan, ntime = sd.na, sd.nbl, sd.nchan, sd.ntime
-        npsrc, ngsrc, nsrc = sd.npsrc, sd.ngsrc, sd.nsrc
-        ft, ct = sd.ft, sd.ct
+        slvr = self
+        na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime
+        npsrc, ngsrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nsrc
+        ft, ct = slvr.ft, slvr.ct
 
         # Curry the register_array function for simplicity
         def reg(name,shape,dtype):
             self.register_array(name=name,shape=shape,dtype=dtype,
-                registrant='BaseSharedData', gpu=True, cpu=False,
+                registrant='BaseSolver', gpu=True, cpu=False,
                 shape_member=True, dtype_member=True)
 
         def reg_prop(name,dtype,default):
             self.register_property(name=name,dtype=dtype,
-                default=default,registrant='BaseSharedData', setter=True)
+                default=default,registrant='BaseSolver', setter=True)
 
         # Set up gaussian scaling parameters
         # Derived from https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L493
@@ -97,7 +97,7 @@ class BiroSharedData(BaseSharedData):
 
         reg(name='keys', shape=keys.shape, dtype=np.int32)
 
-        sd.transfer_keys(keys)
+        slvr.transfer_keys(keys)
 
     def get_default_ant_pairs(self):
         """
@@ -106,7 +106,7 @@ class BiroSharedData(BaseSharedData):
         """
         # Create the antenna pair mapping, from upper triangle indices
         # based on the number of antenna. 
-        sd = self
+        slvr = self
 
-        return np.repeat(np.int32(np.triu_indices(sd.na,1)),
-            sd.ntime).reshape(2,sd.nbl,sd.ntime)
+        return np.repeat(np.int32(np.triu_indices(slvr.na,1)),
+            slvr.ntime).reshape(2,slvr.nbl,slvr.ntime)

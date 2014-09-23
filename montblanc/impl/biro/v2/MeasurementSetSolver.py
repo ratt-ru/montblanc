@@ -5,11 +5,11 @@ import pycuda.gpuarray as gpuarray
 from pyrap.tables import table
 
 import montblanc
-import montblanc.BaseSharedData
+import montblanc.BaseSolver
 
-from montblanc.impl.biro.v2.BiroSharedData import BiroSharedData
+from montblanc.impl.biro.v2.BiroSolver import BiroSolver
 
-class MeasurementSetSharedData(BiroSharedData):
+class MeasurementSetSolver(BiroSolver):
     ANTENNA_TABLE = "ANTENNA"
     SPECTRAL_WINDOW = "SPECTRAL_WINDOW"
 
@@ -28,11 +28,11 @@ class MeasurementSetSharedData(BiroSharedData):
         t = table(self.msfile, ack=False).query('ANTENNA1 != ANTENNA2')
 
         # Open the antenna table
-        ant_path = os.path.join(self.msfile, MeasurementSetSharedData.ANTENNA_TABLE)
+        ant_path = os.path.join(self.msfile, MeasurementSetSolver.ANTENNA_TABLE)
         ta=table(ant_path, ack=False)
 
         # Open the spectral window table
-        freq_path = os.path.join(self.msfile, MeasurementSetSharedData.SPECTRAL_WINDOW)
+        freq_path = os.path.join(self.msfile, MeasurementSetSolver.SPECTRAL_WINDOW)
         tf=table(freq_path, ack=False)
         f=tf.getcol("CHAN_FREQ").astype(dtype)
 
@@ -45,7 +45,7 @@ class MeasurementSetSharedData(BiroSharedData):
         nchan = f.size
         ntime = t.nrows() // nbl
 
-        super(MeasurementSetSharedData, self).__init__(\
+        super(MeasurementSetSolver, self).__init__(\
             na=na,nchan=nchan,ntime=ntime,npsrc=npsrc,ngsrc=ngsrc,dtype=dtype,**kwargs)
 
         # Check that nbl agrees with version from constructor

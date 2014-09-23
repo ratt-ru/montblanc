@@ -14,29 +14,29 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     # Get the BK pipeline and shared data.
-    pipeline, sd = montblanc.get_bk_pipeline(args.msfile, npsrc=args.npsrc, ngsrc=args.ngsrc)
+    pipeline, slvr = montblanc.get_bk_pipeline(args.msfile, npsrc=args.npsrc, ngsrc=args.ngsrc)
 
     # Create point sources at zeros
-    l=sd.ft(np.zeros(sd.nsrc))
-    m=sd.ft(np.zeros(sd.nsrc))
-    lm=np.array([l,m], dtype=sd.ft)
+    l=slvr.ft(np.zeros(slvr.nsrc))
+    m=slvr.ft(np.zeros(slvr.nsrc))
+    lm=np.array([l,m], dtype=slvr.ft)
 
     # Create 1Jy point sources
-    fI=sd.ft(np.ones(sd.ntime*sd.nsrc)).reshape(sd.ntime,sd.nsrc)
-    fQ=sd.ft(np.zeros(sd.ntime*sd.nsrc)).reshape(sd.ntime,sd.nsrc)
-    fU=sd.ft(np.zeros(sd.ntime*sd.nsrc)).reshape(sd.ntime,sd.nsrc)
-    fV=sd.ft(np.zeros(sd.ntime*sd.nsrc)).reshape(sd.ntime,sd.nsrc)
-    alpha=sd.ft(np.zeros(sd.ntime*sd.nsrc)).reshape(sd.ntime,sd.nsrc)
-    brightness = np.array([fI,fQ,fU,fV,alpha], dtype=sd.ft)
+    fI=slvr.ft(np.ones(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+    fQ=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+    fU=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+    fV=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+    alpha=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
+    brightness = np.array([fI,fQ,fU,fV,alpha], dtype=slvr.ft)
 
-    sd.transfer_lm(lm)
-    sd.transfer_brightness(brightness)
+    slvr.transfer_lm(lm)
+    slvr.transfer_brightness(brightness)
 
     # Initialise the pipeline
-    pipeline.initialise(sd)
-    pipeline.execute(sd)
-    pipeline.shutdown(sd)
+    pipeline.initialise(slvr)
+    pipeline.execute(slvr)
+    pipeline.shutdown(slvr)
 
-    print sd.vis_gpu.get()
+    print slvr.vis_gpu.get()
 
-    print sd
+    print slvr
