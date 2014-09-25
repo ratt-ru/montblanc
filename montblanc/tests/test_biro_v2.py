@@ -7,13 +7,16 @@ import sys
 import montblanc.ext.crimes
 import montblanc.ext.predict
 
-from montblanc.impl.biro.v2.TestSolver import TestSolver
+import montblanc.factory
 
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
 
 from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
 from montblanc.pipeline import Pipeline
+
+def solver(**kwargs):
+    return montblanc.factory.get_biro_solver('test',version='v2',**kwargs)
 
 class TestBiroV2(unittest.TestCase):
     """
@@ -58,14 +61,14 @@ class TestBiroV2(unittest.TestCase):
 
     def test_EK_float(self):
         """ Single precision EK test """
-        with TestSolver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
+        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
             dtype=np.float32,pipeline=Pipeline([RimeEK()])) as slvr:
 
             self.EK_test_impl(slvr)
 
     def test_EK_double(self):
         """ Double precision EK test """
-        with TestSolver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
+        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
             dtype=np.float64,pipeline=Pipeline([RimeEK()])) as slvr:
 
             self.EK_test_impl(slvr)
@@ -95,7 +98,7 @@ class TestBiroV2(unittest.TestCase):
     def test_gauss_B_sum_float(self):
         """ """
         for w in [True,False]:
-            with TestSolver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
+            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
                 pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
 
                 self.gauss_B_sum_test_impl(slvr, weight_vector=w, cmp={'rtol' : 1e-3})
@@ -103,7 +106,7 @@ class TestBiroV2(unittest.TestCase):
     def test_gauss_B_sum_double(self):
         """ """
         for w in [True,False]:
-            with TestSolver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
+            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
                 pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
 
                 self.gauss_B_sum_test_impl(slvr, weight_vector=w, cmp={'rtol' : 1e-3})
@@ -176,13 +179,13 @@ class TestBiroV2(unittest.TestCase):
         self.assertTrue(np.allclose(vis_predict_cyril, vis_predict_cpu))
 
     def test_predict_double(self):
-        with TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float64) as slvr:
 
             self.do_predict_test(slvr)
 
     def test_predict_float(self):
-        with TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float32) as slvr:
 
             self.do_predict_test(slvr)

@@ -361,6 +361,22 @@ class TestSolver(unittest.TestCase):
             # actually tests things quite well
             slvr.viable_timesteps(2*1024*1024*1024)
 
+    def test_solver_factory(self):
+        """ Test that the solver factory produces the correct types """
+        import montblanc.factory
+
+        with montblanc.factory.get_biro_solver(sd_type='biro',version='v1') as slvr:
+            self.assertTrue(type(slvr) == montblanc.impl.biro.v1.BiroSolver.BiroSolver)
+
+        with montblanc.factory.get_biro_solver(sd_type='biro',version='v2') as slvr:
+            self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
+
+        with montblanc.factory.get_biro_solver(sd_type='test',version='v1') as slvr:
+            self.assertTrue(type(slvr) == montblanc.impl.biro.v1.BiroSolver.BiroSolver)
+
+        with montblanc.factory.get_biro_solver(sd_type='test',version='v2') as slvr:
+            self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSolver)
     unittest.TextTestRunner(verbosity=2).run(suite)

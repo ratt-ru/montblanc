@@ -7,7 +7,7 @@ import sys
 import montblanc.ext.predict
 import montblanc.ext.crimes
 
-from montblanc.impl.biro.v1.TestSolver import TestSolver
+import montblanc.factory
 
 from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
 from montblanc.impl.biro.v1.gpu.RimeEBK import RimeEBK
@@ -19,6 +19,9 @@ from montblanc.impl.biro.v1.gpu.RimeChiSquared import RimeChiSquared
 from montblanc.impl.biro.v1.cpu.RimeCPU import RimeCPU
 
 from montblanc.pipeline import Pipeline
+
+def solver(**kwargs):
+    return montblanc.factory.get_biro_solver('test',version='v1',**kwargs)
 
 class TestBiroV1(unittest.TestCase):
     """
@@ -60,14 +63,14 @@ class TestBiroV1(unittest.TestCase):
 
     def test_BK_float(self):
         """ single precision BK test """
-        with TestSolver(na=10,nchan=32,ntime=10,npsrc=200,
+        with solver(na=10,nchan=32,ntime=10,npsrc=200,
             pipeline=Pipeline([RimeBK()]), dtype=np.float32) as slvr:
 
             self.BK_test_impl(slvr)
 
     def test_BK_double(self):
         """ double precision BK test """
-        with TestSolver(na=10,nchan=32,ntime=10,npsrc=200,
+        with solver(na=10,nchan=32,ntime=10,npsrc=200,
             pipeline=Pipeline([RimeBK()]), dtype=np.float64) as slvr:
 
             self.BK_test_impl(slvr)
@@ -90,14 +93,14 @@ class TestBiroV1(unittest.TestCase):
 
     def test_pEBK_double(self):
         """ double precision EBK test for point sources only """
-        with TestSolver(na=10,nchan=32,ntime=10,npsrc=200,ngsrc=0,
+        with solver(na=10,nchan=32,ntime=10,npsrc=200,ngsrc=0,
             dtype=np.float64, pipeline=Pipeline([RimeEBK(gaussian=False)])) as slvr:
 
             self.EBK_test_impl(slvr)
 
     def test_pEBK_float(self):
         """ single precision EBK test for point sources only """
-        with TestSolver(na=10,nchan=32,ntime=10,npsrc=200,ngsrc=0,
+        with solver(na=10,nchan=32,ntime=10,npsrc=200,ngsrc=0,
             dtype=np.float32, pipeline=Pipeline([RimeEBK(gaussian=False)])) as slvr:
 
             # Hmmm, we don't need this tolerance now? I wonder why it's working...
@@ -106,7 +109,7 @@ class TestBiroV1(unittest.TestCase):
 
     def test_pgEBK_double(self):
         """ double precision EBK test for point and gaussian sources """
-        with TestSolver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
+        with solver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
             dtype=np.float64,
             pipeline=Pipeline([RimeEBK(gaussian=False), RimeEBK(gaussian=True)])) as slvr:
 
@@ -114,7 +117,7 @@ class TestBiroV1(unittest.TestCase):
 
     def test_pgEBK_float(self):
         """ single precision EBK test for point and gaussian sources """
-        with TestSolver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
+        with solver(na=10,nchan=32,ntime=10,npsrc=100,ngsrc=100,
             dtype=np.float64,
             pipeline=Pipeline([RimeEBK(gaussian=False), RimeEBK(gaussian=True)])) as slvr:
     
@@ -174,7 +177,7 @@ class TestBiroV1(unittest.TestCase):
     def test_multiply_double(self):
         """ double precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        with TestSolver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float64) as slvr:
+        with solver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float64) as slvr:
         
             self.multiply_test_impl(slvr)
 
@@ -182,7 +185,7 @@ class TestBiroV1(unittest.TestCase):
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        with TestSolver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32) as slvr:
+        with solver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32) as slvr:
         
             self.multiply_test_impl(slvr)
 
@@ -208,28 +211,28 @@ class TestBiroV1(unittest.TestCase):
 
     def test_chi_squared_double(self):
         """ double precision chi squared test """
-        with TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64,
+        with solver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64,
             pipeline=Pipeline([RimeChiSquared(weight_vector=False)])) as slvr:
 
             self.chi_squared_test_impl(slvr)
 
     def test_chi_squared_float(self):
         """ single precision chi squared test """
-        with TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64,
+        with solver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64,
             pipeline=Pipeline([RimeChiSquared(weight_vector=False)])) as slvr:
 
             self.chi_squared_test_impl(slvr, cmp={'rtol' : 1e-4})
 
     def test_chi_squared_weight_vector_double(self):
         """ double precision chi squared test with noise vector """
-        with TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64,
+        with solver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float64,
             pipeline=Pipeline([RimeChiSquared(weight_vector=True)])) as slvr:
 
             self.chi_squared_test_impl(slvr, weight_vector=True)
 
     def test_chi_squared_weight_vector_float(self):
         """ single precision chi squared test with noise vector """
-        with TestSolver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32,
+        with solver(na=20,nchan=32,ntime=100,npsrc=2,dtype=np.float32,
             pipeline=Pipeline([RimeChiSquared(weight_vector=True)])) as slvr:
 
             self.chi_squared_test_impl(slvr,
@@ -262,14 +265,14 @@ class TestBiroV1(unittest.TestCase):
 
     def test_reduce_double(self):
         """ double precision reduction test """
-        with TestSolver(na=10, nchan=32, ntime=10, npsrc=200,
+        with solver(na=10, nchan=32, ntime=10, npsrc=200,
             dtype=np.float64, pipeline=Pipeline([RimeJonesReduce()])) as slvr:
 
             self.reduce_test_impl(slvr)
 
     def test_reduce_float(self):
         """ single precision reduction test """
-        with TestSolver(na=10, nchan=32, ntime=10, npsrc=200,
+        with solver(na=10, nchan=32, ntime=10, npsrc=200,
             dtype=np.float32, pipeline=Pipeline([RimeJonesReduce()])) as slvr:
 
             self.reduce_test_impl(slvr)
@@ -287,13 +290,13 @@ class TestBiroV1(unittest.TestCase):
 
     def test_gauss_double(self):
         """ Gaussian with fwhm and without is the same """
-        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float64)
+        slvr = solver(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float64)
 
         self.gauss_test_impl(slvr)
 
     def test_gauss_float(self):
         """ Gaussian with fwhm and without is the same """
-        slvr = TestSolver(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float32)
+        slvr = solver(na=10,nchan=32,ntime=10,npsrc=10,ngsrc=10,dtype=np.float32)
 
         self.gauss_test_impl(slvr, cmp={'rtol' : 1e-4 })
 
@@ -371,19 +374,19 @@ class TestBiroV1(unittest.TestCase):
         self.assertTrue(np.allclose(vis_gpu, vis_predict_cpu))
 
     def test_predict_double(self):
-        with TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float64, pipeline=Pipeline([RimeBK(), RimeJonesReduce()])) as slvr:
 
             self.predict_test_impl(slvr)
 
     def test_predict_float(self):
-        with TestSolver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
             dtype=np.float32, pipeline=Pipeline([RimeBK(), RimeJonesReduce()])) as slvr:
 
             self.predict_test_impl(slvr)
 
     def test_sum_float(self):
-        slvr = TestSolver(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32)
+        slvr = solver(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32)
 
         jones_cpu = (np.random.random(np.product(slvr.jones_shape)) + \
             np.random.random(np.product(slvr.jones_shape))*1j)\
