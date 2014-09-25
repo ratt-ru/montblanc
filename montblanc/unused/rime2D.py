@@ -9,7 +9,7 @@ from node import *
 class Rime2D(Node):
     def __init__(self):
         super(Rime2D, self).__init__()
-    def initialise(self, shared_data):
+    def initialise(self, solver):
         self.mod = SourceModule("""
 #include <pycuda-complex.hpp>
 #include \"math_constants.h\"
@@ -218,11 +218,11 @@ __global__ void predict(
 options=['-lineinfo'])
         self.kernel = self.mod.get_function('predict')
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
-    def execute(self, shared_data):
+    def execute(self, solver):
         ## Here I define my data, and my Jones matrices
         na=10                   # Number of antenna
         nbl=(na*(na-1))/2     # Number of baselines
@@ -280,7 +280,7 @@ options=['-lineinfo'])
 
         baselines_per_block = 8 if nbl > 8 else nbl
         ddes_per_block = 16 if ndir > 16 else ndir
-        foreground_stream,background_stream = shared_data.stream[0], shared_data.stream[1]
+        foreground_stream,background_stream = solver.stream[0], solver.stream[1]
 
         baseline_blocks = (nbl + baselines_per_block - 1) / baselines_per_block
         dde_blocks = (ndir + ddes_per_block - 1) / ddes_per_block
@@ -339,5 +339,5 @@ options=['-lineinfo'])
         A1_gpu.free()
         sols_gpu.free()
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

@@ -9,6 +9,7 @@ import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
 import montblanc
+import montblanc.factory
 
 class ArrayRecord(object):
     """ Records information about an array """
@@ -28,6 +29,20 @@ class PropertyRecord(object):
         self.dtype = dtype
         self.default = default
         self.registrant = registrant
+
+class PipelineDescriptor(object):
+    """ Descriptor class for pipelines """
+    def __init__(self):
+        self.data = WeakKeyDictionary()
+
+    def __get__(self, instance, owner):
+        return self.data.get(instance,None)
+
+    def __set__(self, instance, value):
+        self.data[instance] = value
+
+    def __delete__(self, instance):
+        del self.data[instance]
 
 class PropertyDescriptor(object):
     """ Descriptor class for properties """
@@ -97,7 +112,7 @@ class Parameter(object):
     def __delete__(self, instance):
         del self.data[instance]
 
-class SharedData(object):
+class Solver(object):
     """ Base class for data shared amongst pipeline nodes.
 
     In practice, nodes will be responsible for creating,
@@ -116,8 +131,8 @@ DEFAULT_NSRC=DEFAULT_NPSRC + DEFAULT_NGSRC
 DEFAULT_NVIS=DEFAULT_NBL*DEFAULT_NCHAN*DEFAULT_NTIME
 DEFAULT_DTYPE=np.float32
 
-class BaseSharedData(SharedData):
-    """ Class defining the RIME Simulation Parameters. """
+class BaseSolver(Solver):
+    """ Class that holds the elements for solving the RIME """
     na = Parameter(DEFAULT_NA)
     nbl = Parameter(DEFAULT_NBL)
     nchan = Parameter(DEFAULT_NCHAN)
@@ -127,10 +142,13 @@ class BaseSharedData(SharedData):
     nsrc = Parameter(DEFAULT_NSRC)
     nvis = Parameter(DEFAULT_NVIS)
 
+    pipeline = PipelineDescriptor()
+
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE, **kwargs):
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE,
+        pipeline=None, **kwargs):
         """
-        BaseSharedData Constructor
+        BaseSolver Constructor
 
         Parameters:
             na : integer
@@ -149,14 +167,13 @@ class BaseSharedData(SharedData):
             device : pycuda.device.Device
                 CUDA device to operate on.
             store_cpu: boolean
-                if True, store cpu versions of the kernel arrays
-                within the GPUSharedData object.
+                if True, store cpu versions of the kernel arrays.
             auto_correlations: boolean
                 if True, take auto-correlations into account when
-                calculating the number of baselines
+                calculating the number of baselines.
         """
 
-        super(BaseSharedData, self).__init__()
+        super(BaseSolver, self).__init__()
 
         autocor = kwargs.get('auto_correlations',True)
 
@@ -209,6 +226,11 @@ class BaseSharedData(SharedData):
 
         # Should we store CPU versions of the GPU arrays
         self.store_cpu = kwargs.get('store_cpu', False)
+
+        # Configure our solver pipeline
+        if pipeline is None:
+            pipeline = montblanc.factory.get_empty_pipeline()
+        self.pipeline = pipeline
 
     @staticmethod
     def __cpu_name(name):
@@ -277,13 +299,13 @@ class BaseSharedData(SharedData):
     def get_numeric_shape(self, sshape, ignore=None):
         """
         Substitutes string values in the supplied shape parameter
-        with properties registered on this BaseSharedData object.
+        with properties registered on this BaseSolver object.
 
         Parameters
         ----------
             sshape : tuple composed of integers and strings.
                 The strings should related to integral properties
-                registered with this SharedData object
+                registered with this Solver object
             ignore : list
                 A list of tuple strings to ignore
 
@@ -346,12 +368,12 @@ class BaseSharedData(SharedData):
 
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
-        return np.sum([BaseSharedData.array_bytes(a.shape,a.dtype) 
+        return np.sum([BaseSolver.array_bytes(a.shape,a.dtype) 
             for a in self.arrays.itervalues()])
 
     def mem_required(self):
         """ Return a string representation of the total memory required """
-        return BaseSharedData.fmt_bytes(self.bytes_required())
+        return BaseSolver.fmt_bytes(self.bytes_required())
 
     def check_array(self, record_key, ary):
         """
@@ -402,7 +424,7 @@ class BaseSharedData(SharedData):
 
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         """
-        Register an array with this SharedData object.
+        Register an array with this Solver object.
 
         Parameters
         ----------
@@ -419,16 +441,16 @@ class BaseSharedData(SharedData):
         -----------------
             cpu : boolean
                 True if a ndarray called 'name_cpu' should be
-                created on the SharedData object.
+                created on the Solver object.
             gpu : boolean
                 True if a gpuarray called 'name_gpu' should be
-                created on the SharedData object.
+                created on the Solver object.
             shape_member : boolean
                 True if a member called 'name_shape' should be
-                created on the SharedData object.
+                created on the Solver object.
             dtype_member : boolean
                 True if a member called 'name_dtype' should be
-                created on the SharedData object.
+                created on the Solver object.
             replace : boolean
                 True if existing arrays should be replaced.
         """
@@ -470,8 +492,8 @@ class BaseSharedData(SharedData):
         self.arrays[name] = new
 
         # Attribute names
-        cpu_name = BaseSharedData.__cpu_name(name)
-        gpu_name = BaseSharedData.__gpu_name(name)
+        cpu_name = BaseSolver.__cpu_name(name)
+        gpu_name = BaseSolver.__gpu_name(name)
 
         # Create descriptors on the class instance, even though members
         # may not necessarily be created on object instances. This is so
@@ -479,18 +501,18 @@ class BaseSharedData(SharedData):
         # created, we have control over it, if at some later point they wish
         # to do a
         #
-        # sd.blah_cpu = ...
+        # slvr.blah_cpu = ...
         #
 
         # TODO, there's probably a better way of figuring out if a descriptor
         # is set on the class
-        #if not hasattr(BaseSharedData, cpu_name):
-        if not BaseSharedData.__dict__.has_key(cpu_name):
-            setattr(BaseSharedData, cpu_name, CPUArrayDescriptor(record_key=name))
+        #if not hasattr(BaseSolver, cpu_name):
+        if not BaseSolver.__dict__.has_key(cpu_name):
+            setattr(BaseSolver, cpu_name, CPUArrayDescriptor(record_key=name))
 
-        #if not hasattr(BaseSharedData, gpu_name):
-        if not BaseSharedData.__dict__.has_key(gpu_name):
-            setattr(BaseSharedData, gpu_name, GPUArrayDescriptor(record_key=name))
+        #if not hasattr(BaseSolver, gpu_name):
+        if not BaseSolver.__dict__.has_key(gpu_name):
+            setattr(BaseSolver, gpu_name, GPUArrayDescriptor(record_key=name))
 
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
@@ -516,7 +538,7 @@ class BaseSharedData(SharedData):
                 getattr(self,gpu_name).set(npary)
 
             # Create the method on ourself
-            method_name = BaseSharedData.__transfer_method_name(name)
+            method_name = BaseSolver.__transfer_method_name(name)
             method = types.MethodType(transfer,self)
             setattr(self,  method_name, method)
             # Create a docstring!
@@ -532,17 +554,17 @@ class BaseSharedData(SharedData):
 
         # Set up a member describing the shape
         if kwargs.get('shape_member', False) is True:
-            shape_name = BaseSharedData.__shape_name(name)
+            shape_name = BaseSolver.__shape_name(name)
             setattr(self, shape_name, shape)
 
         # Set up a member describing the dtype
         if kwargs.get('dtype_member', False) is True:
-            dtype_name = BaseSharedData.__dtype_name(name)
+            dtype_name = BaseSolver.__dtype_name(name)
             setattr(self, dtype_name, dtype)
 
     def register_property(self, name, dtype, default, registrant, **kwargs):
         """
-        Registers a property with this SharedData object
+        Registers a property with this Solver object
 
         Parameters
         ----------
@@ -569,13 +591,13 @@ class BaseSharedData(SharedData):
             name, dtype, default, registrant)
 
         # Create the descriptor for this property on the class instance
-        setattr(BaseSharedData, name, PropertyDescriptor(record_key=name, default=default))
+        setattr(BaseSolver, name, PropertyDescriptor(record_key=name, default=default))
         # Set the descriptor on this object instance
         setattr(self, name, default)
 
         # Should we create a setter for this property?
         setter = kwargs.get('setter', False)
-        setter_name = BaseSharedData.__setter_name(name)
+        setter_name = BaseSolver.__setter_name(name)
 
         # Yes, create a default setter
         if isinstance(setter, types.BooleanType) and setter is True:
@@ -603,21 +625,21 @@ class BaseSharedData(SharedData):
 
     def get_properties(self):
         """
-        Returns a dictionary of properties related to this SharedData object.
+        Returns a dictionary of properties related to this Solver object.
 
         Used in templated GPU kernels.
         """
-        sd = self
+        slvr = self
         
         D = {
-            'na' : sd.na,
-            'nbl' : sd.nbl,
-            'nchan' : sd.nchan,
-            'ntime' : sd.ntime,
-            'npsrc' : sd.npsrc,
-            'ngsrc' : sd.ngsrc,
-            'nsrc'  : sd.nsrc,
-            'nvis' : sd.nvis,
+            'na' : slvr.na,
+            'nbl' : slvr.nbl,
+            'nchan' : slvr.nchan,
+            'ntime' : slvr.ntime,
+            'npsrc' : slvr.npsrc,
+            'ngsrc' : slvr.ngsrc,
+            'nsrc'  : slvr.nsrc,
+            'nvis' : slvr.nvis,
         }
 
         for p in self.properties.itervalues():
@@ -635,12 +657,12 @@ class BaseSharedData(SharedData):
         """ Generator generating strings describing each registered array """
         yield 'Registered Arrays'
         yield '-'*80
-        yield BaseSharedData.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
+        yield BaseSolver.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
         yield '-'*80
 
         for a in self.arrays.itervalues():
-            yield BaseSharedData.fmt_array_line(a.name,
-                BaseSharedData.fmt_bytes(BaseSharedData.array_bytes(a.shape, a.dtype)),
+            yield BaseSolver.fmt_array_line(a.name,
+                BaseSolver.fmt_bytes(BaseSolver.array_bytes(a.shape, a.dtype)),
                 np.dtype(a.dtype).name,
                 'Y' if a.has_cpu_ary else 'N',
                 'Y' if a.has_gpu_ary else 'N',
@@ -650,21 +672,39 @@ class BaseSharedData(SharedData):
         """ Generator generating string describing each registered property """
         yield 'Registered Properties'
         yield '-'*80
-        yield BaseSharedData.fmt_property_line('Property Name',
+        yield BaseSolver.fmt_property_line('Property Name',
             'Type', 'Value', 'Default Value')
         yield '-'*80
 
         for p in self.properties.itervalues():
-            yield BaseSharedData.fmt_property_line(
+            yield BaseSolver.fmt_property_line(
                 p.name, np.dtype(p.dtype).name,
                 getattr(self, p.name), p.default)
 
+    def solve(self):
+        """ Solve the RIME """        
+        self.pipeline.execute(self)
+
+    def initialise(self):
+        self.pipeline.initialise(self)
+
+    def shutdown(self):
+        """ Stop the RIME solver """
+        self.pipeline.shutdown(self)
+
+    def __enter__(self):
+        self.initialise()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.shutdown()
+
     def __str__(self):
         """ Outputs a string representation of this object """
-        n_cpu_bytes = np.sum([BaseSharedData.array_bytes(a.shape,a.dtype)
+        n_cpu_bytes = np.sum([BaseSolver.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_cpu_ary is True])
 
-        n_gpu_bytes = np.sum([BaseSharedData.array_bytes(a.shape,a.dtype)
+        n_gpu_bytes = np.sum([BaseSolver.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_gpu_ary is True])
 
         w = 20
@@ -678,8 +718,8 @@ class BaseSharedData(SharedData):
             '%-*s: %s' % (w,'Timesteps', self.ntime),
             '%-*s: %s' % (w,'Point Sources', self.npsrc),
             '%-*s: %s' % (w,'Gaussian Sources', self.ngsrc),
-            '%-*s: %s' % (w,'CPU Memory', BaseSharedData.fmt_bytes(n_cpu_bytes)),
-            '%-*s: %s' % (w,'GPU Memory', BaseSharedData.fmt_bytes(n_gpu_bytes))]
+            '%-*s: %s' % (w,'CPU Memory', BaseSolver.fmt_bytes(n_cpu_bytes)),
+            '%-*s: %s' % (w,'GPU Memory', BaseSolver.fmt_bytes(n_gpu_bytes))]
 
         l.extend([''])
         l.extend([s for s in self.gen_array_descriptions()])

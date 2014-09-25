@@ -205,11 +205,11 @@ class RimeBK(Node):
     def __init__(self):
         super(RimeBK, self).__init__()
 
-    def initialise(self, shared_data):
-        sd = shared_data
+    def initialise(self, solver):
+        slvr = solver
 
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
-        D.update(sd.get_properties())
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
+        D.update(slvr.get_properties())
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
@@ -218,41 +218,41 @@ class RimeBK(Node):
             no_extern_c=True)
 
         kname = 'rime_jones_BK_float' \
-            if sd.is_float() is True else \
+            if slvr.is_float() is True else \
             'rime_jones_BK_double'
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
 
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
 
-    def get_kernel_params(self, shared_data):
-        sd = shared_data
+    def get_kernel_params(self, solver):
+        slvr = solver
 
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
 
-        psrcs_per_block = D['BLOCKDIMX'] if sd.npsrc > D['BLOCKDIMX'] else sd.npsrc
+        psrcs_per_block = D['BLOCKDIMX'] if slvr.npsrc > D['BLOCKDIMX'] else slvr.npsrc
         time_chans_per_block = D['BLOCKDIMY']
-        baselines_per_block = D['BLOCKDIMZ'] if sd.nbl > D['BLOCKDIMZ'] else sd.nbl
+        baselines_per_block = D['BLOCKDIMZ'] if slvr.nbl > D['BLOCKDIMZ'] else slvr.nbl
 
-        psrc_blocks = self.blocks_required(sd.npsrc,psrcs_per_block)
-        baseline_blocks = self.blocks_required(sd.nbl,baselines_per_block)
-        time_chan_blocks = sd.ntime*sd.nchan
+        psrc_blocks = self.blocks_required(slvr.npsrc,psrcs_per_block)
+        baseline_blocks = self.blocks_required(slvr.nbl,baselines_per_block)
+        time_chan_blocks = slvr.ntime*slvr.nchan
 
         return {
             'block' : (psrcs_per_block,time_chans_per_block,baselines_per_block),
             'grid'  : (psrc_blocks,time_chan_blocks,baseline_blocks), 
         }
 
-    def execute(self, shared_data):
-        sd = shared_data
+    def execute(self, solver):
+        slvr = solver
 
-        self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu,  sd.jones_gpu, sd.ref_wave,
-            **self.get_kernel_params(sd))
+        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
+            slvr.wavelength_gpu,  slvr.jones_gpu, slvr.ref_wave,
+            **self.get_kernel_params(slvr))
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

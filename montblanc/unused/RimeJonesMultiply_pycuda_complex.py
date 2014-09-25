@@ -9,7 +9,7 @@ from node import *
 class RimeJonesMultiply(Node):
     def __init__(self):
         super(RimeJonesMultiply, self).__init__()
-    def initialise(self, shared_data):
+    def initialise(self, solver):
         self.mod = SourceModule("""
 #include <pycuda-complex.hpp>
 #include \"math_constants.h\"
@@ -43,16 +43,16 @@ void rime_jones_multiply(
 options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_multiply')
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
-    def execute(self, shared_data):
+    def execute(self, solver):
         ## Here I define my data, and my Jones matrices
-        na=shared_data.na          # Number of antenna
-        nbl=shared_data.nbl        # Number of baselines
-        nchan=shared_data.nchan    # Number of channels
-        nsrc=shared_data.nsrc      # Number of DDES
+        na=solver.na          # Number of antenna
+        nbl=solver.nbl        # Number of baselines
+        nchan=solver.nchan    # Number of channels
+        nsrc=solver.nsrc      # Number of DDES
 
         # Output jones matrix
         jones_shape = (4,nbl,nsrc)
@@ -77,5 +77,5 @@ options=['-lineinfo'])
 
 #        print jones_gpu.get()
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

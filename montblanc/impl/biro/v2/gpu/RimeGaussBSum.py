@@ -38,9 +38,6 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMY ${BLOCKDIMY}
 #define BLOCKDIMZ ${BLOCKDIMZ}
 
-#define REFWAVE ${ref_wave}
-#define BEAMCLIP ${beam_clip}
-#define BEAMWIDTH ${beam_width}
 #define GAUSS_SCALE ${gauss_scale}
 
 template <
@@ -59,7 +56,8 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * weight_vector,
     typename Tr::ct * visibilities,
     typename Tr::ct * data_vis,
-    typename Tr::ft * chi_sqrd_result)
+    typename Tr::ft * chi_sqrd_result,
+    typename Tr::ft ref_wave)
 {
     int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
@@ -133,7 +131,7 @@ void rime_gauss_B_sum_impl(
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
         // Multiply in the power term
-        T power = Po::pow(T(REFWAVE)/wl[threadIdx.x], a[threadIdx.y]);
+        T power = Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.y]);
         ant_two.x *= power; ant_two.y *= power;
         // Get the complex scalar for antenna one and conjugate it
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
@@ -196,7 +194,7 @@ void rime_gauss_B_sum_impl(
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
         // Multiply in the power term
-        exp *= Po::pow(T(REFWAVE)/wl[threadIdx.x], a[threadIdx.y]);
+        exp *= Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.y]);
 
         // Get the complex scalar for antenna two and multiply
         // in the exponent term
@@ -288,12 +286,13 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * weight_vector, \
     ct * visibilities, \
     ct * data_vis, \
-    ft * chi_sqrd_result) \
+    ft * chi_sqrd_result, \
+    ft ref_wave) \
 { \
     rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, \
         wavelength, ant_pairs, jones_EK_scalar, \
         weight_vector, visibilities, data_vis, \
-        chi_sqrd_result); \
+        chi_sqrd_result, ref_wave); \
 }
 
 stamp_gauss_b_sum_fn(float, float2, false, u)
@@ -309,18 +308,18 @@ class RimeGaussBSum(Node):
         super(RimeGaussBSum, self).__init__()
         self.weight_vector = weight_vector
 
-    def initialise(self, shared_data):
-        sd = shared_data
+    def initialise(self, solver):
+        slvr = solver
 
-        D = sd.get_properties()
-        D.update(FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS)
+        D = slvr.get_properties()
+        D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
-            if sd.is_float() else DOUBLE_PARAMS['maxregs'])
+            if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
 
         kname = 'rime_gauss_B_sum_' + \
             ('w' if self.weight_vector else 'u') + 'chi_' + \
-            ('float' if sd.is_float() is True else 'double')
+            ('float' if slvr.is_float() is True else 'double')
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
@@ -330,54 +329,54 @@ class RimeGaussBSum(Node):
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
 
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
 
-    def get_kernel_params(self, shared_data):
-        sd = shared_data
+    def get_kernel_params(self, solver):
+        slvr = solver
 
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
 
-        chans_per_block = D['BLOCKDIMX'] if sd.nchan > D['BLOCKDIMX'] else sd.nchan
-        bl_per_block = D['BLOCKDIMY'] if sd.nbl > D['BLOCKDIMY'] else sd.nbl
-        times_per_block = D['BLOCKDIMZ'] if sd.ntime > D['BLOCKDIMZ'] else sd.ntime
+        chans_per_block = D['BLOCKDIMX'] if slvr.nchan > D['BLOCKDIMX'] else slvr.nchan
+        bl_per_block = D['BLOCKDIMY'] if slvr.nbl > D['BLOCKDIMY'] else slvr.nbl
+        times_per_block = D['BLOCKDIMZ'] if slvr.ntime > D['BLOCKDIMZ'] else slvr.ntime
 
-        chan_blocks = self.blocks_required(sd.nchan, chans_per_block)
-        bl_blocks = self.blocks_required(sd.nbl, bl_per_block)
-        time_blocks = self.blocks_required(sd.ntime, times_per_block)
+        chan_blocks = self.blocks_required(slvr.nchan, chans_per_block)
+        bl_blocks = self.blocks_required(slvr.nbl, bl_per_block)
+        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
 
         return {
             'block' : (chans_per_block, bl_per_block, times_per_block),
             'grid'  : (chan_blocks, bl_blocks, time_blocks), 
         }
 
-    def execute(self, shared_data):
-        sd = shared_data
+    def execute(self, solver):
+        slvr = solver
 
         # The gaussian shape array can conceivably be empty if
         # no gaussian points were specified.
-        gauss = np.intp(0) if np.product(sd.gauss_shape_shape) == 0 \
-            else sd.gauss_shape_gpu
+        gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
+            else slvr.gauss_shape_gpu
 
-        self.kernel(sd.uvw_gpu, sd.brightness_gpu, gauss, 
-            sd.wavelength_gpu, sd.ant_pairs_gpu, sd.jones_scalar_gpu,
-            sd.weight_vector_gpu,
-            sd.vis_gpu, sd.bayes_data_gpu, sd.chi_sqrd_result_gpu,
-            **self.get_kernel_params(sd))
+        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, 
+            slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
+            slvr.weight_vector_gpu,
+            slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
+            slvr.ref_wave, **self.get_kernel_params(slvr))
 
         # If we're not catering for a weight vector,
         # call the simple reduction and divide by sigma squared.
         # Otherwise, the kernel will incorporate the weight vector
         # (and thus the sigma squared) into the sum
-        gpu_sum = gpuarray.sum(sd.chi_sqrd_result_gpu).get()
+        gpu_sum = gpuarray.sum(slvr.chi_sqrd_result_gpu).get()
 
         if not self.weight_vector:
-            sd.set_X2(gpu_sum/sd.sigma_sqrd)
+            slvr.set_X2(gpu_sum/slvr.sigma_sqrd)
         else:
-            sd.set_X2(gpu_sum)        
+            slvr.set_X2(gpu_sum)        
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

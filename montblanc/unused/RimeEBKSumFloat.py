@@ -151,42 +151,42 @@ class RimeEBKSumFloat(Node):
     def __init__(self):
         super(RimeEBKSumFloat, self).__init__()
 
-    def initialise(self, shared_data):
+    def initialise(self, solver):
         self.mod = SourceModule(FLOAT_KERNEL, options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_EBK_sum_float')
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
 
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
 
-    def get_kernel_params(self, shared_data):
-        sd = shared_data
+    def get_kernel_params(self, solver):
+        slvr = solver
 
-        times_per_block = 16 if sd.ntime > 2 else sd.ntime
-        chans_per_block = 8 if sd.nchan > 2 else sd.nchan
-        baselines_per_block = 1 if sd.nbl > 16 else sd.nbl
+        times_per_block = 16 if slvr.ntime > 2 else slvr.ntime
+        chans_per_block = 8 if slvr.nchan > 2 else slvr.nchan
+        baselines_per_block = 1 if slvr.nbl > 16 else slvr.nbl
 
-        time_blocks = (sd.ntime + times_per_block - 1) / times_per_block
-        chan_blocks = (sd.nchan + chans_per_block - 1) / chans_per_block
-        baseline_blocks = (sd.nbl + baselines_per_block - 1)/ baselines_per_block
+        time_blocks = (slvr.ntime + times_per_block - 1) / times_per_block
+        chan_blocks = (slvr.nchan + chans_per_block - 1) / chans_per_block
+        baseline_blocks = (slvr.nbl + baselines_per_block - 1)/ baselines_per_block
 
         return {
             'block' : (times_per_block,chans_per_block,baselines_per_block),
             'grid'  : (time_blocks,chan_blocks,baseline_blocks),
             'shared' : (1*chans_per_block +
-                6*sd.npsrc +
+                6*slvr.npsrc +
                 4*baselines_per_block*times_per_block)*
-                    np.dtype(sd.ft).itemsize }
+                    np.dtype(slvr.ft).itemsize }
 
-    def execute(self, shared_data):
-        sd = shared_data
+    def execute(self, solver):
+        slvr = solver
 
-        self.kernel(sd.uvw_gpu, sd.lm_gpu, sd.brightness_gpu,
-            sd.wavelength_gpu, sd.point_errors_gpu, sd.vis_gpu, sd.ref_wave,
-            np.int32(sd.nbl), np.int32(sd.nchan), np.int32(sd.ntime), np.int32(sd.npsrc),
-            np.int32(sd.na), **self.get_kernel_params(sd))       
+        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
+            slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.vis_gpu, slvr.ref_wave,
+            np.int32(slvr.nbl), np.int32(slvr.nchan), np.int32(slvr.ntime), np.int32(slvr.npsrc),
+            np.int32(slvr.na), **self.get_kernel_params(slvr))       
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

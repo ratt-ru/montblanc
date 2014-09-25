@@ -77,32 +77,32 @@ class RimeSumFloat(Node):
     def __init__(self):
         super(RimeSumFloat, self).__init__()
 
-    def initialise(self, shared_data):
+    def initialise(self, solver):
         self.mod = SourceModule(FLOAT_KERNEL, options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_sum_float')
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
 
-    def get_kernel_params(self, shared_data):
-        sd = shared_data
+    def get_kernel_params(self, solver):
+        slvr = solver
 
-        vis_per_block = 128 if sd.nvis > 128 else sd.nvis
-        vis_blocks = (sd.nvis + vis_per_block - 1) / vis_per_block
+        vis_per_block = 128 if slvr.nvis > 128 else slvr.nvis
+        vis_blocks = (slvr.nvis + vis_per_block - 1) / vis_per_block
 
         return {
             'block' : (vis_per_block,1,1),
             'grid'  : (vis_blocks,1,1),
-            'shared' : 16*vis_per_block*np.dtype(sd.ct).itemsize }
+            'shared' : 16*vis_per_block*np.dtype(slvr.ct).itemsize }
 
-    def execute(self, shared_data):
-        sd = shared_data
+    def execute(self, solver):
+        slvr = solver
 
-        self.kernel(sd.jones_gpu, sd.vis_gpu,
-            np.int32(sd.nbl*sd.nchan*sd.ntime), np.int32(sd.npsrc),
-            **self.get_kernel_params(sd))       
+        self.kernel(slvr.jones_gpu, slvr.vis_gpu,
+            np.int32(slvr.nbl*slvr.nchan*slvr.ntime), np.int32(slvr.npsrc),
+            **self.get_kernel_params(slvr))       
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

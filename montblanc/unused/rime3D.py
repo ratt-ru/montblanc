@@ -9,7 +9,7 @@ from node import *
 class Rime3D(Node):
     def __init__(self):
         super(Rime3D, self).__init__()
-    def initialise(self, shared_data):
+    def initialise(self, solver):
         self.mod = SourceModule("""
 #include <pycuda-complex.hpp>
 #include \"math_constants.h\"
@@ -178,11 +178,11 @@ __global__ void predict(
 """)
         self.kernel = self.mod.get_function('predict')
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
-    def execute(self, shared_data):
+    def execute(self, solver):
         ## Here I define my data, and my Jones matrices
         na=10        # Number of antenna
         nrow=10      # Number of rows
@@ -228,22 +228,22 @@ __global__ void predict(
 
 #        P1=predict.predictSols(Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
 
-        vis_gpu = gpuarray.to_gpu_async(Vis, stream=shared_data.stream[0])
+        vis_gpu = gpuarray.to_gpu_async(Vis, stream=solver.stream[0])
         # GPU CHANGE transpose for the GPU version
-        uvw_gpu = gpuarray.to_gpu_async(uvw.T, stream=shared_data.stream[0])
-        lms_gpu = gpuarray.to_gpu_async(lms, stream=shared_data.stream[0])
-        A0_gpu = gpuarray.to_gpu_async(A0, stream=shared_data.stream[0])
-        A1_gpu = gpuarray.to_gpu_async(A1, stream=shared_data.stream[0])
-        wavelength_gpu = gpuarray.to_gpu_async(wavelength, stream=shared_data.stream[0])
-        sols_gpu = gpuarray.to_gpu_async(Sols, stream=shared_data.stream[0])
+        uvw_gpu = gpuarray.to_gpu_async(uvw.T, stream=solver.stream[0])
+        lms_gpu = gpuarray.to_gpu_async(lms, stream=solver.stream[0])
+        A0_gpu = gpuarray.to_gpu_async(A0, stream=solver.stream[0])
+        A1_gpu = gpuarray.to_gpu_async(A1, stream=solver.stream[0])
+        wavelength_gpu = gpuarray.to_gpu_async(wavelength, stream=solver.stream[0])
+        sols_gpu = gpuarray.to_gpu_async(Sols, stream=solver.stream[0])
 
         self.kernel(vis_gpu, uvw_gpu, lms_gpu,
             A0_gpu, A1_gpu, wavelength_gpu, sols_gpu,
             np.int32(ndir), np.int32(nchan),
             np.int32(na), np.int32(nrow),
-            stream=shared_data.stream[0], block=(8,8,8), grid=(2,2,2))
+            stream=solver.stream[0], block=(8,8,8), grid=(2,2,2))
 
-        vis = vis_gpu.get_async(stream=shared_data.stream[0])
+        vis = vis_gpu.get_async(stream=solver.stream[0])
 
         print vis.shape
 
@@ -254,5 +254,5 @@ __global__ void predict(
 
         f.close()
 
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

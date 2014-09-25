@@ -132,11 +132,11 @@ class RimeChiSquared(Node):
         super(RimeChiSquared, self).__init__()
         self.weight_vector = weight_vector
 
-    def initialise(self, shared_data):
-        sd = shared_data
+    def initialise(self, solver):
+        slvr = solver
 
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
-        D.update(sd.get_properties())
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
+        D.update(slvr.get_properties())
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
@@ -147,50 +147,50 @@ class RimeChiSquared(Node):
         kname = 'rime_chi_squared_' + \
             ('w' if self.weight_vector else 'u') + \
             'diff_' + \
-            ('float' if sd.is_float() else 'double')
+            ('float' if slvr.is_float() else 'double')
 
         #print 'kernel', kname
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, shared_data):
+    def shutdown(self, solver):
         pass
 
-    def pre_execution(self, shared_data):
+    def pre_execution(self, solver):
         pass
 
-    def get_kernel_params(self, shared_data):
-        sd = shared_data
-        D = FLOAT_PARAMS if sd.is_float() else DOUBLE_PARAMS
+    def get_kernel_params(self, solver):
+        slvr = solver
+        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
 
-        vis_per_block = D['BLOCKDIMX'] if sd.nvis > D['BLOCKDIMX'] else sd.nvis
-        vis_blocks = self.blocks_required(sd.nvis,vis_per_block)
+        vis_per_block = D['BLOCKDIMX'] if slvr.nvis > D['BLOCKDIMX'] else slvr.nvis
+        vis_blocks = self.blocks_required(slvr.nvis,vis_per_block)
 
         return {
             'block'  : (vis_per_block,1,1), \
             'grid'   : (vis_blocks,1,1)
         }
 
-    def execute(self, shared_data):
-        sd = shared_data
+    def execute(self, solver):
+        slvr = solver
 
-        weight_vector_gpu = sd.weight_vector_gpu if self.weight_vector is True \
+        weight_vector_gpu = slvr.weight_vector_gpu if self.weight_vector is True \
             else np.intp(0)
 
-        self.kernel(sd.vis_gpu, sd.bayes_data_gpu, weight_vector_gpu,
-            sd.chi_sqrd_result_gpu,
-            **self.get_kernel_params(sd))
+        self.kernel(slvr.vis_gpu, slvr.bayes_data_gpu, weight_vector_gpu,
+            slvr.chi_sqrd_result_gpu,
+            **self.get_kernel_params(slvr))
 
         # If we're not catering for a weight vector,
         # call the simple reduction and divide by sigma squared.
         # Otherwise, call the more complicated reduction kernel that
         # internally divides by the noise vector
-        gpu_sum = gpuarray.sum(sd.chi_sqrd_result_gpu).get()
+        gpu_sum = gpuarray.sum(slvr.chi_sqrd_result_gpu).get()
 
         if not self.weight_vector:
-            sd.set_X2(gpu_sum/sd.sigma_sqrd)
+            slvr.set_X2(gpu_sum/slvr.sigma_sqrd)
         else:
-            sd.set_X2(gpu_sum)        
+            slvr.set_X2(gpu_sum)        
             
-    def post_execution(self, shared_data):
+    def post_execution(self, solver):
         pass

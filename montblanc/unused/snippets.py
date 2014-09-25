@@ -9,7 +9,7 @@ self.mod = SourceModule(KERNEL_TEMPLATE % {
     # wants a cudaStream_t. However, according to the following
     #  http://developer.download.nvidia.com/compute/cuda/4_1/rel/toolkit/docs/online/group__CUDART__DRIVER.html
     # 'The types CUstream and cudaStream_t are identical and may be used interchangeably.'
-    'stream_handle' : shared_data.stream[0].handle,
+    'stream_handle' : solver.stream[0].handle,
     'block_size' : 256,
     'warp_size' : 32,
     'value_type' : dtype_to_ctype(np.float64),

@@ -7,8 +7,8 @@ def rethrow_attribute_exception(e):
         'as well as call the transfer_* method for this to work.' % e
 
 class RimeCPU(object):
-    def __init__(self, shared_data):
-        self.shared_data = shared_data
+    def __init__(self, solver):
+        self.solver = solver
 
     def compute_gaussian_shape(self):
         """
@@ -17,36 +17,36 @@ class RimeCPU(object):
         Returns a (ntime, nbl, ngsrc, nchan) matrix of floating point scalars.
         """
 
-        sd = self.shared_data
+        slvr = self.solver
 
         try:
-            ant0, ant1 = sd.get_flat_ap_idx()
+            ant0, ant1 = slvr.get_flat_ap_idx()
 
-            uvw = sd.uvw_cpu.reshape(3,sd.ntime*sd.na)
-            u = (uvw[0][ant1] - uvw[0][ant0]).reshape(sd.ntime, sd.nbl)
-            v = (uvw[1][ant1] - uvw[1][ant0]).reshape(sd.ntime, sd.nbl)
-            w = (uvw[2][ant1] - uvw[2][ant0]).reshape(sd.ntime, sd.nbl)
+            uvw = slvr.uvw_cpu.reshape(3,slvr.ntime*slvr.na)
+            u = (uvw[0][ant1] - uvw[0][ant0]).reshape(slvr.ntime, slvr.nbl)
+            v = (uvw[1][ant1] - uvw[1][ant0]).reshape(slvr.ntime, slvr.nbl)
+            w = (uvw[2][ant1] - uvw[2][ant0]).reshape(slvr.ntime, slvr.nbl)
 
-            el = sd.gauss_shape_cpu[0]
-            em = sd.gauss_shape_cpu[1]
-            R = sd.gauss_shape_cpu[2]
+            el = slvr.gauss_shape_cpu[0]
+            em = slvr.gauss_shape_cpu[1]
+            R = slvr.gauss_shape_cpu[2]
 
             # OK, try obtain the same results with the fwhm factored out!
             # u1 = u*em - v*el
             # v1 = u*el + v*em
             u1 = (np.outer(u, em) - np.outer(v, el)) \
-                .reshape(sd.ntime,sd.nbl,sd.ngsrc)
+                .reshape(slvr.ntime,slvr.nbl,slvr.ngsrc)
             v1 = (np.outer(u, el) + np.outer(v, em)) \
-                .reshape(sd.ntime,sd.nbl,sd.ngsrc)
+                .reshape(slvr.ntime,slvr.nbl,slvr.ngsrc)
 
             # Obvious given the above reshape
-            assert u1.shape == (sd.ntime, sd.nbl, sd.ngsrc)
-            assert v1.shape == (sd.ntime, sd.nbl, sd.ngsrc)
+            assert u1.shape == (slvr.ntime, slvr.nbl, slvr.ngsrc)
+            assert v1.shape == (slvr.ntime, slvr.nbl, slvr.ngsrc)
 
             # Construct the scaling factor, this includes the wavelength/frequency
             # into the mix.
-            scale_uv = sd.gauss_scale/sd.wavelength_cpu
-            assert scale_uv.shape == (sd.nchan,)
+            scale_uv = slvr.gauss_scale/slvr.wavelength_cpu
+            assert scale_uv.shape == (slvr.nchan,)
 
             # Multiply u1 and v1 by the scaling factor
             u1 = u1[:,:,:,np.newaxis]*scale_uv[np.newaxis,np.newaxis,np.newaxis,:]
@@ -65,26 +65,26 @@ class RimeCPU(object):
 
         Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
-        sd = self.shared_data
+        slvr = self.solver
 
         try:
-            wave = sd.wavelength_cpu
+            wave = slvr.wavelength_cpu
 
-            u, v, w = sd.uvw_cpu[0], sd.uvw_cpu[1], sd.uvw_cpu[2]
-            l, m = sd.lm_cpu[0], sd.lm_cpu[1]
+            u, v, w = slvr.uvw_cpu[0], slvr.uvw_cpu[1], slvr.uvw_cpu[2]
+            l, m = slvr.lm_cpu[0], slvr.lm_cpu[1]
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
-            n = np.sqrt(1. - sd.lm_cpu[0]**2 - sd.lm_cpu[1]**2) - 1.
+            n = np.sqrt(1. - slvr.lm_cpu[0]**2 - slvr.lm_cpu[1]**2) - 1.
 
             # w*n+v*m+u*l. Outer product creates array of dim ntime x na x nsrcs
             phase = (np.outer(w,n) + np.outer(v, m) + np.outer(u, l)) \
-                    .reshape(sd.ntime, sd.na, sd.nsrc)
-            assert phase.shape == (sd.ntime, sd.na, sd.nsrc)            
+                    .reshape(slvr.ntime, slvr.na, slvr.nsrc)
+            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc)            
 
             # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. na x ntime x nchan x nsrcs 
             phase = (2*np.pi*1j*phase)[:,:,:,np.newaxis]/ \
                 wave[np.newaxis,np.newaxis,np.newaxis,:]
-            assert phase.shape == (sd.ntime, sd.na, sd.nsrc, sd.nchan)
+            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
 
             return np.exp(phase)
 
@@ -97,29 +97,29 @@ class RimeCPU(object):
 
         Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
-        sd = self.shared_data
+        slvr = self.solver
 
         try:
-            ant0, ant1 = sd.get_flat_ap_idx(src=True,chan=True)
+            ant0, ant1 = slvr.get_flat_ap_idx(src=True,chan=True)
             k_jones = self.compute_k_jones_scalar_per_ant().flatten()
 
             k_jones_per_bl = (k_jones[ant1]*k_jones[ant0].conj())\
-                .reshape(sd.ntime,sd.nbl,sd.nsrc,sd.nchan)
+                .reshape(slvr.ntime,slvr.nbl,slvr.nsrc,slvr.nchan)
 
-            wave = sd.wavelength_cpu
-            alpha =sd.brightness_cpu[4]
+            wave = slvr.wavelength_cpu
+            alpha =slvr.brightness_cpu[4]
 
             # Dimension ntime x nsrc x nchan
-            power = np.power(sd.ref_wave/wave[np.newaxis,np.newaxis,:],
+            power = np.power(slvr.ref_wave/wave[np.newaxis,np.newaxis,:],
                 alpha[:,:,np.newaxis])
-            assert power.shape == (sd.ntime, sd.nsrc, sd.nchan)
+            assert power.shape == (slvr.ntime, slvr.nsrc, slvr.nchan)
 
             # Add in the K power term
             k_jones_per_bl *= power[:,np.newaxis,:,:]
 
             # Add in the shape terms of the gaussian sources.
-            if sd.ngsrc > 0:
-                k_jones_per_bl[:,:,sd.npsrc:,:] *= self.compute_gaussian_shape()
+            if slvr.ngsrc > 0:
+                k_jones_per_bl[:,:,slvr.npsrc:,:] *= self.compute_gaussian_shape()
 
             return k_jones_per_bl
         except AttributeError as e:
@@ -131,24 +131,24 @@ class RimeCPU(object):
 
         Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
-        sd = self.shared_data
+        slvr = self.solver
 
         try:
             # Compute the offsets for different antenna
             # Broadcasting here produces, ntime x na x  nsrc
-            l_diff = sd.lm_cpu[0] - sd.point_errors_cpu[0,:,:,np.newaxis]
-            m_diff = sd.lm_cpu[1] - sd.point_errors_cpu[1,:,:,np.newaxis]
+            l_diff = slvr.lm_cpu[0] - slvr.point_errors_cpu[0,:,:,np.newaxis]
+            m_diff = slvr.lm_cpu[1] - slvr.point_errors_cpu[1,:,:,np.newaxis]
             E_p = np.sqrt(l_diff**2 + m_diff**2)
 
-            assert E_p.shape == (sd.ntime, sd.na, sd.nsrc)
+            assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc)
 
             # Broadcasting here produces, ntime x nbl x nsrc x nchan
-            E_p = E_p[:,:,:,np.newaxis]*sd.beam_width*1e-9*\
-                sd.wavelength_cpu[np.newaxis,np.newaxis,np.newaxis,:]
-            np.clip(E_p, np.finfo(sd.ft).min, sd.beam_clip, E_p)
+            E_p = E_p[:,:,:,np.newaxis]*slvr.beam_width*1e-9*\
+                slvr.wavelength_cpu[np.newaxis,np.newaxis,np.newaxis,:]
+            np.clip(E_p, np.finfo(slvr.ft).min, slvr.beam_clip, E_p)
             E_p = np.cos(E_p)**3
 
-            assert E_p.shape == (sd.ntime, sd.na, sd.nsrc, sd.nchan)
+            assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
 
             return E_p
         except AttributeError as e:
@@ -160,14 +160,14 @@ class RimeCPU(object):
 
         Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
-        sd = self.shared_data
+        slvr = self.solver
 
         try:
-            ant0, ant1 = sd.get_flat_ap_idx(src=True,chan=True)
+            ant0, ant1 = slvr.get_flat_ap_idx(src=True,chan=True)
             e_jones = self.compute_e_jones_scalar_per_ant().flatten()
 
             return (e_jones[ant1]*e_jones[ant0].conj())\
-                .reshape(sd.ntime,sd.nbl,sd.nsrc,sd.nchan)
+                .reshape(slvr.ntime,slvr.nbl,slvr.nsrc,slvr.nchan)
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
@@ -185,7 +185,7 @@ class RimeCPU(object):
 
         Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
-        sd = self.shared_data
+        slvr = self.solver
 
         per_bl_ek_scalar = self.compute_k_jones_scalar_per_bl() * \
             self.compute_e_jones_scalar_per_bl()
@@ -198,16 +198,16 @@ class RimeCPU(object):
 
         Returns a (4,ntime,nsrc) matrix of complex scalars.
         """
-        sd = self.shared_data
+        slvr = self.solver
 
         try:
             # Create the brightness matrix. Dim 4 x ntime x nsrcs
-            B = sd.ct([
-                sd.brightness_cpu[0]+sd.brightness_cpu[1] + 0j,     # fI+fQ + 0j
-                sd.brightness_cpu[2] + 1j*sd.brightness_cpu[3],     # fU + fV*1j
-                sd.brightness_cpu[2] - 1j*sd.brightness_cpu[3],     # fU - fV*1j
-                sd.brightness_cpu[0]-sd.brightness_cpu[1] + 0j])    # fI-fQ + 0j
-            assert B.shape == (4, sd.ntime, sd.nsrc)
+            B = slvr.ct([
+                slvr.brightness_cpu[0]+slvr.brightness_cpu[1] + 0j,     # fI+fQ + 0j
+                slvr.brightness_cpu[2] + 1j*slvr.brightness_cpu[3],     # fU + fV*1j
+                slvr.brightness_cpu[2] - 1j*slvr.brightness_cpu[3],     # fU - fV*1j
+                slvr.brightness_cpu[0]-slvr.brightness_cpu[1] + 0j])    # fI-fQ + 0j
+            assert B.shape == (4, slvr.ntime, slvr.nsrc)
 
             return B
 
@@ -221,14 +221,14 @@ class RimeCPU(object):
 
         Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
-        sd = self.shared_data
+        slvr = self.solver
         
         per_bl_ek_scalar = self.compute_ek_jones_scalar_per_bl()
         b_jones = self.compute_b_jones()
 
         jones = per_bl_ek_scalar[np.newaxis,:,:,:,:]*\
             b_jones[:,:,np.newaxis,:,np.newaxis]
-        assert jones.shape == (4,sd.ntime,sd.nbl,sd.nsrc,sd.nchan)
+        assert jones.shape == (4,slvr.ntime,slvr.nbl,slvr.nsrc,slvr.nchan)
 
         return jones
 
@@ -239,14 +239,14 @@ class RimeCPU(object):
 
         Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
-        sd = self.shared_data
+        slvr = self.solver
         
         per_bl_k_scalar = self.compute_k_jones_scalar_per_bl()
         b_jones = self.compute_b_jones()
 
         jones = per_bl_k_scalar[np.newaxis,:,:,:,:]*\
             b_jones[:,:,np.newaxis,:,np.newaxis]
-        assert jones.shape == (4,sd.ntime,sd.nbl,sd.nsrc,sd.nchan)
+        assert jones.shape == (4,slvr.ntime,slvr.nbl,slvr.nsrc,slvr.nchan)
 
         return jones
 
@@ -258,10 +258,10 @@ class RimeCPU(object):
         Returns a (4,ntime,nbl,nchan) matrix of complex scalars.
         """
 
-        sd = self.shared_data
+        slvr = self.solver
 
         vis = np.add.reduce(self.compute_ebk_jones(),axis=3)
-        assert vis.shape == (4,sd.ntime,sd.nbl,sd.nchan)
+        assert vis.shape == (4,slvr.ntime,slvr.nbl,slvr.nchan)
 
         return vis
 
@@ -273,10 +273,10 @@ class RimeCPU(object):
         Returns a (4,ntime,nbl,nchan) matrix of complex scalars.
         """
 
-        sd = self.shared_data
+        slvr = self.solver
 
         vis = np.add.reduce(self.compute_bk_jones(),axis=3)
-        assert vis.shape == (4,sd.ntime,sd.nbl,sd.nchan)
+        assert vis.shape == (4,slvr.ntime,slvr.nbl,slvr.nchan)
 
         return vis
 
@@ -290,21 +290,21 @@ class RimeCPU(object):
 
         Returns a (ntime,nbl,nchan) matrix of floating point scalars.
         """
-        sd = self.shared_data
+        slvr = self.solver
 
         try:
             # Take the difference between the visibilities and the model
             # (4,nbl,nchan,ntime)
-            d = sd.vis_cpu - sd.bayes_data_cpu
-            assert d.shape == (4,sd.ntime,sd.nbl,sd.nchan)
+            d = slvr.vis_cpu - slvr.bayes_data_cpu
+            assert d.shape == (4,slvr.ntime,slvr.nbl,slvr.nchan)
 
             # Square of the real and imaginary components
             real_term, imag_term = d.real**2, d.imag**2
 
             # Multiply by the weight vector if required
             if weight_vector is True:
-                real_term *= sd.weight_vector_cpu
-                imag_term *= sd.weight_vector_cpu
+                real_term *= slvr.weight_vector_cpu
+                imag_term *= slvr.weight_vector_cpu
 
             # Reduces a dimension so that we have (nbl,nchan,ntime)
             # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + 
@@ -314,7 +314,7 @@ class RimeCPU(object):
             # for the final result.
             chi_sqrd_terms = np.add.reduce(real_term,axis=0) + \
                 np.add.reduce(imag_term,axis=0)
-            assert chi_sqrd_terms.shape == (sd.ntime,sd.nbl,sd.nchan)
+            assert chi_sqrd_terms.shape == (slvr.ntime,slvr.nbl,slvr.nchan)
 
             return chi_sqrd_terms
 
@@ -330,7 +330,7 @@ class RimeCPU(object):
 
         Returns a floating point scalar values
         """
-        sd = self.shared_data
+        slvr = self.solver
 
         # Do the chi squared sum on the CPU.
         # If we're not using the weight vector, sum and
@@ -338,11 +338,11 @@ class RimeCPU(object):
         # Otherwise, simply return the sum
         try:
             term_sum = self.compute_chi_sqrd_sum_terms(weight_vector=weight_vector).sum()
-            return term_sum if weight_vector is True else term_sum / sd.sigma_sqrd
+            return term_sum if weight_vector is True else term_sum / slvr.sigma_sqrd
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
     def compute_biro_chi_sqrd(self, weight_vector=False):
-        sd = self.shared_data
-        sd.vis_cpu = self.compute_ebk_vis()
+        slvr = self.solver
+        slvr.vis_cpu = self.compute_ebk_vis()
         return self.compute_chi_sqrd(weight_vector=weight_vector)
