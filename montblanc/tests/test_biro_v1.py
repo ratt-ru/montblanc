@@ -474,15 +474,11 @@ class TestBiroV1(unittest.TestCase):
                     na=tel_params[tel]['nant'],\
                     nchan=tel_params[tel]['nchan'],ntime=obs_params['ntime'],\
                     npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
-                    dtype=mb_params['dtype'])
-        sampler['simulator'] = factory.get_biro_pipeline(\
-                    npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
+                    dtype=mb_params['dtype'], \
                     weight_vector=mb_params['use_weight_vector'],\
-                    dtype=mb_params['dtype'],\
                     store_cpu=mb_params['store_cpu'])
 
         print slvr
-	#print sampler['simulator']
 
         # Set up the observation
         uvw = slvr.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
@@ -513,15 +509,13 @@ class TestBiroV1(unittest.TestCase):
         R_sim = slvr.ft(np.ones(slvr.ngsrc)*r)
         gauss_shape_sim = np.array([el_sim,em_sim,R_sim]).reshape(slvr.gauss_shape_shape)
         slvr.transfer_gauss_shape(gauss_shape_sim)
-        sampler['simulator'].initialise(slvr)
-        sampler['simulator'].execute(slvr)
+        slvr.solve()
 
         # Fetch the simulated visibilities back and add noise
         vis_sim=slvr.vis_gpu.get()
         np.random.seed(noise_seed)
         noise_sim=slvr.ct((np.random.normal(0.0,sigmaSim,4*slvr.nbl*slvr.nchan*slvr.ntime*slvr.nsrc)+1j*np.random.normal(0.0,sigmaSim,4*slvr.nbl*slvr.nchan*slvr.ntime*slvr.nsrc)).reshape(slvr.vis_shape))
         vis_sim+=noise_sim
-        sampler['simulator'].shutdown(slvr)
         sampler['simulator']=vis_sim
         # End of simulation step
 
@@ -549,23 +543,18 @@ class TestBiroV1(unittest.TestCase):
 
         #-------------------------------------------------------------------
         # Now begin the likelihood calculation proper
-        sampler['pipeline']=None
         sampler['slvr']=None
         sampler['ndata']=None
         def myloglike(cube, ndim, nparams):
-            # Initialize the pipeline
-            if sampler['pipeline'] is None:
+            # Initialize the solver
+            if sampler['slvr'] is None:
                 sampler['slvr']=factory.get_biro_solver(sd_type='biro',\
                     na=tel_params[tel]['nant'],\
                     nchan=tel_params[tel]['nchan'],ntime=obs_params['ntime'],\
                     npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
-                    dtype=mb_params['dtype'])
-                sampler['pipeline'] = factory.get_biro_pipeline(\
-                    npsrc=sky_params['npsrc'],ngsrc=sky_params['ngsrc'],\
-                    weight_vector=mb_params['use_weight_vector'],\
                     dtype=mb_params['dtype'],\
+                    weight_vector=mb_params['use_weight_vector'],\
                     store_cpu=mb_params['store_cpu'])
-                slvr=sampler['slvr']
                 # Set up the observation (again - probably unnecessary)
                 uvw = slvr.ft(np.genfromtxt(uvw_f).T.reshape((3,-1,obs_params['ntime'])))
                 slvr.transfer_uvw(uvw)
@@ -579,14 +568,8 @@ class TestBiroV1(unittest.TestCase):
                 # Transfer the simulated vis into slvr
                 slvr.transfer_bayes_data(sampler['simulator'])
 
-                sampler['pipeline'].initialise(slvr)
+                sampler['slvr'].initialise()
                 print slvr
-                # Carry out calculations on the CPU (as opposed to GPU)
-                if mb_params['store_cpu']:
-                    point_errors = np.zeros(2*slvr.na*slvr.ntime)\
-                        .astype(slvr.ft).reshape((2,slvr.na,slvr.ntime))
-                    slvr.transfer_point_errors(point_errors)
-
                 # Set up the antenna table if noise depends on this
                 if mb_params['use_weight_vector']:
                      bl2ants=slvr.get_default_ant_pairs()
@@ -637,7 +620,7 @@ class TestBiroV1(unittest.TestCase):
                 slvr.set_sigma_sqrd((sigma[0]**2))
 
             # Execute the pipeline; cube[:] -> slvr.X2
-            sampler['pipeline'].execute(slvr)
+            sampler['slvr'].solve()
             if mb_params['store_cpu']:
                 chi2=slvr.compute_biro_chi_sqrd()
             else:
@@ -674,11 +657,13 @@ class TestBiroV1(unittest.TestCase):
 
         #-----------------------------------------------------------------------
         print 'PyMultinest took ', (tend-tstart)/60.0, ' minutes to run\n'
-        print 'Avg. execution time %gms' % sampler['pipeline'].avg_execution_time
-        print 'Last execution time %gms' % sampler['pipeline'].last_execution_time
-        print 'No. of executions %d.' % sampler['pipeline'].nr_of_executions
-        print slvr
-        sampler['pipeline'].shutdown(slvr)
+        print 'Avg. execution time %gms' % sampler['slvr'].pipeline.avg_execution_time
+        print 'Last execution time %gms' % sampler['slvr'].pipeline.last_execution_time
+        print 'No. of executions %d.' % sampler['slvr'].pipeline.nr_of_executions
+        print sample['slvr']
+        # We use this because we can't use context managers with the
+        # paradigm used to obtained the solver above
+        sampler['slvr'].shutdown()
         print source_params
         lproj_sim=source_params['emaj']*np.sin(source_params['pa'])
         mproj_sim=source_params['emaj']*np.cos(source_params['pa'])
