@@ -45,6 +45,9 @@ class BiroSolver(BaseSolver):
         super(BiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
             npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, pipeline=pipeline, **kwargs)
 
+        # Store the compute capability
+        self.cc = kwargs['cc']
+
         slvr = self
         na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime
         npsrc, ngsrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nsrc

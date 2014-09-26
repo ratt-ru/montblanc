@@ -209,18 +209,6 @@ class BaseSolver(Solver):
 
         self.ft = ft = dtype
 
-        # Store the device, choosing the default if not specified
-        self.device = kwargs.get('device')
-
-        if self.device is None:
-            import pycuda.autoinit
-            self.device = pycuda.autoinit.device
-
-        # Figure out the integer compute cability of the device
-        cc_tuple = self.device.compute_capability()
-        # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
-        self.cc = np.int32(np.dot(cc_tuple, (100,10)))
-
         # Dictionaries to store records about our arrays and properties
         self.arrays = {}
         self.properties = {}
