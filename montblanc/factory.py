@@ -49,11 +49,24 @@ def get_bk_pipeline(**kwargs):
 
 	return Pipeline([RimeBK(), RimeJonesReduce()])
 
+def get_base_solver(**kwargs):
+	pipeline = get_empty_pipeline(**kwargs)
+
+	# Get the default cuda device if none is provided
+	if kwargs.get('device', None) is None:
+		import pycuda.autoinit
+		kwargs['device']=pycuda.autoinit.device
+
+	from montblanc.BaseSolver import BaseSolver
+
+	return BaseSolver(**kwargs)
+
 def get_bk_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,**kwargs):
-	pipeline = get_bk_pipeline(**kwargs)
+	if kwargs.get('pipeline') is None:
+		kwargs['pipeline'] = get_bk_pipeline(**kwargs)
 
 	return get_biro_solver(npsrc=npsrc, ngsrc=ngsrc,
-		dtype=dtype, pipeline=pipeline, version='v1', **kwargs)
+		dtype=dtype, version='v1', **kwargs)
 
 def get_biro_pipeline(**kwargs):
 	# Decide whether to use the weight vector
