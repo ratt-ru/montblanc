@@ -50,18 +50,10 @@ def get_bk_pipeline(**kwargs):
 	return Pipeline([RimeBK(), RimeJonesReduce()])
 
 def get_bk_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,**kwargs):
-	if kwargs.get('device', None) is None:
-		import pycuda.autoinit
-		kwargs['device']=pycuda.autoinit.device
-
 	pipeline = get_bk_pipeline(**kwargs)
 
-	check_msfile(kwargs.get('msfile', None))
-
-	from montblanc.impl.biro.v1.MeasurementSetSolver import MeasurementSetSolver
-
-	return MeasurementSetSolver(npsrc=npsrc, ngsrc=ngsrc,
-		dtype=dtype, pipeline=pipeline, **kwargs)
+	return get_biro_solver(npsrc=npsrc, ngsrc=ngsrc,
+		dtype=dtype, pipeline=pipeline, version='v1', **kwargs)
 
 def get_biro_pipeline(**kwargs):
 	# Decide whether to use the weight vector
