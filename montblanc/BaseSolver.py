@@ -10,6 +10,7 @@ import pycuda.gpuarray as gpuarray
 
 import montblanc
 import montblanc.factory
+import montblanc.util
 
 class ArrayRecord(object):
     """ Records information about an array """
@@ -232,70 +233,6 @@ class BaseSolver(Solver):
             pipeline = montblanc.factory.get_empty_pipeline()
         self.pipeline = pipeline
 
-    @staticmethod
-    def __cpu_name(name):
-        """ Constructs a name for the CPU version of the array """
-        return name + '_cpu'
-
-    @staticmethod
-    def __gpu_name(name):
-        """ Constructs a name for the GPU version of the array """
-        return name + '_gpu'
-
-    @staticmethod
-    def __transfer_method_name(name):
-        """ Constructs a transfer method name, given the array name """
-        return 'transfer_' + name
-
-    @staticmethod
-    def __shape_name(name):
-        """ Constructs a name for the array shape member, based on the array name """
-        return name + '_shape'
-
-    @staticmethod
-    def __dtype_name(name):
-        """ Constructs a name for the array data-type member, based on the array name """
-        return name + '_dtype'
-
-    @staticmethod
-    def __setter_name(name):
-        """ Constructs a name for the property, based on the property name """
-        return 'set_' + name
-
-    @staticmethod
-    def fmt_array_line(name,size,dtype,cpu,gpu,shape):
-        """ Format array parameters on an 80 character width line """
-        return '%-*s%-*s%-*s%-*s%-*s%-*s' % (
-            20,name,
-            10,size,
-            15,dtype,
-            4,cpu,
-            4,gpu,
-            20,shape)
-
-    @staticmethod
-    def fmt_property_line(name,dtype,value,default):
-        return '%-*s%-*s%-*s%-*s' % (
-            20,name,
-            10,dtype,
-            20,value,
-            20,default)
-
-    @staticmethod
-    def fmt_bytes(nbytes):
-        """ Returns a human readable string, given the number of bytes """
-        for x in ['B','KB','MB','GB']:
-            if nbytes < 1024.0:
-                return "%3.1f%s" % (nbytes, x)
-            nbytes /= 1024.0
-        
-        return "%.1f%s" % (nbytes, 'TB')
-
-    @staticmethod
-    def array_bytes(shape, dtype):
-        """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
-        return np.product(shape)*np.dtype(dtype).itemsize
-
     def get_numeric_shape(self, sshape, ignore=None):
         """
         Substitutes string values in the supplied shape parameter
@@ -368,12 +305,12 @@ class BaseSolver(Solver):
 
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
-        return np.sum([BaseSolver.array_bytes(a.shape,a.dtype) 
+        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype) 
             for a in self.arrays.itervalues()])
 
     def mem_required(self):
         """ Return a string representation of the total memory required """
-        return BaseSolver.fmt_bytes(self.bytes_required())
+        return montblanc.util.fmt_bytes(self.bytes_required())
 
     def check_array(self, record_key, ary):
         """
@@ -492,8 +429,8 @@ class BaseSolver(Solver):
         self.arrays[name] = new
 
         # Attribute names
-        cpu_name = BaseSolver.__cpu_name(name)
-        gpu_name = BaseSolver.__gpu_name(name)
+        cpu_name = montblanc.util.cpu_name(name)
+        gpu_name = montblanc.util.gpu_name(name)
 
         # Create descriptors on the class instance, even though members
         # may not necessarily be created on object instances. This is so
@@ -538,7 +475,7 @@ class BaseSolver(Solver):
                 getattr(self,gpu_name).set(npary)
 
             # Create the method on ourself
-            method_name = BaseSolver.__transfer_method_name(name)
+            method_name = montblanc.util.transfer_method_name(name)
             method = types.MethodType(transfer,self)
             setattr(self,  method_name, method)
             # Create a docstring!
@@ -554,12 +491,12 @@ class BaseSolver(Solver):
 
         # Set up a member describing the shape
         if kwargs.get('shape_member', False) is True:
-            shape_name = BaseSolver.__shape_name(name)
+            shape_name = montblanc.util.shape_name(name)
             setattr(self, shape_name, shape)
 
         # Set up a member describing the dtype
         if kwargs.get('dtype_member', False) is True:
-            dtype_name = BaseSolver.__dtype_name(name)
+            dtype_name = montblanc.util.dtype_name(name)
             setattr(self, dtype_name, dtype)
 
     def register_property(self, name, dtype, default, registrant, **kwargs):
@@ -597,7 +534,7 @@ class BaseSolver(Solver):
 
         # Should we create a setter for this property?
         setter = kwargs.get('setter', False)
-        setter_name = BaseSolver.__setter_name(name)
+        setter_name = montblanc.util.setter_name(name)
 
         # Yes, create a default setter
         if isinstance(setter, types.BooleanType) and setter is True:
@@ -657,12 +594,12 @@ class BaseSolver(Solver):
         """ Generator generating strings describing each registered array """
         yield 'Registered Arrays'
         yield '-'*80
-        yield BaseSolver.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
+        yield montblanc.util.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
         yield '-'*80
 
         for a in self.arrays.itervalues():
-            yield BaseSolver.fmt_array_line(a.name,
-                BaseSolver.fmt_bytes(BaseSolver.array_bytes(a.shape, a.dtype)),
+            yield montblanc.util.fmt_array_line(a.name,
+                montblanc.util.fmt_bytes(montblanc.util.array_bytes(a.shape, a.dtype)),
                 np.dtype(a.dtype).name,
                 'Y' if a.has_cpu_ary else 'N',
                 'Y' if a.has_gpu_ary else 'N',
@@ -672,12 +609,12 @@ class BaseSolver(Solver):
         """ Generator generating string describing each registered property """
         yield 'Registered Properties'
         yield '-'*80
-        yield BaseSolver.fmt_property_line('Property Name',
+        yield montblanc.util.fmt_property_line('Property Name',
             'Type', 'Value', 'Default Value')
         yield '-'*80
 
         for p in self.properties.itervalues():
-            yield BaseSolver.fmt_property_line(
+            yield montblanc.util.fmt_property_line(
                 p.name, np.dtype(p.dtype).name,
                 getattr(self, p.name), p.default)
 
@@ -701,10 +638,10 @@ class BaseSolver(Solver):
 
     def __str__(self):
         """ Outputs a string representation of this object """
-        n_cpu_bytes = np.sum([BaseSolver.array_bytes(a.shape,a.dtype)
+        n_cpu_bytes = np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_cpu_ary is True])
 
-        n_gpu_bytes = np.sum([BaseSolver.array_bytes(a.shape,a.dtype)
+        n_gpu_bytes = np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_gpu_ary is True])
 
         w = 20
@@ -718,8 +655,8 @@ class BaseSolver(Solver):
             '%-*s: %s' % (w,'Timesteps', self.ntime),
             '%-*s: %s' % (w,'Point Sources', self.npsrc),
             '%-*s: %s' % (w,'Gaussian Sources', self.ngsrc),
-            '%-*s: %s' % (w,'CPU Memory', BaseSolver.fmt_bytes(n_cpu_bytes)),
-            '%-*s: %s' % (w,'GPU Memory', BaseSolver.fmt_bytes(n_gpu_bytes))]
+            '%-*s: %s' % (w,'CPU Memory', montblanc.util.fmt_bytes(n_cpu_bytes)),
+            '%-*s: %s' % (w,'GPU Memory', montblanc.util.fmt_bytes(n_gpu_bytes))]
 
         l.extend([''])
         l.extend([s for s in self.gen_array_descriptions()])
