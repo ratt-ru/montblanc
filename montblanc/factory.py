@@ -6,6 +6,7 @@ from montblanc.node import Node, NullNode
 
 VERSION_ONE = 'v1'
 VERSION_TWO = 'v2'
+DEFAULT_VERSION = VERSION_TWO
 
 MS_SD_TYPE = 'ms'
 TEST_SD_TYPE = 'test'
@@ -231,7 +232,7 @@ def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,
 	version=None, **kwargs):
 
 	if sd_type is None: sd_type=MS_SD_TYPE
-	if version is None: version=VERSION_ONE
+	if version is None: version=DEFAULT_VERSION
 
 	check_biro_version(version)
 	check_solver_type(sd_type)

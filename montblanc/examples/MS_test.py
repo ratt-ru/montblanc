@@ -7,7 +7,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='RIME MS test script')
     parser.add_argument('msfile', help='Measurement Set File')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v1', choices=['v1','v2'],
+    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v1','v2'],
         help='BIRO Pipeline Version.')        
 
     args = parser.parse_args(sys.argv[1:])
