@@ -55,7 +55,7 @@ def get_base_solver(**kwargs):
 	# Get the default cuda device if none is provided
 	if kwargs.get('device', None) is None:
 		import pycuda.autoinit
-		kwargs['device'] = pycuda.autoinit.device
+		kwargs['device']=pycuda.autoinit.device
 
 	from montblanc.BaseSolver import BaseSolver
 
@@ -252,11 +252,7 @@ def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,
 	# Get the default cuda device if none is provided
 	if kwargs.get('device', None) is None:
 		import pycuda.autoinit
-		kwargs['device'] = device = pycuda.autoinit.device
-		# Figure out the integer compute cability of the device
-        cc_tuple = device.compute_capability()
-        # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
-        kwargs['cc'] = np.int32(np.dot(cc_tuple, (100,10)))
+		kwargs['device']=pycuda.autoinit.device
 
 	# Create a pipeline, if none is provided
 	if kwargs.get('pipeline',None) is None:
