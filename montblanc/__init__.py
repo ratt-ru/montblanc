@@ -18,7 +18,7 @@ def get_source_path():
 
 def get_bk_solver(msfile, npsrc, ngsrc, **kwargs):
 	"""
-	get_bk_solver(msfile, npsrc, device=None)
+	get_bk_solver(msfile, npsrc, context=None)
 
 	Returns a solver composed of simple brightness and phase terms.
 
@@ -30,8 +30,8 @@ def get_bk_solver(msfile, npsrc, ngsrc, **kwargs):
 		Number of point sources.
 	ngsrc : number
 		Number of gaussian sources.
-	device - PyCUDA device.
-		The CUDA device to execute on If left blank, the default device
+	context - pycuda.driver.Context.
+		The CUDA context to execute on If left blank, the default context
 		will be selected.
 
 	Returns
@@ -76,8 +76,8 @@ def get_biro_solver(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kwar
 	store_cpu : boolean
 		True if copies of the numpy arrays should be stored on the shared data object
 		when using the shared data object's transfer_* methods. Otherwise False.
-	device - PyCUDA device.
-		The CUDA device to execute on If left blank, the default device
+	context - pycuda.driver.Context.
+		The CUDA context to execute on If left blank, the default context
 		will be selected.
 
 	Returns

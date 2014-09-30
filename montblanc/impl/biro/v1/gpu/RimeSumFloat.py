@@ -15,7 +15,7 @@ __global__
 void rime_jones_sum_float(
     float2 * jones,
     float2 * visibilities,
-    int nvis, int npsrc)
+    int nvis, int nsrc)
 {
     // Our data space is a 4D matrix of BL x CHAN x TIME x SRC
     // V is the visibility
@@ -24,11 +24,11 @@ void rime_jones_sum_float(
     if(V >= nvis)
         return;
 
-    int J = V*npsrc;
+    int J = V*nsrc;
 
     float2 sum = make_float2(0.0f, 0.0f);
 	    
-    for(int SRC=0; SRC<npsrc; ++SRC)
+    for(int SRC=0; SRC<nsrc; ++SRC)
     {
     	float2 value = jones[J+SRC];
     	sum.x += value.x; sum.y += value.y;
@@ -36,10 +36,10 @@ void rime_jones_sum_float(
 
     visibilities[V] = sum;
 
-    J += nvis*npsrc; V += nvis;
+    J += nvis*nsrc; V += nvis;
     sum = make_float2(0.0f, 0.0f);
 
-    for(int SRC=0; SRC<npsrc; ++SRC)
+    for(int SRC=0; SRC<nsrc; ++SRC)
     {
     	float2 value = jones[J+SRC];
     	sum.x += value.x; sum.y += value.y;
@@ -47,10 +47,10 @@ void rime_jones_sum_float(
 
     visibilities[V] = sum;
 
-    J += nvis*npsrc; V += nvis;
+    J += nvis*nsrc; V += nvis;
     sum = make_float2(0.0f, 0.0f);
 
-    for(int SRC=0; SRC<npsrc; ++SRC)
+    for(int SRC=0; SRC<nsrc; ++SRC)
     {
     	float2 value = jones[J+SRC];
     	sum.x += value.x; sum.y += value.y;
@@ -58,10 +58,10 @@ void rime_jones_sum_float(
 
     visibilities[V] = sum;
 
-    J += nvis*npsrc; V += nvis;
+    J += nvis*nsrc; V += nvis;
     sum = make_float2(0.0f, 0.0f);
 
-    for(int SRC=0; SRC<npsrc; ++SRC)
+    for(int SRC=0; SRC<nsrc; ++SRC)
     {
     	float2 value = jones[J+SRC];
     	sum.x += value.x; sum.y += value.y;
@@ -77,13 +77,13 @@ class RimeSumFloat(Node):
     def __init__(self):
         super(RimeSumFloat, self).__init__()
 
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         self.mod = SourceModule(FLOAT_KERNEL, options=['-lineinfo'])
         self.kernel = self.mod.get_function('rime_jones_sum_float')
 
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         pass
-    def pre_execution(self, solver):
+    def pre_execution(self, solver, stream=None):
         pass
 
     def get_kernel_params(self, solver):
@@ -97,12 +97,12 @@ class RimeSumFloat(Node):
             'grid'  : (vis_blocks,1,1),
             'shared' : 16*vis_per_block*np.dtype(slvr.ct).itemsize }
 
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         slvr = solver
 
         self.kernel(slvr.jones_gpu, slvr.vis_gpu,
-            np.int32(slvr.nbl*slvr.nchan*slvr.ntime), np.int32(slvr.npsrc),
+            np.int32(slvr.nvis), np.int32(slvr.nsrc),
             **self.get_kernel_params(slvr))       
 
-    def post_execution(self, solver):
+    def post_execution(self, solver, stream=None):
         pass

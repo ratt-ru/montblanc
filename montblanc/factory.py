@@ -1,18 +1,21 @@
 import numpy as np
 
+import pycuda.driver as cuda
+
 import montblanc
 from montblanc.pipeline import Pipeline
 from montblanc.node import Node, NullNode
 
 VERSION_ONE = 'v1'
 VERSION_TWO = 'v2'
+VERSION_THREE = 'v3'
 DEFAULT_VERSION = VERSION_TWO
 
 MS_SD_TYPE = 'ms'
 TEST_SD_TYPE = 'test'
 BIRO_SD_TYPE = 'biro'
 
-valid_biro_versions = [VERSION_ONE, VERSION_TWO]
+valid_biro_versions = [VERSION_ONE, VERSION_TWO, VERSION_THREE]
 valid_biro_solver_types = [MS_SD_TYPE, TEST_SD_TYPE, BIRO_SD_TYPE]
 
 def check_msfile(msfile):
@@ -40,28 +43,54 @@ def check_biro_solver_type(sd_type):
 		raise ValueError, 'Supplied shared data type %s is not valid. ' \
 			'Should be one of %s', (sd_type, valid_biro_solver_types)
 
+def get_contexts_per_device():
+	""" Returns a list of CUDA contexts associated with each CUDA device """
+	cuda.init()
+
+	# Create contexts for each device
+	devices = [cuda.Device(d) for d in range(cuda.Device.count())]
+	contexts = [d.make_context() for d in devices]
+
+	# Pop each context off the stack
+	for d in range(len(devices)):
+		cuda.Context.pop()
+
+	return contexts
+
+def get_default_context():
+	""" Get a default context """
+	contexts = get_contexts_per_device()
+
+	if not len(contexts) > 0:
+		raise Exception, 'No CUDA devices availabe'
+
+	return contexts[0]
+
 def get_empty_pipeline(**kwargs):
+	""" Get an empty pipeline object """
 	return Pipeline([])
 
 def get_bk_pipeline(**kwargs):
+	""" Get a BK pipeline """
 	from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
 	from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
 
 	return Pipeline([RimeBK(), RimeJonesReduce()])
 
 def get_base_solver(**kwargs):
+	""" Get a basic solver object """
 	pipeline = get_empty_pipeline(**kwargs)
 
-	# Get the default cuda device if none is provided
-	if kwargs.get('device', None) is None:
-		import pycuda.autoinit
-		kwargs['device']=pycuda.autoinit.device
+	# Get the default cuda context if none is provided
+	if kwargs.get('context', None) is None:
+		kwargs['context']=get_default_context()
 
 	from montblanc.BaseSolver import BaseSolver
 
 	return BaseSolver(**kwargs)
 
 def get_bk_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,**kwargs):
+	""" Get a BK solver """
 	if kwargs.get('pipeline') is None:
 		kwargs['pipeline'] = get_bk_pipeline(**kwargs)
 
@@ -69,6 +98,8 @@ def get_bk_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,**kwargs):
 		dtype=dtype, version='v1', **kwargs)
 
 def get_biro_pipeline(**kwargs):
+	""" Get a BIRO pipeline """
+
 	# Decide whether to use the weight vector
 	use_weight_vector = kwargs.get('weight_vector', False)
 	version = kwargs.get('version')
@@ -96,47 +127,42 @@ def get_biro_pipeline(**kwargs):
 	elif version == VERSION_TWO:
 		from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 		from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
-
 		# Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
-		nodes = [RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)]
-
-		return Pipeline(nodes)
+		return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)])
+	elif version == VERSION_THREE:
+		from montblanc.impl.biro.v3.gpu.RimeEK import RimeEK
+		from montblanc.impl.biro.v3.gpu.RimeGaussBSum import RimeGaussBSum
+		# Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
+		return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)])
 
 	raise Exception, 'Invalid Version %s' % version
 
-def load_from_ms(**kwargs):
+def create_biro_solver_from_ms(slvr_class_type, **kwargs):
+	""" Initialise the supplied solver with measurement set data """
 	check_msfile(kwargs.get('msfile',None))
 	version = kwargs.get('version')
 
-	if version == VERSION_TWO:
+	if version == VERSION_THREE:
+		from montblanc.impl.biro.v3.loaders import MeasurementSetLoader
+	elif version == VERSION_TWO:
 		from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
-		from montblanc.impl.biro.v2.BiroSolver import BiroSolver
 	elif version == VERSION_ONE:
 		from montblanc.impl.biro.v1.loaders import MeasurementSetLoader
-		from montblanc.impl.biro.v1.BiroSolver import BiroSolver
 	else:
 		raise Exception, 'Incorrect version %s' % version
 
 	with MeasurementSetLoader(kwargs.get('msfile')) as loader:
 		ntime,na,nchan = loader.get_dims()
-		slvr = BiroSolver(na=na,ntime=ntime,nchan=nchan,**kwargs)
+		slvr = slvr_class_type(na=na,ntime=ntime,nchan=nchan,**kwargs)
 		loader.load(slvr)
 		return slvr
 
-def create_biro_test_solver(**kwargs):
+def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
+	""" Initialise the supplied solver with test data """
 	version = kwargs.get('version')
 
-	if version == VERSION_TWO:
-		from montblanc.impl.biro.v2.BiroSolver import BiroSolver
-	elif version == VERSION_ONE:
-		from montblanc.impl.biro.v1.BiroSolver import BiroSolver
-	else:
-		raise Exception, 'Incorrect version %s' % version
-
-	# Store CPU arrays
 	kwargs['store_cpu'] = True
-
-	slvr = BiroSolver(**kwargs)
+	slvr = slvr_class_type(**kwargs)
 
 	na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime
 	npsrc, ngsrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nsrc
@@ -153,7 +179,7 @@ def create_biro_test_solver(**kwargs):
 	def uvw_values(version):
 		if version == VERSION_ONE:
 			return np.arange(1,nbl*ntime+1)
-		elif version == VERSION_TWO:
+		elif version in [VERSION_TWO, VERSION_THREE]:
 			return np.arange(1,ntime*na+1)
 		
 		raise Exception, 'Invalid Version %s' % version
@@ -163,7 +189,7 @@ def create_biro_test_solver(**kwargs):
 	uvw = shape_list([30.*r, 25.*r, 20.*r],
 		shape=slvr.uvw_shape, dtype=slvr.uvw_dtype)
 	# Normalise Antenna 0 for version two
-	if version == VERSION_TWO: uvw[:,:,0] = 0
+	if version in [VERSION_TWO, VERSION_THREE]: uvw[:,:,0] = 0
 	slvr.transfer_uvw(uvw)
 
 	# Point source coordinates in the l,m,n (sky image) domain
@@ -214,7 +240,7 @@ def create_biro_test_solver(**kwargs):
 		jones = make_random(slvr.jones_shape,
 			slvr.jones_dtype)
 		slvr.transfer_jones(jones)
-	elif version == VERSION_TWO:
+	elif version in [VERSION_TWO, VERSION_THREE]:
 		# Generate random jones scalar values
 		jones_scalar = make_random(slvr.jones_scalar_shape,
 			slvr.jones_scalar_dtype)
@@ -235,6 +261,7 @@ def create_biro_test_solver(**kwargs):
 
 def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,
 	version=None, **kwargs):
+	""" Factory function that produces a BIRO solver """
 
 	if sd_type is None: sd_type=MS_SD_TYPE
 	if version is None: version=DEFAULT_VERSION
@@ -249,27 +276,30 @@ def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,
 	kwargs['dtype'] = dtype
 	kwargs['version'] = version
 
-	# Get the default cuda device if none is provided
-	if kwargs.get('device', None) is None:
-		import pycuda.autoinit
-		kwargs['device']=pycuda.autoinit.device
+	# Get the default cuda context if none is provided
+	if kwargs.get('context', None) is None:
+		kwargs['context'] = get_default_context()
 
 	# Create a pipeline, if none is provided
 	if kwargs.get('pipeline',None) is None:
 		kwargs['pipeline'] = get_biro_pipeline(**kwargs)
 
+	# Figure out which version of BIRO solver we're dealing with.
+	if version == VERSION_ONE:
+		from montblanc.impl.biro.v1.BiroSolver import BiroSolver
+	elif version == VERSION_TWO:
+		from montblanc.impl.biro.v2.BiroSolver import BiroSolver
+	elif version == VERSION_THREE:
+		from montblanc.impl.biro.v3.CompositeBiroSolver \
+		import CompositeBiroSolver as BiroSolver
+	else:
+		raise Exception, 'Invalid version %s' % version
+
 	if sd_type == MS_SD_TYPE:
-		return load_from_ms(**kwargs)
+		return create_biro_solver_from_ms(BiroSolver, **kwargs)
 	elif sd_type == TEST_SD_TYPE:			
-		return create_biro_test_solver(**kwargs)
+		return create_biro_solver_from_test_data(BiroSolver, **kwargs)
 	elif sd_type == BIRO_SD_TYPE:
-		if version == VERSION_ONE:
-			from montblanc.impl.biro.v1.BiroSolver import BiroSolver
-		elif version == VERSION_TWO:
-			from montblanc.impl.biro.v2.BiroSolver import BiroSolver
-		else:
-			raise 'Invalid version %s' % version
-
 		return BiroSolver(**kwargs)
-
-	raise Exception, 'Invalid Version %s' % version
+	else:
+		raise Exception, 'Invalid type %s' % sd_type

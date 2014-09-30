@@ -311,7 +311,7 @@ class RimeEBK(Node):
         super(RimeEBK, self).__init__()
         self.gaussian = gaussian
 
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         slvr = solver
 
         D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
@@ -338,10 +338,10 @@ class RimeEBK(Node):
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         pass
 
-    def pre_execution(self, solver):
+    def pre_execution(self, solver, stream=None):
         pass
 
     def get_kernel_params(self, solver):
@@ -364,7 +364,7 @@ class RimeEBK(Node):
             'grid'  : (src_blocks,time_chan_blocks,baseline_blocks)
         }
 
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         slvr = solver
 
         # Setup our kernel call, depending on whether we're
@@ -382,5 +382,5 @@ class RimeEBK(Node):
                 slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
                 **self.get_kernel_params(slvr))
 
-    def post_execution(self, solver):
+    def post_execution(self, solver, stream=None):
         pass

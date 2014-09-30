@@ -31,7 +31,7 @@ def myloglike(cube, ndim, nparams):
         pipeline, slvr = montblanc.get_biro_pipeline(msfile,\
                  npsrc=npsrc,ngsrc=ngsrc,\
                  noise_vector=use_noise_vector,\
-                 device=pycuda.autoinit.device,dtype=dtype,\
+                 context=pycuda.autoinit.context,dtype=dtype,\
                  store_cpu=store_cpu)
 
         pipeline.initialise(slvr)

@@ -175,7 +175,7 @@ class RimeEK(Node):
     def __init__(self):
         super(RimeEK, self).__init__()
 
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         slvr = solver
 
         D = slvr.get_properties()
@@ -196,10 +196,10 @@ class RimeEK(Node):
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         pass
 
-    def pre_execution(self, solver):
+    def pre_execution(self, solver, stream=None):
         pass
 
     def get_kernel_params(self, solver):
@@ -220,13 +220,13 @@ class RimeEK(Node):
             'grid'  : (chan_blocks, ant_blocks, time_blocks), 
         }
 
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         slvr = solver
 
         self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
             slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_scalar_gpu,
             slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
-            **self.get_kernel_params(slvr))
+            stream=stream, **self.get_kernel_params(slvr))
 
-    def post_execution(self, solver):
+    def post_execution(self, solver, stream=None):
         pass

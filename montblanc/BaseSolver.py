@@ -165,8 +165,8 @@ class BaseSolver(Solver):
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
         Keyword Arguments:
-            device : pycuda.device.Device
-                CUDA device to operate on.
+            context : pycuda.driver.Context
+                CUDA context to operate on.
             store_cpu: boolean
                 if True, store cpu versions of the kernel arrays.
             auto_correlations: boolean
@@ -176,7 +176,7 @@ class BaseSolver(Solver):
 
         super(BaseSolver, self).__init__()
 
-        autocor = kwargs.get('auto_correlations',True)
+        autocor = kwargs.get('auto_correlations',False)
 
         # Configure our problem dimensions. Number of
         # - antenna
@@ -209,15 +209,19 @@ class BaseSolver(Solver):
 
         self.ft = ft = dtype
 
-        # Store the device, choosing the default if not specified
-        self.device = kwargs.get('device')
+        # Store the context, choosing the default if not specified
+        ctx = kwargs.get('context')
 
-        if self.device is None:
-            import pycuda.autoinit
-            self.device = pycuda.autoinit.device
+        if ctx is None:
+            raise Exception, 'No context was supplied to the BaseSolver'
+
+        # Create a context wrapper
+        self.context = montblanc.util.ContextWrapper(ctx)
 
         # Figure out the integer compute cability of the device
-        cc_tuple = self.device.compute_capability()
+        # associated with the context
+        with self.context as ctx:
+            cc_tuple = cuda.Context.get_device().compute_capability()
         # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
         self.cc = np.int32(np.dot(cc_tuple, (100,10)))
 
@@ -247,54 +251,17 @@ class BaseSolver(Solver):
         return {
             'ft' : self.ft,
             'ct' : self.ct,
-            'int' : np.int64
+            'int' : int
         }[sdtype]
-
-    def get_numeric_shape(self, sshape, ignore=None):
-        """
-        Substitutes string values in the supplied shape parameter
-        with properties registered on this BaseSolver object.
-
-        Parameters
-        ----------
-            sshape : tuple composed of integers and strings.
-                The strings should related to integral properties
-                registered with this Solver object
-            ignore : list
-                A list of tuple strings to ignore
-
-        >>> print self.get_numeric_shape((4,'na','ntime'),ignore=['ntime'])
-        (4, 3)
-        """
-        D = self.get_properties()
-        if ignore is None: ignore = []
-        
-        if type(sshape) is not tuple:
-            raise TypeError, 'shape argument must be a tuple'
-
-        if type(ignore) is not list:
-            raise TypeError, 'ignore argument must be a list'
-
-        def tup_replace(value):
-            """ Replace strings in a tuple with the supplied dictionary value """
-            try:
-                replace_value = D[value]
-            except KeyError:
-                if not np.issubdtype(type(value), np.integer):
-                    raise KeyError, ('Unable to replace %s in shape %s ',
-                        'with a suitable integral value.') % \
-                        (value, sshape, )
-                replace_value = value
-
-            return replace_value
-
-        return tuple([tup_replace(v) for v in sshape if v not in ignore])
 
     def viable_timesteps(self, bytes_available):
         """
         Returns the number of timesteps possible, given the registered arrays
         and a memory budget defined by bytes_available
         """
+
+        # Don't accept non-negative memory budgets
+        if bytes_available < 0: bytes_available = 0
 
         # Figure out which arrays have an ntime dimension
         has_time = np.array([ \
@@ -303,7 +270,10 @@ class BaseSolver(Solver):
         # Get the shape product of each array, EXCLUDING any ntime dimension,
         # multiplied by the size of the array type in bytes.
         products = np.array([ \
-            np.product(self.get_numeric_shape(t.sshape, ignore=['ntime'])) * \
+            np.product(montblanc.util.get_numeric_shape(
+                t.sshape,
+                self.get_properties(),
+                ignore=['ntime'])) * \
             np.dtype(t.dtype).itemsize \
             for t in self.arrays.values()])
 
@@ -324,6 +294,16 @@ class BaseSolver(Solver):
         """ Returns the memory required by all arrays in bytes."""
         return np.sum([montblanc.util.array_bytes(a.shape,a.dtype) 
             for a in self.arrays.itervalues()])
+
+    def cpu_bytes_required(self):
+        """ returns the memory required by all CPU arrays in bytes. """
+        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype) 
+            for a in self.arrays.itervalues() if a.has_cpu_ary])
+
+    def gpu_bytes_required(self):
+        """ returns the memory required by all GPU arrays in bytes. """
+        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype) 
+            for a in self.arrays.itervalues() if a.has_gpu_ary])
 
     def mem_required(self):
         """ Return a string representation of the total memory required """
@@ -405,13 +385,20 @@ class BaseSolver(Solver):
             dtype_member : boolean
                 True if a member called 'name_dtype' should be
                 created on the Solver object.
+            transfer_method : boolean or function
+                True by default. If True, a default 'transfer_name' member is 
+                created, otherwise the supplied function is used instead
+            page_locked : boolean
+                True if the 'name_cpu' ndarray should be allocated as
+                a page-locked array
             replace : boolean
                 True if existing arrays should be replaced.
         """
         # Try and find an existing version of this array
         old = self.arrays.get(name, None)
 
-        # Should we create arrays?
+        # Should we create arrays? By default we don't create CPU arrays
+        # but we do create GPU arrays by default.
         want_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
         want_gpu_ary = kwargs.get('gpu', True)
 
@@ -428,9 +415,9 @@ class BaseSolver(Solver):
         create_cpu_ary = not cpu_ary_exists and want_cpu_ary
         create_gpu_ary = not gpu_ary_exists and want_gpu_ary
 
-        # Figure out the actual integral shape
+        # Figure out the actual integer shape
         sshape = shape
-        shape = self.get_numeric_shape(sshape)
+        shape = montblanc.util.get_numeric_shape(sshape, self.get_properties())
 
         if type(dtype) == str:
             dtype = self.get_actual_dtype(dtype)
@@ -475,10 +462,18 @@ class BaseSolver(Solver):
         if not BaseSolver.__dict__.has_key(gpu_name):
             setattr(BaseSolver, gpu_name, GPUArrayDescriptor(record_key=name))
 
+        page_locked = kwargs.get('page_locked', False)
+
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
         if create_cpu_ary:
-            cpu_ary = np.empty(shape=shape, dtype=dtype)
+            if not page_locked:
+                cpu_ary = np.zeros(shape=shape, dtype=dtype)
+            else:
+                with self.context as ctx:
+                    cpu_ary = pycuda.driver.pagelocked_zeros(
+                        shape=shape, dtype=dtype)
+
             setattr(self, cpu_name, cpu_ary)
 
         # Create an empty gpu array if it doesn't exist
@@ -489,21 +484,36 @@ class BaseSolver(Solver):
             # a zero-length array. This is kind of bad since
             # the gpuarray returned by gpuarray.empty() doesn't
             # have GPU memory allocated to it.
-            gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
+            with self.context as ctx:
+                gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
 
-            # Zero the array, if it has non-zero length
-            if np.product(shape) > 0: gpu_ary.fill(dtype(0))
-            setattr(self, gpu_name, gpu_ary)
+                # Zero the array, if it has non-zero length
+                if np.product(shape) > 0: gpu_ary.fill(dtype(0))
+                setattr(self, gpu_name, gpu_ary)
 
-        # Create the transfer method
-        def transfer(self, npary):
-            self.check_array(name, npary)
-            if create_cpu_ary: setattr(self,cpu_name,npary)
-            if create_gpu_ary: getattr(self,gpu_name).set(npary)
+        # Should we create a setter for this property?
+        transfer_method = kwargs.get('transfer_method', True)
 
-        # Create the method on ourself
+        # OK, we got a boolean for the kwarg, create a default transfer method
+        if isinstance(transfer_method, types.BooleanType) and transfer_method is True:
+            # Create the transfer method
+            def transfer(self, npary):
+                self.check_array(name, npary)
+                if create_cpu_ary: setattr(self,cpu_name,npary)
+                if create_gpu_ary:
+                    with self.context as ctx:
+                        getattr(self,gpu_name).set(npary)
+
+            transfer_method = types.MethodType(transfer,self)
+        # Otherwise, we can just use the supplied kwarg
+        elif isinstance(transfer_method, types.MethodType):
+            pass
+        else:
+            raise TypeError, ('transfer_method keyword argument set',
+                ' to an invalid type %s' % (type(transfer_method)))
+
+        # Name the transfer method
         transfer_method_name = montblanc.util.transfer_method_name(name)
-        transfer_method = types.MethodType(transfer,self)
         setattr(self,  transfer_method_name, transfer_method)
         # Create a docstring!
         getattr(transfer_method, '__func__').__doc__ = \
@@ -568,13 +578,16 @@ class BaseSolver(Solver):
         self.properties[name] = pr = PropertyRecord(
             name, dtype, default, registrant)
 
-        # Create the descriptor for this property on the class instance
-        setattr(BaseSolver, name, PropertyDescriptor(record_key=name, default=default))
+        #if not hasattr(BaseSolver, name):
+        if not BaseSolver.__dict__.has_key(name):
+	        # Create the descriptor for this property on the class instance
+	        setattr(BaseSolver, name, PropertyDescriptor(record_key=name, default=default))
+
         # Set the descriptor on this object instance
         setattr(self, name, default)
 
         # Should we create a setter for this property?
-        setter = kwargs.get('setter', True)
+        setter = kwargs.get('setter_method', True)
         setter_name = montblanc.util.setter_name(name)
 
         # Yes, create a default setter
@@ -593,7 +606,7 @@ class BaseSolver(Solver):
                 if setter_docstring is None else setter_docstring
 
         elif isinstance(setter, types.MethodType):
-            settattr(self, setter_name, setter)
+            setattr(self, setter_name, setter)
         else:
             raise TypeError, ('setter keyword argument set',
                 ' to an invalid type %s' % (type(setter)))
@@ -675,14 +688,17 @@ class BaseSolver(Solver):
 
     def solve(self):
         """ Solve the RIME """        
-        self.pipeline.execute(self)
+        with self.context as ctx:
+            self.pipeline.execute(self)
 
     def initialise(self):
-        self.pipeline.initialise(self)
+        with self.context as ctx:
+            self.pipeline.initialise(self)
 
     def shutdown(self):
         """ Stop the RIME solver """
-        self.pipeline.shutdown(self)
+        with self.context as ctx:
+            self.pipeline.shutdown(self)
 
     def __enter__(self):
         self.initialise()
@@ -693,11 +709,8 @@ class BaseSolver(Solver):
 
     def __str__(self):
         """ Outputs a string representation of this object """
-        n_cpu_bytes = np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
-            for a in self.arrays.itervalues() if a.has_cpu_ary is True])
-
-        n_gpu_bytes = np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
-            for a in self.arrays.itervalues() if a.has_gpu_ary is True])
+        n_cpu_bytes = self.cpu_bytes_required()
+        n_gpu_bytes = self.gpu_bytes_required()
 
         w = 20
 

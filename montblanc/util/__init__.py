@@ -1,5 +1,7 @@
 import numpy as np
 
+from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
+
 def nr_of_baselines(na, auto_correlations=False):
     """ Compute the number of baselines for the 
     given number of antenna. Can specify whether
@@ -60,3 +62,91 @@ def fmt_bytes(nbytes):
 def array_bytes(shape, dtype):
     """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
     return np.product(shape)*np.dtype(dtype).itemsize
+
+def flatten(nested):
+    """ Return a flatten version of the nested argument """
+    flat_return = list()
+
+    def __inner_flat(nested,flat):
+        for i in nested:
+            __inner_flat(i, flat) if isinstance(i, list) else flat.append(i)
+        return flat
+
+    __inner_flat(nested,flat_return)
+
+    return flat_return
+
+def get_numeric_shape(sshape, variables, ignore=None):
+    """
+    Substitutes string values in the supplied shape parameter
+    with integer variables stored in a dictionary
+
+    Parameters
+    ----------
+    sshape : tuple/string composed of integers and strings.
+        The strings should related to integral properties
+        registered with this Solver object
+    variables : dictionary
+        Keys with associated integer values. Used to replace
+        string values within the tuple
+    ignore : list
+        A list of tuple strings to ignore
+
+    >>> print self.get_numeric_shape((4,'na','ntime'),ignore=['ntime'])
+    (4, 3)
+    """
+    if ignore is None: ignore = []
+
+    if not isinstance(sshape, tuple) and not isinstance(sshape, list):
+        raise TypeError, 'sshape argument must be a tuple or list'
+
+    if not isinstance(ignore, list):
+        raise TypeError, 'ignore argument must be a list'
+
+    return tuple([int(eval_expr(v,variables)) if isinstance(v,str) else int(v)
+        for v in sshape if v not in ignore])
+
+def array_convert_function(sshape_one, sshape_two, variables):
+    """ Return a function defining the conversion process between two NumPy
+    arrays of different shapes """
+    if not isinstance(sshape_one, tuple): sshape_one = (sshape_one,)
+    if not isinstance(sshape_two, tuple): sshape_two = (sshape_two,)
+
+    s_one = flatten([eval_expr_names_and_nrs(d) if isinstance(d,str) else d
+        for d in sshape_one])
+    s_two = flatten([eval_expr_names_and_nrs(d) if isinstance(d,str) else d
+        for d in sshape_two])
+
+    if len(s_one) != len(s_two):
+        raise ValueError, ('Flattened shapes %s and %s '\
+            'do not have the same length. '
+            'Original shapes were %s and %s') % \
+            (s_one, s_two, sshape_one, sshape_two)
+
+    # Reason about the transpose
+    t_idx = tuple([s_one.index(v) for v in s_two])
+
+    # Figure out the actual numeric shape values to use
+    n_one = get_numeric_shape(s_one, variables)
+    n_two = [eval_expr(d,variables)
+        if isinstance(d,str) else d for d in sshape_two]
+
+    def f(ary): return np.reshape(ary, n_one).transpose(t_idx).reshape(n_two)
+
+    return f
+
+import pycuda.driver as cuda
+
+class ContextWrapper(object):
+    """ Context Manager Wrapper for CUDA Contexts! """
+    def __init__(self, context):
+        self.context = context
+
+    def __enter__(self):
+        """ Pushed the wrapped context onto the stack """
+        self.context.push()
+        return self
+
+    def __exit__(self,type,value,traceback):
+        """ Pop when we're done """
+        cuda.Context.pop()

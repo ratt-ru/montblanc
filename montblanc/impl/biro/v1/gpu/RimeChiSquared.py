@@ -132,7 +132,7 @@ class RimeChiSquared(Node):
         super(RimeChiSquared, self).__init__()
         self.weight_vector = weight_vector
 
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         slvr = solver
 
         D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
@@ -153,10 +153,10 @@ class RimeChiSquared(Node):
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         pass
 
-    def pre_execution(self, solver):
+    def pre_execution(self, solver, stream=None):
         pass
 
     def get_kernel_params(self, solver):
@@ -171,7 +171,7 @@ class RimeChiSquared(Node):
             'grid'   : (vis_blocks,1,1)
         }
 
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         slvr = solver
 
         weight_vector_gpu = slvr.weight_vector_gpu if self.weight_vector is True \
@@ -192,5 +192,5 @@ class RimeChiSquared(Node):
         else:
             slvr.set_X2(gpu_sum)        
             
-    def post_execution(self, solver):
+    def post_execution(self, solver, stream=None):
         pass
