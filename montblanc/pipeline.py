@@ -90,7 +90,7 @@ class Pipeline:
 
         if not self.is_initialised():
             montblanc.log.error('Pipeline was not initialised!')
-            if not self.initialise():
+            if not self.initialise(solver):
                 return False
 
         try:
