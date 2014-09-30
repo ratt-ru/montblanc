@@ -233,6 +233,23 @@ class BaseSolver(Solver):
             pipeline = montblanc.factory.get_empty_pipeline()
         self.pipeline = pipeline
 
+    def get_actual_dtype(self,sdtype):
+        """
+        Substitutes string dtype parameters with actual
+        NumPy dtypes.
+
+        Parameters
+        ----------
+            sdtype : string defining the dtype
+
+        """
+
+        return {
+            'ft' : self.ft,
+            'ct' : self.ct,
+            'int' : np.int64
+        }[sdtype]
+
     def get_numeric_shape(self, sshape, ignore=None):
         """
         Substitutes string values in the supplied shape parameter
@@ -415,6 +432,9 @@ class BaseSolver(Solver):
         sshape = shape
         shape = self.get_numeric_shape(sshape)
 
+        if type(dtype) == str:
+            dtype = self.get_actual_dtype(dtype)
+
         # Create a new record
         new = ArrayRecord(
             name=name,
@@ -541,6 +561,9 @@ class BaseSolver(Solver):
                 docstring for the default setter.
 
         """
+
+        if type(dtype) == str:
+            dtype = self.get_actual_dtype(dtype)
 
         self.properties[name] = pr = PropertyRecord(
             name, dtype, default, registrant)
