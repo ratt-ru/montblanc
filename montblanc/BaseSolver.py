@@ -395,8 +395,8 @@ class BaseSolver(Solver):
         old = self.arrays.get(name, None)
 
         # Should we create arrays?
-        create_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
-        create_gpu_ary = kwargs.get('gpu', True)
+        want_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
+        want_gpu_ary = kwargs.get('gpu', True)
 
         # Have we already created arrays?
         cpu_ary_exists = True if old is not None and old.has_cpu_ary else False
@@ -404,8 +404,12 @@ class BaseSolver(Solver):
 
         # Determine whether the new record we're creating will have
         # CPU or GPU arrays
-        has_cpu_ary = cpu_ary_exists or create_cpu_ary
-        has_gpu_ary = gpu_ary_exists or create_gpu_ary
+        has_cpu_ary = cpu_ary_exists or want_cpu_ary
+        has_gpu_ary = gpu_ary_exists or want_gpu_ary
+
+        # Determine whether we need to create cpu/gpu arrays
+        create_cpu_ary = not cpu_ary_exists and want_cpu_ary
+        create_gpu_ary = not gpu_ary_exists and want_gpu_ary
 
         # Figure out the actual integral shape
         sshape = shape
@@ -453,41 +457,41 @@ class BaseSolver(Solver):
 
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
-        if cpu_ary_exists is not True and create_cpu_ary is True:
+        if create_cpu_ary:
             cpu_ary = np.empty(shape=shape, dtype=dtype)
             setattr(self, cpu_name, cpu_ary)
 
         # Create an empty gpu array if it doesn't exist
         # and set it on the object instance
         # Also create a transfer method for tranferring data to the GPU
-        if gpu_ary_exists is not True and create_gpu_ary is True:
+        if create_gpu_ary:
             # We don't use gpuarray.zeros, since it fails for
             # a zero-length array. This is kind of bad since
             # the gpuarray returned by gpuarray.empty() doesn't
             # have GPU memory allocated to it.
             gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
-            setattr(self, gpu_name, gpu_ary)
-
-            # Create the transfer method
-            def transfer(self, npary):
-                self.check_array(name, npary)
-                if self.store_cpu: setattr(self,cpu_name,npary)
-                getattr(self,gpu_name).set(npary)
-
-            # Create the method on ourself
-            method_name = montblanc.util.transfer_method_name(name)
-            method = types.MethodType(transfer,self)
-            setattr(self,  method_name, method)
-            # Create a docstring!
-            getattr(method, '__func__').__doc__ = \
-            """
-            Transfers the npary numpy array to the %s gpuarray.
-            npary and %s must be the same shape and type.
-            """ % (gpu_name,gpu_name)
 
             # Zero the array, if it has non-zero length
-            if np.product(shape) > 0:
-                gpu_ary.fill(dtype(0))
+            if np.product(shape) > 0: gpu_ary.fill(dtype(0))
+            setattr(self, gpu_name, gpu_ary)
+
+        # Create the transfer method
+        def transfer(self, npary):
+            self.check_array(name, npary)
+            if create_cpu_ary: setattr(self,cpu_name,npary)
+            if create_gpu_ary: getattr(self,gpu_name).set(npary)
+
+        # Create the method on ourself
+        transfer_method_name = montblanc.util.transfer_method_name(name)
+        transfer_method = types.MethodType(transfer,self)
+        setattr(self,  transfer_method_name, transfer_method)
+        # Create a docstring!
+        getattr(transfer_method, '__func__').__doc__ = \
+        """
+        Transfers the npary numpy array to the %s gpuarray.
+        npary and %s must be the same shape and type.
+        """ % (gpu_name,gpu_name)
+
 
         # Set up a member describing the shape
         if kwargs.get('shape_member', False) is True:
@@ -498,6 +502,20 @@ class BaseSolver(Solver):
         if kwargs.get('dtype_member', False) is True:
             dtype_name = montblanc.util.dtype_name(name)
             setattr(self, dtype_name, dtype)
+
+    def register_arrays(self, array_dicts):
+        """
+        Register arrays using a dictionary defining the arrays.
+
+        The dictionary should itself contain dictionaries. i.e.
+
+        >>> D = {
+            'uvw' : { 'name':'uvw', 'shape':(3,'ntime','nbl'),'dtype':np.float32 },
+            'lm' : { 'name':'lm', 'shape':(2,'nsrc'),'dtype':np.float32 }
+        }
+        """
+        for name, ary in array_dicts.iteritems():
+            self.register_array(**ary)
 
     def register_property(self, name, dtype, default, registrant, **kwargs):
         """
@@ -533,7 +551,7 @@ class BaseSolver(Solver):
         setattr(self, name, default)
 
         # Should we create a setter for this property?
-        setter = kwargs.get('setter', False)
+        setter = kwargs.get('setter', True)
         setter_name = montblanc.util.setter_name(name)
 
         # Yes, create a default setter
@@ -556,6 +574,20 @@ class BaseSolver(Solver):
         else:
             raise TypeError, ('setter keyword argument set',
                 ' to an invalid type %s' % (type(setter)))
+
+    def register_properties(self, property_dicts):
+        """
+        Register properties using a dictionary defining the properties.
+
+        The dictionary should itself contain dictionaries. i.e.
+
+        >>> D = {
+            'ref_wave' : { 'name':'ref_wave','dtype':np.float32,
+                'default':1.41e6, 'registrant':'solver' },
+        }
+        """
+        for name, prop in property_dicts.iteritems():
+            self.register_property(**prop)
 
     def get_array_record(self, name):
         return self.arrays[name]
