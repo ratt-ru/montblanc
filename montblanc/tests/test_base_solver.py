@@ -10,6 +10,7 @@ import pycuda.curandom
 
 import montblanc
 import montblanc.factory
+import montblanc.util
 import montblanc.ext.crimes
 
 class TestSolver(unittest.TestCase):
@@ -42,10 +43,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = name + '_gpu'
-            cpu_name = name + '_cpu'
-            shape_name = name + '_shape'
-            dtype_name = name + '_dtype'
+            gpu_name = montblanc.util.gpu_name(name)
+            cpu_name = montblanc.util.cpu_name(name)
+            shape_name = montblanc.util.shape_name(name)
+            dtype_name = montblanc.util.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -76,10 +77,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = name + '_gpu'
-            cpu_name = name + '_cpu'
-            shape_name = name + '_shape'
-            dtype_name = name + '_dtype'
+            gpu_name = montblanc.util.gpu_name(name)
+            cpu_name = montblanc.util.cpu_name(name)
+            shape_name = montblanc.util.shape_name(name)
+            dtype_name = montblanc.util.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -111,10 +112,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = name + '_gpu'
-            cpu_name = name + '_cpu'
-            shape_name = name + '_shape'
-            dtype_name = name + '_dtype'
+            gpu_name = montblanc.util.gpu_name(name)
+            cpu_name = montblanc.util.cpu_name(name)
+            shape_name = montblanc.util.shape_name(name)
+            dtype_name = montblanc.util.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -146,10 +147,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = name + '_gpu'
-            cpu_name = name + '_cpu'
-            shape_name = name + '_shape'
-            dtype_name = name + '_dtype'
+            gpu_name = montblanc.util.gpu_name(name)
+            cpu_name = montblanc.util.cpu_name(name)
+            shape_name = montblanc.util.shape_name(name)
+            dtype_name = montblanc.util.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -181,10 +182,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = name + '_gpu'
-            cpu_name = name + '_cpu'
-            shape_name = name + '_shape'
-            dtype_name = name + '_dtype'
+            gpu_name = montblanc.util.gpu_name(name)
+            cpu_name = montblanc.util.cpu_name(name)
+            shape_name = montblanc.util.shape_name(name)
+            dtype_name = montblanc.util.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -285,10 +286,10 @@ class TestSolver(unittest.TestCase):
             ntime=10,npsrc=10,ngsrc=10) as slvr:
 
             name='uvw'
-            gpu_name = name + '_gpu'
-            cpu_name = name + '_cpu'
-            shape_name = name + '_shape'
-            dtype_name = name + '_dtype'
+            gpu_name = montblanc.util.gpu_name(name)
+            cpu_name = montblanc.util.cpu_name(name)
+            shape_name = montblanc.util.shape_name(name)
+            dtype_name = montblanc.util.dtype_name(name)
 
             shape = (3,slvr.nbl, slvr.ntime)
             dtype = np.complex64
