@@ -74,11 +74,11 @@ void rime_gauss_B_sum_impl(
     __shared__ T em[1];
     __shared__ T eR[1];
 
-    __shared__ T I[BLOCKDIMY];
-    __shared__ T Q[BLOCKDIMY];
-    __shared__ T U[BLOCKDIMY];
-    __shared__ T V[BLOCKDIMY];
-    __shared__ T a[BLOCKDIMY];
+    __shared__ T I[BLOCKDIMZ];
+    __shared__ T Q[BLOCKDIMZ];
+    __shared__ T U[BLOCKDIMZ];
+    __shared__ T V[BLOCKDIMZ];
+    __shared__ T a[BLOCKDIMZ];
 
     __shared__ T wl[BLOCKDIMX];
 
@@ -115,13 +115,13 @@ void rime_gauss_B_sum_impl(
         // The following loads effect the global load efficiency.
 
         // brightness varies by time (and source), not baseline or channel
-        if(threadIdx.x == 0 && threadIdx.z == 0)
+        if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = TIME*NSRC + SRC;  I[threadIdx.y] = brightness[i];
-            i += NTIME*NSRC;      Q[threadIdx.y] = brightness[i];
-            i += NTIME*NSRC;      U[threadIdx.y] = brightness[i];
-            i += NTIME*NSRC;      V[threadIdx.y] = brightness[i];
-            i += NTIME*NSRC;      a[threadIdx.y] = brightness[i];
+            i = TIME*NSRC + SRC;  I[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      Q[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      U[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      V[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      a[threadIdx.z] = brightness[i];
         }
 
         __syncthreads();
@@ -131,7 +131,7 @@ void rime_gauss_B_sum_impl(
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
         // Multiply in the power term
-        T power = Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.y]);
+        T power = Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.z]);
         ant_two.x *= power; ant_two.y *= power;
         // Get the complex scalar for antenna one and conjugate it
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
@@ -143,17 +143,17 @@ void rime_gauss_B_sum_impl(
             ant_two.x*ant_one.x - ant_two.y*ant_one.y,
             ant_two.x*ant_one.y + ant_two.y*ant_one.x);
 
-        Isum.x += (I[threadIdx.y]+Q[threadIdx.y])*value.x + 0.0*value.y;
-        Isum.y += (I[threadIdx.y]+Q[threadIdx.y])*value.y + 0.0*value.x;
+        Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
+        Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
 
-        Qsum.x += (I[threadIdx.y]-Q[threadIdx.y])*value.x - 0.0*value.y;
-        Qsum.y += (I[threadIdx.y]-Q[threadIdx.y])*value.y - 0.0*value.x;
+        Qsum.x += (I[threadIdx.z]-Q[threadIdx.z])*value.x - 0.0*value.y;
+        Qsum.y += (I[threadIdx.z]-Q[threadIdx.z])*value.y - 0.0*value.x;
 
-        Usum.x += U[threadIdx.y]*value.x - -V[threadIdx.y]*value.y;
-        Usum.y += U[threadIdx.y]*value.y + -V[threadIdx.y]*value.x;
+        Usum.x += U[threadIdx.z]*value.x - -V[threadIdx.z]*value.y;
+        Usum.y += U[threadIdx.z]*value.y + -V[threadIdx.z]*value.x;
 
-        Vsum.x += U[threadIdx.y]*value.x - V[threadIdx.y]*value.y;
-        Vsum.y += U[threadIdx.y]*value.y + V[threadIdx.y]*value.x;
+        Vsum.x += U[threadIdx.z]*value.x - V[threadIdx.z]*value.y;
+        Vsum.y += U[threadIdx.z]*value.y + V[threadIdx.z]*value.x;
 
         __syncthreads();
     }
@@ -163,13 +163,13 @@ void rime_gauss_B_sum_impl(
         // The following loads effect the global load efficiency.
 
         // brightness varies by time (and source), not baseline or channel
-        if(threadIdx.x == 0 && threadIdx.z == 0)
+        if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = TIME*NSRC + SRC;  I[threadIdx.y] = brightness[i];
-            i += NTIME*NSRC;      Q[threadIdx.y] = brightness[i];
-            i += NTIME*NSRC;      U[threadIdx.y] = brightness[i];
-            i += NTIME*NSRC;      V[threadIdx.y] = brightness[i];
-            i += NTIME*NSRC;      a[threadIdx.y] = brightness[i];
+            i = TIME*NSRC + SRC;  I[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      Q[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      U[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      V[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      a[threadIdx.z] = brightness[i];
         }
 
         // gaussian shape only varies by source. Shape parameters
@@ -194,7 +194,7 @@ void rime_gauss_B_sum_impl(
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
         // Multiply in the power term
-        exp *= Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.y]);
+        exp *= Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.z]);
 
         // Get the complex scalar for antenna two and multiply
         // in the exponent term
@@ -211,17 +211,17 @@ void rime_gauss_B_sum_impl(
             ant_two.x*ant_one.x - ant_two.y*ant_one.y,
             ant_two.x*ant_one.y + ant_two.y*ant_one.x);
   
-        Isum.x += (I[threadIdx.y]+Q[threadIdx.y])*value.x + 0.0*value.y;
-        Isum.y += (I[threadIdx.y]+Q[threadIdx.y])*value.y + 0.0*value.x;
+        Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
+        Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
 
-        Qsum.x += (I[threadIdx.y]-Q[threadIdx.y])*value.x - 0.0*value.y;
-        Qsum.y += (I[threadIdx.y]-Q[threadIdx.y])*value.y - 0.0*value.x;
+        Qsum.x += (I[threadIdx.z]-Q[threadIdx.z])*value.x - 0.0*value.y;
+        Qsum.y += (I[threadIdx.z]-Q[threadIdx.z])*value.y - 0.0*value.x;
 
-        Usum.x += U[threadIdx.y]*value.x - -V[threadIdx.y]*value.y;
-        Usum.y += U[threadIdx.y]*value.y + -V[threadIdx.y]*value.x;
+        Usum.x += U[threadIdx.z]*value.x - -V[threadIdx.z]*value.y;
+        Usum.y += U[threadIdx.z]*value.y + -V[threadIdx.z]*value.x;
 
-        Vsum.x += U[threadIdx.y]*value.x - V[threadIdx.y]*value.y;
-        Vsum.y += U[threadIdx.y]*value.y + V[threadIdx.y]*value.x;
+        Vsum.x += U[threadIdx.z]*value.x - V[threadIdx.z]*value.y;
+        Vsum.y += U[threadIdx.z]*value.y + V[threadIdx.z]*value.x;
 
         __syncthreads();
     }
@@ -376,7 +376,7 @@ class RimeGaussBSum(Node):
         if not self.weight_vector:
             slvr.set_X2(gpu_sum/slvr.sigma_sqrd)
         else:
-            slvr.set_X2(gpu_sum)        
+            slvr.set_X2(gpu_sum)
 
     def post_execution(self, solver):
         pass
