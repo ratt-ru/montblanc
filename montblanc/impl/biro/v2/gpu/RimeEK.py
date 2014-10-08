@@ -134,34 +134,25 @@ void rime_jones_EK_impl(
 
 extern "C" {
 
-__global__ void rime_jones_EK_float(
-    float * UVW,
-    float * LM,
-    float * brightness,
-    float * wavelength,
-    float * point_errors,
-    float2 * jones,
-    float beam_width,
-    float beam_clip)
-{
-    rime_jones_EK_impl<float>(UVW, LM, brightness, wavelength,
-        point_errors, jones, beam_width, beam_clip);
+#define stamp_rime_ek_fn(ft,ct) \
+__global__ void \
+rime_jones_EK_ ## ft( \
+    ft * UVW, \
+    ft * LM, \
+    ft * brightness, \
+    ft * wavelength, \
+    ft * point_errors, \
+    ct * jones, \
+    ft beam_width, \
+    ft beam_clip) \
+{ \
+    rime_jones_EK_impl<ft>(UVW, LM, brightness, wavelength, \
+        point_errors, jones, beam_width, beam_clip); \
 }
 
+stamp_rime_ek_fn(float,float2)
+stamp_rime_ek_fn(double,double2)
 
-__global__ void rime_jones_EK_double(
-    double * UVW,
-    double * LM,
-    double * brightness,
-    double * wavelength,
-    double * point_errors,
-    double2 * jones,
-    double beam_width,
-    double beam_clip)
-{
-    rime_jones_EK_impl<double>(UVW, LM, brightness, wavelength,
-        point_errors, jones, beam_width, beam_clip);
-}
 
 } // extern "C" {
 """)
@@ -177,17 +168,17 @@ class RimeEK(Node):
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
-        	if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
+        	if slvr.is_float() else DOUBLE_PARAMS['maxregs'])        
+
+        kname = 'rime_jones_EK_float' \
+            if slvr.is_float() is True else \
+            'rime_jones_EK_double'
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
             options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
-
-        kname = 'rime_jones_EK_float' \
-            if slvr.is_float() is True else \
-            'rime_jones_EK_double'
 
         self.kernel = self.mod.get_function(kname)
 

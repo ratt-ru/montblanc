@@ -184,12 +184,10 @@ void rime_gauss_B_sum_impl(
 
         __syncthreads();
 
-        T u1 = (u[threadIdx.z][threadIdx.y]*em[0] -
-            v[threadIdx.z][threadIdx.y]*el[0]);
+        T u1 = u[threadIdx.z][threadIdx.y]*em[0] - v[threadIdx.z][threadIdx.y]*el[0];
         u1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
         u1 *= eR[0];
-        T v1 = (u[threadIdx.z][threadIdx.y]*el[0] +
-            v[threadIdx.z][threadIdx.y]*em[0]);
+        T v1 = u[threadIdx.z][threadIdx.y]*el[0] + v[threadIdx.z][threadIdx.y]*em[0];
         v1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
@@ -226,7 +224,6 @@ void rime_gauss_B_sum_impl(
         __syncthreads();
     }
 
-    //i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
     i = (TIME*NBL + BL)*NCHAN + CHAN;
     visibilities[i] = Isum;
     typename Tr::ct delta = data_vis[i];
@@ -259,7 +256,6 @@ void rime_gauss_B_sum_impl(
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
-    //i = BL*NTIME*NCHAN + TIME*NCHAN + CHAN;
     i = (TIME*NBL + BL)*NCHAN + CHAN;    
     chi_sqrd_result[i] = Isum.x + Isum.y;
 }
@@ -356,8 +352,8 @@ class RimeGaussBSum(Node):
     def execute(self, solver):
         slvr = solver
 
-        # The gaussian shape array can conceivably be empty if
-        # no gaussian points were specified.
+        # The gaussian shape array can be empty if
+        # no gaussian sources were specified.
         gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
             else slvr.gauss_shape_gpu
 
@@ -367,10 +363,10 @@ class RimeGaussBSum(Node):
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
             slvr.ref_wave, **self.get_kernel_params(slvr))
 
-        # If we're not catering for a weight vector,
-        # call the simple reduction and divide by sigma squared.
-        # Otherwise, the kernel will incorporate the weight vector
-        # (and thus the sigma squared) into the sum
+        # Call the pycuda reduction kernel.
+        # Divide by the single sigma squared value if a weight vector
+        # is not required. Otherwise the kernel will incorporate the
+        # individual sigma squared values into the sum
         gpu_sum = gpuarray.sum(slvr.chi_sqrd_result_gpu).get()
 
         if not self.weight_vector:

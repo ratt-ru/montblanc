@@ -146,9 +146,9 @@ class Pipeline:
         # Even if shutdown fails, keep trying on the other nodes
         for node in self.pipeline:
             try:
-                    montblanc.log.debug('Shutting down node \'' + node.description() + '\'')
-                    node.shutdown(solver)
-                    montblanc.log.debug('Done')
+                montblanc.log.debug('Shutting down node \'' + node.description() + '\'')
+                node.shutdown(solver)
+                montblanc.log.debug('Done')
             except PipeLineError as e:
                 montblanc.log.error('Pipeline Error occurred during RIME pipeline shutdown', exc_info=True)
                 success = False

@@ -74,7 +74,7 @@ class RimeCPU(object):
             l, m = slvr.lm_cpu[0], slvr.lm_cpu[1]
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
-            n = np.sqrt(1. - slvr.lm_cpu[0]**2 - slvr.lm_cpu[1]**2) - 1.
+            n = np.sqrt(1. - l**2 - m**2) - 1.
 
             # w*n+v*m+u*l. Outer product creates array of dim ntime x na x nsrcs
             phase = (np.outer(w,n) + np.outer(v, m) + np.outer(u, l)) \
@@ -177,7 +177,8 @@ class RimeCPU(object):
 
         Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
-        return self.compute_k_jones_scalar_per_ant()*self.compute_e_jones_scalar_per_ant()
+        return self.compute_k_jones_scalar_per_ant()*\
+            self.compute_e_jones_scalar_per_ant()
 
     def compute_ek_jones_scalar_per_bl(self):
         """
