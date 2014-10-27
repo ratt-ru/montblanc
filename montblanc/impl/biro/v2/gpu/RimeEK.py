@@ -48,6 +48,7 @@ void rime_jones_EK_impl(
     T * wavelength,
     T * point_errors,
     typename Tr::ct * jones_scalar,
+    T ref_wave,
     T beam_width,
     T beam_clip)
 {
@@ -71,6 +72,8 @@ void rime_jones_EK_impl(
 	__shared__ T md[BLOCKDIMZ][BLOCKDIMY];
 
 	__shared__ T wl[BLOCKDIMX];
+
+    __shared__ T a[BLOCKDIMZ];
 
 	int i;
 
@@ -100,6 +103,13 @@ void rime_jones_EK_impl(
 			i += NSRC; m[0] = lm[i];
 		}
 
+        // Brightness varies by time and source, not antenna or channel
+        if(threadIdx.x == 0 && threadIdx.y == 0)
+        {
+            i = (TIME + 4*NTIME)*NSRC + SRC;
+            a[threadIdx.z] = brightness[i];
+        }
+
 		__syncthreads();
 
 		// Calculate the phase term for this antenna
@@ -109,10 +119,13 @@ void rime_jones_EK_impl(
 			+ v[threadIdx.z][threadIdx.y]*m[0]
 			+ u[threadIdx.z][threadIdx.y]*l[0];
 
-	    phase *= (T(2.0) * Tr::cuda_pi / wl[threadIdx.x]);
+	    phase *= T(2.0) * Tr::cuda_pi / wl[threadIdx.x];
 
 		T real, imag;
 		Po::sincos(phase, &imag, &real);
+
+        T power = Po::pow(ref_wave/wl[threadIdx.x], T(0.5)*a[threadIdx.z]);
+        real *= power; imag *= power;
 
 		// Calculate the beam term for this antenna
 		T diff = l[0] - ld[threadIdx.z][threadIdx.y];
@@ -143,11 +156,12 @@ rime_jones_EK_ ## ft( \
     ft * wavelength, \
     ft * point_errors, \
     ct * jones, \
+    ft ref_wave, \
     ft beam_width, \
     ft beam_clip) \
 { \
     rime_jones_EK_impl<ft>(UVW, LM, brightness, wavelength, \
-        point_errors, jones, beam_width, beam_clip); \
+        point_errors, jones, ref_wave, beam_width, beam_clip); \
 }
 
 stamp_rime_ek_fn(float,float2)
@@ -211,7 +225,7 @@ class RimeEK(Node):
 
         self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
             slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_scalar_gpu,
-            slvr.beam_width, slvr.beam_clip,
+            slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
             **self.get_kernel_params(slvr))
 
     def post_execution(self, solver):
