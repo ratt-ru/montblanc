@@ -72,6 +72,7 @@ class RimeCPU(object):
 
             u, v, w = slvr.uvw_cpu[0], slvr.uvw_cpu[1], slvr.uvw_cpu[2]
             l, m = slvr.lm_cpu[0], slvr.lm_cpu[1]
+            alpha = slvr.brightness_cpu[4]
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
             n = np.sqrt(1. - l**2 - m**2) - 1.
@@ -81,12 +82,22 @@ class RimeCPU(object):
                     .reshape(slvr.ntime, slvr.na, slvr.nsrc)
             assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc)            
 
-            # 2*pi*sqrt(u*l+v*m+w*n)/wavelength. Dim. na x ntime x nchan x nsrcs 
-            phase = (2*np.pi*1j*phase)[:,:,:,np.newaxis]/ \
-                wave[np.newaxis,np.newaxis,np.newaxis,:]
+            # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength). Dim. na x ntime x nchan x nsrcs 
+            phase = np.exp((2*np.pi*1j*phase)[:,:,:,np.newaxis]/ \
+                wave[np.newaxis,np.newaxis,np.newaxis,:])
             assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
 
-            return np.exp(phase)
+            # Dimension ntime x nsrc x nchan. Use 0.5*alpha here so that
+            # when the other antenna term is multiplied with this one, we
+            # end up with the full power term. sqrt(n)*sqrt(n) == n.
+            power = np.power(slvr.ref_wave/wave[np.newaxis,np.newaxis,:],
+                0.5*alpha[:,:,np.newaxis])
+            assert power.shape == (slvr.ntime, slvr.nsrc, slvr.nchan)
+
+            phase *= power[:,np.newaxis,:,:]
+            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan) 
+
+            return phase
 
         except AttributeError as e:
             rethrow_attribute_exception(e)
@@ -105,17 +116,6 @@ class RimeCPU(object):
 
             k_jones_per_bl = (k_jones[ant1]*k_jones[ant0].conj())\
                 .reshape(slvr.ntime,slvr.nbl,slvr.nsrc,slvr.nchan)
-
-            wave = slvr.wavelength_cpu
-            alpha =slvr.brightness_cpu[4]
-
-            # Dimension ntime x nsrc x nchan
-            power = np.power(slvr.ref_wave/wave[np.newaxis,np.newaxis,:],
-                alpha[:,:,np.newaxis])
-            assert power.shape == (slvr.ntime, slvr.nsrc, slvr.nchan)
-
-            # Add in the K power term
-            k_jones_per_bl *= power[:,np.newaxis,:,:]
 
             # Add in the shape terms of the gaussian sources.
             if slvr.ngsrc > 0:

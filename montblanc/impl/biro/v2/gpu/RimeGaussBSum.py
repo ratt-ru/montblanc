@@ -56,8 +56,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * weight_vector,
     typename Tr::ct * visibilities,
     typename Tr::ct * data_vis,
-    typename Tr::ft * chi_sqrd_result,
-    typename Tr::ft ref_wave)
+    typename Tr::ft * chi_sqrd_result)
 {
     int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
@@ -78,7 +77,6 @@ void rime_gauss_B_sum_impl(
     __shared__ T Q[BLOCKDIMZ];
     __shared__ T U[BLOCKDIMZ];
     __shared__ T V[BLOCKDIMZ];
-    __shared__ T a[BLOCKDIMZ];
 
     __shared__ T wl[BLOCKDIMX];
 
@@ -121,7 +119,6 @@ void rime_gauss_B_sum_impl(
             i += NTIME*NSRC;      Q[threadIdx.z] = brightness[i];
             i += NTIME*NSRC;      U[threadIdx.z] = brightness[i];
             i += NTIME*NSRC;      V[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      a[threadIdx.z] = brightness[i];
         }
 
         __syncthreads();
@@ -130,9 +127,6 @@ void rime_gauss_B_sum_impl(
         // in the exponent term
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
-        // Multiply in the power term
-        T power = Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.z]);
-        ant_two.x *= power; ant_two.y *= power;
         // Get the complex scalar for antenna one and conjugate it
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
@@ -169,7 +163,6 @@ void rime_gauss_B_sum_impl(
             i += NTIME*NSRC;      Q[threadIdx.z] = brightness[i];
             i += NTIME*NSRC;      U[threadIdx.z] = brightness[i];
             i += NTIME*NSRC;      V[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      a[threadIdx.z] = brightness[i];
         }
 
         // gaussian shape only varies by source. Shape parameters
@@ -190,9 +183,6 @@ void rime_gauss_B_sum_impl(
         T v1 = u[threadIdx.z][threadIdx.y]*el[0] + v[threadIdx.z][threadIdx.y]*em[0];
         v1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
         T exp = Po::exp(-(u1*u1 +v1*v1));
-
-        // Multiply in the power term
-        exp *= Po::pow(ref_wave/wl[threadIdx.x], a[threadIdx.z]);
 
         // Get the complex scalar for antenna two and multiply
         // in the exponent term
@@ -282,13 +272,12 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * weight_vector, \
     ct * visibilities, \
     ct * data_vis, \
-    ft * chi_sqrd_result, \
-    ft ref_wave) \
+    ft * chi_sqrd_result) \
 { \
     rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, \
         wavelength, ant_pairs, jones_EK_scalar, \
         weight_vector, visibilities, data_vis, \
-        chi_sqrd_result, ref_wave); \
+        chi_sqrd_result); \
 }
 
 stamp_gauss_b_sum_fn(float, float2, false, u)
@@ -361,7 +350,7 @@ class RimeGaussBSum(Node):
             slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
             slvr.weight_vector_gpu,
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
-            slvr.ref_wave, **self.get_kernel_params(slvr))
+            **self.get_kernel_params(slvr))
 
         # Call the pycuda reduction kernel.
         # Divide by the single sigma squared value if a weight vector
