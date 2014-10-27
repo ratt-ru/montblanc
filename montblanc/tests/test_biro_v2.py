@@ -101,7 +101,7 @@ class TestBiroV2(unittest.TestCase):
             with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
                 pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
 
-                self.gauss_B_sum_test_impl(slvr, weight_vector=w, cmp={'rtol' : 1e-3})
+                self.gauss_B_sum_test_impl(slvr, weight_vector=w)
         
     def test_gauss_B_sum_double(self):
         """ """
@@ -109,7 +109,7 @@ class TestBiroV2(unittest.TestCase):
             with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
                 pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
 
-                self.gauss_B_sum_test_impl(slvr, weight_vector=w, cmp={'rtol' : 1e-3})
+                self.gauss_B_sum_test_impl(slvr, weight_vector=w)
 
     def time_predict(self, slvr):
         na=slvr.na          # Number of antenna
