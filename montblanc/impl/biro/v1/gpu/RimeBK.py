@@ -205,7 +205,7 @@ class RimeBK(Node):
     def __init__(self):
         super(RimeBK, self).__init__()
 
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         slvr = solver
 
         D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
@@ -223,10 +223,10 @@ class RimeBK(Node):
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         pass
 
-    def pre_execution(self, solver):
+    def pre_execution(self, solver, stream=None):
         pass
 
     def get_kernel_params(self, solver):
@@ -247,12 +247,12 @@ class RimeBK(Node):
             'grid'  : (psrc_blocks,time_chan_blocks,baseline_blocks), 
         }
 
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         slvr = solver
 
         self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
             slvr.wavelength_gpu,  slvr.jones_gpu, slvr.ref_wave,
             **self.get_kernel_params(slvr))
 
-    def post_execution(self, solver):
+    def post_execution(self, solver, stream=None):
         pass

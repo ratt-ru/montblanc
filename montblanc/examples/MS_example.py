@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('-np','--npsrc',dest='npsrc', type=int, default=10, help='Number of Point Sources')
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')    
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v1','v2'],
+    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v1','v2','v3'],
         help='BIRO Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
@@ -86,17 +86,8 @@ if __name__ == '__main__':
             # The chi squared result is set on the shared data object
             print 'Chi Squared Value', slvr.X2
 
-            # Must use get_biro_pipeline(...,store_cpu=True)
-            # for the following to work
-            #X2_cpu = slvr.compute_biro_chi_sqrd()
-            #print 'Chi Squared Value', slvr.X2, X2_cpu, np.allclose(slvr.X2,X2_cpu, rtol=1e-2)
-
             # Obtain the visibilities  (slow)
             #V = slvr.vis_gpu.get()
 
         # Print information about the simulation
         print slvr
-        print 'Pipeline: avg execution time: %gms last execution time: %gms executions: %d. ' %\
-            (slvr.pipeline.avg_execution_time,
-            slvr.pipeline.last_execution_time,
-            slvr.pipeline.nr_of_executions)

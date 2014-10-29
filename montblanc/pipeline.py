@@ -35,7 +35,7 @@ class Pipeline:
     def is_initialised(self):
         return self.initialised
 
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         """
         Iterates over each node in the pipeline,
         calling the initialise() method on each one.
@@ -47,34 +47,33 @@ class Pipeline:
         >>> pipeline.shutdown(slvr)
         """
 
+        if self.is_initialised():
+            return self.is_initialised()
+
         montblanc.log.debug('Initialising pipeline')
 
         try:
             for node in self.pipeline:
                 montblanc.log.debug('Initialising node \'' + node.description() + '\'')
-                node.initialise(solver)
+                node.initialise(solver, stream)
                 montblanc.log.debug('Done')
         except PipeLineError as e:
             montblanc.log.error('Pipeline Error occurred during RIME pipeline initialisation', exc_info=True)
             self.initialised = False
             return self.initialised
-#        except Exception, e:
-#            print
-#            print 'Unexpected exception occurred duri8\ng RIME pipeline initialisation', e
-#            self.initialised = False
-#            return self.initialised
+        except Exception as e:
+            montblanc.log.error(('Unexpected exception occurred '
+                'during RIME pipeline shutdown'), exc_info=True)
+            self.initialised = False
+            return self.is_initialised()
 
         montblanc.log.debug('Initialisation of pipeline complete')
 
         self.initialised = True
         self.nr_of_executions = 0
-        self.sum_execution_time = 0.0
-        self.last_execution_time = 0.0
-        self.pipeline_start = cuda.Event()
-        self.pipeline_end = cuda.Event()        
-        return self.initialised
+        return self.is_initialised()
 
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         """
         Iterates over each node in the pipeline,
         calling the execute() method on each one.
@@ -90,44 +89,37 @@ class Pipeline:
 
         if not self.is_initialised():
             montblanc.log.error('Pipeline was not initialised!')
-            if not self.initialise(solver):
+            if not self.initialise(solver, stream):
                 return False
 
         try:
             # Record start of pipeline
-            self.pipeline_start.record()
 
             for node in self.pipeline:
 
                 montblanc.log.debug('Executing node \'' + node.description() + '\'')
-                node.pre_execution(solver)
+                node.pre_execution(solver, stream)
                 montblanc.log.debug('pre')
-                node.execute(solver)
+                node.execute(solver, stream)
                 montblanc.log.debug('execute')
-                node.post_execution(solver)
+                node.post_execution(solver, stream)
                 montblanc.log.debug('post Done')
 
             # Record pipeline end
-            self.pipeline_end.record()
-            self.pipeline_end.synchronize()
             self.nr_of_executions += 1
-            self.last_execution_time = self.pipeline_start.time_till(self.pipeline_end)
-            self.sum_execution_time += self.last_execution_time
 
         except PipeLineError as e:
             montblanc.log.error('Pipeline Error occurred during RIME pipeline execution', exc_info=True)
             return False
-#        except Exception, e:
-#            print
-#            print 'Unexpected exception occurred during RIME pipeline execution', e
-#            return False
-
-        self.avg_execution_time = self.sum_execution_time / self.nr_of_executions
+        except Exception as e:
+            montblanc.log.error(('Unexpected exception occurred '
+                'during RIME pipeline execution'), exc_info=True)
+            return False
 
         montblanc.log.debug('Execution of pipeline complete')
         return False
 
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         """
         Iterates over each node in the pipeline,
         calling the shutdown() method on each one.
@@ -147,17 +139,21 @@ class Pipeline:
         for node in self.pipeline:
             try:
                 montblanc.log.debug('Shutting down node \'' + node.description() + '\'')
-                node.shutdown(solver)
+                node.shutdown(solver, stream)
                 montblanc.log.debug('Done')
             except PipeLineError as e:
-                montblanc.log.error('Pipeline Error occurred during RIME pipeline shutdown', exc_info=True)
+                montblanc.log.error(('Pipeline Error occurred '
+                    'during RIME pipeline shutdown'), exc_info=True)
                 success = False
-#            except Exception, e:
-#                print
-#                print 'Unexpected exception occurred during RIME pipeline shutdown', e
-#                success = False
+            except Exception as e:
+                montblanc.log.error(('Unexpected exception occurred '
+                    'during RIME pipeline shutdown'), exc_info=True)
+                success = False
 
         montblanc.log.debug('Shutdown of pipeline Complete')
+        # The pipeline is no longer active
+        self.initialised = False
+
         return success
 
     def __str__(self):

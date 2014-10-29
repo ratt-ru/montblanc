@@ -5,13 +5,13 @@ import montblanc.ext.crimes
 class RimeJonesReduce(Node):
     def __init__(self):
         super(RimeJonesReduce, self).__init__()
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         pass
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         pass
-    def pre_execution(self, solver):
+    def pre_execution(self, solver, stream=None):
         pass
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         slvr = solver
 
         if slvr.is_float():
@@ -23,5 +23,5 @@ class RimeJonesReduce(Node):
                 data=slvr.jones_gpu, seg_starts=slvr.keys_gpu,
                 seg_sums=slvr.vis_gpu, cc=slvr.cc, device_id=0)
 
-    def post_execution(self, solver):
+    def post_execution(self, solver, stream=None):
         pass

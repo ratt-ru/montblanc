@@ -27,58 +27,78 @@ class Node(object):
         #raise NotImplementedError, self.not_implemented_string(type(self).description.__name__)
         return self.__class__.__name__
 
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         """
         Abstract method that should be overriden by derived classes.
         This method is called before the execution of the pipeline. Any initialisation
         required by the node should be performed here.
 
-        Keyword arguments:
-        solver -- object containing data shared amongst pipeline components
+        Arguments:
+            solver - object derived from BaseSolver
+                Contains data shared amongst pipeline components
+            stream - cuda stream
+                Asynchronous stream to execute this node on. Can be None
+                indicating asynchronous transfers should not take place. 
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).initialise.__name__)
 
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         """
         Abstract method that should be overriden by derived classes.
         This method is called after the execution of the pipeline. Any cleanup required
         by the node should be performed here.
 
-        Keyword arguments:
-        solver -- object containing data shared amongst pipeline components
+        Arguments:
+            solver - object derived from BaseSolver
+                Contains data shared amongst pipeline components
+            stream - cuda stream
+                Asynchronous stream to execute this node on. Can be None
+                indicating asynchronous transfers should not take place. 
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).shutdown.__name__)
 
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         """
         Abstract method that should be overriden by derived classes.
         The derived class should implement the code that the node should
         execute. Most likely this will be a PyCUDA GPU kernel of some sort,
         but the pipeline model is general enough to support CPU calls etc.
         
-        Keyword arguments:
-        solver -- object containing data shared amongst pipeline components
+        Arguments:
+            solver - object derived from BaseSolver
+                Contains data shared amongst pipeline components
+            stream - cuda stream
+                Asynchronous stream to execute this node on. Can be None
+                indicating asynchronous transfers should not take place. 
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).execute.__name__)
 
-    def pre_execution(self, solver):
+    def pre_execution(self, solver, stream=None):
         """
         Hook for writing code that will be executed prior
         to the execute() method.
 
 
-        Keyword arguments:
-        solver -- object containing data shared amongst pipeline components
+        Arguments:
+            solver - object derived from BaseSolver
+                Contains data shared amongst pipeline components
+            stream - cuda stream
+                Asynchronous stream to execute this node on. Can be None
+                indicating asynchronous transfers should not take place. 
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).pre_execution.__name__)
 
-    def post_execution(self, solver):
+    def post_execution(self, solver, stream=None):
         """
         Hook for writing code that will be executed after
         the execute() method.
 
-        Keyword arguments:
-        solver -- object containing data shared amongst pipeline components
+        Arguments:
+            solver - object derived from BaseSolver
+                Contains data shared amongst pipeline components
+            stream - cuda stream
+                Asynchronous stream to execute this node on. Can be None
+                indicating asynchronous transfers should not take place. 
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).post_execution.__name__)
 
@@ -90,8 +110,13 @@ class Node(object):
                
 class NullNode(Node):
     def __init__(self): super(NullNode, self).__init__()
-    def initialise(self, solver): pass
-    def shutdown(self, solver): pass
-    def pre_execution(self, solver): pass
-    def execute(self, solver): pass
-    def post_execution(self, solver): pass
+    def initialise(self, solver, stream=None):
+        pass
+    def shutdown(self, solver, stream=None):
+        pass
+    def pre_execution(self, solver, stream=None):
+        pass
+    def execute(self, solver, stream=None):
+        pass
+    def post_execution(self, solver, stream=None):
+        pass

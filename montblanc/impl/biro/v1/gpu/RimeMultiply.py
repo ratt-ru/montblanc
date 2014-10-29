@@ -141,7 +141,7 @@ class RimeMultiply(Node):
     def __init__(self):
         super(RimeMultiply, self).__init__()
 
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         slvr = solver
 
         D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
@@ -159,10 +159,10 @@ class RimeMultiply(Node):
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         pass
 
-    def pre_execution(self, solver):
+    def pre_execution(self, solver, stream=None):
         pass
 
     def get_kernel_params(self, solver):
@@ -178,7 +178,7 @@ class RimeMultiply(Node):
             'grid'   : (jones_blocks,1,1)
         }
 
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         slvr = solver
 
         # Output jones matrix
@@ -200,5 +200,5 @@ class RimeMultiply(Node):
             
         slvr.jones_gpu = jones_output_gpu
 
-    def post_execution(self, solver):
+    def post_execution(self, solver, stream=None):
         pass

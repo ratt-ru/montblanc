@@ -293,7 +293,7 @@ class RimeGaussBSum(Node):
         super(RimeGaussBSum, self).__init__()
         self.weight_vector = weight_vector
 
-    def initialise(self, solver):
+    def initialise(self, solver, stream=None):
         slvr = solver
 
         D = slvr.get_properties()
@@ -314,10 +314,10 @@ class RimeGaussBSum(Node):
 
         self.kernel = self.mod.get_function(kname)
 
-    def shutdown(self, solver):
+    def shutdown(self, solver, stream=None):
         pass
 
-    def pre_execution(self, solver):
+    def pre_execution(self, solver, stream=None):
         pass
 
     def get_kernel_params(self, solver):
@@ -338,7 +338,7 @@ class RimeGaussBSum(Node):
             'grid'  : (chan_blocks, bl_blocks, time_blocks), 
         }
 
-    def execute(self, solver):
+    def execute(self, solver, stream=None):
         slvr = solver
 
         # The gaussian shape array can be empty if
@@ -363,5 +363,5 @@ class RimeGaussBSum(Node):
         else:
             slvr.set_X2(gpu_sum)
 
-    def post_execution(self, solver):
+    def post_execution(self, solver, stream=None):
         pass

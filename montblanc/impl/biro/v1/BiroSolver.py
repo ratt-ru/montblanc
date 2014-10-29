@@ -32,8 +32,8 @@ class BiroSolver(BaseSolver):
             pipeline : list of nodes
                 nodes defining the GPU kernels used to solve this RIME
         Keyword Arguments:
-            device : pycuda.device.Device
-                CUDA device to operate on.
+            context : pycuda.driver.Context
+                CUDA context to operate on.
             store_cpu: boolean
                 if True, store cpu versions of the kernel arrays
                 within the GPUSolver object.

@@ -178,7 +178,7 @@ class TestSolver(unittest.TestCase):
     def test_register_array_create_existing(self):
         """  Test array registration of existing arrays """
         with montblanc.factory.get_base_solver(na=14,nchan=32,
-            ntime=10,npsrc=10,ngsrc=10) as slvr:
+            ntime=10,npsrc=10,ngsrc=10) as slvr, slvr.context as ctx:
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
@@ -271,7 +271,7 @@ class TestSolver(unittest.TestCase):
                     registrant='montblanc.factory.get_base_solver', cpu=True, gpu=True)
 
             self.assertTrue(cm.exception.message.find(
-                'shape (3, 105, 10) different to the supplied (2, 105, 10)') != -1)
+                'shape (3, 91, 10) different to the supplied (2, 91, 10)') != -1)
 
             # uvw_gpu should return a GPUArray and should still be the same array
             # uvw_cpu should return an ndarray and should still be the same array
@@ -426,15 +426,6 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.get_base_solver(na=14,ntime=ntime,
             nchan=nchan,npsrc=npsrc,ngsrc=ngsrc) as slvr:
 
-            shape_one = (5,'ntime','nchan')
-            shape_two = (10, 'nsrc')
-
-            self.assertTrue(slvr.get_numeric_shape(shape_one) == (5,ntime,nchan))
-            self.assertTrue(slvr.get_numeric_shape(shape_two) == (10,npsrc+ngsrc))
-
-            self.assertTrue(slvr.get_numeric_shape(shape_one, ignore=['ntime']) == (5,nchan))
-            self.assertTrue(slvr.get_numeric_shape(shape_two, ignore=['ntime']) == (10,npsrc+ngsrc))
-
             slvr.register_array(name='ary_one',shape=(5,'ntime', 'nchan'), dtype=np.float64,
                 registrant='test_solver', cpu=False, gpu=False)
 
@@ -448,8 +439,6 @@ class TestSolver(unittest.TestCase):
 
     def test_solver_factory(self):
         """ Test that the solver factory produces the correct types """
-        import montblanc.factory
-
         with montblanc.factory.get_biro_solver(sd_type='biro',version='v1') as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v1.BiroSolver.BiroSolver)
 

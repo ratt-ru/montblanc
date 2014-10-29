@@ -177,7 +177,8 @@ class TestBiroV1(unittest.TestCase):
     def test_multiply_double(self):
         """ double precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        with solver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float64) as slvr:
+        with solver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float64) as slvr, \
+            slvr.context as ctx:
         
             self.multiply_test_impl(slvr)
 
@@ -185,8 +186,9 @@ class TestBiroV1(unittest.TestCase):
     def test_multiply_float(self):
         """ single precision multiplication test """
         # Make the problem size smaller, due to slow numpy code in multiply_test_impl
-        with solver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32) as slvr:
-        
+        with solver(na=5,nchan=4,ntime=2,npsrc=10,dtype=np.float32) as slvr, \
+            slvr.context as ctx:
+
             self.multiply_test_impl(slvr)
 
     def chi_squared_test_impl(self, slvr, weight_vector=False, cmp=None):
@@ -346,14 +348,10 @@ class TestBiroV1(unittest.TestCase):
 
         return Vis
     
-    def predict_test_impl(self, solver):
+    def predict_test_impl(self, slvr):
         import pycuda.driver as cuda
 
-        slvr = solver        
-
         vis_predict_cpu = self.time_predict(slvr)
-
-        montblanc.log.info(slvr)
 
         kernels_start, kernels_end = cuda.Event(), cuda.Event()
         kernels_start.record()
@@ -364,45 +362,39 @@ class TestBiroV1(unittest.TestCase):
         kernels_end.record()
         kernels_end.synchronize()
 
-        montblanc.log.info('kernels: elapsed time: %fs',
-            kernels_start.time_till(kernels_end)*1e-3)
-
         # Shift the gpu jones matrices so they are on the last axis
         vis_gpu = np.rollaxis(slvr.vis_gpu.get(),0,len(slvr.jones_shape)-2).squeeze()
+
+        montblanc.log.info('kernels: elapsed time: %fs',
+            kernels_start.time_till(kernels_end)*1e-3)
 
         # Compare the GPU solution with Cyril's predict code
         self.assertTrue(np.allclose(vis_gpu, vis_predict_cpu))
 
     def test_predict_double(self):
-        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float64, pipeline=Pipeline([RimeBK(), RimeJonesReduce()])) as slvr:
+        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0, dtype=np.float64,
+            pipeline=Pipeline([RimeBK(), RimeJonesReduce()])) as slvr, \
+            slvr.context as ctx:
 
             self.predict_test_impl(slvr)
 
     def test_predict_float(self):
-        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
-            dtype=np.float32, pipeline=Pipeline([RimeBK(), RimeJonesReduce()])) as slvr:
+        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0, dtype=np.float32,
+            pipeline=Pipeline([RimeBK(), RimeJonesReduce()])) as slvr, \
+            slvr.context as ctx:
 
             self.predict_test_impl(slvr)
 
     def test_sum_float(self):
-        slvr = solver(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32)
-
-        jones_cpu = (np.random.random(np.product(slvr.jones_shape)) + \
-            np.random.random(np.product(slvr.jones_shape))*1j)\
-            .reshape(slvr.jones_shape).astype(slvr.ct)
-        slvr.jones_gpu.set(jones_cpu)
+        with solver(na=14,nchan=32,ntime=36,npsrc=100,dtype=np.float32,
+            pipeline=Pipeline([RimeSumFloat()])) as slvr:
         
-        rime_sum = RimeSumFloat()
-        rime_sum.initialise(slvr)
+            slvr.solve()
 
-        rime_sum.execute(slvr)
+            vis_cpu = np.add.reduce(slvr.jones_cpu, axis=4)
 
-        vis_cpu = np.add.reduce(jones_cpu,axis=4)
-
-        self.assertTrue(np.allclose(vis_cpu, slvr.vis_gpu.get()))
-
-        rime_sum.shutdown(slvr)
+            self.assertTrue(np.allclose(slvr.jones_cpu, slvr.jones_gpu.get()))
+            self.assertTrue(np.allclose(vis_cpu, slvr.vis_gpu.get()))
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV1)
