@@ -43,19 +43,40 @@ def check_biro_solver_type(sd_type):
 		raise ValueError, 'Supplied shared data type %s is not valid. ' \
 			'Should be one of %s', (sd_type, valid_biro_solver_types)
 
+# PyCUDA device and context variables
+__devices = None
+__contexts = None
+
 def get_contexts_per_device():
 	""" Returns a list of CUDA contexts associated with each CUDA device """
-	cuda.init()
+	global __devices
+	global __contexts
 
-	# Create contexts for each device
-	devices = [cuda.Device(d) for d in range(cuda.Device.count())]
-	contexts = [d.make_context() for d in devices]
+	# Create contexts for each device if they don't yet exist
+	if __devices is None and __contexts is None:
+		try:
+			cuda.init()
+		except:
+			__devices, __contexts = None
+			montblanc.log.critical('Unable to initialise CUDA', exc_info=True)
 
-	# Pop each context off the stack
-	for d in range(len(devices)):
-		cuda.Context.pop()
+		try:
+			__devices = [cuda.Device(d) for d in range(cuda.Device.count())]
+		except:
+			__devices, __contexts = None
+			montblanc.log.critical('Unable to create devices', exc_info=True)
 
-	return contexts
+		try:
+			__contexts = [d.make_context() for d in __devices]
+		except:
+			__devices, __contexts = None
+			montblanc.log.critical('Unable to create contexts', exc_info=True)
+
+		# Pop each context off the stack
+		for d in range(len(__devices)):
+			cuda.Context.pop()
+
+	return __contexts
 
 def get_default_context():
 	""" Get a default context """
