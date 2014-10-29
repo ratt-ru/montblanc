@@ -123,7 +123,7 @@ class Solver(object):
     pass
 
 DEFAULT_NA=3
-DEFAULT_NBL=montblanc.nr_of_baselines(DEFAULT_NA)
+DEFAULT_NBL=montblanc.util.nr_of_baselines(DEFAULT_NA)
 DEFAULT_NCHAN=4
 DEFAULT_NTIME=10
 DEFAULT_NPSRC=2
@@ -186,7 +186,7 @@ class BaseSolver(Solver):
         # - point sources
         # - gaussian sources
         self.na = na
-        self.nbl = nbl = montblanc.nr_of_baselines(na,autocor)
+        self.nbl = nbl = montblanc.util.nr_of_baselines(na,autocor)
         self.nchan = nchan
         self.ntime = ntime
         self.npsrc = npsrc

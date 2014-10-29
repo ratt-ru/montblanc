@@ -29,7 +29,7 @@ class MeasurementSetLoader(BaseLoader):
 		"""
 		# Determine the problem dimensions
 		na = self.tables['ant'].nrows()
-		nbl = montblanc.nr_of_baselines(na, auto_correlations)
+		nbl = montblanc.util.nr_of_baselines(na, auto_correlations)
 		nchan = self.tables['freq'].getcol('CHAN_FREQ').size
 		ntime = self.tables['main'].nrows() // nbl
 

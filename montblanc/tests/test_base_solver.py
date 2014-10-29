@@ -406,7 +406,7 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.get_base_solver(na=na,ntime=5,
             nchan=16,npsrc=2,ngsrc=2,auto_correlations=autocor) as slvr:
             
-            self.assertTrue(slvr.nbl == montblanc.nr_of_baselines(na,autocor))
+            self.assertTrue(slvr.nbl == montblanc.util.nr_of_baselines(na,autocor))
             self.assertTrue(slvr.nbl == 105)
 
         # Should have 91 baselines for 14 antenna with auto-correlations on
@@ -414,7 +414,7 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.get_base_solver(na=na,ntime=5,
             nchan=16,npsrc=2,ngsrc=2,auto_correlations=autocor) as slvr:
 
-            self.assertTrue(slvr.nbl == montblanc.nr_of_baselines(na,autocor))
+            self.assertTrue(slvr.nbl == montblanc.util.nr_of_baselines(na,autocor))
             self.assertTrue(slvr.nbl == 91)
 
     def test_viable_timesteps(self):
