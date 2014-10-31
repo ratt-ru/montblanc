@@ -52,56 +52,56 @@ void rime_jones_EK_impl(
     T beam_width,
     T beam_clip)
 {
-	int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
+    int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
-	int TIME = blockIdx.z*blockDim.z + threadIdx.z;
+    int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
-	if(ANT >= NA || TIME >= NTIME || CHAN >= NCHAN)
-		return;
+    if(ANT >= NA || TIME >= NTIME || CHAN >= NCHAN)
+    	return;
 
-	__shared__ T u[BLOCKDIMZ][BLOCKDIMY];
-	__shared__ T v[BLOCKDIMZ][BLOCKDIMY];
-	__shared__ T w[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T u[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T v[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T w[BLOCKDIMZ][BLOCKDIMY];
 
-	// Shared Memory produces a faster kernel than
-	// registers for some reason!
-	__shared__ T l[1];
-	__shared__ T m[1];
+    // Shared Memory produces a faster kernel than
+    // registers for some reason!
+    __shared__ T l[1];
+    __shared__ T m[1];
 
-	__shared__ T ld[BLOCKDIMZ][BLOCKDIMY];
-	__shared__ T md[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T ld[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T md[BLOCKDIMZ][BLOCKDIMY];
 
-	__shared__ T wl[BLOCKDIMX];
+    __shared__ T wl[BLOCKDIMX];
 
     __shared__ T a[BLOCKDIMZ];
 
-	int i;
+    int i;
 
-	// UVW coordinates vary by antenna and time, but not channel
-	if(threadIdx.x == 0)
-	{
-		i = TIME*NA + ANT;
-		u[threadIdx.z][threadIdx.y] = uvw[i];
-		ld[threadIdx.z][threadIdx.y] = point_errors[i];
-		i += NA*NTIME;
-		v[threadIdx.z][threadIdx.y] = uvw[i];
-		md[threadIdx.z][threadIdx.y] = point_errors[i];
-		i += NA*NTIME;
-		w[threadIdx.z][threadIdx.y] = uvw[i];
-	}
+    // UVW coordinates vary by antenna and time, but not channel
+    if(threadIdx.x == 0)
+    {
+        i = TIME*NA + ANT;
+        u[threadIdx.z][threadIdx.y] = uvw[i];
+        ld[threadIdx.z][threadIdx.y] = point_errors[i];
+        i += NA*NTIME;
+        v[threadIdx.z][threadIdx.y] = uvw[i];
+        md[threadIdx.z][threadIdx.y] = point_errors[i];
+        i += NA*NTIME;
+        w[threadIdx.z][threadIdx.y] = uvw[i];
+    }
 
-	// Wavelengths vary by channel, not by time and antenna
-	if(threadIdx.y == 0 && threadIdx.z == 0)
-		{ wl[threadIdx.x] = wavelength[CHAN]; }
+    // Wavelengths vary by channel, not by time and antenna
+    if(threadIdx.y == 0 && threadIdx.z == 0)
+        { wl[threadIdx.x] = wavelength[CHAN]; }
 
-	for(int SRC=0;SRC<NSRC;++SRC)
-	{
-		// LM coordinates vary only by source, not antenna and time
-		if(threadIdx.x == 0 && threadIdx.y == 0)
-		{
-			i = SRC;   l[0] = lm[i];
-			i += NSRC; m[0] = lm[i];
-		}
+    for(int SRC=0;SRC<NSRC;++SRC)
+    {
+        // LM coordinates vary only by source, not antenna and time
+        if(threadIdx.x == 0 && threadIdx.y == 0)
+        {
+            i = SRC;   l[0] = lm[i];
+            i += NSRC; m[0] = lm[i];
+        }
 
         // Brightness varies by time and source, not antenna or channel
         if(threadIdx.x == 0 && threadIdx.y == 0)
@@ -110,39 +110,39 @@ void rime_jones_EK_impl(
             a[threadIdx.z] = brightness[i];
         }
 
-		__syncthreads();
+        __syncthreads();
 
-		// Calculate the phase term for this antenna
-		T phase = Po::sqrt(T(1.0) - l[0]*l[0] - m[0]*m[0]) - T(1.0);
+        // Calculate the phase term for this antenna
+        T phase = Po::sqrt(T(1.0) - l[0]*l[0] - m[0]*m[0]) - T(1.0);
 
-		phase = w[threadIdx.z][threadIdx.y]*phase
-			+ v[threadIdx.z][threadIdx.y]*m[0]
-			+ u[threadIdx.z][threadIdx.y]*l[0];
+        phase = w[threadIdx.z][threadIdx.y]*phase
+            + v[threadIdx.z][threadIdx.y]*m[0]
+            + u[threadIdx.z][threadIdx.y]*l[0];
 
-	    phase *= T(2.0) * Tr::cuda_pi / wl[threadIdx.x];
+        phase *= T(2.0) * Tr::cuda_pi / wl[threadIdx.x];
 
-		T real, imag;
-		Po::sincos(phase, &imag, &real);
+        T real, imag;
+        Po::sincos(phase, &imag, &real);
 
         T power = Po::pow(ref_wave/wl[threadIdx.x], T(0.5)*a[threadIdx.z]);
         real *= power; imag *= power;
 
-		// Calculate the beam term for this antenna
-		T diff = l[0] - ld[threadIdx.z][threadIdx.y];
-		T E = diff*diff;
-		diff = m[0] - md[threadIdx.z][threadIdx.y];
-		E += diff*diff;
-		E = Po::sqrt(E);
-		E *= beam_width*1e-9*wl[threadIdx.x];
-		E = Po::min(E, beam_clip);
-		E = Po::cos(E);
-		E = E*E*E;
+        // Calculate the beam term for this antenna
+        T diff = l[0] - ld[threadIdx.z][threadIdx.y];
+        T E = diff*diff;
+        diff = m[0] - md[threadIdx.z][threadIdx.y];
+        E += diff*diff;
+        E = Po::sqrt(E);
+        E *= beam_width*1e-9*wl[threadIdx.x];
+        E = Po::min(E, beam_clip);
+        E = Po::cos(E);
+        E = E*E*E;
 
-		// Write out the phase and beam values multiplied together
+        // Write out the phase and beam values multiplied together
         i = (TIME*NA*NSRC + ANT*NSRC + SRC)*NCHAN + CHAN;
-		jones_scalar[i] = Po::make_ct(real*E, imag*E);
+        jones_scalar[i] = Po::make_ct(real*E, imag*E);
         __syncthreads();
-	}
+    }
 }
 
 extern "C" {
@@ -166,7 +166,6 @@ rime_jones_EK_ ## ft( \
 
 stamp_rime_ek_fn(float,float2)
 stamp_rime_ek_fn(double,double2)
-
 
 } // extern "C" {
 """)
