@@ -30,7 +30,7 @@ class TestBiroV1(unittest.TestCase):
 
     def setUp(self):
         """ Set up each test case """
-        np.random.seed(int(time.time()*100))
+        np.random.seed(int(time.time()) & 0xFFFFFFFF)
         # Set up various things that aren't possible in PyCUDA
         montblanc.ext.crimes.setup_cuda()
 

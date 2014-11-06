@@ -15,7 +15,7 @@ class TestUtils(unittest.TestCase):
 
     def setUp(self):
         """ Set up each test case """
-        np.random.seed(int(time.time()*100))
+        np.random.seed(int(time.time()) & 0xFFFFFFFF)
 
         # Add a handler that outputs INFO level logging
         fh = logging.FileHandler('test.log')
