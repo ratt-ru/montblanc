@@ -106,7 +106,7 @@ class TestBiroV2(unittest.TestCase):
     def test_gauss_B_sum_double(self):
         """ """
         for w in [True,False]:
-            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
+            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float64,
                 pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
 
                 self.gauss_B_sum_test_impl(slvr, weight_vector=w)
