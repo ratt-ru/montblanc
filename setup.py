@@ -227,6 +227,7 @@ setup(name='montblanc',
         'montblanc.util'],
       install_requires=[
       	'numpy',
+        'numexpr',
       	'pycuda',
       	'pytools',
       ],

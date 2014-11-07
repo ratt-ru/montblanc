@@ -1,3 +1,4 @@
+import numexpr as ne
 import numpy as np
 
 def rethrow_attribute_exception(e):
@@ -9,6 +10,8 @@ def rethrow_attribute_exception(e):
 class RimeCPU(object):
     def __init__(self, solver):
         self.solver = solver
+        self.gant0, self.gant1 = solver.get_flat_ap_idx()
+        self.ant0, self.ant1 = solver.get_flat_ap_idx(src=True,chan=True)
 
     def compute_gaussian_shape(self):
         """
@@ -20,12 +23,15 @@ class RimeCPU(object):
         slvr = self.solver
 
         try:
-            ant0, ant1 = slvr.get_flat_ap_idx()
+            ant0, ant1 = self.gant0, self.gant1
 
             uvw = slvr.uvw_cpu.reshape(3,slvr.ntime*slvr.na)
-            u = (uvw[0][ant1] - uvw[0][ant0]).reshape(slvr.ntime, slvr.nbl)
-            v = (uvw[1][ant1] - uvw[1][ant0]).reshape(slvr.ntime, slvr.nbl)
-            w = (uvw[2][ant1] - uvw[2][ant0]).reshape(slvr.ntime, slvr.nbl)
+            u = ne.evaluate('ap-aq', {'ap':uvw[0][ant1],'aq':uvw[0][ant0]})\
+                .reshape(slvr.ntime, slvr.nbl)
+            v = ne.evaluate('ap-aq', {'ap':uvw[1][ant1],'aq':uvw[1][ant0]})\
+                .reshape(slvr.ntime, slvr.nbl)
+            w = ne.evaluate('ap-aq', {'ap':uvw[2][ant1],'aq':uvw[2][ant0]})\
+                .reshape(slvr.ntime, slvr.nbl)
 
             el = slvr.gauss_shape_cpu[0]
             em = slvr.gauss_shape_cpu[1]
@@ -34,27 +40,23 @@ class RimeCPU(object):
             # OK, try obtain the same results with the fwhm factored out!
             # u1 = u*em - v*el
             # v1 = u*el + v*em
-            u1 = (np.outer(u, em) - np.outer(v, el)) \
+            u1 = ne.evaluate('u_em - v_el',
+                {'u_em' : np.outer(u,em), 'v_el' : np.outer(v, el)})\
                 .reshape(slvr.ntime,slvr.nbl,slvr.ngsrc)
-            v1 = (np.outer(u, el) + np.outer(v, em)) \
+            v1 = ne.evaluate('u_el + v_em', {
+                'u_el' : np.outer(u,el), 'v_em' : np.outer(v, em)})\
                 .reshape(slvr.ntime,slvr.nbl,slvr.ngsrc)
 
             # Obvious given the above reshape
             assert u1.shape == (slvr.ntime, slvr.nbl, slvr.ngsrc)
             assert v1.shape == (slvr.ntime, slvr.nbl, slvr.ngsrc)
 
-            # Construct the scaling factor, this includes the wavelength/frequency
-            # into the mix.
-            scale_uv = slvr.gauss_scale/slvr.wavelength_cpu
-            assert scale_uv.shape == (slvr.nchan,)
-
-            # Multiply u1 and v1 by the scaling factor
-            u1 = u1[:,:,:,np.newaxis]*scale_uv[np.newaxis,np.newaxis,np.newaxis,:]
-            v1 = v1[:,:,:,np.newaxis]*scale_uv[np.newaxis,np.newaxis,np.newaxis,:]
-            # u1 *= R, the ratio of the gaussian axis
-            u1 *= R[np.newaxis,np.newaxis,:,np.newaxis]
-
-            return np.exp(-(u1**2 + v1**2))
+            return ne.evaluate('exp(-((u1*scale_uv*R)**2 + (v1*scale_uv)**2))',
+                local_dict={
+                    'u1':u1[:,:,:,np.newaxis],
+                    'v1':v1[:,:,:,np.newaxis],
+                    'scale_uv':(slvr.gauss_scale/slvr.wavelength_cpu)[np.newaxis,np.newaxis,np.newaxis,:],
+                    'R':R[np.newaxis,np.newaxis,:,np.newaxis]})
 
         except AttributeError as e:
             rethrow_attribute_exception(e)
@@ -75,7 +77,8 @@ class RimeCPU(object):
             alpha = slvr.brightness_cpu[4]
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
-            n = np.sqrt(1. - l**2 - m**2) - 1.
+            n = ne.evaluate('sqrt(1. - l**2 - m**2) - 1.',
+                { 'l' : l, 'm' : m })
 
             # w*n+v*m+u*l. Outer product creates array of dim ntime x na x nsrcs
             phase = (np.outer(w,n) + np.outer(v, m) + np.outer(u, l)) \
@@ -83,21 +86,27 @@ class RimeCPU(object):
             assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc)            
 
             # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength). Dim. na x ntime x nchan x nsrcs 
-            phase = np.exp((2*np.pi*1j*phase)[:,:,:,np.newaxis]/ \
-                wave[np.newaxis,np.newaxis,np.newaxis,:])
+            phase = ne.evaluate('exp(2*pi*1j*p/wl)',
+                { 'p' : phase[:,:,:,np.newaxis],
+                'wl' : wave[np.newaxis,np.newaxis,np.newaxis,:],
+                'pi' : np.pi })
+
             assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
 
             # Dimension ntime x nsrc x nchan. Use 0.5*alpha here so that
             # when the other antenna term is multiplied with this one, we
             # end up with the full power term. sqrt(n)*sqrt(n) == n.
-            power = np.power(slvr.ref_wave/wave[np.newaxis,np.newaxis,:],
-                0.5*alpha[:,:,np.newaxis])
+            power = ne.evaluate('(rw/wl)**(0.5*a)', {
+                'rw' : slvr.ref_wave,
+                'wl' : wave[np.newaxis,np.newaxis,:],
+                'a' : alpha[:,:,np.newaxis]
+                })
             assert power.shape == (slvr.ntime, slvr.nsrc, slvr.nchan)
 
-            phase *= power[:,np.newaxis,:,:]
-            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan) 
-
-            return phase
+            return ne.evaluate('phs*p', {
+                'phs' : phase,
+                'p' : power[:,np.newaxis,:,:]
+                }).astype(slvr.ct) # Need a cast since numexpr upcasts
 
         except AttributeError as e:
             rethrow_attribute_exception(e)
@@ -111,7 +120,7 @@ class RimeCPU(object):
         slvr = self.solver
 
         try:
-            ant0, ant1 = slvr.get_flat_ap_idx(src=True,chan=True)
+            ant0, ant1 = self.ant0, self.ant1
             k_jones = self.compute_k_jones_scalar_per_ant().ravel()
 
             k_jones_per_bl = (k_jones[ant1]*k_jones[ant0].conj())\
@@ -120,6 +129,12 @@ class RimeCPU(object):
             # Add in the shape terms of the gaussian sources.
             if slvr.ngsrc > 0:
                 k_jones_per_bl[:,:,slvr.npsrc:,:] *= self.compute_gaussian_shape()
+                # TODO: Would like to do this, but fails because of
+                # https://github.com/pydata/numexpr/issues/155
+                #gsrc_view = k_jones_per_bl[:,:,slvr.npsrc:,:]
+                #gshape = self.compute_gaussian_shape()
+                #ne.evaluate('kjones*complex(gshape.real,0.0)',
+                #    {'kjones' : gsrc_view, 'gshape':gshape }, out=gsrc_view)
 
             return k_jones_per_bl
         except AttributeError as e:
@@ -136,17 +151,24 @@ class RimeCPU(object):
         try:
             # Compute the offsets for different antenna
             # Broadcasting here produces, ntime x na x  nsrc
-            l_diff = slvr.lm_cpu[0] - slvr.point_errors_cpu[0,:,:,np.newaxis]
-            m_diff = slvr.lm_cpu[1] - slvr.point_errors_cpu[1,:,:,np.newaxis]
-            E_p = np.sqrt(l_diff**2 + m_diff**2)
+            E_p = ne.evaluate('sqrt((l - lp)**2 + (m - mp)**2)', {
+                'l' : slvr.lm_cpu[0], 'm' : slvr.lm_cpu[1],
+                'lp' : slvr.point_errors_cpu[0,:,:,np.newaxis],
+                'mp' : slvr.point_errors_cpu[1,:,:,np.newaxis]                
+                })
 
             assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc)
 
             # Broadcasting here produces, ntime x nbl x nsrc x nchan
-            E_p = E_p[:,:,:,np.newaxis]*slvr.beam_width*1e-9*\
-                slvr.wavelength_cpu[np.newaxis,np.newaxis,np.newaxis,:]
+            E_p = ne.evaluate('E*bw*1e-9*wl', {
+                'E' : E_p[:,:,:,np.newaxis], 'bw' : slvr.beam_width,
+                'wl' : slvr.wavelength_cpu[np.newaxis,np.newaxis,np.newaxis,:]
+                })
+
+            # Clip the beam
             np.clip(E_p, np.finfo(slvr.ft).min, slvr.beam_clip, E_p)
-            E_p = np.cos(E_p)**3
+            # Cosine it, cube it and cast because of numexpr
+            E_p = ne.evaluate('cos(E)**3', { 'E' : E_p }).astype(slvr.ct)
 
             assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
 
@@ -163,7 +185,7 @@ class RimeCPU(object):
         slvr = self.solver
 
         try:
-            ant0, ant1 = slvr.get_flat_ap_idx(src=True,chan=True)
+            ant0, ant1 = self.ant0, self.ant1
             e_jones = self.compute_e_jones_scalar_per_ant().ravel()
 
             return (e_jones[ant1]*e_jones[ant0].conj())\
@@ -261,7 +283,8 @@ class RimeCPU(object):
 
         slvr = self.solver
 
-        vis = np.add.reduce(self.compute_ebk_jones(),axis=3)
+        vis = ne.evaluate('sum(ebk,3)', {'ebk':self.compute_ebk_jones()})\
+            .astype(slvr.ct)
         assert vis.shape == (4,slvr.ntime,slvr.nbl,slvr.nchan)
 
         return vis
@@ -276,7 +299,8 @@ class RimeCPU(object):
 
         slvr = self.solver
 
-        vis = np.add.reduce(self.compute_bk_jones(),axis=3)
+        vis = ne.evaluate('sum(bk,3)', {'bk':self.compute_bk_jones()})\
+            .astype(slvr.ct)
         assert vis.shape == (4,slvr.ntime,slvr.nbl,slvr.nchan)
 
         return vis
@@ -296,16 +320,20 @@ class RimeCPU(object):
         try:
             # Take the difference between the visibilities and the model
             # (4,nbl,nchan,ntime)
-            d = slvr.vis_cpu - slvr.bayes_data_cpu
+            d = ne.evaluate('vis - bayes', {
+                'vis' : slvr.vis_cpu,
+                'bayes' : slvr.bayes_data_cpu })
             assert d.shape == (4,slvr.ntime,slvr.nbl,slvr.nchan)
 
             # Square of the real and imaginary components
-            real_term, imag_term = d.real**2, d.imag**2
+            re = ne.evaluate('re**2', {'re' : d.real})
+            im = ne.evaluate('im**2', {'im' : d.imag})
+            wv = slvr.weight_vector_cpu
 
             # Multiply by the weight vector if required
             if weight_vector is True:
-                real_term *= slvr.weight_vector_cpu
-                imag_term *= slvr.weight_vector_cpu
+                ne.evaluate('re*wv', {'re':re,'wv':wv}, out=re)
+                ne.evaluate('im*wv', {'im':im,'wv':wv}, out=im)                    
 
             # Reduces a dimension so that we have (nbl,nchan,ntime)
             # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + 
@@ -313,8 +341,10 @@ class RimeCPU(object):
 
             # Sum the real and imaginary terms together
             # for the final result.
-            chi_sqrd_terms = np.add.reduce(real_term,axis=0) + \
-                np.add.reduce(imag_term,axis=0)
+            re_sum = ne.evaluate('sum(re,0)', {'re':re})
+            im_sum = ne.evaluate('sum(im,0)', {'im':im})
+            chi_sqrd_terms = ne.evaluate('re_sum + im_sum',
+                {'re_sum':re_sum,'im_sum':im_sum})
             assert chi_sqrd_terms.shape == (slvr.ntime,slvr.nbl,slvr.nchan)
 
             return chi_sqrd_terms
@@ -338,7 +368,8 @@ class RimeCPU(object):
         # divide by the sigma squared.
         # Otherwise, simply return the sum
         try:
-            term_sum = self.compute_chi_sqrd_sum_terms(weight_vector=weight_vector).sum()
+            chi_sqrd_terms = self.compute_chi_sqrd_sum_terms(weight_vector=weight_vector)
+            term_sum = ne.evaluate('sum(terms)', {'terms':chi_sqrd_terms} )
             return term_sum if weight_vector is True else term_sum / slvr.sigma_sqrd
         except AttributeError as e:
             rethrow_attribute_exception(e)
