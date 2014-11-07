@@ -112,7 +112,7 @@ class RimeCPU(object):
 
         try:
             ant0, ant1 = slvr.get_flat_ap_idx(src=True,chan=True)
-            k_jones = self.compute_k_jones_scalar_per_ant().flatten()
+            k_jones = self.compute_k_jones_scalar_per_ant().ravel()
 
             k_jones_per_bl = (k_jones[ant1]*k_jones[ant0].conj())\
                 .reshape(slvr.ntime,slvr.nbl,slvr.nsrc,slvr.nchan)
@@ -164,7 +164,7 @@ class RimeCPU(object):
 
         try:
             ant0, ant1 = slvr.get_flat_ap_idx(src=True,chan=True)
-            e_jones = self.compute_e_jones_scalar_per_ant().flatten()
+            e_jones = self.compute_e_jones_scalar_per_ant().ravel()
 
             return (e_jones[ant1]*e_jones[ant0].conj())\
                 .reshape(slvr.ntime,slvr.nbl,slvr.nsrc,slvr.nchan)
