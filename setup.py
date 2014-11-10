@@ -228,7 +228,6 @@ setup(name='montblanc',
       install_requires=[
       	'numpy',
       	'pycuda',
-      	'pyrap',
       	'pytools',
       ],
       package_data={
