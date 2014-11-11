@@ -35,7 +35,6 @@ def suite():
     from test_biro_v3 import TestBiroV3
     from test_base_solver import TestSolver
     from test_utils import TestUtils
-    from test_multinest import TestMultinest
 
     test_suite = unittest.TestSuite()
     niter = 1
