@@ -46,7 +46,6 @@ def suite():
         test_suite.addTest(unittest.makeSuite(TestBiroV3))
         test_suite.addTest(unittest.makeSuite(TestSolver))
         test_suite.addTest(unittest.makeSuite(TestUtils))
-        test_suite.addTest(unittest.makeSuite(TestMultinest))
 
     return test_suite
 
