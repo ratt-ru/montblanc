@@ -8,8 +8,9 @@ import os
 # Import ourself. How is this... I don't even...
 # Hooray for python
 import montblanc
+import montblanc.util
 
-from montblanc import util, tests
+from montblanc.tests import test
 
 def get_montblanc_path():
 	""" Return the current path in which montblanc is installed """
