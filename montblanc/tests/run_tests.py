@@ -7,8 +7,8 @@ import unittest
 
 def print_versions():
     """
-    Print the versions of software that relied upon by montblanc.
-    Based upon numexpr's version of this
+    Print the versions of software relied upon by montblanc.
+    Inspired by numexpr testing suite.
     """
     print('-=' * 38)
     print('Python version:    %s' % sys.version)
