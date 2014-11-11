@@ -343,7 +343,7 @@ class TestBiroV1(unittest.TestCase):
             Vis, A0, A1, uvw, lms, WaveL, Sols, Info)
         predict_end = time.time()
 
-        montblanc.log.info('predict start: %fs end: %fs elapsed time: %fs',
+        montblanc.log.debug('predict start: %fs end: %fs elapsed time: %fs',
             predict_start, predict_end, predict_end - predict_start)
 
         return Vis
@@ -365,7 +365,7 @@ class TestBiroV1(unittest.TestCase):
         # Shift the gpu jones matrices so they are on the last axis
         vis_gpu = np.rollaxis(slvr.vis_gpu.get(),0,len(slvr.jones_shape)-2).squeeze()
 
-        montblanc.log.info('kernels: elapsed time: %fs',
+        montblanc.log.debug('kernels: elapsed time: %fs',
             kernels_start.time_till(kernels_end)*1e-3)
 
         # Compare the GPU solution with Cyril's predict code

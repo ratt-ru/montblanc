@@ -13,10 +13,6 @@ Pre-requisites must be installed and dependant C libraries built.
 
 ### Pre-requisites
 
-You'll need to install the [PyCUDA][pycuda] and [pytools][pytools] packages. On ubuntu one can run the following:
-
-    # sudo apt-get install python-pycuda python-pytools
-
 You'll also need to install the [pyrap][pyrap] library, which is dependant on [casacore][casacore]. It may be easier to add the [SKA PPA][ska-ppa]  and get the binaries from there.
 
 ### Setting up Submodules
@@ -26,11 +22,11 @@ You'll need to run
     # git submodule init
     # git submodule update
 
-This should clone the [moderngpu][moderngpu] and [cub][cub] CUDA libraries which are needed by montblanc.
+This should clone the [moderngpu][moderngpu] CUDA library which are required by montblanc.
 
 ### Setting up the CUDA path
 
-Montblanc is dependant on PyCUDA, which in turn depends on CUDA. It needs to know where CUDA is installed. This is usually somewhere like `/usr/local/cuda-5.5`. It is useful to create the following environment variables.
+Montblanc is dependant on [PyCUDA][pycuda], which in turn depends on CUDA. It needs to know where CUDA is installed. This is usually somewhere like `/usr/local/cuda-5.5`. It is useful to create the following environment variables.
 
     # export CUDAHOME=/usr/local/cuda-5.5
     # export PATH=$PATH:$CUDAHOME/bin
@@ -55,14 +51,14 @@ should install the package.
 Once the libraries have been compiled you should be able to run the
 
     # cd tests
-    # python test_biro_v1.py
-    # python -m unittest test_biro_v1.TestBiroV1.test_predict_float
+    # python -c 'import montblanc; montblanc.tests.test()'
+    # python -m unittest test_biro_v2.TestBiroV2.test_predict_float
 
 which will run the current test suite or only the particular test case specified. The reported times are for the entire test case with numpy code, and not just the CUDA kernels.
 
 If you're running on an ubuntu laptop with optimus technology, you may have to install bumblebee and run
 
-    # optirun python test_biro_v1.py
+    # optirun python -c 'import montblanc; montblanc.tests.test()'
 
 ## Playing with the Westerbork MeasurementSet
 
@@ -80,4 +76,3 @@ which sets up things based on the Westerbork Measurement Set, with 10 point and 
 [pyrap]:https://code.google.com/p/pyrap/
 [casacore]:https://code.google.com/p/casacore/
 [ska-ppa]:https://launchpad.net/~ska-sa/+archive/main
-

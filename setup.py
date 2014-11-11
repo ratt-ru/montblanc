@@ -224,6 +224,7 @@ setup(name='montblanc',
         'montblanc.impl.biro.v3.loaders',
         'montblanc.impl.common',
         'montblanc.impl.common.loaders',
+        'montblanc.tests',
         'montblanc.util'],
       install_requires=[
       	'numpy',

@@ -57,19 +57,19 @@ def get_contexts_per_device():
 		try:
 			cuda.init()
 		except:
-			__devices, __contexts = None
+			__devices, __contexts = None, None
 			montblanc.log.critical('Unable to initialise CUDA', exc_info=True)
 
 		try:
 			__devices = [cuda.Device(d) for d in range(cuda.Device.count())]
 		except:
-			__devices, __contexts = None
+			__devices, __contexts = None, None
 			montblanc.log.critical('Unable to create devices', exc_info=True)
 
 		try:
 			__contexts = [d.make_context() for d in __devices]
 		except:
-			__devices, __contexts = None
+			__devices, __contexts = None, None
 			montblanc.log.critical('Unable to create contexts', exc_info=True)
 
 		# Pop each context off the stack

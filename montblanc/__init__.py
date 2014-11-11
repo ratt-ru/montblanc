@@ -9,6 +9,8 @@ import os
 # Hooray for python
 import montblanc
 
+from montblanc import util, tests
+
 def get_montblanc_path():
 	""" Return the current path in which montblanc is installed """
 	return os.path.dirname(inspect.getfile(montblanc))
