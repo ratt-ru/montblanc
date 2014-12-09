@@ -63,7 +63,7 @@ class Pipeline:
             return self.initialised
         except Exception as e:
             montblanc.log.error(('Unexpected exception occurred '
-                'during RIME pipeline shutdown'), exc_info=True)
+                'during RIME pipeline initialisation'), exc_info=True)
             self.initialised = False
             return self.is_initialised()
 
