@@ -9,11 +9,11 @@ A PyCUDA implementation of the Radio Interferometry Measurement Equation, and a 
 
 ## Installation
 
-Pre-requisites must be installed and dependant C libraries built.
+Pre-requisites must be installed and dependent C libraries built.
 
 ### Pre-requisites
 
-You'll also need to install the [pyrap][pyrap] library, which is dependant on [casacore][casacore]. It may be easier to add the [SKA PPA][ska-ppa]  and get the binaries from there.
+You'll also need to install the [pyrap][pyrap] library, which is dependent on [casacore][casacore]. It may be easier to add the [SKA PPA][ska-ppa]  and get the binaries from there.
 
 ### Setting up Submodules
 
@@ -22,11 +22,11 @@ You'll need to run
     # git submodule init
     # git submodule update
 
-This should clone the [moderngpu][moderngpu] CUDA library which are required by montblanc.
+This should clone the [moderngpu][moderngpu] library.
 
 ### Setting up the CUDA path
 
-Montblanc is dependant on [PyCUDA][pycuda], which in turn depends on CUDA. It needs to know where CUDA is installed. This is usually somewhere like `/usr/local/cuda-5.5`. It is useful to create the following environment variables.
+Montblanc is dependent on [PyCUDA][pycuda], which in turn depends on CUDA. It needs to know where CUDA is installed. This is usually somewhere like `/usr/local/cuda-5.5`. It is useful to create the following environment variables.
 
     # export CUDAHOME=/usr/local/cuda-5.5
     # export PATH=$PATH:$CUDAHOME/bin
@@ -37,7 +37,7 @@ Montblanc is dependant on [PyCUDA][pycuda], which in turn depends on CUDA. It ne
 ### Building the package
 
 Run
-     
+
     # python setup.py build
 
 to build the package. With the CUDA environment variables set, it should be able to find the CUDA compiler and compile the C extensions. The following:
