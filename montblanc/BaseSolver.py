@@ -128,7 +128,8 @@ DEFAULT_NCHAN=4
 DEFAULT_NTIME=10
 DEFAULT_NPSRC=2
 DEFAULT_NGSRC=1
-DEFAULT_NSRC=DEFAULT_NPSRC + DEFAULT_NGSRC
+DEFAULT_NSSRC=0
+DEFAULT_NSRC=DEFAULT_NPSRC + DEFAULT_NGSRC + DEFAULT_NSSRC
 DEFAULT_NVIS=DEFAULT_NBL*DEFAULT_NCHAN*DEFAULT_NTIME
 DEFAULT_DTYPE=np.float32
 
@@ -140,13 +141,14 @@ class BaseSolver(Solver):
     ntime = Parameter(DEFAULT_NTIME)
     npsrc = Parameter(DEFAULT_NPSRC)
     ngsrc = Parameter(DEFAULT_NGSRC)
+    nssrc = Parameter(DEFAULT_NSSRC)
     nsrc = Parameter(DEFAULT_NSRC)
     nvis = Parameter(DEFAULT_NVIS)
 
     pipeline = PipelineDescriptor()
 
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE,
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC, dtype=DEFAULT_DTYPE,
         pipeline=None, **kwargs):
         """
         BaseSolver Constructor
@@ -162,6 +164,8 @@ class BaseSolver(Solver):
                 Number of point sources.
             ngsrc : integer
                 Number of gaussian sources.
+	    nssrc: integer
+		Number of sersic (exponential) sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
         Keyword Arguments:
@@ -185,13 +189,15 @@ class BaseSolver(Solver):
         # - timesteps
         # - point sources
         # - gaussian sources
+	# - sersic sources
         self.na = na
         self.nbl = nbl = montblanc.util.nr_of_baselines(na,autocor)
         self.nchan = nchan
         self.ntime = ntime
         self.npsrc = npsrc
         self.ngsrc = ngsrc
-        self.nsrc = nsrc = npsrc + ngsrc
+	self.nssrc = nssrc
+        self.nsrc = nsrc = npsrc + ngsrc + nssrc
         self.nvis = nbl*nchan*ntime
 
         if nsrc == 0:
@@ -643,6 +649,7 @@ class BaseSolver(Solver):
             'ntime' : slvr.ntime,
             'npsrc' : slvr.npsrc,
             'ngsrc' : slvr.ngsrc,
+	    'nssrc' : slvr.nssrc,
             'nsrc'  : slvr.nsrc,
             'nvis' : slvr.nvis,
         }
@@ -723,6 +730,7 @@ class BaseSolver(Solver):
             '%-*s: %s' % (w,'Timesteps', self.ntime),
             '%-*s: %s' % (w,'Point Sources', self.npsrc),
             '%-*s: %s' % (w,'Gaussian Sources', self.ngsrc),
+	    '%-*s: %s' % (w,'Sersic Sources', self.nssrc),
             '%-*s: %s' % (w,'CPU Memory', montblanc.util.fmt_bytes(n_cpu_bytes)),
             '%-*s: %s' % (w,'GPU Memory', montblanc.util.fmt_bytes(n_gpu_bytes))]
 

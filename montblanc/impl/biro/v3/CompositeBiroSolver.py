@@ -13,6 +13,7 @@ from montblanc.BaseSolver import DEFAULT_NCHAN
 from montblanc.BaseSolver import DEFAULT_NTIME
 from montblanc.BaseSolver import DEFAULT_NPSRC
 from montblanc.BaseSolver import DEFAULT_NGSRC
+from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
 from montblanc.impl.biro.v3.BiroSolver import BiroSolver
@@ -48,6 +49,7 @@ P = {
     # Note that we don't divide by speed of light here. meqtrees code operates
     # on frequency, while we're dealing with wavelengths.
     'gauss_scale' : prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi),
+    'two_pi' : prop_dict('two_pi', 'ft', 2*np.pi),
     'ref_wave' : prop_dict('ref_wave', 'ft', 0.0),
     'sigma_sqrd' : prop_dict('sigma_sqrd', 'ft', 1.0),
     'X2' : prop_dict('X2', 'ft', 0.0),
@@ -64,6 +66,7 @@ A = {
     'lm' : ary_dict('lm', (2,'nsrc'), 'ft'),
     'brightness' : ary_dict('brightness', (5,'ntime','nsrc'), 'ft'),
     'gauss_shape' : ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
+    'sersic_shape' : ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
 
     'wavelength' : ary_dict('wavelength', ('nchan',), 'ft'),
     'point_errors' : ary_dict('point_errors', (2,'ntime','na'), 'ft'),
@@ -90,7 +93,7 @@ class CompositeBiroSolver(BaseSolver):
     memory transfers and pipelines are executed asynchronously.
     """
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE,
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC, dtype=DEFAULT_DTYPE,
         pipeline=None, **kwargs):
         """
         CompositeBiroSolver Constructor
@@ -106,6 +109,8 @@ class CompositeBiroSolver(BaseSolver):
                 Number of point sources.
             ngsrc : integer
                 Number of gaussian sources.
+	    nssrc : integer
+		Number of sersic sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
             pipeline : list of nodes
@@ -129,7 +134,7 @@ class CompositeBiroSolver(BaseSolver):
         """
 
         super(CompositeBiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, pipeline=pipeline, **kwargs)
+            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, pipeline=pipeline, **kwargs)
 
         A_main = copy.deepcopy(A)
         P_main = copy.deepcopy(P)
@@ -203,7 +208,7 @@ class CompositeBiroSolver(BaseSolver):
         # Create the sub-solvers
         self.solvers = [BiroSolver(na=na,
             nchan=nchan, ntime=self.time_diff[i],
-            npsrc=npsrc, ngsrc=ngsrc,
+            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc,
             dtype=dtype, pipeline=copy.deepcopy(pipeline),
             **kwargs) for i in range(self.nsolvers)]
 

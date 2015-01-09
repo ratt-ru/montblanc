@@ -30,7 +30,7 @@ def print_versions():
     print('-=' * 38)
 
 def suite():
-    from test_biro_v1 import TestBiroV1
+#    from test_biro_v1 import TestBiroV1
     from test_biro_v2 import TestBiroV2
     from test_biro_v3 import TestBiroV3
     from test_base_solver import TestSolver
@@ -40,7 +40,7 @@ def suite():
     niter = 1
 
     for n in range(niter):
-        test_suite.addTest(unittest.makeSuite(TestBiroV1))
+#        test_suite.addTest(unittest.makeSuite(TestBiroV1))
         test_suite.addTest(unittest.makeSuite(TestBiroV2))
         test_suite.addTest(unittest.makeSuite(TestBiroV3))
         test_suite.addTest(unittest.makeSuite(TestSolver))

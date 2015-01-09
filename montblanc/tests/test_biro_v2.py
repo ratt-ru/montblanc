@@ -60,15 +60,15 @@ class TestBiroV2(unittest.TestCase):
         self.assertTrue(np.allclose(ek_cpu, ek_gpu, **cmp))
 
     def test_EK_float(self):
-        """ Single precision EK test """
-        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
+        """ Single precision EK test with gaussians """
+        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,nssrc=10,
             dtype=np.float32,pipeline=Pipeline([RimeEK()])) as slvr:
 
             self.EK_test_impl(slvr)
 
     def test_EK_double(self):
-        """ Double precision EK test """
-        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
+        """ Double precision EK test with gaussians """
+        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,nssrc=10,
             dtype=np.float64,pipeline=Pipeline([RimeEK()])) as slvr:
 
             self.EK_test_impl(slvr)
@@ -98,7 +98,7 @@ class TestBiroV2(unittest.TestCase):
     def test_gauss_B_sum_float(self):
         """ """
         for w in [True,False]:
-            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
+            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=10, nssrc=10, dtype=np.float32,
                 pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
 
                 self.gauss_B_sum_test_impl(slvr, weight_vector=w)
@@ -106,7 +106,7 @@ class TestBiroV2(unittest.TestCase):
     def test_gauss_B_sum_double(self):
         """ """
         for w in [True,False]:
-            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float64,
+            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=10, nssrc=10, dtype=np.float64,
                 pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
 
                 self.gauss_B_sum_test_impl(slvr, weight_vector=w)
@@ -179,13 +179,13 @@ class TestBiroV2(unittest.TestCase):
         self.assertTrue(np.allclose(vis_predict_cyril, vis_predict_cpu))
 
     def test_predict_double(self):
-        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0, nssrc=0,
             dtype=np.float64) as slvr:
 
             self.do_predict_test(slvr)
 
     def test_predict_float(self):
-        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0,
+        with solver(na=10,nchan=32,ntime=1,npsrc=10000, ngsrc=0, nssrc=0,
             dtype=np.float32) as slvr:
 
             self.do_predict_test(slvr)

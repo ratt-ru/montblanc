@@ -29,10 +29,12 @@ class RimeGaussBSum(montblanc.impl.biro.v2.gpu.RimeGaussBSum.RimeGaussBSum):
         # no gaussian sources were specified.
         gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
             else slvr.gauss_shape_gpu
+	sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
+	    else slvr.sersic_shape_gpu
 
         self.start.record(stream=stream)
 
-        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, 
+        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic, 
             slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
             slvr.weight_vector_gpu, slvr.vis_gpu, slvr.bayes_data_gpu,
             slvr.chi_sqrd_result_gpu,
