@@ -6,13 +6,12 @@ from montblanc.BaseSolver import DEFAULT_NCHAN
 from montblanc.BaseSolver import DEFAULT_NTIME
 from montblanc.BaseSolver import DEFAULT_NPSRC
 from montblanc.BaseSolver import DEFAULT_NGSRC
-from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
 class BiroSolver(BaseSolver):
     """ Shared Data implementation for BIRO """
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC, dtype=DEFAULT_DTYPE,
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE,
         pipeline=None, **kwargs):
         """
         BiroSolver Constructor
@@ -28,8 +27,6 @@ class BiroSolver(BaseSolver):
                 Number of point sources.
             ngsrc : integer
                 Number of gaussian sources.
-	    nssrc : integer
-		Number of sersic sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
             pipeline : list of nodes
@@ -46,7 +43,7 @@ class BiroSolver(BaseSolver):
         kwargs['auto_correlations'] = False
 
         super(BiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, pipeline=pipeline, **kwargs)
+            npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, pipeline=pipeline, **kwargs)
 
     def get_default_ant_pairs(self):
         """

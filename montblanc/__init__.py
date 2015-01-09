@@ -19,9 +19,9 @@ def get_montblanc_path():
 def get_source_path():
 	return os.path.join(get_montblanc_path(), 'src')
 
-def get_bk_solver(msfile, npsrc, ngsrc, nssrc, **kwargs):
+def get_bk_solver(msfile, npsrc, ngsrc, **kwargs):
 	"""
-	get_bk_solver(msfile, npsrc, nssrc, context=None)
+	get_bk_solver(msfile, npsrc, context=None)
 
 	Returns a solver composed of simple brightness and phase terms.
 
@@ -33,8 +33,6 @@ def get_bk_solver(msfile, npsrc, ngsrc, nssrc, **kwargs):
 		Number of point sources.
 	ngsrc : number
 		Number of gaussian sources.
-	nssrc : number
-		Number of sersic sources.
 	context - pycuda.driver.Context.
 		The CUDA context to execute on If left blank, the default context
 		will be selected.
@@ -47,11 +45,11 @@ def get_bk_solver(msfile, npsrc, ngsrc, nssrc, **kwargs):
 	import montblanc.factory
 
 	return montblanc.factory.get_bk_solver(sd_type='ms', msfile=msfile,
-		npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=np.float32, **kwargs)
+		npsrc=npsrc, ngsrc=ngsrc, dtype=np.float32, **kwargs)
 
-def get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, version='v1', **kwargs):
+def get_biro_solver(msfile, npsrc, ngsrc, dtype=np.float32, version='v1', **kwargs):
 	"""
-	get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs)
+	get_biro_solver(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs)
 
 	Returns a solver suitable for solving the BIRO RIME.
 
@@ -63,8 +61,6 @@ def get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, version='v1',
 		Number of point sources.
 	ngsrc : number
 		Number of gaussian sources.
-	nssrc : number
-		Number of sersic sources.
 	dtype : The floating point data type.
 		Should be np.float32 or np.float64.
 	version : string
@@ -95,7 +91,7 @@ def get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, version='v1',
 	import montblanc.factory
 
 	return montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
-		npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, version=version, **kwargs)
+		npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, version=version, **kwargs)
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """
