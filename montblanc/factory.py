@@ -110,12 +110,12 @@ def get_base_solver(**kwargs):
 
 	return BaseSolver(**kwargs)
 
-def get_bk_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,**kwargs):
+def get_bk_solver(sd_type=None, npsrc=1, ngsrc=0, nssrc=0, dtype=np.float32,**kwargs):
 	""" Get a BK solver """
 	if kwargs.get('pipeline') is None:
 		kwargs['pipeline'] = get_bk_pipeline(**kwargs)
 
-	return get_biro_solver(npsrc=npsrc, ngsrc=ngsrc,
+	return get_biro_solver(npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc,
 		dtype=dtype, version='v1', **kwargs)
 
 def get_biro_pipeline(**kwargs):
@@ -186,7 +186,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 	slvr = slvr_class_type(**kwargs)
 
 	na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime
-	npsrc, ngsrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nsrc
+	npsrc, ngsrc, nssrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nssrc, slvr.nsrc
 	ft, ct = slvr.ft, slvr.ct
 
 	# Curry the creation of a random array
@@ -238,6 +238,15 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 		slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
 	if ngsrc > 0: slvr.transfer_gauss_shape(gauss_shape)
 
+	if version in [VERSION_TWO, VERSION_THREE]:
+		# Sersic (exponential) shape matrix
+		e1=ft(np.zeros((nssrc)))
+		e2=ft(np.zeros((nssrc)))
+		scale=ft(np.ones((nssrc)))
+		sersic_shape = shape_list([e1,e2,scale],
+			slvr.sersic_shape_shape, slvr.sersic_shape_dtype)
+		if nssrc > 0: slvr.transfer_sersic_shape(sersic_shape)
+
 	# Generate nchan frequencies/wavelengths
 	frequencies = ft(np.linspace(1e6,2e6,nchan))
 	wavelength = ft(montblanc.constants.C/frequencies)
@@ -280,7 +289,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
 	return slvr
 
-def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,
+def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, nssrc=0, dtype=np.float32,
 	version=None, **kwargs):
 	""" Factory function that produces a BIRO solver """
 
@@ -294,6 +303,7 @@ def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, dtype=np.float32,
 	# so that we don't have to pass them around
 	kwargs['npsrc'] = npsrc
 	kwargs['ngsrc'] = ngsrc
+	kwargs['nssrc'] = nssrc
 	kwargs['dtype'] = dtype
 	kwargs['version'] = version
 

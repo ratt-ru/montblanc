@@ -32,6 +32,7 @@ KERNEL_TEMPLATE = string.Template("""
 #define NTIME ${ntime}
 #define NPSRC ${npsrc}
 #define NGSRC ${ngsrc}
+#define NSSRC ${nssrc}
 #define NSRC ${nsrc}
 
 #define BLOCKDIMX ${BLOCKDIMX}
@@ -39,6 +40,7 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMZ ${BLOCKDIMZ}
 
 #define GAUSS_SCALE ${gauss_scale}
+#define TWO_PI ${two_pi}
 
 template <
     typename T,
@@ -50,6 +52,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * uvw,
     typename Tr::ft * brightness,
     typename Tr::ft * gauss_shape,
+    typename Tr::ft * sersic_shape,
     typename Tr::ft * wavelength,
     int * ant_pairs,
     typename Tr::ct * jones_EK_scalar,
@@ -72,6 +75,10 @@ void rime_gauss_B_sum_impl(
     __shared__ T el[1];
     __shared__ T em[1];
     __shared__ T eR[1];
+
+    __shared__ T e1[1];
+    __shared__ T e2[1];
+    __shared__ T scale[1];    
 
     __shared__ T I[BLOCKDIMZ];
     __shared__ T Q[BLOCKDIMZ];
@@ -152,7 +159,7 @@ void rime_gauss_B_sum_impl(
         __syncthreads();
     }
 
-    for(int SRC=NPSRC;SRC<NSRC;++SRC)
+    for(int SRC=NPSRC;SRC<NPSRC+NGSRC;++SRC)
     {
         // The following loads effect the global load efficiency.
 
@@ -189,6 +196,71 @@ void rime_gauss_B_sum_impl(
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
         ant_two.x *= exp; ant_two.y *= exp;
+        // Get the complex scalar for antenna one and conjugate it
+        i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
+
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        // a = ant_two.x b=ant_two.y c=ant_one.x d = ant_one.y
+        typename Tr::ct value = Po::make_ct(
+            ant_two.x*ant_one.x - ant_two.y*ant_one.y,
+            ant_two.x*ant_one.y + ant_two.y*ant_one.x);
+  
+        Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
+        Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
+
+        Qsum.x += (I[threadIdx.z]-Q[threadIdx.z])*value.x - 0.0*value.y;
+        Qsum.y += (I[threadIdx.z]-Q[threadIdx.z])*value.y - 0.0*value.x;
+
+        Usum.x += U[threadIdx.z]*value.x - -V[threadIdx.z]*value.y;
+        Usum.y += U[threadIdx.z]*value.y + -V[threadIdx.z]*value.x;
+
+        Vsum.x += U[threadIdx.z]*value.x - V[threadIdx.z]*value.y;
+        Vsum.y += U[threadIdx.z]*value.y + V[threadIdx.z]*value.x;
+
+        __syncthreads();
+    }
+ 
+    for(int SRC=NPSRC+NGSRC;SRC<NSRC;++SRC)
+    {
+        // The following loads effect the global load efficiency.
+
+        // brightness varies by time (and source), not baseline or channel
+        if(threadIdx.x == 0 && threadIdx.y == 0)
+        {
+            i = TIME*NSRC + SRC;  I[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      Q[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      U[threadIdx.z] = brightness[i];
+            i += NTIME*NSRC;      V[threadIdx.z] = brightness[i];
+        }
+
+        // sersic shape only varies by source. Shape parameters
+        // thus apply to the entire block and we can load them with
+        // only the first thread.
+        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+        {
+            i = SRC-NPSRC-NGSRC;  e1[0] = sersic_shape[i];
+            i += NSSRC;     	  e2[0] = sersic_shape[i];
+            i += NSSRC;     	  scale[0] = sersic_shape[i];
+        }
+
+        __syncthreads();
+
+	// sersic source in  the Fourier domain
+	T u1 = u[threadIdx.z][threadIdx.y]*(T(1.0)+e1[0]) + v[threadIdx.z][threadIdx.y]*e2[0];
+	u1 *= T(TWO_PI)/wl[threadIdx.x];
+	u1 *= scale[0]/(T(1.0)-e1[0]*e1[0]-e2[0]*e2[0]);
+        T v1 = u[threadIdx.z][threadIdx.y]*e2[0] + v[threadIdx.z][threadIdx.y]*(T(1.0)-e1[0]);
+	v1 *= T(TWO_PI)/wl[threadIdx.x];
+	v1 *= scale[0]/(T(1.0)-e1[0]*e1[0]-e2[0]*e2[0]);
+        T sersic_factor = T(1.0) + u1*u1+v1*v1;
+	sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));	
+
+        // Get the complex scalar for antenna two and multiply
+        // in sersic factor term
+        i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
+        typename Tr::ct ant_two = jones_EK_scalar[i];
+        ant_two.x *= sersic_factor; ant_two.y *= sersic_factor;
         // Get the complex scalar for antenna one and conjugate it
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
@@ -266,6 +338,7 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * uvw, \
     ft * brightness, \
     ft * gauss_shape, \
+    ft * sersic_shape, \
     ft * wavelength, \
     int * ant_pairs, \
     ct * jones_EK_scalar, \
@@ -274,7 +347,7 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ct * data_vis, \
     ft * chi_sqrd_result) \
 { \
-    rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, \
+    rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, sersic_shape, \
         wavelength, ant_pairs, jones_EK_scalar, \
         weight_vector, visibilities, data_vis, \
         chi_sqrd_result); \
@@ -346,7 +419,10 @@ class RimeGaussBSum(Node):
         gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
             else slvr.gauss_shape_gpu
 
-        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, 
+	sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
+	    else slvr.sersic_shape_gpu
+
+        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic, 
             slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
             slvr.weight_vector_gpu,
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
