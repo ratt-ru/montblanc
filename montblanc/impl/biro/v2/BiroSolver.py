@@ -26,13 +26,14 @@ from montblanc.BaseSolver import DEFAULT_NCHAN
 from montblanc.BaseSolver import DEFAULT_NTIME
 from montblanc.BaseSolver import DEFAULT_NPSRC
 from montblanc.BaseSolver import DEFAULT_NGSRC
+from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
 class BiroSolver(BaseSolver):
     """ Shared Data implementation for BIRO """
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE,
-        pipeline=None, **kwargs):
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC, 
+	dtype=DEFAULT_DTYPE, pipeline=None, **kwargs):
         """
         BiroSolver Constructor
 
@@ -47,6 +48,8 @@ class BiroSolver(BaseSolver):
                 Number of point sources.
             ngsrc : integer
                 Number of gaussian sources.
+	    nssrc : integer
+		Number of sersic (exponential) sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
             pipeline : list of nodes
@@ -63,11 +66,11 @@ class BiroSolver(BaseSolver):
         kwargs['auto_correlations'] = False
 
         super(BiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, pipeline=pipeline, **kwargs)
+            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, pipeline=pipeline, **kwargs)
 
         slvr = self
         na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime
-        npsrc, ngsrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nsrc
+        npsrc, ngsrc, nssrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nssrc, slvr.nsrc
         ft, ct = slvr.ft, slvr.ct
 
         # Curry the register_array function for simplicity
@@ -88,6 +91,7 @@ class BiroSolver(BaseSolver):
         # on frequency, while we're dealing with wavelengths.
         reg_prop('gauss_scale', ft, fwhm2int*np.sqrt(2)*np.pi)
         reg_prop('ref_wave', ft, 0.0)
+	reg_prop('two_pi', ft, 2*np.pi)
 
         reg_prop('sigma_sqrd', ft, 1.0)
         reg_prop('X2', ft, 0.0)
@@ -100,6 +104,7 @@ class BiroSolver(BaseSolver):
         reg(name='lm', shape=(2,'nsrc'), dtype=ft)
         reg(name='brightness', shape=(5,'ntime','nsrc'), dtype=ft)
         reg(name='gauss_shape', shape=(3, 'ngsrc'), dtype=ft)
+	reg(name='sersic_shape', shape=(3, 'nssrc'), dtype=ft)
 
         reg(name='wavelength', shape=('nchan',), dtype=ft)
         reg(name='point_errors', shape=(2,'ntime','na'), dtype=ft)

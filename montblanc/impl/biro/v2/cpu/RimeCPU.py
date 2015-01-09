@@ -81,6 +81,59 @@ class RimeCPU(object):
         except AttributeError as e:
             rethrow_attribute_exception(e)
 
+    def compute_sersic_shape(self):
+        """
+        Compute the shape values for the sersic (exponential) sources.
+
+        Returns a (ntime, nbl, nssrc, nchan) matrix of floating point scalars.
+        """
+
+        slvr = self.solver
+
+        try:
+            ant0, ant1 = self.gant0, self.gant1
+
+            uvw = slvr.uvw_cpu.reshape(3,slvr.ntime*slvr.na)
+            u = ne.evaluate('ap-aq', {'ap':uvw[0][ant1],'aq':uvw[0][ant0]})\
+                .reshape(slvr.ntime, slvr.nbl)
+            v = ne.evaluate('ap-aq', {'ap':uvw[1][ant1],'aq':uvw[1][ant0]})\
+                .reshape(slvr.ntime, slvr.nbl)
+            w = ne.evaluate('ap-aq', {'ap':uvw[2][ant1],'aq':uvw[2][ant0]})\
+                .reshape(slvr.ntime, slvr.nbl)
+
+            e1 = slvr.sersic_shape_cpu[0]
+            e2 = slvr.sersic_shape_cpu[1]
+            R = slvr.sersic_shape_cpu[2]
+
+            # OK, try obtain the same results with the fwhm factored out!
+            # u1 = u*(1+e1) - v*e2
+            # v1 = u*e2 + v*(1-e1)
+            u1 = ne.evaluate('u_1_e1 + v_e2',
+                {'u_1_e1' : np.outer(u,np.ones(slvr.nssrc)+e1), 'v_e2' : np.outer(v, e2)})\
+                .reshape(slvr.ntime,slvr.nbl,slvr.nssrc)
+            v1 = ne.evaluate('u_e2 + v_1_e1', {
+                'u_e2' : np.outer(u,e2), 'v_1_e1' : np.outer(v,np.ones(slvr.nssrc)-e1)})\
+                .reshape(slvr.ntime,slvr.nbl,slvr.nssrc)
+
+            # Obvious given the above reshape
+            assert u1.shape == (slvr.ntime, slvr.nbl, slvr.nssrc)
+            assert v1.shape == (slvr.ntime, slvr.nbl, slvr.nssrc)
+
+            den = ne.evaluate('1 + (u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
+                local_dict={
+                    'u1':u1[:,:,:,np.newaxis],
+                    'v1':v1[:,:,:,np.newaxis],
+                    'scale_uv':(slvr.two_pi/slvr.wavelength_cpu)[np.newaxis,np.newaxis,np.newaxis,:],
+                    'R':(R/(1-e1*e1-e2*e2))[np.newaxis,np.newaxis,:,np.newaxis]})\
+		    .reshape(slvr.ntime,slvr.nbl,slvr.nssrc,slvr.nchan)
+
+	    return ne.evaluate('1/(den*sqrt(den))',
+		{ 'den' : den[:,:,:,:] })
+	    
+        except AttributeError as e:
+            rethrow_attribute_exception(e)
+	
+
     def compute_k_jones_scalar_per_ant(self):
         """
         Computes the scalar K (phase) term of the RIME per antenna.
@@ -148,13 +201,17 @@ class RimeCPU(object):
 
             # Add in the shape terms of the gaussian sources.
             if slvr.ngsrc > 0:
-                k_jones_per_bl[:,:,slvr.npsrc:,:] *= self.compute_gaussian_shape()
+                k_jones_per_bl[:,:,slvr.npsrc:slvr.npsrc+slvr.ngsrc,:] *= self.compute_gaussian_shape()
                 # TODO: Would like to do this, but fails because of
                 # https://github.com/pydata/numexpr/issues/155
                 #gsrc_view = k_jones_per_bl[:,:,slvr.npsrc:,:]
                 #gshape = self.compute_gaussian_shape()
                 #ne.evaluate('kjones*complex(gshape.real,0.0)',
                 #    {'kjones' : gsrc_view, 'gshape':gshape }, out=gsrc_view)
+
+	    # Add in the shape terms of the sersic sources.
+            if slvr.nssrc > 0:
+                k_jones_per_bl[:,:,slvr.npsrc+slvr.ngsrc:slvr.npsrc+slvr.ngsrc+slvr.nssrc:,:] *= self.compute_sersic_shape()
 
             return k_jones_per_bl
         except AttributeError as e:
