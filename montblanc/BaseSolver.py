@@ -148,7 +148,8 @@ DEFAULT_NCHAN=4
 DEFAULT_NTIME=10
 DEFAULT_NPSRC=2
 DEFAULT_NGSRC=1
-DEFAULT_NSRC=DEFAULT_NPSRC + DEFAULT_NGSRC
+DEFAULT_NSSRC=0
+DEFAULT_NSRC=DEFAULT_NPSRC + DEFAULT_NGSRC + DEFAULT_NSSRC
 DEFAULT_NVIS=DEFAULT_NBL*DEFAULT_NCHAN*DEFAULT_NTIME
 DEFAULT_DTYPE=np.float32
 
@@ -160,13 +161,14 @@ class BaseSolver(Solver):
     ntime = Parameter(DEFAULT_NTIME)
     npsrc = Parameter(DEFAULT_NPSRC)
     ngsrc = Parameter(DEFAULT_NGSRC)
+    nssrc = Parameter(DEFAULT_NSSRC)
     nsrc = Parameter(DEFAULT_NSRC)
     nvis = Parameter(DEFAULT_NVIS)
 
     pipeline = PipelineDescriptor()
 
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, dtype=DEFAULT_DTYPE,
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC, dtype=DEFAULT_DTYPE,
         pipeline=None, **kwargs):
         """
         BaseSolver Constructor
@@ -182,6 +184,8 @@ class BaseSolver(Solver):
                 Number of point sources.
             ngsrc : integer
                 Number of gaussian sources.
+            nssrc: integer
+                Number of sersic (exponential) sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
         Keyword Arguments:
@@ -205,18 +209,22 @@ class BaseSolver(Solver):
         # - timesteps
         # - point sources
         # - gaussian sources
+        # - sersic sources
         self.na = na
         self.nbl = nbl = montblanc.util.nr_of_baselines(na,autocor)
         self.nchan = nchan
         self.ntime = ntime
         self.npsrc = npsrc
         self.ngsrc = ngsrc
-        self.nsrc = nsrc = npsrc + ngsrc
+        self.nssrc = nssrc
+        self.nsrc = nsrc = npsrc + ngsrc + nssrc
         self.nvis = nbl*nchan*ntime
 
         if nsrc == 0:
-            raise ValueError, ('The number of sources, or, ',
-                'the sum of npsrc and ngsrc, must be greater than zero')
+            raise ValueError('The number of sources, or, ',
+                            'the sum of npsrc (%d), ngsrc (%d) and nssrc (%d), '
+                            'must be greater than zero') % \
+                            (npsrc, ngsrc, nssrc)
 
         # Configure our floating point and complex types
         if dtype == np.float32:
@@ -312,17 +320,17 @@ class BaseSolver(Solver):
 
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
-        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype) 
+        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues()])
 
     def cpu_bytes_required(self):
         """ returns the memory required by all CPU arrays in bytes. """
-        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype) 
+        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_cpu_ary])
 
     def gpu_bytes_required(self):
         """ returns the memory required by all GPU arrays in bytes. """
-        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype) 
+        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_gpu_ary])
 
     def mem_required(self):
@@ -346,13 +354,13 @@ class BaseSolver(Solver):
                 '%s\'s type \'%s\' is different from the type \'%s\' of the supplied argument.' % \
                     (record.name,
                     np.dtype(record.dtype).name,
-                    np.dtype(ary.dtype).name)          
+                    np.dtype(ary.dtype).name)
 
     def handle_existing_array(self, old, new, **kwargs):
         """
         Compares old array record against new. Complains
-        if there's a mismatch in shape or type. 
-        """ 
+        if there's a mismatch in shape or type.
+        """
         should_replace = kwargs.get('replace',False)
 
         # There's no existing record, or we've been told to replace it
@@ -390,7 +398,7 @@ class BaseSolver(Solver):
                 The data-type for the array.
             registrant : string
                 Name of the entity registering this array.
-        
+
         Keyword Arguments
         -----------------
             cpu : boolean
@@ -406,7 +414,7 @@ class BaseSolver(Solver):
                 True if a member called 'name_dtype' should be
                 created on the Solver object.
             transfer_method : boolean or function
-                True by default. If True, a default 'transfer_name' member is 
+                True by default. If True, a default 'transfer_name' member is
                 created, otherwise the supplied function is used instead
             page_locked : boolean
                 True if the 'name_cpu' ndarray should be allocated as
@@ -577,7 +585,7 @@ class BaseSolver(Solver):
                 The name of the property.
             dtype : data-type
                 The data-type of this property
-            default : 
+            default :
                 Default value for the property.
             registrant : string
                 Name of the entity registering the property.
@@ -655,7 +663,7 @@ class BaseSolver(Solver):
         Used in templated GPU kernels.
         """
         slvr = self
-        
+
         D = {
             'na' : slvr.na,
             'nbl' : slvr.nbl,
@@ -663,6 +671,7 @@ class BaseSolver(Solver):
             'ntime' : slvr.ntime,
             'npsrc' : slvr.npsrc,
             'ngsrc' : slvr.ngsrc,
+	    'nssrc' : slvr.nssrc,
             'nsrc'  : slvr.nsrc,
             'nvis' : slvr.nvis,
         }
@@ -707,7 +716,7 @@ class BaseSolver(Solver):
                 getattr(self, p.name), p.default)
 
     def solve(self):
-        """ Solve the RIME """        
+        """ Solve the RIME """
         with self.context as ctx:
             self.pipeline.execute(self)
 
@@ -743,6 +752,7 @@ class BaseSolver(Solver):
             '%-*s: %s' % (w,'Timesteps', self.ntime),
             '%-*s: %s' % (w,'Point Sources', self.npsrc),
             '%-*s: %s' % (w,'Gaussian Sources', self.ngsrc),
+	    '%-*s: %s' % (w,'Sersic Sources', self.nssrc),
             '%-*s: %s' % (w,'CPU Memory', montblanc.util.fmt_bytes(n_cpu_bytes)),
             '%-*s: %s' % (w,'GPU Memory', montblanc.util.fmt_bytes(n_gpu_bytes))]
 

@@ -39,9 +39,9 @@ def get_montblanc_path():
 def get_source_path():
 	return os.path.join(get_montblanc_path(), 'src')
 
-def get_biro_solver(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
+def get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs):
 	"""
-	get_biro_solver(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs)
+	get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs)
 
 	Returns a solver suitable for solving the BIRO RIME.
 
@@ -53,6 +53,8 @@ def get_biro_solver(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
 		Number of point sources.
 	ngsrc : number
 		Number of gaussian sources.
+	nssrc : number
+		Number of sersic sources.
 	dtype : The floating point data type.
 		Should be np.float32 or np.float64.
 	version : string
@@ -83,7 +85,7 @@ def get_biro_solver(msfile, npsrc, ngsrc, dtype=np.float32, **kwargs):
 	import montblanc.factory
 
 	return montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
-		npsrc=npsrc, ngsrc=ngsrc, dtype=dtype, **kwargs)
+		npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """

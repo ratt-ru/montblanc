@@ -18,11 +18,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import itertools
 import logging
 import unittest
 import numpy as np
 import time
-import sys
 
 import montblanc.factory
 
@@ -32,8 +32,59 @@ from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
 from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
 from montblanc.pipeline import Pipeline
 
+
 def solver(**kwargs):
-    return montblanc.factory.get_biro_solver('test',version='v2',**kwargs)
+    """ Shorten the factory call for readability """
+    return montblanc.factory.get_biro_solver('test', version='v2', **kwargs)
+
+
+def src_perms(defaults, permute_weights=False):
+    """
+    Permute the source types and return a dictionary suitable
+    for use as keyword arguments for the solver function/factory.
+
+    Parameters:
+        default : dictionary
+            dictionary containing other sensible defaults to include
+            in the returned permutation.
+            e.g. {'na': 14, 'ntime': 20, 'nchan': 48}
+
+    { 'npsrc': 0, 'ngsrc': 00, 'nssrc': 20}
+    { 'npsrc': 0, 'ngsrc': 20, 'nssrc': 0}
+    { 'npsrc': 20, 'ngsrc': 0, 'nssrc': 0}
+    { 'npsrc': 0, 'ngsrc': 20, 'nssrc': 20}
+    { 'npsrc': 20, 'ngsrc': 20, 'nssrc': 0}
+    { 'npsrc': 20, 'ngsrc': 0, 'nssrc': 20}
+    { 'npsrc': 20, 'ngsrc': 20, 'nssrc': 20}
+
+    >>> for p in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, True)
+    >>>     with solver(dtype=np.float32, **p) as slvr:
+    >>>         slvr.solve()
+    """
+
+    if defaults is None:
+        defaults = {}
+
+    src_types = ['npsrc', 'ngsrc', 'nssrc']
+    count = 0
+
+    weight_vector = [True, False] if permute_weights is True else [False]
+
+    for wv in weight_vector:
+        count = 0
+        for p in itertools.product([0, 20], repeat=len(src_types)):
+            # Nasty, but works to avoid the (0,0,0) case
+            count += 1
+            if count == 1:
+                continue
+
+            params = defaults.copy()
+            params['w'] = wv
+            for i, s in enumerate(src_types):
+                params[s] = p[i]
+
+            yield params
+
 
 class TestBiroV2(unittest.TestCase):
     """
@@ -56,8 +107,9 @@ class TestBiroV2(unittest.TestCase):
         pass
 
     def EK_test_impl(self, slvr, cmp=None):
-        """ Type independent implementaiton of the EK test """
-        if cmp is None: cmp = {}
+        """ Type independent implementation of the EK test """
+        if cmp is None:
+            cmp = {}
 
         # This beam width produces reasonable values
         # for testing the E term
@@ -69,27 +121,33 @@ class TestBiroV2(unittest.TestCase):
         slvr.solve()
 
         ek_cpu = rime_cpu.compute_ek_jones_scalar_per_ant()
-        with slvr.context: ek_gpu = slvr.jones_scalar_gpu.get()
+        with slvr.context:
+            ek_gpu = slvr.jones_scalar_gpu.get()
 
-        # Test that the jones CPU calculation matches that of the GPU calculation
+        # Test that the jones CPU calculation matches
+        # that of the GPU calculation
         self.assertTrue(np.allclose(ek_cpu, ek_gpu, **cmp))
 
     def test_EK_float(self):
-        """ Single precision EK test """
-        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
-            dtype=np.float32,pipeline=Pipeline([RimeEK()])) as slvr:
+        """ Single precision EK test  """
+        for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
+            with solver(type=np.float32,
+                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
 
-            self.EK_test_impl(slvr)
+                self.EK_test_impl(slvr)
 
     def test_EK_double(self):
         """ Double precision EK test """
-        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,
-            dtype=np.float64,pipeline=Pipeline([RimeEK()])) as slvr:
+        for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
+            with solver(type=np.float64,
+                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
 
-            self.EK_test_impl(slvr)
+                self.EK_test_impl(slvr)
 
-    def gauss_B_sum_test_impl(self, slvr, weight_vector=False, cmp=None):
-        if cmp is None: cmp = {}
+    def B_sum_test_impl(self, slvr, weight_vector=False, cmp=None):
+        """ Type independent implementation of the B Sum test """
+        if cmp is None:
+            cmp = {}
 
         # This beam width produces reasonable values
         # for testing the E term
@@ -102,29 +160,33 @@ class TestBiroV2(unittest.TestCase):
         slvr.solve()
 
         ebk_vis_cpu = rime_cpu.compute_ebk_vis()
-        with slvr.context: ebk_vis_gpu = slvr.vis_gpu.get()
+        with slvr.context:
+            ebk_vis_gpu = slvr.vis_gpu.get()
 
         self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
 
-        chi_sqrd_result_cpu = rime_cpu.compute_biro_chi_sqrd(weight_vector=weight_vector)
+        chi_sqrd_result_cpu = rime_cpu.compute_biro_chi_sqrd(
+            weight_vector=weight_vector)
 
         self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
-    def test_gauss_B_sum_float(self):
-        """ """
-        for w in [True,False]:
-            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float32,
-                pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
+    def test_B_sum_float(self):
+        """ Test the B sum float kernel """
+        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}):
+            with solver(dtype=np.float32, pipeline=Pipeline([RimeEK(),
+                        RimeGaussBSum(weight_vector=params['w'])]),
+                        **params) as slvr:
 
-                self.gauss_B_sum_test_impl(slvr, weight_vector=w)
+                self.B_sum_test_impl(slvr, params['w'], {'rtol': 1e-4})
 
-    def test_gauss_B_sum_double(self):
-        """ """
-        for w in [True,False]:
-            with solver(na=14,nchan=48,ntime=20,npsrc=20,ngsrc=20, dtype=np.float64,
-                pipeline=Pipeline([RimeEK(), RimeGaussBSum(weight_vector=w)])) as slvr:
+    def test_B_sum_double(self):
+        """ Test the B sum double kernel """
+        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}):
+            with solver(dtype=np.float64, pipeline=Pipeline([RimeEK(),
+                        RimeGaussBSum(weight_vector=params['w'])]),
+                        **params) as slvr:
 
-                self.gauss_B_sum_test_impl(slvr, weight_vector=w)
+                self.B_sum_test_impl(slvr, weight_vector=params['w'])
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV2)
