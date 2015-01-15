@@ -38,10 +38,16 @@ def solver(**kwargs):
     return montblanc.factory.get_biro_solver('test', version='v2', **kwargs)
 
 
-def src_perms():
+def src_perms(defaults, permute_weights=False):
     """
-    Permute the source types to produce something like
-    along these lines.
+    Permute the source types and return a dictionary suitable
+    for use as keyword arguments for the solver function/factory.
+
+    Parameters:
+        default : dictionary
+            dictionary containing other sensible defaults to include
+            in the returned permutation.
+            e.g. {'na': 14, 'ntime': 20, 'nchan': 48}
 
     { 'npsrc': 0, 'ngsrc': 00, 'nssrc': 20}
     { 'npsrc': 0, 'ngsrc': 20, 'nssrc': 0}
@@ -50,25 +56,34 @@ def src_perms():
     { 'npsrc': 20, 'ngsrc': 20, 'nssrc': 0}
     { 'npsrc': 20, 'ngsrc': 0, 'nssrc': 20}
     { 'npsrc': 20, 'ngsrc': 20, 'nssrc': 20}
+
+    >>> for p in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, True)
+    >>>     with solver(dtype=np.float32, **p) as slvr:
+    >>>         slvr.solve()
     """
 
-    params = {'na': 14, 'ntime': 20, 'nchan': 48}
+    if defaults is None:
+        defaults = {}
+
     src_types = ['npsrc', 'ngsrc', 'nssrc']
     count = 0
 
-    for weight_vector in [True, False]:
+    weight_vector = [True, False] if permute_weights is True else [False]
+
+    for wv in weight_vector:
         count = 0
         for p in itertools.product([0, 20], repeat=len(src_types)):
+            # Nasty, but works to avoid the (0,0,0) case
             count += 1
             if count == 1:
                 continue
 
-            params_copy = params.copy()
-            params_copy['w'] = weight_vector
+            params = defaults.copy()
+            params['w'] = wv
             for i, s in enumerate(src_types):
-                params_copy[s] = p[i]
+                params[s] = p[i]
 
-            yield params_copy
+            yield params
 
 
 class TestBiroV2(unittest.TestCase):
@@ -114,18 +129,20 @@ class TestBiroV2(unittest.TestCase):
         self.assertTrue(np.allclose(ek_cpu, ek_gpu, **cmp))
 
     def test_EK_float(self):
-        """ Single precision EK test with gaussians """
-        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,nssrc=10,
-            dtype=np.float32,pipeline=Pipeline([RimeEK()])) as slvr:
+        """ Single precision EK test  """
+        for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
+            with solver(type=np.float32,
+                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
 
-            self.EK_test_impl(slvr)
+                self.EK_test_impl(slvr)
 
     def test_EK_double(self):
-        """ Double precision EK test with gaussians """
-        with solver(na=64,nchan=64,ntime=10,npsrc=20,ngsrc=20,nssrc=10,
-            dtype=np.float64,pipeline=Pipeline([RimeEK()])) as slvr:
+        """ Double precision EK test """
+        for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
+            with solver(type=np.float64,
+                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
 
-            self.EK_test_impl(slvr)
+                self.EK_test_impl(slvr)
 
     def B_sum_test_impl(self, slvr, weight_vector=False, cmp=None):
         """ Type independent implementation of the B Sum test """
@@ -155,7 +172,7 @@ class TestBiroV2(unittest.TestCase):
 
     def test_B_sum_float(self):
         """ Test the B sum float kernel """
-        for params in src_perms():
+        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}):
             with solver(dtype=np.float32, pipeline=Pipeline([RimeEK(),
                         RimeGaussBSum(weight_vector=params['w'])]),
                         **params) as slvr:
@@ -164,7 +181,7 @@ class TestBiroV2(unittest.TestCase):
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """
-        for params in src_perms():
+        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}):
             with solver(dtype=np.float64, pipeline=Pipeline([RimeEK(),
                         RimeGaussBSum(weight_vector=params['w'])]),
                         **params) as slvr:
@@ -174,4 +191,3 @@ class TestBiroV2(unittest.TestCase):
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV2)
     unittest.TextTestRunner(verbosity=2).run(suite)
-
