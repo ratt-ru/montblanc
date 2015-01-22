@@ -20,7 +20,11 @@ Montblanc contributors (sorted alphabetically)
 * **[Oleg Smirnov](https://github.com/o-smirnov)**
 
   * Theory
+  
+* Cyril Tasse
 
+  * Theory and Testing
+  
 * Jonathan Zwart
 
   * Theory and Testing
