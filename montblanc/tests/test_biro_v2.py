@@ -172,7 +172,7 @@ class TestBiroV2(unittest.TestCase):
 
     def test_B_sum_float(self):
         """ Test the B sum float kernel """
-        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}):
+        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
             with solver(dtype=np.float32, pipeline=Pipeline([RimeEK(),
                         RimeGaussBSum(weight_vector=params['w'])]),
                         **params) as slvr:
@@ -181,7 +181,7 @@ class TestBiroV2(unittest.TestCase):
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """
-        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}):
+        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
             with solver(dtype=np.float64, pipeline=Pipeline([RimeEK(),
                         RimeGaussBSum(weight_vector=params['w'])]),
                         **params) as slvr:
