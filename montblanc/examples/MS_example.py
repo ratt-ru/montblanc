@@ -31,6 +31,7 @@ if __name__ == '__main__':
     parser.add_argument('msfile', help='Measurement Set File')
     parser.add_argument('-np','--npsrc',dest='npsrc', type=int, default=10, help='Number of Point Sources')
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')
+    parser.add_argument('-ns','--nssrc',dest='nssrc', type=int, default=0, help='Number of Sersic Sources')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
     parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v2','v3'],
         help='BIRO Pipeline Version.')
@@ -52,7 +53,7 @@ if __name__ == '__main__':
     # store_cpu : indicates whether copies of the data passed into the
     #   shared data transfer_* methods should be stored on the shared data object
     with montblanc.get_biro_solver(args.msfile,
-        npsrc=args.npsrc, ngsrc=args.ngsrc, init_weights=None,
+        npsrc=args.npsrc, ngsrc=args.ngsrc, nssrc=args.nssrc, init_weights=None,
         weight_vector=False, store_cpu=False, version=args.version) as slvr:
 
         # Random point source coordinates in the l,m,n (brightness image) domain

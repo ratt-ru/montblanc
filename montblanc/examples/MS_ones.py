@@ -29,12 +29,14 @@ if __name__ == '__main__':
     parser.add_argument('msfile', help='Measurement Set File')
     parser.add_argument('-np','--npsrc',dest='npsrc', type=int, default=1, help='Number of Point Sources')
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')
+    parser.add_argument('-ns','--nssrc',dest='nssrc', type=int, default=0, help='Number of Gaussian Sources')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
 
     args = parser.parse_args(sys.argv[1:])
 
     # Get the BK pipeline and shared data.
-    with montblanc.get_biro_solver(args.msfile, npsrc=args.npsrc, ngsrc=args.ngsrc) as slvr:
+    with montblanc.get_biro_solver(args.msfile, npsrc=args.npsrc,
+        ngsrc=args.ngsrc, nssrc=args.nssrc) as slvr:
 
         # Create point sources at zeros
         l=slvr.ft(np.zeros(slvr.nsrc))
