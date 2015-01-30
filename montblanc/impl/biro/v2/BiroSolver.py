@@ -32,8 +32,8 @@ from montblanc.BaseSolver import DEFAULT_DTYPE
 class BiroSolver(BaseSolver):
     """ Shared Data implementation for BIRO """
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC, 
-	dtype=DEFAULT_DTYPE, pipeline=None, **kwargs):
+        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC,
+        dtype=DEFAULT_DTYPE, pipeline=None, **kwargs):
         """
         BiroSolver Constructor
 
@@ -48,8 +48,8 @@ class BiroSolver(BaseSolver):
                 Number of point sources.
             ngsrc : integer
                 Number of gaussian sources.
-	    nssrc : integer
-		Number of sersic (exponential) sources.
+            nssrc : integer
+                Number of sersic (exponential) sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
             pipeline : list of nodes
@@ -91,7 +91,7 @@ class BiroSolver(BaseSolver):
         # on frequency, while we're dealing with wavelengths.
         reg_prop('gauss_scale', ft, fwhm2int*np.sqrt(2)*np.pi)
         reg_prop('ref_wave', ft, 0.0)
-	reg_prop('two_pi', ft, 2*np.pi)
+        reg_prop('two_pi', ft, 2*np.pi)
 
         reg_prop('sigma_sqrd', ft, 1.0)
         reg_prop('X2', ft, 0.0)
@@ -104,7 +104,7 @@ class BiroSolver(BaseSolver):
         reg(name='lm', shape=(2,'nsrc'), dtype=ft)
         reg(name='brightness', shape=(5,'ntime','nsrc'), dtype=ft)
         reg(name='gauss_shape', shape=(3, 'ngsrc'), dtype=ft)
-	reg(name='sersic_shape', shape=(3, 'nssrc'), dtype=ft)
+        reg(name='sersic_shape', shape=(3, 'nssrc'), dtype=ft)
 
         reg(name='wavelength', shape=('nchan',), dtype=ft)
         reg(name='point_errors', shape=(2,'ntime','na'), dtype=ft)
@@ -121,7 +121,7 @@ class BiroSolver(BaseSolver):
         default antenna pairs for each timestep at each baseline.
         """
         # Create the antenna pair mapping, from upper triangle indices
-        # based on the number of antenna. 
+        # based on the number of antenna.
         slvr = self
 
         return np.tile(np.int32(np.triu_indices(slvr.na,1)),
@@ -153,7 +153,7 @@ class BiroSolver(BaseSolver):
         # ant1: 0 0 1 0 0 1 0 0 1 0 0 1
         # ant2: 1 2 2 1 2 2 1 2 2 1 2 2
 
-        slvr = self        
+        slvr = self
         ap = slvr.get_default_ant_pairs().reshape(2,slvr.ntime*slvr.nbl)
 
         C = 1
@@ -167,7 +167,7 @@ class BiroSolver(BaseSolver):
         ant1 = ap[1]*C + repeat
 
         if src is True or chan is True:
-            tile = np.tile(np.arange(C),slvr.ntime*slvr.nbl) 
+            tile = np.tile(np.arange(C),slvr.ntime*slvr.nbl)
 
             ant0 = np.repeat(ant0, C) + tile
             ant1 = np.repeat(ant1, C) + tile

@@ -77,7 +77,7 @@ void rime_jones_EK_impl(
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
     if(ANT >= NA || TIME >= NTIME || CHAN >= NCHAN)
-    	return;
+        return;
 
     __shared__ T u[BLOCKDIMZ][BLOCKDIMY];
     __shared__ T v[BLOCKDIMZ][BLOCKDIMY];
@@ -201,7 +201,7 @@ class RimeEK(Node):
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
-        	if slvr.is_float() else DOUBLE_PARAMS['maxregs'])        
+                if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
 
         kname = 'rime_jones_EK_float' \
             if slvr.is_float() is True else \
@@ -236,7 +236,7 @@ class RimeEK(Node):
 
         return {
             'block' : (chans_per_block, ants_per_block, times_per_block),
-            'grid'  : (chan_blocks, ant_blocks, time_blocks), 
+            'grid'  : (chan_blocks, ant_blocks, time_blocks),
         }
 
     def execute(self, solver, stream=None):

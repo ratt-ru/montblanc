@@ -217,7 +217,7 @@ class RimeMultiply(Node):
 
         self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, \
             **self.get_kernel_params(slvr))
-            
+
         slvr.jones_gpu = jones_output_gpu
 
     def post_execution(self, solver):

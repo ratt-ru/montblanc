@@ -48,8 +48,8 @@ class BiroSolver(BaseSolver):
                 Number of point sources.
             ngsrc : integer
                 Number of gaussian sources.
-	    nssrc : integer
-		Number of sersic sources.
+            nssrc : integer
+                Number of sersic sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
             pipeline : list of nodes
@@ -74,7 +74,7 @@ class BiroSolver(BaseSolver):
         default antenna pairs for each timestep at each baseline.
         """
         # Create the antenna pair mapping, from upper triangle indices
-        # based on the number of antenna. 
+        # based on the number of antenna.
         slvr = self
 
         return np.tile(np.int32(np.triu_indices(slvr.na,1)),
@@ -106,7 +106,7 @@ class BiroSolver(BaseSolver):
         # ant1: 0 0 1 0 0 1 0 0 1 0 0 1
         # ant2: 1 2 2 1 2 2 1 2 2 1 2 2
 
-        slvr = self        
+        slvr = self
         ap = slvr.get_default_ant_pairs().reshape(2,slvr.ntime*slvr.nbl)
 
         C = 1
@@ -120,7 +120,7 @@ class BiroSolver(BaseSolver):
         ant1 = ap[1]*C + repeat
 
         if src is True or chan is True:
-            tile = np.tile(np.arange(C),slvr.ntime*slvr.nbl) 
+            tile = np.tile(np.arange(C),slvr.ntime*slvr.nbl)
 
             ant0 = np.repeat(ant0, C) + tile
             ant1 = np.repeat(ant1, C) + tile

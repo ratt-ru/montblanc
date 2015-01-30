@@ -63,7 +63,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         ant2 = tm.getcol('ANTENNA2').reshape(ntime,nbl)
 
         expected_ant_shape = (ntime,nbl)
-        
+
         assert expected_ant_shape == ant1.shape, \
             'ANTENNA1 shape is %s != expected %s' % (ant1.shape,expected_ant_shape)
 

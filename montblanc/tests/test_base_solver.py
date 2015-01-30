@@ -54,8 +54,8 @@ class TestSolver(unittest.TestCase):
         pass
 
     def test_register_array_basic(self):
-    	""" """
-    	with montblanc.factory.get_base_solver(na=3,nchan=32,
+        """ """
+        with montblanc.factory.get_base_solver(na=3,nchan=32,
             ntime=10,npsrc=10,ngsrc=10) as slvr:
 
             name='uvw'
@@ -158,8 +158,8 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(isinstance(getattr(slvr, cpu_name), np.ndarray))
 
     def test_register_array_create_cpu_not_gpu(self):
-    	"""  Test array registration requiring a CPU array, but not a GPU array """
-    	with montblanc.factory.get_base_solver(na=3,nchan=32,
+        """  Test array registration requiring a CPU array, but not a GPU array """
+        with montblanc.factory.get_base_solver(na=3,nchan=32,
             ntime=10,npsrc=10,ngsrc=10) as slvr:
 
             name='uvw'
@@ -298,8 +298,8 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(getattr(slvr, gpu_name) == gpu_ary)
 
     def test_register_array_shape_and_dtype(self):
-    	""" Test array registration requiring shape and dtype attributes to be created """
-    	with montblanc.factory.get_base_solver(na=3,nchan=32,
+        """ Test array registration requiring shape and dtype attributes to be created """
+        with montblanc.factory.get_base_solver(na=3,nchan=32,
             ntime=10,npsrc=10,ngsrc=10) as slvr:
 
             name='uvw'

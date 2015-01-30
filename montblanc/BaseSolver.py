@@ -608,8 +608,8 @@ class BaseSolver(Solver):
 
         #if not hasattr(BaseSolver, name):
         if not BaseSolver.__dict__.has_key(name):
-	        # Create the descriptor for this property on the class instance
-	        setattr(BaseSolver, name, PropertyDescriptor(record_key=name, default=default))
+                # Create the descriptor for this property on the class instance
+            setattr(BaseSolver, name, PropertyDescriptor(record_key=name, default=default))
 
         # Set the descriptor on this object instance
         setattr(self, name, default)
@@ -671,7 +671,7 @@ class BaseSolver(Solver):
             'ntime' : slvr.ntime,
             'npsrc' : slvr.npsrc,
             'ngsrc' : slvr.ngsrc,
-	    'nssrc' : slvr.nssrc,
+            'nssrc' : slvr.nssrc,
             'nsrc'  : slvr.nsrc,
             'nvis' : slvr.nvis,
         }
@@ -752,7 +752,7 @@ class BaseSolver(Solver):
             '%-*s: %s' % (w,'Timesteps', self.ntime),
             '%-*s: %s' % (w,'Point Sources', self.npsrc),
             '%-*s: %s' % (w,'Gaussian Sources', self.ngsrc),
-	    '%-*s: %s' % (w,'Sersic Sources', self.nssrc),
+            '%-*s: %s' % (w,'Sersic Sources', self.nssrc),
             '%-*s: %s' % (w,'CPU Memory', montblanc.util.fmt_bytes(n_cpu_bytes)),
             '%-*s: %s' % (w,'GPU Memory', montblanc.util.fmt_bytes(n_gpu_bytes))]
 

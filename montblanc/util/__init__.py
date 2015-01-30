@@ -23,7 +23,7 @@ import numpy as np
 from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 
 def nr_of_baselines(na, auto_correlations=False):
-    """ Compute the number of baselines for the 
+    """ Compute the number of baselines for the
     given number of antenna. Can specify whether
     auto-correlations should be taken into
     account """
@@ -76,7 +76,7 @@ def fmt_bytes(nbytes):
         if nbytes < 1024.0:
             return "%3.1f%s" % (nbytes, x)
         nbytes /= 1024.0
-    
+
     return "%.1f%s" % (nbytes, 'TB')
 
 def array_bytes(shape, dtype):

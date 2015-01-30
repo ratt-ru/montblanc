@@ -86,7 +86,7 @@ void rime_gauss_B_sum_impl(
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
     if(BL >= NBL || TIME >= NTIME || CHAN >= NCHAN)
-        return;   
+        return;
 
     __shared__ T u[BLOCKDIMZ][BLOCKDIMY];
     __shared__ T v[BLOCKDIMZ][BLOCKDIMY];
@@ -98,7 +98,7 @@ void rime_gauss_B_sum_impl(
 
     __shared__ T e1[1];
     __shared__ T e2[1];
-    __shared__ T scale[1];    
+    __shared__ T scale[1];
 
     __shared__ T I[BLOCKDIMZ];
     __shared__ T Q[BLOCKDIMZ];
@@ -225,7 +225,7 @@ void rime_gauss_B_sum_impl(
         typename Tr::ct value = Po::make_ct(
             ant_two.x*ant_one.x - ant_two.y*ant_one.y,
             ant_two.x*ant_one.y + ant_two.y*ant_one.x);
-  
+
         Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
         Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
 
@@ -240,7 +240,7 @@ void rime_gauss_B_sum_impl(
 
         __syncthreads();
     }
- 
+
     for(int SRC=NPSRC+NGSRC;SRC<NSRC;++SRC)
     {
         // The following loads effect the global load efficiency.
@@ -260,21 +260,21 @@ void rime_gauss_B_sum_impl(
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
             i = SRC-NPSRC-NGSRC;  e1[0] = sersic_shape[i];
-            i += NSSRC;     	  e2[0] = sersic_shape[i];
-            i += NSSRC;     	  scale[0] = sersic_shape[i];
+            i += NSSRC;           e2[0] = sersic_shape[i];
+            i += NSSRC;           scale[0] = sersic_shape[i];
         }
 
         __syncthreads();
 
-	// sersic source in  the Fourier domain
-	T u1 = u[threadIdx.z][threadIdx.y]*(T(1.0)+e1[0]) + v[threadIdx.z][threadIdx.y]*e2[0];
-	u1 *= T(TWO_PI)/wl[threadIdx.x];
-	u1 *= scale[0]/(T(1.0)-e1[0]*e1[0]-e2[0]*e2[0]);
+        // sersic source in  the Fourier domain
+        T u1 = u[threadIdx.z][threadIdx.y]*(T(1.0)+e1[0]) + v[threadIdx.z][threadIdx.y]*e2[0];
+        u1 *= T(TWO_PI)/wl[threadIdx.x];
+        u1 *= scale[0]/(T(1.0)-e1[0]*e1[0]-e2[0]*e2[0]);
         T v1 = u[threadIdx.z][threadIdx.y]*e2[0] + v[threadIdx.z][threadIdx.y]*(T(1.0)-e1[0]);
-	v1 *= T(TWO_PI)/wl[threadIdx.x];
-	v1 *= scale[0]/(T(1.0)-e1[0]*e1[0]-e2[0]*e2[0]);
+        v1 *= T(TWO_PI)/wl[threadIdx.x];
+        v1 *= scale[0]/(T(1.0)-e1[0]*e1[0]-e2[0]*e2[0]);
         T sersic_factor = T(1.0) + u1*u1+v1*v1;
-	sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));	
+        sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));
 
         // Get the complex scalar for antenna two and multiply
         // in sersic factor term
@@ -290,7 +290,7 @@ void rime_gauss_B_sum_impl(
         typename Tr::ct value = Po::make_ct(
             ant_two.x*ant_one.x - ant_two.y*ant_one.y,
             ant_two.x*ant_one.y + ant_two.y*ant_one.x);
-  
+
         Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
         Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
 
@@ -338,7 +338,7 @@ void rime_gauss_B_sum_impl(
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
-    i = (TIME*NBL + BL)*NCHAN + CHAN;    
+    i = (TIME*NBL + BL)*NCHAN + CHAN;
     chi_sqrd_result[i] = Isum.x + Isum.y;
 }
 
@@ -428,7 +428,7 @@ class RimeGaussBSum(Node):
 
         return {
             'block' : (chans_per_block, bl_per_block, times_per_block),
-            'grid'  : (chan_blocks, bl_blocks, time_blocks), 
+            'grid'  : (chan_blocks, bl_blocks, time_blocks),
         }
 
     def execute(self, solver, stream=None):
@@ -439,10 +439,10 @@ class RimeGaussBSum(Node):
         gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
             else slvr.gauss_shape_gpu
 
-	sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
-	    else slvr.sersic_shape_gpu
+        sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
+            else slvr.sersic_shape_gpu
 
-        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic, 
+        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic,
             slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
             slvr.weight_vector_gpu,
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,

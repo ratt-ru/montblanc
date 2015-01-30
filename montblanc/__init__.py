@@ -33,59 +33,59 @@ import montblanc.util
 from montblanc.tests import test
 
 def get_montblanc_path():
-	""" Return the current path in which montblanc is installed """
-	return os.path.dirname(inspect.getfile(montblanc))
+    """ Return the current path in which montblanc is installed """
+    return os.path.dirname(inspect.getfile(montblanc))
 
 def get_source_path():
-	return os.path.join(get_montblanc_path(), 'src')
+    return os.path.join(get_montblanc_path(), 'src')
 
 def get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs):
-	"""
-	get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs)
+    """
+    get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs)
 
-	Returns a solver suitable for solving the BIRO RIME.
+    Returns a solver suitable for solving the BIRO RIME.
 
-	Parameters
-	----------
-	msfile : string
-		Name of the measurement set file.
-	npsrc : number
-		Number of point sources.
-	ngsrc : number
-		Number of gaussian sources.
-	nssrc : number
-		Number of sersic sources.
-	dtype : The floating point data type.
-		Should be np.float32 or np.float64.
-	version : string
-		Should be either 'v1' or 'v2'
+    Parameters
+    ----------
+    msfile : string
+            Name of the measurement set file.
+    npsrc : number
+            Number of point sources.
+    ngsrc : number
+            Number of gaussian sources.
+    nssrc : number
+            Number of sersic sources.
+    dtype : The floating point data type.
+            Should be np.float32 or np.float64.
+    version : string
+            Should be either 'v1' or 'v2'
 
-	Keyword Arguments
-	-----------------
-	init_weights : string
-		Indicates how the weight vector should be initialised from the Measurementset.
-		None - Don't initialise the weight vector.
-		'sigma' - Initialise from 'SIGMA_SPECTRUM' if present, else 'SIGMA'
-		'weight' - Initialise from 'WEIGHT_SPECTRUM' if present, else 'WEIGHT'
-	weight_vector : boolean
-		True if the chi squared should be computed using a weighting for each value.
-		False if it should be computed with a single sigma squared value.
-	store_cpu : boolean
-		True if copies of the numpy arrays should be stored on the shared data object
-		when using the shared data object's transfer_* methods. Otherwise False.
-	context - pycuda.driver.Context.
-		The CUDA context to execute on If left blank, the default context
-		will be selected.
+    Keyword Arguments
+    -----------------
+    init_weights : string
+            Indicates how the weight vector should be initialised from the Measurementset.
+            None - Don't initialise the weight vector.
+            'sigma' - Initialise from 'SIGMA_SPECTRUM' if present, else 'SIGMA'
+            'weight' - Initialise from 'WEIGHT_SPECTRUM' if present, else 'WEIGHT'
+    weight_vector : boolean
+            True if the chi squared should be computed using a weighting for each value.
+            False if it should be computed with a single sigma squared value.
+    store_cpu : boolean
+            True if copies of the numpy arrays should be stored on the shared data object
+            when using the shared data object's transfer_* methods. Otherwise False.
+    context - pycuda.driver.Context.
+            The CUDA context to execute on If left blank, the default context
+            will be selected.
 
-	Returns
-	-------
-	A solver
-	"""
+    Returns
+    -------
+    A solver
+    """
 
-	import montblanc.factory
+    import montblanc.factory
 
-	return montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
-		npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
+    return montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
+            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """

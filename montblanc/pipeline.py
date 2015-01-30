@@ -44,7 +44,7 @@ class Pipeline:
             ProcessingNode1(), ProcessingNode2(), CleanupNode()])
         """
         if node_list is None:
-        	node_list = [NullNode()]
+            node_list = [NullNode()]
 
         if type(node_list) is not list:
             raise TypeError, 'node_list argument is not a list'
@@ -177,4 +177,4 @@ class Pipeline:
         return success
 
     def __str__(self):
-    	return ' '.join([node.description() for node in self.pipeline])
+        return ' '.join([node.description() for node in self.pipeline])

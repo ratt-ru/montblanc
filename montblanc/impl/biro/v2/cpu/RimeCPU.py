@@ -125,14 +125,14 @@ class RimeCPU(object):
                     'v1':v1[:,:,:,np.newaxis],
                     'scale_uv':(slvr.two_pi/slvr.wavelength_cpu)[np.newaxis,np.newaxis,np.newaxis,:],
                     'R':(R/(1-e1*e1-e2*e2))[np.newaxis,np.newaxis,:,np.newaxis]})\
-		    .reshape(slvr.ntime,slvr.nbl,slvr.nssrc,slvr.nchan)
+                    .reshape(slvr.ntime,slvr.nbl,slvr.nssrc,slvr.nchan)
 
-	    return ne.evaluate('1/(den*sqrt(den))',
-		{ 'den' : den[:,:,:,:] })
-	    
+            return ne.evaluate('1/(den*sqrt(den))',
+                { 'den' : den[:,:,:,:] })
+
         except AttributeError as e:
             rethrow_attribute_exception(e)
-	
+
 
     def compute_k_jones_scalar_per_ant(self):
         """
@@ -156,9 +156,9 @@ class RimeCPU(object):
             # w*n+v*m+u*l. Outer product creates array of dim ntime x na x nsrcs
             phase = (np.outer(w,n) + np.outer(v, m) + np.outer(u, l)) \
                     .reshape(slvr.ntime, slvr.na, slvr.nsrc)
-            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc)            
+            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc)
 
-            # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength). Dim. na x ntime x nchan x nsrcs 
+            # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength). Dim. na x ntime x nchan x nsrcs
             phase = ne.evaluate('exp(2*pi*1j*p/wl)',
                 { 'p' : phase[:,:,:,np.newaxis],
                 'wl' : wave[np.newaxis,np.newaxis,np.newaxis,:],
@@ -209,7 +209,7 @@ class RimeCPU(object):
                 #ne.evaluate('kjones*complex(gshape.real,0.0)',
                 #    {'kjones' : gsrc_view, 'gshape':gshape }, out=gsrc_view)
 
-	    # Add in the shape terms of the sersic sources.
+            # Add in the shape terms of the sersic sources.
             if slvr.nssrc > 0:
                 k_jones_per_bl[:,:,slvr.npsrc+slvr.ngsrc:slvr.npsrc+slvr.ngsrc+slvr.nssrc:,:] *= self.compute_sersic_shape()
 
@@ -231,7 +231,7 @@ class RimeCPU(object):
             E_p = ne.evaluate('sqrt((l - lp)**2 + (m - mp)**2)', {
                 'l' : slvr.lm_cpu[0], 'm' : slvr.lm_cpu[1],
                 'lp' : slvr.point_errors_cpu[0,:,:,np.newaxis],
-                'mp' : slvr.point_errors_cpu[1,:,:,np.newaxis]                
+                'mp' : slvr.point_errors_cpu[1,:,:,np.newaxis]
                 })
 
             assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc)
@@ -322,7 +322,7 @@ class RimeCPU(object):
         Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        
+
         per_bl_ek_scalar = self.compute_ek_jones_scalar_per_bl()
         b_jones = self.compute_b_jones()
 
@@ -340,7 +340,7 @@ class RimeCPU(object):
         Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        
+
         per_bl_k_scalar = self.compute_k_jones_scalar_per_bl()
         b_jones = self.compute_b_jones()
 
@@ -410,10 +410,10 @@ class RimeCPU(object):
             # Multiply by the weight vector if required
             if weight_vector is True:
                 ne.evaluate('re*wv', {'re':re,'wv':wv}, out=re)
-                ne.evaluate('im*wv', {'im':im,'wv':wv}, out=im)                    
+                ne.evaluate('im*wv', {'im':im,'wv':wv}, out=im)
 
             # Reduces a dimension so that we have (nbl,nchan,ntime)
-            # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) + 
+            # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) +
             # ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
 
             # Sum the real and imaginary terms together

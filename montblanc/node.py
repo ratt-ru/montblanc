@@ -58,7 +58,7 @@ class Node(object):
                 Contains data shared amongst pipeline components
             stream - cuda stream
                 Asynchronous stream to execute this node on. Can be None
-                indicating asynchronous transfers should not take place. 
+                indicating asynchronous transfers should not take place.
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).initialise.__name__)
 
@@ -73,7 +73,7 @@ class Node(object):
                 Contains data shared amongst pipeline components
             stream - cuda stream
                 Asynchronous stream to execute this node on. Can be None
-                indicating asynchronous transfers should not take place. 
+                indicating asynchronous transfers should not take place.
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).shutdown.__name__)
 
@@ -83,13 +83,13 @@ class Node(object):
         The derived class should implement the code that the node should
         execute. Most likely this will be a PyCUDA GPU kernel of some sort,
         but the pipeline model is general enough to support CPU calls etc.
-        
+
         Arguments:
             solver - object derived from BaseSolver
                 Contains data shared amongst pipeline components
             stream - cuda stream
                 Asynchronous stream to execute this node on. Can be None
-                indicating asynchronous transfers should not take place. 
+                indicating asynchronous transfers should not take place.
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).execute.__name__)
 
@@ -104,7 +104,7 @@ class Node(object):
                 Contains data shared amongst pipeline components
             stream - cuda stream
                 Asynchronous stream to execute this node on. Can be None
-                indicating asynchronous transfers should not take place. 
+                indicating asynchronous transfers should not take place.
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).pre_execution.__name__)
 
@@ -118,7 +118,7 @@ class Node(object):
                 Contains data shared amongst pipeline components
             stream - cuda stream
                 Asynchronous stream to execute this node on. Can be None
-                indicating asynchronous transfers should not take place. 
+                indicating asynchronous transfers should not take place.
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).post_execution.__name__)
 
@@ -127,7 +127,7 @@ class Node(object):
 
     def __not_implemented_string(self, function_name):
         return ' '.join(['method', function_name, 'not implemented in class',type(self).__name__,'derived from abstract class', Node.__name__])
-               
+
 class NullNode(Node):
     def __init__(self): super(NullNode, self).__init__()
     def initialise(self, solver, stream=None):
