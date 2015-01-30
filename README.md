@@ -54,6 +54,12 @@ You could also try run
 
 which sets up things based on the supplied Measurement Set, with 10 point and 10 gaussian sources. It performs 100 iterations of the pipeline.
 
+## Citing Montblanc
+
+If you use Montblanc and find it useful, you may wish to consider citing the related paper. It is currently undergoing review, but a preprint should be available on arXiv soon.
+
+More information on BIRO can be found in this arXiv [preprint][biro] .
+
 [pycuda]:http://mathema.tician.de/software/pycuda/
 [pytools]:https://pypi.python.org/pypi/pytools
 [moderngpu]:https://github.com/nvlabs/moderngpu
@@ -61,3 +67,4 @@ which sets up things based on the supplied Measurement Set, with 10 point and 10
 [pyrap]:https://code.google.com/p/pyrap/
 [casacore]:https://code.google.com/p/casacore/
 [ska-ppa]:https://launchpad.net/~ska-sa/+archive/main
+[biro]:http://arxiv.org/abs/1501.05304
