@@ -277,6 +277,72 @@ class BaseSolver(Solver):
             'int' : int
         }[sdtype]
 
+    def viable_dim_config(self, bytes_available, dim_ord):
+        """
+        Returns the number of timesteps possible, given the registered arrays
+        and a memory budget defined by bytes_available
+
+        Parameters
+        ----------------
+        bytes_available : int
+            The memory budget, or available number of bytes
+            for solving the problem.
+        dim_ord : list
+            list of dimension string names that the problem should be
+            subdivided by.
+
+            e.g. ['ntime', 'nbl', 'nchan']
+
+        For a dim_ord = ['ntime', 'nbl', 'nchan'], this method will try and fit
+        a ntime x nbl x nchan problem into the available number of bytes.
+        If this is not possible, it will first set ntime=1, and then try fit an
+        1 x nbl x nchan problem into the budget, then a 1 x 1 x nchan
+        problem.
+        """
+
+        import copy
+
+        if not isinstance(dim_ord, list):
+            raise TypeError('dim_ord should be a list')
+
+        # Don't accept non-negative memory budgets
+        if bytes_available < 0:
+            bytes_available = 0
+
+        P = copy.deepcopy(self.get_properties())
+
+        def bytes_required(props):
+            return np.sum(
+                np.array([
+                    np.product(
+                        montblanc.util.get_numeric_shape(
+                            t.sshape, props)
+                    )*np.dtype(t.dtype).itemsize
+                    for t in self.arrays.values()]))
+
+        bytes_used = bytes_required(P)
+
+        # While more bytes are used than are available, set
+        # dimensions to one in the order specified by the
+        # dim_ord argument.
+        while bytes_used > bytes_available:
+            try:
+                dim = dim_ord.pop(0)
+            except IndexError:
+                raise ValueError(
+                    'No more dimensions available for reducing '
+                    'the problem size. Unable to fit the problem '
+                    'within the specified memory budget!')
+
+            # Can't fit everything into memory,
+            # set this dimension to 1 and re-evaluate
+            P[dim] = 1
+            bytes_used = bytes_required(P)
+
+        #print 'used: %s avail: %s dim: %s' % (bytes_used, bytes_available, dim)
+
+        return P
+
     def viable_timesteps(self, bytes_available):
         """
         Returns the number of timesteps possible, given the registered arrays
