@@ -23,12 +23,12 @@ import logging
 import unittest
 import numpy as np
 import time
-import sys
 
 import montblanc.factory
 
 from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
 from montblanc.impl.biro.v4.cpu.RimeCPU import RimeCPU
 from montblanc.pipeline import Pipeline
@@ -200,6 +200,13 @@ class TestBiroV4(unittest.TestCase):
 
             P = slvr.viable_dim_config(512*1024, ['ntime', 'nbl', 'nchan'])
             print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+
+    def test_transpose(self):
+        with solver(na=4, npsrc=10, ntime=2, nchan=16,
+            weight_vector=True,
+            pipeline=Pipeline([MatrixTranspose()])) as slvr:
+
+            slvr.solve()
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV4)
