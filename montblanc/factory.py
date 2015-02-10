@@ -28,6 +28,7 @@ from montblanc.pipeline import Pipeline
 VERSION_ONE = 'v1'
 VERSION_TWO = 'v2'
 VERSION_THREE = 'v3'
+VERSION_FOUR = 'v4'
 DEFAULT_VERSION = VERSION_TWO
 
 MS_SD_TYPE = 'ms'
@@ -35,7 +36,7 @@ TEST_SD_TYPE = 'test'
 BIRO_SD_TYPE = 'biro'
 
 deprecated_biro_versions = [VERSION_ONE]
-valid_biro_versions = [VERSION_TWO, VERSION_THREE]
+valid_biro_versions = [VERSION_TWO, VERSION_THREE, VERSION_FOUR]
 valid_biro_solver_types = [MS_SD_TYPE, TEST_SD_TYPE, BIRO_SD_TYPE]
 
 def check_msfile(msfile):
@@ -156,6 +157,11 @@ def get_biro_pipeline(**kwargs):
         from montblanc.impl.biro.v3.gpu.RimeGaussBSum import RimeGaussBSum
         # Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
         return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)])
+    elif version == VERSION_FOUR:
+        from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
+        from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+        # Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
+        return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)])
 
     raise Exception, 'Invalid Version %s' % version
 
@@ -164,7 +170,9 @@ def create_biro_solver_from_ms(slvr_class_type, **kwargs):
     check_msfile(kwargs.get('msfile',None))
     version = kwargs.get('version')
 
-    if version == VERSION_THREE:
+    if version == VERSION_FOUR:
+        from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
+    elif version == VERSION_THREE:
         from montblanc.impl.biro.v3.loaders import MeasurementSetLoader
     elif version == VERSION_TWO:
         from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
@@ -206,7 +214,8 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     uvw = shape_list([30.*r, 25.*r, 20.*r],
             shape=slvr.uvw_shape, dtype=slvr.uvw_dtype)
     # Normalise Antenna 0 for version two
-    if version in [VERSION_TWO, VERSION_THREE]: uvw[:,:,0] = 0
+    if version in [VERSION_TWO, VERSION_THREE, VERSION_FOUR]:
+        uvw[:,:,0] = 0
     slvr.transfer_uvw(uvw)
 
     # Point source coordinates in the l,m,n (sky image) domain
@@ -234,7 +243,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
             slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
     if ngsrc > 0: slvr.transfer_gauss_shape(gauss_shape)
 
-    if version in [VERSION_TWO, VERSION_THREE]:
+    if version in [VERSION_TWO, VERSION_THREE, VERSION_FOUR]:
         # Sersic (exponential) shape matrix
         e1=ft(np.zeros((nssrc)))
         e2=ft(np.zeros((nssrc)))
@@ -261,7 +270,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     slvr.transfer_ant_pairs(slvr.get_default_ant_pairs())
 
-    if version in [VERSION_TWO, VERSION_THREE]:
+    if version in [VERSION_TWO, VERSION_THREE, VERSION_FOUR]:
         # Generate random jones scalar values
         jones_scalar = make_random(slvr.jones_scalar_shape,
                 slvr.jones_scalar_dtype)
@@ -312,6 +321,8 @@ def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, nssrc=0, dtype=np.float32,
     elif version == VERSION_THREE:
         from montblanc.impl.biro.v3.CompositeBiroSolver \
         import CompositeBiroSolver as BiroSolver
+    elif version == VERSION_FOUR:
+        from montblanc.impl.biro.v4.BiroSolver import BiroSolver
     else:
         raise Exception, 'Invalid version %s' % version
 
