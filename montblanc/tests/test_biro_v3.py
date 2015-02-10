@@ -93,21 +93,6 @@ class TestBiroV3(unittest.TestCase):
             chi_sqrd_result_cpu = RimeCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
             self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
-    def test_smart_budget(self):
-        wv = True
-
-        with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
-            weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
-
-            P = slvr.viable_dim_config(10*1024*1024, ['ntime', 'nbl', 'nchan'])
-            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
-
-            P = slvr.viable_dim_config(1*1024*1024, ['ntime', 'nbl', 'nchan'])
-            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
-
-            P = slvr.viable_dim_config(512*1024, ['ntime', 'nbl', 'nchan'])
-            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
-
 
     def test_time(self, cmp=None):
         """ Test for timing purposes """

@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2015 Simon Perkins
+#
+# This file is part of montblanc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, see <http://www.gnu.org/licenses/>.
+
+import logging
+import unittest
+import numpy as np
+import time
+import sys
+
+import montblanc.factory
+
+from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
+from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+
+from montblanc.impl.biro.v4.cpu.RimeCPU import RimeCPU
+from montblanc.pipeline import Pipeline
+
+def solver(**kwargs):
+    return montblanc.factory.get_biro_solver('test',version='v4',**kwargs)
+
+class TestBiroV4(unittest.TestCase):
+    """
+    TestRimes class defining the unit test cases for montblanc
+    """
+
+    def setUp(self):
+        """ Set up each test case """
+        np.random.seed(int(time.time()) & 0xFFFFFFFF)
+
+        # Add a handler that outputs INFO level logging
+        fh = logging.FileHandler('test.log')
+        fh.setLevel(logging.INFO)
+
+        montblanc.log.addHandler(fh)
+        montblanc.log.setLevel(logging.INFO)
+
+    def tearDown(self):
+        """ Tear down each test case """
+        pass
+
+    def test_smart_budget(self):
+        wv = True
+
+        with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
+            weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
+
+            P = slvr.viable_dim_config(10*1024*1024, ['ntime', 'nbl', 'nchan'])
+            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+
+            P = slvr.viable_dim_config(1*1024*1024, ['ntime', 'nbl', 'nchan'])
+            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+
+            P = slvr.viable_dim_config(512*1024, ['ntime', 'nbl', 'nchan'])
+            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+
+if __name__ == '__main__':
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV4)
+    unittest.TextTestRunner(verbosity=2).run(suite)
