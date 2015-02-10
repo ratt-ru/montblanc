@@ -36,6 +36,8 @@ from montblanc.BaseSolver import DEFAULT_NGSRC
 from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
+from montblanc.impl.biro.v2.BiroSolver import BiroSolver as BiroSolverV2
+
 from montblanc.impl.biro.v3.BiroSolver import BiroSolver
 
 def ary_dict(name,shape,dtype,cpu=True,gpu=False):
@@ -476,61 +478,10 @@ class CompositeBiroSolver(BaseSolver):
 
         return types.MethodType(transfer,self)
 
-    def get_default_ant_pairs(self):
-        """
-        Return an np.array(shape=(2, ntime, nbl), dtype=np.int32]) containing the
-        default antenna pairs for each timestep at each baseline.
-        """
-        # Create the antenna pair mapping, from upper triangle indices
-        # based on the number of antenna.
-        slvr = self
-
-        return np.tile(np.int32(np.triu_indices(slvr.na,1)),
-            slvr.ntime).reshape(2,slvr.ntime,slvr.nbl)
-
-    def get_flat_ap_idx(self, src=False, chan=False):
-        """
-        Returns a flattened antenna pair index
-
-        Parameters
-        ----------
-        src : boolean
-            Expand the index over the source dimension
-        chan : boolean
-            Expand the index over the channel dimension
-        """
-        # TODO: Test for src=False and chan=True, and src=True and chan=False
-        # This works for
-        # - src=True and chan=True.
-        # - src=False and chan=False.
-
-        # The flattened antenna pair array will look something like this.
-        # It is based on 2 x ntime x nbl. Here we have 3 baselines and
-        # 4 timesteps.
-        #
-        #            timestep
-        #       0 0 0 1 1 1 2 2 2 3 3 3
-        #
-        # ant1: 0 0 1 0 0 1 0 0 1 0 0 1
-        # ant2: 1 2 2 1 2 2 1 2 2 1 2 2
-
-        slvr = self
-        ap = slvr.get_default_ant_pairs().reshape(2,slvr.ntime*slvr.nbl)
-
-        C = 1
-
-        if src is True: C *= slvr.nsrc
-        if chan is True: C *= slvr.nchan
-
-        repeat = np.repeat(np.arange(slvr.ntime),slvr.nbl)*slvr.na*C
-
-        ant0 = ap[0]*C + repeat
-        ant1 = ap[1]*C + repeat
-
-        if src is True or chan is True:
-            tile = np.tile(np.arange(C),slvr.ntime*slvr.nbl)
-
-            ant0 = np.repeat(ant0, C) + tile
-            ant1 = np.repeat(ant1, C) + tile
-
-        return ant0, ant1
+    # Take these methods from the v2 BiroSolver
+    get_default_base_ant_pairs = \
+        BiroSolverV2.__dict__['get_default_base_ant_pairs']
+    get_default_ant_pairs = \
+        BiroSolverV2.__dict__['get_default_ant_pairs']
+    get_ap_idx = \
+        BiroSolverV2.__dict__['get_ap_idx']

@@ -115,61 +115,79 @@ class BiroSolver(BaseSolver):
         reg(name='vis', shape=(4,'ntime','nbl','nchan'), dtype=ct)
         reg(name='chi_sqrd_result', shape=('ntime','nbl','nchan'), dtype=ft)
 
+    def get_default_base_ant_pairs(self):
+        """
+        Return an np.array(shape=(2, nbl), dtype=np.int32]) containing the
+        default antenna pairs for each baseline.
+        """
+        return np.int32(np.triu_indices(self.na, 1))
+
     def get_default_ant_pairs(self):
         """
-        Return an np.array(shape=(2, ntime, nbl), dtype=np.int32]) containing the
-        default antenna pairs for each timestep at each baseline.
+        Return an np.array(shape=(2, ntime, nbl), dtype=np.int32])
+        containing the default antenna pairs for each timestep
+        at each baseline.
         """
         # Create the antenna pair mapping, from upper triangle indices
         # based on the number of antenna.
+        return np.tile(self.get_default_base_ant_pairs(), self.ntime) \
+            .reshape(2, self.ntime, self.nbl)
+
+    def get_ap_idx(self, src=False, chan=False):
+        """
+        This method produces an index
+        which arranges per antenna values into a
+        per baseline configuration, using the default
+        per timestep and baseline antenna pair configuration.
+        Thus, indexing an array with shape (na) will produce
+        a view of the values in this array with shape (2, nbl).
+
+        Consequently, this method is suitable for indexing
+        an array of shape (ntime, na). Specifiying source
+        and channel dimensions allows indexing of an array
+        of shape (ntime, na, nsrc, nchan).
+
+        Using this index on an array of (ntime, na)
+        produces a (2, ntime, nbl) array,
+        or (2, ntime, nbl, nsrc, nchan) if source
+        and channel are also included.
+
+        The values for the first antenna are in position 0, while
+        those for the second are in position 1.
+
+        >>> ap = slvr.get_ap_idx()
+        >>> u_ant = np.random.random(size=(ntime,na))
+        >>> u_bl = u_ant[ap][1] - u_ant[ap][0]
+        >>> assert u_bl.shape == (2, ntime, nbl)
+        """
+
         slvr = self
 
-        return np.tile(np.int32(np.triu_indices(slvr.na,1)),
-            slvr.ntime).reshape(2,slvr.ntime,slvr.nbl)
+        newdim = lambda d: [np.newaxis for n in range(d)]
 
-    def get_flat_ap_idx(self, src=False, chan=False):
-        """
-        Returns a flattened antenna pair index
+        sed = (1 if src else 0)          # Extra source dimension
+        ced = (1 if chan else 0)       # Extra channel dimension
+        ned = sed + ced                 # Nr of extra dimensions
+        all = slice(None, None, 1)   # all slice
+        idx = []                                # Index we're returning
 
-        Parameters
-        ----------
-        src : boolean
-            Expand the index over the source dimension
-        chan : boolean
-            Expand the index over the channel dimension
-        """
-        # TODO: Test for src=False and chan=True, and src=True and chan=False
-        # This works for
-        # - src=True and chan=True.
-        # - src=False and chan=False.
+        # Create the time index, [np.newaxis,:,np.newaxis] + [...]
+        time_slice = tuple([np.newaxis, all, np.newaxis] + newdim(ned))
+        idx.append(np.arange(slvr.ntime)[time_slice])
 
-        # The flattened antenna pair array will look something like this.
-        # It is based on 2 x ntime x nbl. Here we have 3 baselines and
-        # 4 timesteps.
-        #
-        #            timestep
-        #       0 0 0 1 1 1 2 2 2 3 3 3
-        #
-        # ant1: 0 0 1 0 0 1 0 0 1 0 0 1
-        # ant2: 1 2 2 1 2 2 1 2 2 1 2 2
+        # Create the antenna pair index, [:, np.newaxis, :] + [...]
+        ap_slice = tuple([all, np.newaxis, all] + newdim(ned))
+        idx.append(self.get_default_base_ant_pairs()[ap_slice])
 
-        slvr = self
-        ap = slvr.get_default_ant_pairs().reshape(2,slvr.ntime*slvr.nbl)
+        # Create the source index, [np.newaxis,np.newaxis,np.newaxis,:] + [...]
+        if src is True:
+            src_slice = tuple(newdim(3) + [all] + newdim(ced))
+            idx.append(np.arange(slvr.nsrc)[src_slice])
 
-        C = 1
+        # Create the channel index,
+        # [np.newaxis,np.newaxis,np.newaxis] + [...] + [:]
+        if chan is True:
+            chan_slice = tuple(newdim(3 + sed) + [all])
+            idx.append(np.arange(slvr.nchan)[chan_slice])
 
-        if src is True: C *= slvr.nsrc
-        if chan is True: C *= slvr.nchan
-
-        repeat = np.repeat(np.arange(slvr.ntime),slvr.nbl)*slvr.na*C
-
-        ant0 = ap[0]*C + repeat
-        ant1 = ap[1]*C + repeat
-
-        if src is True or chan is True:
-            tile = np.tile(np.arange(C),slvr.ntime*slvr.nbl)
-
-            ant0 = np.repeat(ant0, C) + tile
-            ant1 = np.repeat(ant1, C) + tile
-
-        return ant0, ant1
+        return tuple(idx)
