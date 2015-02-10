@@ -149,7 +149,7 @@ class BiroSolver(BaseSolver):
 
         Using this index on an array of (ntime, na)
         produces a (2, ntime, nbl) array,
-        or (2, ntime, nbl, nsrc, nchan) if source
+        or (2, nsrc, ntime, nbl, nchan) if source
         and channel are also included.
 
         The values for the first antenna are in position 0, while
@@ -171,23 +171,26 @@ class BiroSolver(BaseSolver):
         all = slice(None, None, 1)   # all slice
         idx = []                                # Index we're returning
 
-        # Create the time index, [np.newaxis,:,np.newaxis] + [...]
-        time_slice = tuple([np.newaxis, all, np.newaxis] + newdim(ned))
-        idx.append(np.arange(slvr.ntime)[time_slice])
-
-        # Create the antenna pair index, [:, np.newaxis, :] + [...]
-        ap_slice = tuple([all, np.newaxis, all] + newdim(ned))
-        idx.append(self.get_default_base_ant_pairs()[ap_slice])
-
-        # Create the source index, [np.newaxis,np.newaxis,np.newaxis,:] + [...]
+        # Create the source index, [np.newaxis,:,np.newaxis,np.newaxis] + [...]
         if src is True:
-            src_slice = tuple(newdim(3) + [all] + newdim(ced))
+            src_slice = tuple(newdim(1) + [all] + newdim(2) + newdim(ced))
             idx.append(np.arange(slvr.nsrc)[src_slice])
 
+        # Create the time index, [np.newaxis] + [...]  + [:,np.newaxis] + [...]
+        time_slice = tuple(newdim(1) + newdim(sed) +
+            [all, np.newaxis] + newdim(ced))
+        idx.append(np.arange(slvr.ntime)[time_slice])
+
+        # Create the antenna pair index, [:] + [...]  + [np.newaxis,:] + [...]
+        ap_slice = tuple([all] + newdim(sed) +
+            [np.newaxis, all] + newdim(ced))
+        idx.append(self.get_default_base_ant_pairs()[ap_slice])
+
         # Create the channel index,
-        # [np.newaxis,np.newaxis,np.newaxis] + [...] + [:]
+        # Create the antenna pair index, [np.newaxis] + [...]  + [np.newaxis,np.newaxis] + [:]
         if chan is True:
-            chan_slice = tuple(newdim(3 + sed) + [all])
+            chan_slice = tuple(newdim(1) + newdim(sed) +
+                [np.newaxis, np.newaxis] + [all])
             idx.append(np.arange(slvr.nchan)[chan_slice])
 
         return tuple(idx)

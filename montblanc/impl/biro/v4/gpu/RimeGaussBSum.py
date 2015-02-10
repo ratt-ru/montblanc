@@ -142,20 +142,20 @@ void rime_gauss_B_sum_impl(
         // brightness varies by time (and source), not baseline or channel
         if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = TIME*NSRC + SRC;  I[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      Q[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      U[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      V[threadIdx.z] = brightness[i];
+            i = SRC*NTIME + TIME;   I[threadIdx.z] = brightness[i];
+            i += NSRC*NTIME;          Q[threadIdx.z] = brightness[i];
+            i += NSRC*NTIME;          U[threadIdx.z] = brightness[i];
+            i += NSRC*NTIME;          V[threadIdx.z] = brightness[i];
         }
 
         __syncthreads();
 
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
-        i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
         // Get the complex scalar for antenna one and conjugate it
-        i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
 
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
@@ -186,10 +186,10 @@ void rime_gauss_B_sum_impl(
         // brightness varies by time (and source), not baseline or channel
         if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = TIME*NSRC + SRC;  I[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      Q[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      U[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      V[threadIdx.z] = brightness[i];
+            i = SRC*NTIME + TIME;   I[threadIdx.z] = brightness[i];
+            i += NSRC*NTIME;          Q[threadIdx.z] = brightness[i];
+            i += NSRC*NTIME;          U[threadIdx.z] = brightness[i];
+            i += NSRC*NTIME;          V[threadIdx.z] = brightness[i];
         }
 
         // gaussian shape only varies by source. Shape parameters
@@ -213,11 +213,11 @@ void rime_gauss_B_sum_impl(
 
         // Get the complex scalar for antenna two and multiply
         // in the exponent term
-        i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
         ant_two.x *= exp; ant_two.y *= exp;
         // Get the complex scalar for antenna one and conjugate it
-        i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
 
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
@@ -248,10 +248,10 @@ void rime_gauss_B_sum_impl(
         // brightness varies by time (and source), not baseline or channel
         if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = TIME*NSRC + SRC;  I[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      Q[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      U[threadIdx.z] = brightness[i];
-            i += NTIME*NSRC;      V[threadIdx.z] = brightness[i];
+            i = SRC*NTIME + TIME;   I[threadIdx.z] = brightness[i];
+            i += NSRC*NTIME;          Q[threadIdx.z] = brightness[i];
+            i += NSRC*NTIME;          U[threadIdx.z] = brightness[i];
+            i += NSRC*NTIME;          V[threadIdx.z] = brightness[i];
         }
 
         // sersic shape only varies by source. Shape parameters
@@ -278,11 +278,11 @@ void rime_gauss_B_sum_impl(
 
         // Get the complex scalar for antenna two and multiply
         // in sersic factor term
-        i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
         ant_two.x *= sersic_factor; ant_two.y *= sersic_factor;
         // Get the complex scalar for antenna one and conjugate it
-        i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
 
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
