@@ -102,7 +102,7 @@ class BiroSolver(BaseSolver):
         reg(name='ant_pairs', shape=(2,'ntime','nbl'), dtype=np.int32)
 
         reg(name='lm', shape=(2,'nsrc'), dtype=ft)
-        reg(name='brightness', shape=(5,'ntime','nsrc'), dtype=ft)
+        reg(name='brightness', shape=(5,'nsrc','ntime'), dtype=ft)
         reg(name='gauss_shape', shape=(3, 'ngsrc'), dtype=ft)
         reg(name='sersic_shape', shape=(3, 'nssrc'), dtype=ft)
 
@@ -111,7 +111,7 @@ class BiroSolver(BaseSolver):
         reg(name='weight_vector', shape=(4,'ntime','nbl','nchan'), dtype=ft)
         reg(name='bayes_data', shape=(4,'ntime','nbl','nchan'), dtype=ct)
 
-        reg(name='jones_scalar', shape=('ntime','na','nsrc','nchan'), dtype=ct)
+        reg(name='jones_scalar', shape=('nsrc','ntime','na','nchan'), dtype=ct)
         reg(name='vis', shape=(4,'ntime','nbl','nchan'), dtype=ct)
         reg(name='chi_sqrd_result', shape=('ntime','nbl','nchan'), dtype=ft)
 

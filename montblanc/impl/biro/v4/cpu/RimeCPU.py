@@ -160,22 +160,21 @@ class RimeCPU(object):
             n = ne.evaluate('sqrt(1. - l**2 - m**2) - 1.',
                 {'l': l, 'm': m})
 
-            # w*n+v*m+u*l. Outer product creates array of dim ntime x na x nsrcs
-            phase = (np.outer(w, n) + np.outer(v, m) + np.outer(u, l)) \
-                    .reshape(slvr.ntime, slvr.na, slvr.nsrc)
-            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc)
+            # w*n+v*m+u*l. Outer product creates array of dim nsrcs x ntime x na
+            phase = (np.outer(n, w) + np.outer(m, v) + np.outer(l, u)) \
+                    .reshape(slvr.nsrc, slvr.ntime, slvr.na)
 
             # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength).
-            # Dim. na x ntime x nchan x nsrcs
+            # Dim. ntime x na x nchan x nsrcs
             phase = ne.evaluate('exp(2*pi*1j*p/wl)', {
                 'p': phase[:, :, :, np.newaxis],
                 'wl': wave[np.newaxis, np.newaxis, np.newaxis, :],
                 'pi': np.pi
             })
 
-            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
+            assert phase.shape == (slvr.nsrc, slvr.ntime, slvr.na , slvr.nchan)
 
-            # Dimension ntime x nsrc x nchan. Use 0.5*alpha here so that
+            # Dimension nsrc x ntime x  nchan. Use 0.5*alpha here so that
             # when the other antenna term is multiplied with this one, we
             # end up with the full power term. sqrt(n)*sqrt(n) == n.
             power = ne.evaluate('(rw/wl)**(0.5*a)', {
@@ -183,11 +182,11 @@ class RimeCPU(object):
                 'wl': wave[np.newaxis, np.newaxis, :],
                 'a': alpha[:, :, np.newaxis]
             })
-            assert power.shape == (slvr.ntime, slvr.nsrc, slvr.nchan)
+            assert power.shape == (slvr.nsrc, slvr.ntime, slvr.nchan)
 
             return ne.evaluate('phs*p', {
                 'phs': phase,
-                'p': power[:, np.newaxis, :, :]
+                'p': power[:, :, np.newaxis, :]
             }).astype(slvr.ct)  # Need a cast since numexpr upcasts
 
         except AttributeError as e:
@@ -242,27 +241,30 @@ class RimeCPU(object):
 
         try:
             # Compute the offsets for different antenna
-            # Broadcasting here produces, ntime x na x  nsrc
+            # Broadcasting here produces, nsrc x ntime x na
             E_p = ne.evaluate('sqrt((l - lp)**2 + (m - mp)**2)', {
-                'l': slvr.lm_cpu[0], 'm': slvr.lm_cpu[1],
-                'lp': slvr.point_errors_cpu[0, :, :, np.newaxis],
-                'mp': slvr.point_errors_cpu[1, :, :, np.newaxis]
+                'l': slvr.lm_cpu[0, :, np.newaxis, np.newaxis],
+                'm': slvr.lm_cpu[1, :, np.newaxis, np.newaxis],
+                'lp': slvr.point_errors_cpu[0, np.newaxis, :, :],
+                'mp': slvr.point_errors_cpu[1, np.newaxis, :, :]
             })
 
-            assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc)
+            assert E_p.shape == (slvr.nsrc, slvr.ntime, slvr.na)
 
-            # Broadcasting here produces, ntime x nbl x nsrc x nchan
+            # Broadcasting here produces, nsrc x ntime x nbl x nchan
             E_p = ne.evaluate('E*bw*1e-9*wl', {
                 'E': E_p[:, :, :, np.newaxis], 'bw': slvr.beam_width,
                 'wl': slvr.wavelength_cpu[np.newaxis, np.newaxis, np.newaxis, :]
             })
+
+            assert E_p.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
             # Clip the beam
             np.clip(E_p, np.finfo(slvr.ft).min, slvr.beam_clip, E_p)
             # Cosine it, cube it and cast because of numexpr
             E_p = ne.evaluate('cos(E)**3', {'E': E_p}).astype(slvr.ct)
 
-            assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
+            assert E_p.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
             return E_p
         except AttributeError as e:

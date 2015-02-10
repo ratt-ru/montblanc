@@ -123,10 +123,10 @@ void rime_jones_EK_impl(
             i += NSRC; m[0] = lm[i];
         }
 
-        // Brightness varies by time and source, not antenna or channel
+        // Brightness varies by source and time , not antenna or channel
         if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = (TIME + 4*NTIME)*NSRC + SRC;
+            i = (SRC + 4*NSRC)*NTIME + TIME;
             a[threadIdx.z] = brightness[i];
         }
 
@@ -159,7 +159,7 @@ void rime_jones_EK_impl(
         E = E*E*E;
 
         // Write out the phase and beam values multiplied together
-        i = (TIME*NA*NSRC + ANT*NSRC + SRC)*NCHAN + CHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT)*NCHAN + CHAN;
         jones_scalar[i] = Po::make_ct(real*E, imag*E);
         __syncthreads();
     }
