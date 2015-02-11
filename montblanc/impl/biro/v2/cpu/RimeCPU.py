@@ -22,10 +22,10 @@ import numexpr as ne
 import numpy as np
 
 def rethrow_attribute_exception(e):
-    raise AttributeError, '%s. The appropriate numpy array has not ' \
-        'been set on the shared data object. You need to set ' \
-        'store_cpu=True on your shared data object ' \
-        'as well as call the transfer_* method for this to work.' % e
+    raise AttributeError('%s. The appropriate numpy array has not '
+        'been set on the solver object. You need to set '
+        'store_cpu=True on your solver object '
+        'as well as call the transfer_* method for this to work.' % e)
 
 class RimeCPU(object):
     def __init__(self, solver):

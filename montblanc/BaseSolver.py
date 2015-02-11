@@ -134,12 +134,7 @@ class Parameter(object):
         del self.data[instance]
 
 class Solver(object):
-    """ Base class for data shared amongst pipeline nodes.
-
-    In practice, nodes will be responsible for creating,
-    updating and deleting members of this class.
-    Its not a complicated beast.
-    """
+    """ Base class for solving the RIME. """
     pass
 
 DEFAULT_NA=3

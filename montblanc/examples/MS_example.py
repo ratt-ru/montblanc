@@ -44,6 +44,7 @@ if __name__ == '__main__':
     # Get the BIRO solver.
     # npsrc : number of point sources
     # ngsrc : number of gaussian sources
+    # nssrc : number of sersic sources
     # init_weights : (1) None (2) 'sigma' or (3) 'weight'. Either
     #   (1) do not initialise the weight vector, or
     #   (2) initialise from the MS 'SIGMA' tables, or
@@ -51,7 +52,7 @@ if __name__ == '__main__':
     # weight_vector : indicates whether a weight vector should be used to
     #   compute the chi squared or a single sigma squared value
     # store_cpu : indicates whether copies of the data passed into the
-    #   shared data transfer_* methods should be stored on the shared data object
+    #   solver transfer_* methods should be stored on the solver object
     with montblanc.get_biro_solver(args.msfile,
         npsrc=args.npsrc, ngsrc=args.ngsrc, nssrc=args.nssrc, init_weights=None,
         weight_vector=False, store_cpu=False, version=args.version) as slvr:
@@ -95,7 +96,7 @@ if __name__ == '__main__':
 
         # Execute the pipeline
         for i in range(args.count):
-            # Set data on the shared data object. Uploads to GPU
+            # Set data on the solver object. Uploads to GPU
             slvr.transfer_lm(lm)
             slvr.transfer_brightness(brightness)
             slvr.transfer_point_errors(point_errors)
@@ -104,7 +105,7 @@ if __name__ == '__main__':
             # Execute the pipeline
             slvr.solve()
 
-            # The chi squared result is set on the shared data object
+            # The chi squared result is set on the solver object
             print 'Chi Squared Value', slvr.X2
 
             # Obtain the visibilities  (slow)

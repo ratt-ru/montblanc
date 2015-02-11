@@ -34,7 +34,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args(sys.argv[1:])
 
-    # Get the BK pipeline and shared data.
+    # Get the solver.
     with montblanc.get_biro_solver(args.msfile, npsrc=args.npsrc,
         ngsrc=args.ngsrc, nssrc=args.nssrc) as slvr:
 

@@ -413,7 +413,7 @@ class TestSolver(unittest.TestCase):
 
     def test_auto_correlation(self):
         """
-        Test the configuring our shared data object with auto auto-correlations
+        Test the configuring our solver object with auto auto-correlations
         provides the correct number of baselines
         """
         na, ntime, nchan, npsrc, ngsrc = 14, 5, 16, 2, 2

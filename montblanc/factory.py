@@ -60,10 +60,10 @@ def check_biro_version(version):
                 'Should be one of %s', (version, valid_biro_versions)
 
 def check_biro_solver_type(sd_type):
-    """ Throws an exception if the supplied shared data type is invalid """
+    """ Throws an exception if the supplied solver type is invalid """
 
     if sd_type not in valid_biro_solver_types:
-        raise ValueError, 'Supplied shared data type %s is not valid. ' \
+        raise ValueError, 'Supplied solver type %s is not valid. ' \
                 'Should be one of %s', (sd_type, valid_biro_solver_types)
 
 # PyCUDA device and context variables
