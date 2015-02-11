@@ -18,14 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import montblanc.util
+
 import numexpr as ne
 import numpy as np
-
-def rethrow_attribute_exception(e):
-    raise AttributeError('%s. The appropriate numpy array has not '
-        'been set on the solver object. You need to set '
-        'store_cpu=True on your solver object '
-        'as well as call the transfer_* method for this to work.' % e)
 
 class RimeCPU(object):
     def __init__(self, solver):
@@ -81,7 +77,7 @@ class RimeCPU(object):
                     'R':R[np.newaxis,np.newaxis,:,np.newaxis]})
 
         except AttributeError as e:
-            rethrow_attribute_exception(e)
+            montblanc.util.rethrow_attribute_exception(e)
 
     def compute_sersic_shape(self):
         """
@@ -139,7 +135,7 @@ class RimeCPU(object):
                 { 'den' : den[:, :, :, :] })
 
         except AttributeError as e:
-            rethrow_attribute_exception(e)
+            montblanc.util.rethrow_attribute_exception(e)
 
     def compute_k_jones_scalar_per_ant(self):
         """
@@ -191,7 +187,7 @@ class RimeCPU(object):
             }).astype(slvr.ct)  # Need a cast since numexpr upcasts
 
         except AttributeError as e:
-            rethrow_attribute_exception(e)
+            montblanc.util.rethrow_attribute_exception(e)
 
     def compute_k_jones_scalar_per_bl(self):
         """
@@ -230,7 +226,7 @@ class RimeCPU(object):
 
             return k_jones_per_bl
         except AttributeError as e:
-            rethrow_attribute_exception(e)
+            montblanc.util.rethrow_attribute_exception(e)
 
     def compute_e_jones_scalar_per_ant(self):
         """
@@ -266,7 +262,7 @@ class RimeCPU(object):
 
             return E_p
         except AttributeError as e:
-            rethrow_attribute_exception(e)
+            montblanc.util.rethrow_attribute_exception(e)
 
     def compute_e_jones_scalar_per_bl(self):
         """
@@ -283,7 +279,7 @@ class RimeCPU(object):
 
             return e_jones[1]*e_jones[0].conj()
         except AttributeError as e:
-            rethrow_attribute_exception(e)
+            montblanc.util.rethrow_attribute_exception(e)
 
     def compute_ek_jones_scalar_per_ant(self):
         """
@@ -329,7 +325,7 @@ class RimeCPU(object):
             return B
 
         except AttributeError as e:
-            rethrow_attribute_exception(e)
+            montblanc.util.rethrow_attribute_exception(e)
 
     def compute_ebk_jones(self):
         """
@@ -446,7 +442,7 @@ class RimeCPU(object):
             return chi_sqrd_terms
 
         except AttributeError as e:
-            rethrow_attribute_exception(e)
+            montblanc.util.rethrow_attribute_exception(e)
 
     def compute_chi_sqrd(self, weight_vector=False):
         """ Computes the chi squared value.
@@ -471,7 +467,7 @@ class RimeCPU(object):
             return term_sum if weight_vector is True \
                 else term_sum / slvr.sigma_sqrd
         except AttributeError as e:
-            rethrow_attribute_exception(e)
+            montblanc.util.rethrow_attribute_exception(e)
 
     def compute_biro_chi_sqrd(self, weight_vector=False):
         slvr = self.solver
