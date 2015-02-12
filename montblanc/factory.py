@@ -79,21 +79,22 @@ def get_contexts_per_device():
     if __devices is None and __contexts is None:
         try:
             cuda.init()
-        except:
-            __devices, __contexts = None, None
-            montblanc.log.critical('Unable to initialise CUDA', exc_info=True)
+        except Exception, e:
+            raise RuntimeError('Montblanc was unable '
+                'to initialise CUDA: %s' % repr(e))
 
         try:
             __devices = [cuda.Device(d) for d in range(cuda.Device.count())]
         except:
-            __devices, __contexts = None, None
-            montblanc.log.critical('Unable to create devices', exc_info=True)
+            raise RuntimeError('Montblanc was unable '
+                'to create PyCUDA device objects: %s' % repr(e))
 
         try:
             __contexts = [d.make_context() for d in __devices]
         except:
-            __devices, __contexts = None, None
-            montblanc.log.critical('Unable to create contexts', exc_info=True)
+            raise RuntimeError('Montblanc was unable '
+                'to associate PyCUDA contexts '
+                'with devices: %s' % repr(e))
 
         # Ask for an 8 byte shared memory config if we have Kepler
         for dev, ctx in zip(__devices,__contexts):
