@@ -18,6 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import numpy as np
 import string
 
 from pycuda.compiler import SourceModule
@@ -48,7 +49,7 @@ KERNEL_TEMPLATE = string.Template("""
 
 template<typename T, bool is32Multiple>
 __device__
-void transposeSC(T * out, const T * in, unsigned int dim0, unsigned int dim1)
+void transposeSC(const T * in, T * out,  unsigned int nx, unsigned int ny)
 {
     __shared__ T shrdMem[TILE_DIM][TILE_DIM+1];
 
@@ -61,8 +62,8 @@ void transposeSC(T * out, const T * in, unsigned int dim0, unsigned int dim1)
 #pragma unroll
     for (unsigned repeat = 0; repeat < TILE_DIM; repeat += blockDim.y) {
         unsigned gy_ = gy+repeat;
-        if (is32Multiple || (gx<dim0 && gy_<dim1))
-            shrdMem[ly + repeat][lx] = in[gy_ * dim0 + gx];
+        if (is32Multiple || (gx<nx && gy_<ny))
+            shrdMem[ly + repeat][lx] = in[gy_ * nx + gx];
     }
 
     __syncthreads();
@@ -70,13 +71,11 @@ void transposeSC(T * out, const T * in, unsigned int dim0, unsigned int dim1)
     gx = lx + blockDim.x * blockIdx.y;
     gy = ly + TILE_DIM   * blockIdx.x;
 
-     //same code as transpose32 kernel
-
 #pragma unroll
     for (unsigned repeat = 0; repeat < TILE_DIM; repeat += blockDim.y) {
         unsigned gy_ = gy+repeat;
-        if (is32Multiple || (gx<dim1 && gy_<dim0))
-            out[gy_ * dim0 + gx] = shrdMem[lx][ly + repeat];
+        if (is32Multiple || (gx<ny && gy_<nx))
+            out[gy_ * nx + gx] = shrdMem[lx][ly + repeat];
     }
 }
 
@@ -89,11 +88,11 @@ extern "C" {
 #define stamp_matrix_transpose_fn(ft) \
 __global__ \
 void matrix_transpose_ ## ft( \
-    ft * in, \
-    const ft * out, \
-    unsigned int dim0, unsigned int dim1) \
+    const ft * in, \
+    ft * out, \
+    unsigned int nx, unsigned int ny) \
 { \
-    transposeSC<ft, false>(in, out, dim0, dim1); \
+    transposeSC<ft, false>(in, out, nx, ny); \
 }
 
 stamp_matrix_transpose_fn(float)
@@ -133,26 +132,35 @@ class MatrixTranspose(Node):
     def pre_execution(self, solver, stream=None):
         pass
 
-    def get_kernel_params(self, solver):
+    def get_kernel_params(self, solver, nx, ny):
         slvr = solver
 
         D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
 
-        chans_per_block = D['BLOCKDIMX'] if slvr.nchan > D['BLOCKDIMX'] else slvr.nchan
-        bl_per_block = D['BLOCKDIMY'] if slvr.nbl > D['BLOCKDIMY'] else slvr.nbl
-        times_per_block = D['BLOCKDIMZ'] if slvr.ntime > D['BLOCKDIMZ'] else slvr.ntime
+        #x_per_block = D['BLOCKDIMX'] if nx > D['BLOCKDIMX'] else nx
+        #y_per_block = D['BLOCKDIMY'] if ny > D['BLOCKDIMX'] else ny
+        x_per_block = 32
+        y_per_block = 8
 
-        chan_blocks = self.blocks_required(slvr.nchan, chans_per_block)
-        bl_blocks = self.blocks_required(slvr.nbl, bl_per_block)
-        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
+        x_blocks = self.blocks_required(nx, x_per_block)
+        y_blocks = self.blocks_required(ny, y_per_block)
 
         return {
-            'block' : (chans_per_block, bl_per_block, times_per_block),
-            'grid'  : (chan_blocks, bl_blocks, time_blocks),
+            'block' : (x_per_block, y_per_block,1),
+            'grid'  : (x_blocks, y_blocks, 1),
         }
 
     def execute(self, solver, stream=None):
         slvr = solver
+
+        ny, nx = slvr.matrix_in_cpu.shape
+        params = self.get_kernel_params(slvr, nx, ny)
+
+        print params
+        print slvr.matrix_in_gpu.shape
+
+        self.kernel(slvr.matrix_in_gpu, slvr.matrix_out_gpu,
+            np.int32(nx), np.int32(ny), **params)
 
     def post_execution(self, solver, stream=None):
         pass

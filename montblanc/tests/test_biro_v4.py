@@ -202,11 +202,37 @@ class TestBiroV4(unittest.TestCase):
             print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
 
     def test_transpose(self):
-        with solver(na=4, npsrc=10, ntime=2, nchan=16,
+        with solver(na=4, npsrc=6, ntime=2, nchan=10,
             weight_vector=True,
             pipeline=Pipeline([MatrixTranspose()])) as slvr:
 
+            print '%s sources' % slvr.nsrc
+
+            slvr.register_array(
+                name='matrix_in',
+                shape=('nsrc', 'nchan'),
+                dtype='ft',
+                registrant='test_biro_v4')
+
+            slvr.register_array(
+                name='matrix_out',
+                shape=('nchan', 'nsrc'),
+                dtype='ft',
+                registrant='test_biro_v4')
+
+            slvr.transfer_matrix_in(
+                np.random.random(
+                    size=(slvr.nsrc, slvr.nchan)).astype(np.float32))
+
             slvr.solve()
+
+            with slvr.context:
+                slvr.matrix_out_cpu = slvr.matrix_out_gpu.get()
+
+            print 'in:\n%s' % slvr.matrix_in_cpu
+            print 'out:\n%s' % slvr.matrix_out_cpu
+
+            assert np.all(slvr.matrix_in_cpu == slvr.matrix_out_cpu.T)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV4)
