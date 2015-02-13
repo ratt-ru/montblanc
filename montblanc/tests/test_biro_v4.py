@@ -229,9 +229,6 @@ class TestBiroV4(unittest.TestCase):
             with slvr.context:
                 slvr.matrix_out_cpu = slvr.matrix_out_gpu.get()
 
-            print 'in:\n%s' % slvr.matrix_in_cpu
-            print 'out:\n%s' % slvr.matrix_out_cpu
-
             assert np.all(slvr.matrix_in_cpu == slvr.matrix_out_cpu.T)
 
 if __name__ == '__main__':

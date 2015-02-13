@@ -27,25 +27,27 @@ import montblanc
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
+    'TILE_DIM': 32,
     'BLOCKDIMX': 32,
-    'BLOCKDIMY': 32,
+    'BLOCKDIMY': 4,
     'BLOCKDIMZ': 1,
     'maxregs': 63        # Maximum number of registers
 }
 
 DOUBLE_PARAMS = {
+    'TILE_DIM': 32,
     'BLOCKDIMX': 32,
-    'BLOCKDIMY': 32,
+    'BLOCKDIMY': 4,
     'BLOCKDIMZ': 1,
     'maxregs': 63         # Maximum number of registers
 }
 
-# Taken from the following post
+# Based on the following post
 # http://arrayfire.com/cuda-optimization-tips-for-matrix-transpose-in-real-world-applications/
 # which in turn is based on
 # http://devblogs.nvidia.com/parallelforall/efficient-matrix-transpose-cuda-cc/
 KERNEL_TEMPLATE = string.Template("""
-#define TILE_DIM 32
+#define TILE_DIM ${TILE_DIM}
 
 template<typename T, bool is32Multiple>
 __device__
@@ -75,7 +77,7 @@ void transposeSC(const T * in, T * out,  unsigned int nx, unsigned int ny)
     for (unsigned repeat = 0; repeat < TILE_DIM; repeat += blockDim.y) {
         unsigned gy_ = gy+repeat;
         if (is32Multiple || (gx<ny && gy_<nx))
-            out[gy_ * nx + gx] = shrdMem[lx][ly + repeat];
+            out[gy_ * ny + gx] = shrdMem[lx][ly + repeat];
     }
 }
 
@@ -139,11 +141,12 @@ class MatrixTranspose(Node):
 
         #x_per_block = D['BLOCKDIMX'] if nx > D['BLOCKDIMX'] else nx
         #y_per_block = D['BLOCKDIMY'] if ny > D['BLOCKDIMX'] else ny
-        x_per_block = 32
-        y_per_block = 8
+        TILE_DIM = D['TILE_DIM']
+        x_per_block = D['BLOCKDIMX']
+        y_per_block = D['BLOCKDIMY']
 
-        x_blocks = self.blocks_required(nx, x_per_block)
-        y_blocks = self.blocks_required(ny, y_per_block)
+        x_blocks = self.blocks_required(nx, TILE_DIM)
+        y_blocks = self.blocks_required(ny, TILE_DIM)
 
         return {
             'block' : (x_per_block, y_per_block,1),
@@ -155,9 +158,6 @@ class MatrixTranspose(Node):
 
         ny, nx = slvr.matrix_in_cpu.shape
         params = self.get_kernel_params(slvr, nx, ny)
-
-        print params
-        print slvr.matrix_in_gpu.shape
 
         self.kernel(slvr.matrix_in_gpu, slvr.matrix_out_gpu,
             np.int32(nx), np.int32(ny), **params)
