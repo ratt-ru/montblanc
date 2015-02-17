@@ -213,9 +213,8 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     r = uvw_values(version)
     uvw = shape_list([30.*r, 25.*r, 20.*r],
             shape=slvr.uvw_shape, dtype=slvr.uvw_dtype)
-    # Normalise Antenna 0 for version two
-    if version in [VERSION_TWO, VERSION_THREE, VERSION_FOUR]:
-        uvw[:,:,0] = 0
+    # Normalise Antenna 0
+    uvw[:,:,0] = 0
     slvr.transfer_uvw(uvw)
 
     # Point source coordinates in the l,m,n (sky image) domain
@@ -243,14 +242,13 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
             slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
     if ngsrc > 0: slvr.transfer_gauss_shape(gauss_shape)
 
-    if version in [VERSION_TWO, VERSION_THREE, VERSION_FOUR]:
-        # Sersic (exponential) shape matrix
-        e1=ft(np.zeros((nssrc)))
-        e2=ft(np.zeros((nssrc)))
-        scale=ft(np.ones((nssrc)))
-        sersic_shape = shape_list([e1,e2,scale],
-                slvr.sersic_shape_shape, slvr.sersic_shape_dtype)
-        if nssrc > 0: slvr.transfer_sersic_shape(sersic_shape)
+    # Sersic (exponential) shape matrix
+    e1=ft(np.zeros((nssrc)))
+    e2=ft(np.zeros((nssrc)))
+    scale=ft(np.ones((nssrc)))
+    sersic_shape = shape_list([e1,e2,scale],
+            slvr.sersic_shape_shape, slvr.sersic_shape_dtype)
+    if nssrc > 0: slvr.transfer_sersic_shape(sersic_shape)
 
     # Generate nchan frequencies/wavelengths
     frequencies = ft(np.linspace(1e6,2e6,nchan))
@@ -270,11 +268,10 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     slvr.transfer_ant_pairs(slvr.get_default_ant_pairs())
 
-    if version in [VERSION_TWO, VERSION_THREE, VERSION_FOUR]:
-        # Generate random jones scalar values
-        jones_scalar = make_random(slvr.jones_scalar_shape,
-                slvr.jones_scalar_dtype)
-        slvr.transfer_jones_scalar(jones_scalar)
+    # Generate random jones scalar values
+    jones_scalar = make_random(slvr.jones_scalar_shape,
+            slvr.jones_scalar_dtype)
+    slvr.transfer_jones_scalar(jones_scalar)
 
     vis = make_random(slvr.vis_shape, slvr.vis_dtype) + \
             make_random(slvr.vis_shape, slvr.vis_dtype)*1j
