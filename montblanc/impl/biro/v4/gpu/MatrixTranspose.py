@@ -86,7 +86,6 @@ extern "C" {
 // on whether we're handling floats or doubles
 // Arguments
 // - ft: The floating point type. Should be float/double.
-
 #define stamp_matrix_transpose_fn(ft) \
 __global__ \
 void matrix_transpose_ ## ft( \
@@ -99,6 +98,8 @@ void matrix_transpose_ ## ft( \
 
 stamp_matrix_transpose_fn(float)
 stamp_matrix_transpose_fn(double)
+stamp_matrix_transpose_fn(float2)
+stamp_matrix_transpose_fn(double2)
 
 } // extern "C" {
 
