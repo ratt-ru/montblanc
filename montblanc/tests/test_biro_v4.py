@@ -186,21 +186,6 @@ class TestBiroV4(unittest.TestCase):
 
                 self.B_sum_test_impl(slvr, weight_vector=params['w'])
 
-    def test_smart_budget(self):
-        wv = True
-
-        with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
-            weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
-
-            P = slvr.viable_dim_config(10*1024*1024, ['ntime', 'nbl', 'nchan'])
-            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
-
-            P = slvr.viable_dim_config(1*1024*1024, ['ntime', 'nbl', 'nchan'])
-            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
-
-            P = slvr.viable_dim_config(512*1024, ['ntime', 'nbl', 'nchan'])
-            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
-
     def test_transpose(self):
         with solver(na=4, npsrc=6, ntime=2, nchan=10,
             weight_vector=True,
@@ -220,9 +205,10 @@ class TestBiroV4(unittest.TestCase):
                 dtype='ft',
                 registrant='test_biro_v4')
 
-            slvr.transfer_matrix_in(
-                np.random.random(
-                    size=(slvr.nsrc, slvr.nchan)).astype(np.float32))
+            matrix = np.random.random(
+                size=(slvr.nsrc, slvr.nchan)).astype(slvr.ft)
+
+            slvr.transfer_matrix_in(matrix)
 
             slvr.solve()
 
