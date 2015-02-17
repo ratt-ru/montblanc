@@ -164,7 +164,7 @@ class BiroSolver(BaseSolver):
         Consequently, this method is suitable for indexing
         an array of shape (ntime, na). Specifiying source
         and channel dimensions allows indexing of an array
-        of shape (ntime, na, nsrc, nchan).
+        of shape (nsrc, ntime, na, nchan).
 
         Using this index on an array of (ntime, na)
         produces a (2, ntime, nbl) array,
