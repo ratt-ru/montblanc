@@ -223,14 +223,14 @@ class BaseSolver(Solver):
 
         # Configure our floating point and complex types
         if dtype == np.float32:
-            self.ct = ct = np.complex64
+            self.ct = np.complex64
         elif dtype == np.float64:
-            self.ct = ct = np.complex128
+            self.ct = np.complex128
         else:
             raise TypeError, ('Must specify either np.float32 ',
                 'or np.float64 for dtype')
 
-        self.ft = ft = dtype
+        self.ft = dtype
 
         # Store the context, choosing the default if not specified
         ctx = kwargs.get('context')
