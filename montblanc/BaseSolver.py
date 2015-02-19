@@ -18,8 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import copy
 import numpy as np
-import sys
 import types
 
 from weakref import WeakKeyDictionary
@@ -277,7 +277,7 @@ class BaseSolver(Solver):
             'int' : int
         }[sdtype]
 
-    def viable_dim_config(self, bytes_available, dim_ord):
+    def viable_dim_config(self, bytes_available, dim_ord, nsolvers=1):
         """
         Returns the number of timesteps possible, given the registered arrays
         and a memory budget defined by bytes_available
@@ -289,9 +289,9 @@ class BaseSolver(Solver):
             for solving the problem.
         dim_ord : list
             list of dimension string names that the problem should be
-            subdivided by.
-
-            e.g. ['ntime', 'nbl', 'nchan']
+            subdivided by. e.g. ['ntime', 'nbl', 'nchan']
+        nsolvers : int
+            Number of solvers to budget for. Defaults to one.
 
         For a dim_ord = ['ntime', 'nbl', 'nchan'], this method will try and fit
         a ntime x nbl x nchan problem into the available number of bytes.
@@ -299,8 +299,6 @@ class BaseSolver(Solver):
         1 x nbl x nchan problem into the budget, then a 1 x 1 x nchan
         problem.
         """
-
-        import copy
 
         if not isinstance(dim_ord, list):
             raise TypeError('dim_ord should be a list')
@@ -312,7 +310,7 @@ class BaseSolver(Solver):
         P = copy.deepcopy(self.get_properties())
 
         def bytes_required(props):
-            return np.sum(
+            return nsolvers * np.sum(
                 np.array([
                     np.product(
                         montblanc.util.get_numeric_shape(
