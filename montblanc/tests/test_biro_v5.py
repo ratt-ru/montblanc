@@ -108,6 +108,8 @@ class TestBiroV5(unittest.TestCase):
             #P = slvr.viable_dim_config(512*1024, ['ntime', 'nbl'])
             print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
 
+    @unittest.skip('Problem size causes allocation failures during run of '
+        'entire test suite.')
     def test_time(self, cmp=None):
         """ Test for timing purposes """
         if cmp is None: cmp = {}
