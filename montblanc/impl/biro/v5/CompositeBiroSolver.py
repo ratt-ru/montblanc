@@ -36,6 +36,7 @@ from montblanc.BaseSolver import DEFAULT_NGSRC
 from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
+import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
 from montblanc.impl.biro.v5.BiroSolver import BiroSolver
@@ -92,8 +93,12 @@ class CompositeBiroSolver(BaseSolver):
                 problem.
         """
 
+        # Set up a default pipeline if None is supplied
+        pipeline = BSV4mod.get_pipeline(**kwargs) if pipeline is None else pipeline
+
         super(CompositeBiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, pipeline=pipeline, **kwargs)
+            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
+            pipeline=pipeline, **kwargs)
 
         A_main = copy.deepcopy(montblanc.impl.biro.v4.BiroSolver.A)
         P_main = copy.deepcopy(montblanc.impl.biro.v4.BiroSolver.P)

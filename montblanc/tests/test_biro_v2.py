@@ -27,7 +27,6 @@ import time
 import montblanc.factory
 
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
-from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
 
 from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
 from montblanc.pipeline import Pipeline
@@ -79,7 +78,7 @@ def src_perms(defaults, permute_weights=False):
                 continue
 
             params = defaults.copy()
-            params['w'] = wv
+            params['weight_vector'] = wv
             for i, s in enumerate(src_types):
                 params[s] = p[i]
 
@@ -173,20 +172,14 @@ class TestBiroV2(unittest.TestCase):
     def test_B_sum_float(self):
         """ Test the B sum float kernel """
         for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
-            with solver(dtype=np.float32, pipeline=Pipeline([RimeEK(),
-                        RimeGaussBSum(weight_vector=params['w'])]),
-                        **params) as slvr:
-
-                self.B_sum_test_impl(slvr, params['w'], {'rtol': 1e-4})
+            with solver(dtype=np.float32, **params) as slvr:
+                self.B_sum_test_impl(slvr, params['weight_vector'], {'rtol': 1e-4})
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """
         for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
-            with solver(dtype=np.float64, pipeline=Pipeline([RimeEK(),
-                        RimeGaussBSum(weight_vector=params['w'])]),
-                        **params) as slvr:
-
-                self.B_sum_test_impl(slvr, weight_vector=params['w'])
+            with solver(dtype=np.float64, **params) as slvr:
+                self.B_sum_test_impl(slvr, params['weight_vector'])
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV2)

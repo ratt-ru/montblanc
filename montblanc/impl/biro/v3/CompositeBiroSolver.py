@@ -36,9 +36,17 @@ from montblanc.BaseSolver import DEFAULT_NGSRC
 from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
-from montblanc.impl.biro.v2.BiroSolver import BiroSolver as BiroSolverV2
+import montblanc.impl.biro.v2.BiroSolver as BSV2mod
 
 from montblanc.impl.biro.v3.BiroSolver import BiroSolver
+
+from montblanc.impl.biro.v3.gpu.RimeEK import RimeEK
+from montblanc.impl.biro.v3.gpu.RimeGaussBSum import RimeGaussBSum
+from montblanc.pipeline import Pipeline
+
+def get_pipeline(**kwargs):
+    wv = kwargs.get('weight_vector', False)
+    return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
 
 def ary_dict(name,shape,dtype,cpu=True,gpu=False):
     return {
@@ -155,8 +163,11 @@ class CompositeBiroSolver(BaseSolver):
                 problem.
         """
 
+        pipeline = BSV2mod.get_pipeline(**kwargs) if pipeline is None else pipeline
+
         super(CompositeBiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, pipeline=pipeline, **kwargs)
+            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
+            pipeline=pipeline, **kwargs)
 
         A_main = copy.deepcopy(A)
         P_main = copy.deepcopy(P)
@@ -480,8 +491,8 @@ class CompositeBiroSolver(BaseSolver):
 
     # Take these methods from the v2 BiroSolver
     get_default_base_ant_pairs = \
-        BiroSolverV2.__dict__['get_default_base_ant_pairs']
+        BSV2mod.BiroSolver.__dict__['get_default_base_ant_pairs']
     get_default_ant_pairs = \
-        BiroSolverV2.__dict__['get_default_ant_pairs']
+        BSV2mod.BiroSolver.__dict__['get_default_ant_pairs']
     get_ap_idx = \
-        BiroSolverV2.__dict__['get_ap_idx']
+        BSV2mod.BiroSolver.__dict__['get_ap_idx']

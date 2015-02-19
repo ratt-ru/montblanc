@@ -142,36 +142,6 @@ def get_base_solver(**kwargs):
 
     return BaseSolver(**kwargs)
 
-def get_biro_pipeline(**kwargs):
-    """ Get a BIRO pipeline """
-
-    # Decide whether to use the weight vector
-    use_weight_vector = kwargs.get('weight_vector', False)
-    version = kwargs.get('version')
-
-    if version == VERSION_TWO:
-        from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
-        from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
-        # Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
-        return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)])
-    elif version == VERSION_THREE:
-        from montblanc.impl.biro.v3.gpu.RimeEK import RimeEK
-        from montblanc.impl.biro.v3.gpu.RimeGaussBSum import RimeGaussBSum
-        # Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
-        return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)])
-    elif version == VERSION_FOUR:
-        from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
-        from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
-        # Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
-        return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)])
-    elif version == VERSION_FIVE:
-        from montblanc.impl.biro.v5.gpu.RimeEK import RimeEK
-        from montblanc.impl.biro.v5.gpu.RimeGaussBSum import RimeGaussBSum
-        # Create a pipeline consisting of an EK kernel, followed by a Gauss B Sum,
-        return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=use_weight_vector)])
-
-    raise Exception, 'Invalid Version %s' % version
-
 def create_biro_solver_from_ms(slvr_class_type, **kwargs):
     """ Initialise the supplied solver with measurement set data """
     check_msfile(kwargs.get('msfile',None))
@@ -310,10 +280,6 @@ def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, nssrc=0, dtype=np.float32,
     # Get the default cuda context if none is provided
     if kwargs.get('context', None) is None:
         kwargs['context'] = get_default_context()
-
-    # Create a pipeline, if none is provided
-    if kwargs.get('pipeline',None) is None:
-        kwargs['pipeline'] = get_biro_pipeline(**kwargs)
 
     # Figure out which version of BIRO solver we're dealing with.
     if version == VERSION_TWO:

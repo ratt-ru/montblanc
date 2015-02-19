@@ -22,15 +22,11 @@ import logging
 import unittest
 import numpy as np
 import time
-import sys
 
 import montblanc.factory
 
-from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
-from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
-
 from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
-from montblanc.pipeline import Pipeline
+from montblanc.impl.biro.v3.CompositeBiroSolver import get_pipeline
 
 def solver(**kwargs):
     return montblanc.factory.get_biro_solver('test',version='v3',**kwargs)

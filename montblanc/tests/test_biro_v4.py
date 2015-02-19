@@ -74,7 +74,7 @@ def src_perms(defaults, permute_weights=False):
                 continue
 
             params = defaults.copy()
-            params['w'] = wv
+            params['weight_vector'] = wv
             for i, s in enumerate(src_types):
                 params[s] = p[i]
 
@@ -171,20 +171,16 @@ class TestBiroV4(unittest.TestCase):
     def test_B_sum_float(self):
         """ Test the B sum float kernel """
         for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
-            with solver(dtype=np.float32, pipeline=Pipeline([RimeEK(),
-                        RimeGaussBSum(weight_vector=params['w'])]),
-                        **params) as slvr:
+            with solver(dtype=np.float32, **params) as slvr:
 
-                self.B_sum_test_impl(slvr, params['w'], {'rtol': 1e-4})
+                self.B_sum_test_impl(slvr, params['weight_vector'], {'rtol': 1e-4})
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """
         for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
-            with solver(dtype=np.float64, pipeline=Pipeline([RimeEK(),
-                        RimeGaussBSum(weight_vector=params['w'])]),
-                        **params) as slvr:
+            with solver(dtype=np.float64, **params) as slvr:
 
-                self.B_sum_test_impl(slvr, weight_vector=params['w'])
+                self.B_sum_test_impl(slvr, params['weight_vector'])
 
     def test_transpose(self):
         with solver(na=4, npsrc=6, ntime=2, nchan=10,

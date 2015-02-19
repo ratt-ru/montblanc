@@ -29,6 +29,14 @@ from montblanc.BaseSolver import DEFAULT_NGSRC
 from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
+from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
+from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+from montblanc.pipeline import Pipeline
+
+def get_pipeline(**kwargs):
+    wv = kwargs.get('weight_vector', False)
+    return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
+
 def ary_dict(name,shape,dtype,cpu=True,gpu=True):
     return {
         'name' : name,
@@ -127,9 +135,12 @@ class BiroSolver(BaseSolver):
 
         # Turn off auto_correlations
         kwargs['auto_correlations'] = False
+        # Set up a default pipeline if None is supplied
+        pipeline = get_pipeline(**kwargs) if pipeline is None else pipeline
 
         super(BiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, pipeline=pipeline, **kwargs)
+            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
+            pipeline=pipeline, **kwargs)
 
         self.register_arrays(A)
         self.register_properties(P)
