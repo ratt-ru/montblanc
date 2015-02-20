@@ -109,6 +109,26 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(montblanc.util.eval_expr_names_and_nrs(
             'ntime*3+1-nbl') == ['ntime',3,1,'nbl'])
 
+    def test_baseline_antenna_nrs(self):
+        """ Test conversion between antenna and baseline numbers """
+
+        def do_check(na, nbl, nbl_auto):
+            # get nr baselines from nr of antenna
+            self.assertTrue(montblanc.util.nr_of_baselines(na) == nbl)
+            self.assertTrue(montblanc.util.nr_of_baselines(na, False) == nbl)
+            self.assertTrue(montblanc.util.nr_of_baselines(na, True) == nbl_auto)
+
+            # get nr antenna from nr of baselines
+            self.assertTrue(montblanc.util.nr_of_antenna(nbl) == na)
+            self.assertTrue(montblanc.util.nr_of_antenna(nbl, False) == na)
+            self.assertTrue(montblanc.util.nr_of_antenna(nbl_auto, True) == na)
+
+        do_check(7, 7*6//2, 7*8//2)                                 # KAT7
+        do_check(14, 14*13//2, 14*15//2)                       # Westerbork
+        do_check(27, 27*26//2, 27*28//2)                       # VLA
+        do_check(64, 64*63//2, 64*65//2)                       # MeerKAT
+        do_check(3500, 3500*3499//2, 3500*3501//2)   # SKA
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestUtils)
     unittest.TextTestRunner(verbosity=2).run(suite)

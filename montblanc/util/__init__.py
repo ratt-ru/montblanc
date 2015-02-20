@@ -19,15 +19,29 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
+import math
 
 from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 
 def nr_of_baselines(na, auto_correlations=False):
-    """ Compute the number of baselines for the
+    """
+    Compute the number of baselines for the
     given number of antenna. Can specify whether
     auto-correlations should be taken into
-    account """
-    return (na*(na-1))//2 if auto_correlations is False else (na*(na+1)/2)
+    account
+    """
+    m = (na-1) if auto_correlations is False else (na+1)
+    return (na*m)//2
+
+def nr_of_antenna(nbl, auto_correlations=False):
+    """
+    Compute the number of antenna for the
+    given number of baselines. Can specify whether
+    auto-correlations should be taken into
+    account
+    """
+    t = 1 if auto_correlations is False else -1
+    return int(t + math.sqrt(1 + 8*nbl)) // 2
 
 def cpu_name(name):
     """ Constructs a name for the CPU version of the array """
