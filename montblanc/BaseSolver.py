@@ -269,7 +269,16 @@ class BaseSolver(Solver):
         ----------
             sdtype : string defining the dtype
 
+        Returns
+            sdtype == 'ft' - solver's floating point type
+            sdtype == 'ct' - solver's complex type
+            sdtype == 'int' - python integer
+            sdtype otherwise.
+
         """
+
+        if not isinstance(sdtype, str):
+            return sdtype
 
         return {
             'ft' : self.ft,
@@ -277,7 +286,7 @@ class BaseSolver(Solver):
             'int' : int
         }[sdtype]
 
-    def viable_dim_config(self, bytes_available, dim_ord, nsolvers=1):
+    def viable_dim_config(self, bytes_available, array_dict, dim_ord, nsolvers=1):
         """
         Returns the number of timesteps possible, given the registered arrays
         and a memory budget defined by bytes_available
@@ -287,6 +296,8 @@ class BaseSolver(Solver):
         bytes_available : int
             The memory budget, or available number of bytes
             for solving the problem.
+        array_dict : dict
+            Dictionary describing the arrays
         dim_ord : list
             list of dimension string names that the problem should be
             subdivided by. e.g. ['ntime', 'nbl', 'nchan']
@@ -309,14 +320,17 @@ class BaseSolver(Solver):
 
         P = copy.deepcopy(self.get_properties())
 
+        def ary_size(ary, props):
+            shape = montblanc.util.get_numeric_shape(
+                ary['shape'], props)
+            dtypesize = np.dtype(self.get_actual_dtype(
+                ary['dtype'])).itemsize
+
+            return np.product(shape)*dtypesize
+
         def bytes_required(props):
-            return nsolvers * np.sum(
-                np.array([
-                    np.product(
-                        montblanc.util.get_numeric_shape(
-                            t.sshape, props)
-                    )*np.dtype(t.dtype).itemsize
-                    for t in self.arrays.values()]))
+            return nsolvers * np.sum([ary_size(ary, props)
+                for ary in array_dict.itervalues()])
 
         bytes_used = bytes_required(P)
 
@@ -506,8 +520,9 @@ class BaseSolver(Solver):
         sshape = shape
         shape = montblanc.util.get_numeric_shape(sshape, self.get_properties())
 
-        if type(dtype) == str:
-            dtype = self.get_actual_dtype(dtype)
+        # Replace any string representations with the
+        # appropriate data type
+        dtype = self.get_actual_dtype(dtype)
 
         # Create a new record
         new = ArrayRecord(
@@ -659,8 +674,9 @@ class BaseSolver(Solver):
 
         """
 
-        if type(dtype) == str:
-            dtype = self.get_actual_dtype(dtype)
+        # Replace any string representations with the
+        # appropriate data type
+        dtype = self.get_actual_dtype(dtype)
 
         self.properties[name] = pr = PropertyRecord(
             name, dtype, default, registrant)

@@ -22,12 +22,12 @@ import logging
 import unittest
 import numpy as np
 import time
-import sys
 
 import montblanc.factory
 
 from montblanc.impl.biro.v4.cpu.RimeCPU import RimeCPU
-from montblanc.pipeline import Pipeline
+
+import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
 def solver(**kwargs):
     return montblanc.factory.get_biro_solver('test',version='v5',**kwargs)
@@ -96,17 +96,24 @@ class TestBiroV5(unittest.TestCase):
         with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
             weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
 
-            P = slvr.viable_dim_config(10*1024*1024, ['ntime', 'nbl', 'nchan'])
+            A = BSV4mod.A.copy()
+
+            P = slvr.viable_dim_config(10*1024*1024, A,  ['ntime', 'nbl', 'nchan'])
             #P = slvr.viable_dim_config(10*1024*1024, ['ntime', 'nbl'])
             print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
 
-            P = slvr.viable_dim_config(1*1024*1024, ['ntime', 'nbl', 'nchan'])
+            P = slvr.viable_dim_config(1*1024*1024, A, ['ntime', 'nbl', 'nchan'])
             #P = slvr.viable_dim_config(1*1024*1024, ['ntime', 'nbl'])
             print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
 
-            P = slvr.viable_dim_config(512*1024, ['ntime', 'nbl', 'nchan'])
+            P = slvr.viable_dim_config(512*1024, A, ['ntime', 'nbl', 'nchan'])
             #P = slvr.viable_dim_config(512*1024, ['ntime', 'nbl'])
             print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+
+            #P = slvr.viable_dim_config(1*1024*1024, A, ['ntime', 'nbl',], 10)
+            #P = slvr.viable_dim_config(1*1024*1024, ['ntime', 'nbl'])
+            #print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+
 
     @unittest.skip('Problem size causes allocation failures during run of '
         'entire test suite.')

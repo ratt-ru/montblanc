@@ -103,13 +103,15 @@ class CompositeBiroSolver(BaseSolver):
         A_main = copy.deepcopy(montblanc.impl.biro.v4.BiroSolver.A)
         P_main = copy.deepcopy(montblanc.impl.biro.v4.BiroSolver.P)
 
+        # Add custom array transfer method
         for name, ary in A_main.iteritems():
-            # Add a transfer method
             ary['transfer_method'] = self.get_transfer_method(name)
 
+        # Add custom property setter method
         for name, prop in P_main.iteritems():
             prop['setter_method'] = self.get_setter_method(name)
 
+        # Create the arrays on the solver
         self.register_arrays(A_main)
         self.register_properties(P_main)
 
@@ -176,7 +178,6 @@ class CompositeBiroSolver(BaseSolver):
             dtype=dtype, pipeline=copy.deepcopy(pipeline),
             **kwargs) for i in range(self.nsolvers)]
 
-        # Register arrays on the sub-solvers
         A_sub = copy.deepcopy(montblanc.impl.biro.v4.BiroSolver.A)
         P_sub = copy.deepcopy(montblanc.impl.biro.v4.BiroSolver.P)
 
@@ -186,6 +187,7 @@ class CompositeBiroSolver(BaseSolver):
             ary['cpu'] = False
             ary['gpu'] = True
 
+        # Register arrays on the sub-solvers
         for i, slvr in enumerate(self.solvers):
             slvr.register_arrays(A_sub)
             slvr.register_properties(P_sub)
