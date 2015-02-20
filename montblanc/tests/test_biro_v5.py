@@ -99,21 +99,21 @@ class TestBiroV5(unittest.TestCase):
 
             A = copy.deepcopy(BSV4mod.A)
 
-            P = slvr.viable_dim_config(10*1024*1024, A,  ['ntime', 'nbl', 'nchan'], 1, True)
-            #P = slvr.viable_dim_config(10*1024*1024, ['ntime', 'nbl'])
-            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+            viable, P = slvr.viable_dim_config(
+                10*1024*1024, A,  ['ntime', 'nbl', 'nchan'], 1, True)
+            print viable, P
 
-            P = slvr.viable_dim_config(1*1024*1024, A, ['ntime', 'nbl', 'nchan'], 1, True)
-            #P = slvr.viable_dim_config(1*1024*1024, ['ntime', 'nbl'])
-            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+            viable, P = slvr.viable_dim_config(
+                1*1024*1024, A, ['ntime', 'nbl', 'nchan'], 1, True)
+            print viable, P
 
-            P = slvr.viable_dim_config(512*1024, A, ['ntime', 'nbl', 'nchan'], 1, True)
-            #P = slvr.viable_dim_config(512*1024, ['ntime', 'nbl'])
-            print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+            viable, P = slvr.viable_dim_config(
+                512*1024, A, ['ntime', 'nbl', 'nchan'], 1, True)
+            print viable, P
 
-            #P = slvr.viable_dim_config(1*1024*1024, A, ['ntime', 'nbl',], 10)
-            #P = slvr.viable_dim_config(1*1024*1024, ['ntime', 'nbl'])
-            #print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
+            viable, P = slvr.viable_dim_config(
+                1024, A, ['ntime', 'nbl'], 1, True)
+            print viable, P
 
 
     @unittest.skip('Problem size causes allocation failures during run of '

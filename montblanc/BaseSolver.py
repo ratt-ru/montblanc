@@ -311,6 +311,14 @@ class BaseSolver(Solver):
             True if antenna and baseline dimensions should be
             reduced simultaneously.
 
+        Returns
+        ----------
+        A tuple (boolean, dict). The boolean is True if the problem
+        can fit within the supplied budget, False otherwise.
+        THe dictionary contains the reduced dimensions as key and
+        the reduced size as value.
+        e.g. (True, { 'time' : 1, 'nbl' : 1 })
+
         For a dim_ord = ['ntime', 'nbl', 'nchan'], this method will try and fit
         a ntime x nbl x nchan problem into the available number of bytes.
         If this is not possible, it will first set ntime=1, and then try fit an
@@ -326,7 +334,7 @@ class BaseSolver(Solver):
             bytes_available = 0
 
         P = copy.deepcopy(self.get_properties())
-        reduced_dims = []
+        modified_dims = {}
 
         def ary_size(ary, props):
             shape = montblanc.util.get_numeric_shape(
@@ -348,15 +356,15 @@ class BaseSolver(Solver):
         while bytes_used > bytes_available:
             try:
                 dim = dim_ord.pop(0)
-                reduced_dims.append(dim)
             except IndexError:
-                raise ValueError(
-                    'No more dimensions available for reducing '
-                    'the problem size. Unable to fit the problem '
-                    'within the specified memory budget!')
+                # No more dimensions available for reducing
+                # the problem size. Unable to fit the problem
+                # within the specified memory budget
+                return False, modified_dims
 
             # Can't fit everything into memory,
             # set this dimension to 1 and re-evaluate
+            modified_dims[dim] = 1
             P[dim] = 1
 
             # Simultaneously reduce
@@ -364,14 +372,14 @@ class BaseSolver(Solver):
             if na_eq_nbl:
                 if dim == 'na':
                     P['nbl'] = 1
+                    modified_dims['nbl'] = 1
                 elif dim == 'nbl':
                     P['na'] = 1
+                    modified_dims['na'] = 1
 
             bytes_used = bytes_required(P)
 
-        #print 'used: %s avail: %s dim: %s' % (bytes_used, bytes_available, dim)
-
-        return P
+        return True, modified_dims
 
     def viable_timesteps(self, bytes_available):
         """
