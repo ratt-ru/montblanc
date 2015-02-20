@@ -286,12 +286,13 @@ class BaseSolver(Solver):
             'int' : int
         }[sdtype]
 
-    def viable_dim_config(self, bytes_available, array_dict, dim_ord, nsolvers=1):
+    def viable_dim_config(self, bytes_available, array_dict,
+            dim_ord, nsolvers=1, na_eq_nbl=False):
         """
         Returns the number of timesteps possible, given the registered arrays
         and a memory budget defined by bytes_available
 
-        Parameters
+        Arguments
         ----------------
         bytes_available : int
             The memory budget, or available number of bytes
@@ -301,8 +302,14 @@ class BaseSolver(Solver):
         dim_ord : list
             list of dimension string names that the problem should be
             subdivided by. e.g. ['ntime', 'nbl', 'nchan']
+
+        Keyword Arguments
+        ----------------------------
         nsolvers : int
             Number of solvers to budget for. Defaults to one.
+        na_eq_nbl : boolean
+            True if antenna and baseline dimensions should be
+            reduced simultaneously.
 
         For a dim_ord = ['ntime', 'nbl', 'nchan'], this method will try and fit
         a ntime x nbl x nchan problem into the available number of bytes.
@@ -319,6 +326,7 @@ class BaseSolver(Solver):
             bytes_available = 0
 
         P = copy.deepcopy(self.get_properties())
+        reduced_dims = []
 
         def ary_size(ary, props):
             shape = montblanc.util.get_numeric_shape(
@@ -340,6 +348,7 @@ class BaseSolver(Solver):
         while bytes_used > bytes_available:
             try:
                 dim = dim_ord.pop(0)
+                reduced_dims.append(dim)
             except IndexError:
                 raise ValueError(
                     'No more dimensions available for reducing '
@@ -349,6 +358,15 @@ class BaseSolver(Solver):
             # Can't fit everything into memory,
             # set this dimension to 1 and re-evaluate
             P[dim] = 1
+
+            # Simultaneously reduce
+            # antenna and baseline
+            if na_eq_nbl:
+                if dim == 'na':
+                    P['nbl'] = 1
+                elif dim == 'nbl':
+                    P['na'] = 1
+
             bytes_used = bytes_required(P)
 
         #print 'used: %s avail: %s dim: %s' % (bytes_used, bytes_available, dim)

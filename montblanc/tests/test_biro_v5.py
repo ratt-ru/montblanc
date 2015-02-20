@@ -18,6 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import copy
 import logging
 import unittest
 import numpy as np
@@ -96,17 +97,17 @@ class TestBiroV5(unittest.TestCase):
         with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
             weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
 
-            A = BSV4mod.A.copy()
+            A = copy.deepcopy(BSV4mod.A)
 
-            P = slvr.viable_dim_config(10*1024*1024, A,  ['ntime', 'nbl', 'nchan'])
+            P = slvr.viable_dim_config(10*1024*1024, A,  ['ntime', 'nbl', 'nchan'], 1, True)
             #P = slvr.viable_dim_config(10*1024*1024, ['ntime', 'nbl'])
             print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
 
-            P = slvr.viable_dim_config(1*1024*1024, A, ['ntime', 'nbl', 'nchan'])
+            P = slvr.viable_dim_config(1*1024*1024, A, ['ntime', 'nbl', 'nchan'], 1, True)
             #P = slvr.viable_dim_config(1*1024*1024, ['ntime', 'nbl'])
             print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
 
-            P = slvr.viable_dim_config(512*1024, A, ['ntime', 'nbl', 'nchan'])
+            P = slvr.viable_dim_config(512*1024, A, ['ntime', 'nbl', 'nchan'], 1, True)
             #P = slvr.viable_dim_config(512*1024, ['ntime', 'nbl'])
             print 'ntime: %s nbl %s nsrc %s nchan %s' % (P['ntime'], P['nbl'], P['nsrc'], P['nchan'])
 
