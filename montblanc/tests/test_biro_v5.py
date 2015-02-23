@@ -25,6 +25,7 @@ import numpy as np
 import time
 
 import montblanc.factory
+import montblanc.util as mbu
 
 from montblanc.impl.biro.v4.cpu.RimeCPU import RimeCPU
 
@@ -100,20 +101,20 @@ class TestBiroV5(unittest.TestCase):
             A = copy.deepcopy(BSV4mod.A)
             P = slvr.get_properties()
 
-            viable, MP = montblanc.util.viable_dim_config(
+            viable, MP = mbu.viable_dim_config(
                 10*1024*1024, A,  P, ['ntime', 'nbl&na', 'nchan'], 1)
             self.assertTrue(viable is True and len(MP) == 1 and
                 MP['ntime'] == 1)
             #print viable, MP
 
-            viable, MP = montblanc.util.viable_dim_config(
+            viable, MP = mbu.viable_dim_config(
                 1*1024*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1,)
             self.assertTrue(viable is True and len(MP) == 3 and
                 MP['ntime'] == 1 and
                 MP['na'] == 1 and
                 MP['nbl'] == 1)
 
-            viable, MP = montblanc.util.viable_dim_config(
+            viable, MP = mbu.viable_dim_config(
                 10*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1)
             self.assertTrue(viable is True and len(MP) == 4 and
                 MP['ntime'] == 1 and
@@ -121,7 +122,7 @@ class TestBiroV5(unittest.TestCase):
                 MP['nbl'] == 1 and
                 MP['nchan'] == 1)
 
-            viable, MP = montblanc.util.viable_dim_config(
+            viable, MP = mbu.viable_dim_config(
                 1024, A, P, ['ntime', 'nbl&na'], 1)
             self.assertTrue(viable is False and len(MP) == 3 and
                 MP['ntime'] == 1 and

@@ -26,6 +26,7 @@ import pycuda.tools
 import types
 
 import montblanc
+import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
 from montblanc.BaseSolver import DEFAULT_NA
@@ -116,8 +117,8 @@ class CompositeBiroSolver(BaseSolver):
         self.register_properties(P_main)
 
         #print 'Composite Solver Memory CPU %s GPU %s ntime %s' \
-        #    % (montblanc.util.fmt_bytes(self.cpu_bytes_required()),
-        #    montblanc.util.fmt_bytes(self.gpu_bytes_required()),
+        #    % (mbu.fmt_bytes(self.cpu_bytes_required()),
+        #    mbu.fmt_bytes(self.gpu_bytes_required()),
         #    ntime)
 
         # Allocate CUDA constructs using the supplied context
@@ -126,8 +127,8 @@ class CompositeBiroSolver(BaseSolver):
 
             #(free_mem,total_mem) = cuda.mem_get_info()
             #print 'free %s total %s ntime %s' \
-            #    % (montblanc.util.fmt_bytes(free_mem),
-            #        montblanc.util.fmt_bytes(total_mem),
+            #    % (mbu.fmt_bytes(free_mem),
+            #        mbu.fmt_bytes(total_mem),
             #        ntime)
 
             # Work with a supplied memory budget, otherwise use
@@ -135,13 +136,13 @@ class CompositeBiroSolver(BaseSolver):
             mem_budget = kwargs.get('mem_budget', free_mem-10*ONE_MB)
 
             # Work out how many timesteps we can fit in our memory budget
-            self.vtime = montblanc.util.viable_timesteps(mem_budget,
+            self.vtime = mbu.viable_timesteps(mem_budget,
                 self.arrays, self.get_properties())
 
             (free_mem,total_mem) = cuda.mem_get_info()
             #print 'free %s total %s ntime %s vtime %s' \
-            #    % (montblanc.util.fmt_bytes(free_mem),
-            #        montblanc.util.fmt_bytes(total_mem),
+            #    % (mbu.fmt_bytes(free_mem),
+            #        mbu.fmt_bytes(total_mem),
             #        ntime, self.vtime)
 
             # They may fit in completely
@@ -199,14 +200,14 @@ class CompositeBiroSolver(BaseSolver):
 
             #print 'Sub-solver %s Memory CPU %s GPU %s ntime %s' \
             #    % (i,
-            #    montblanc.util.fmt_bytes(slvr.cpu_bytes_required()),
-            #    montblanc.util.fmt_bytes(slvr.gpu_bytes_required()),
+            #    mbu.fmt_bytes(slvr.cpu_bytes_required()),
+            #    mbu.fmt_bytes(slvr.gpu_bytes_required()),
             #    slvr.ntime)
 
         #(free_mem,total_mem) = cuda.mem_get_info()
         #print 'free %s total %s ntime %s vtime %s' \
-        #    % (montblanc.util.fmt_bytes(free_mem),
-        #        montblanc.util.fmt_bytes(total_mem),
+        #    % (mbu.fmt_bytes(free_mem),
+        #        mbu.fmt_bytes(total_mem),
         #        ntime, self.vtime)
 
         self.use_weight_vector = kwargs.get('weight_vector', False)
@@ -231,8 +232,8 @@ class CompositeBiroSolver(BaseSolver):
             # The array has been transferred, try the next one
             if subslvr.was_transferred[r.name]: continue
 
-            cpu_name = montblanc.util.cpu_name(r.name)
-            gpu_name = montblanc.util.gpu_name(r.name)
+            cpu_name = mbu.cpu_name(r.name)
+            gpu_name = mbu.gpu_name(r.name)
 
             # Get the CPU array on the composite solver
             # and the CPU array and the GPU array
@@ -255,8 +256,8 @@ class CompositeBiroSolver(BaseSolver):
                 for s in r.sshape])
 
             # Get a pinned array for asynchronous transfers
-            cpu_shape_name = montblanc.util.shape_name(r.name)
-            cpu_dtype_name = montblanc.util.dtype_name(r.name)
+            cpu_shape_name = mbu.shape_name(r.name)
+            cpu_dtype_name = mbu.dtype_name(r.name)
 
             pinned_ary = self.pinned_mem_pool.allocate(
                 shape=getattr(subslvr,cpu_shape_name),
@@ -396,7 +397,7 @@ class CompositeBiroSolver(BaseSolver):
         def setter(self, value):
             setattr(self,name,value)
             for slvr in self.solvers:
-                setter_method_name = montblanc.util.setter_name(name)
+                setter_method_name = mbu.setter_name(name)
                 setter_method = getattr(slvr,setter_method_name)
                 setter_method(value)
 
@@ -413,7 +414,7 @@ class CompositeBiroSolver(BaseSolver):
         on the CompositeBiroSolver and indicates that it hasn't been transferred
         to the sub-solver
         """
-        cpu_name = montblanc.util.cpu_name(name)
+        cpu_name = mbu.cpu_name(name)
         def transfer(self, npary):
             self.check_array(name, npary)
             setattr(self, cpu_name, npary)

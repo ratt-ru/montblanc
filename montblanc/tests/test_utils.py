@@ -25,7 +25,7 @@ import time
 
 import montblanc
 import montblanc.factory
-import montblanc.util
+import montblanc.util as mbu
 
 class TestUtils(unittest.TestCase):
     """
@@ -57,7 +57,7 @@ class TestUtils(unittest.TestCase):
 
         ri = np.random.randint
 
-        gns = montblanc.util.shape_from_str_tuple
+        gns = mbu.shape_from_str_tuple
         P = { 'ntime' : ri(5,10), 'nbl' : ri(3,5), 'nchan' : 4,
             'nsrc' : ri(4,10) }
 
@@ -81,7 +81,7 @@ class TestUtils(unittest.TestCase):
 
         ntime, nbl, nchan = props['ntime'], props['nbl'], props['nchan']
 
-        f = montblanc.util.array_convert_function(
+        f = mbu.array_convert_function(
             (3,'ntime*nchan','nbl'), ('nchan', 'nbl*ntime*3'), props)
 
         ary = np.random.random(size=(3, ntime*nchan, nbl))
@@ -94,19 +94,19 @@ class TestUtils(unittest.TestCase):
         """ Test evaluation expression and parsing """
         props = { 'ntime' : 7, 'nbl' : 4 }
 
-        self.assertTrue(montblanc.util.eval_expr(
+        self.assertTrue(mbu.eval_expr(
             '1+2*ntime+nbl', props) == (1+2*props['ntime']+props['nbl']))
 
-        self.assertTrue(montblanc.util.eval_expr(
+        self.assertTrue(mbu.eval_expr(
             'ntime*nbl*3', props) == props['ntime']*props['nbl']*3)
 
-        self.assertTrue(montblanc.util.eval_expr_names_and_nrs(
+        self.assertTrue(mbu.eval_expr_names_and_nrs(
             '1+2*ntime+nbl') == [1,2,'ntime','nbl'])
 
-        self.assertTrue(montblanc.util.eval_expr_names_and_nrs(
+        self.assertTrue(mbu.eval_expr_names_and_nrs(
             'ntime*nbl+3-1') == ['ntime','nbl',3,1])
 
-        self.assertTrue(montblanc.util.eval_expr_names_and_nrs(
+        self.assertTrue(mbu.eval_expr_names_and_nrs(
             'ntime*3+1-nbl') == ['ntime',3,1,'nbl'])
 
     def test_baseline_antenna_nrs(self):
@@ -114,14 +114,14 @@ class TestUtils(unittest.TestCase):
 
         def do_check(na, nbl, nbl_auto):
             # get nr baselines from nr of antenna
-            self.assertTrue(montblanc.util.nr_of_baselines(na) == nbl)
-            self.assertTrue(montblanc.util.nr_of_baselines(na, False) == nbl)
-            self.assertTrue(montblanc.util.nr_of_baselines(na, True) == nbl_auto)
+            self.assertTrue(mbu.nr_of_baselines(na) == nbl)
+            self.assertTrue(mbu.nr_of_baselines(na, False) == nbl)
+            self.assertTrue(mbu.nr_of_baselines(na, True) == nbl_auto)
 
             # get nr antenna from nr of baselines
-            self.assertTrue(montblanc.util.nr_of_antenna(nbl) == na)
-            self.assertTrue(montblanc.util.nr_of_antenna(nbl, False) == na)
-            self.assertTrue(montblanc.util.nr_of_antenna(nbl_auto, True) == na)
+            self.assertTrue(mbu.nr_of_antenna(nbl) == na)
+            self.assertTrue(mbu.nr_of_antenna(nbl, False) == na)
+            self.assertTrue(mbu.nr_of_antenna(nbl_auto, True) == na)
 
         do_check(7, 7*6//2, 7*8//2)                                 # KAT7
         do_check(14, 14*13//2, 14*15//2)                       # Westerbork
