@@ -287,7 +287,7 @@ class BaseSolver(Solver):
         }[sdtype]
 
     def viable_dim_config(self, bytes_available, array_dict,
-            dim_ord, nsolvers=1, na_eq_nbl=False):
+            dim_ord, nsolvers=1):
         """
         Returns the number of timesteps possible, given the registered arrays
         and a memory budget defined by bytes_available
@@ -301,15 +301,15 @@ class BaseSolver(Solver):
             Dictionary describing the arrays
         dim_ord : list
             list of dimension string names that the problem should be
-            subdivided by. e.g. ['ntime', 'nbl', 'nchan']
+            subdivided by. e.g. ['ntime', 'nbl', 'nchan'].
+            Multple dimensions can be reduced simultaneously using
+            the following syntax 'nbl&na'. This is mostly useful for
+            the baseline-antenna equivalence.
 
         Keyword Arguments
         ----------------------------
         nsolvers : int
             Number of solvers to budget for. Defaults to one.
-        na_eq_nbl : boolean
-            True if antenna and baseline dimensions should be
-            reduced simultaneously.
 
         Returns
         ----------
@@ -355,7 +355,7 @@ class BaseSolver(Solver):
         # dim_ord argument.
         while bytes_used > bytes_available:
             try:
-                dim = dim_ord.pop(0)
+                dims = dim_ord.pop(0).strip().split('&')
             except IndexError:
                 # No more dimensions available for reducing
                 # the problem size. Unable to fit the problem
@@ -363,19 +363,10 @@ class BaseSolver(Solver):
                 return False, modified_dims
 
             # Can't fit everything into memory,
-            # set this dimension to 1 and re-evaluate
-            modified_dims[dim] = 1
-            P[dim] = 1
-
-            # Simultaneously reduce
-            # antenna and baseline
-            if na_eq_nbl:
-                if dim == 'na':
-                    P['nbl'] = 1
-                    modified_dims['nbl'] = 1
-                elif dim == 'nbl':
-                    P['na'] = 1
-                    modified_dims['na'] = 1
+            # Set dimensions to 1 and re-evaluate
+            for dim in dims:
+                modified_dims[dim] = 1
+                P[dim] = 1
 
             bytes_used = bytes_required(P)
 

@@ -100,20 +100,35 @@ class TestBiroV5(unittest.TestCase):
             A = copy.deepcopy(BSV4mod.A)
 
             viable, P = slvr.viable_dim_config(
-                10*1024*1024, A,  ['ntime', 'nbl', 'nchan'], 1, True)
-            print viable, P
+                10*1024*1024, A,  ['ntime', 'nbl&na', 'nchan'], 1)
+            self.assertTrue(viable is True and len(P) == 1 and
+                P['ntime'] == 1)
+            #print viable, P
 
             viable, P = slvr.viable_dim_config(
-                1*1024*1024, A, ['ntime', 'nbl', 'nchan'], 1, True)
-            print viable, P
+                1*1024*1024, A, ['ntime', 'nbl&na', 'nchan'], 1,)
+            self.assertTrue(viable is True and len(P) == 3 and
+                P['ntime'] == 1 and
+                P['na'] == 1 and
+                P['nbl'] == 1)
+            #print viable, P
 
             viable, P = slvr.viable_dim_config(
-                512*1024, A, ['ntime', 'nbl', 'nchan'], 1, True)
-            print viable, P
+                10*1024, A, ['ntime', 'nbl&na', 'nchan'], 1)
+            self.assertTrue(viable is True and len(P) == 4 and
+                P['ntime'] == 1 and
+                P['na'] == 1 and
+                P['nbl'] == 1 and
+                P['nchan'] == 1)
+            #print viable, P
 
             viable, P = slvr.viable_dim_config(
-                1024, A, ['ntime', 'nbl'], 1, True)
-            print viable, P
+                1024, A, ['ntime', 'nbl&na'], 1)
+            self.assertTrue(viable is False and len(P) == 3 and
+                P['ntime'] == 1 and
+                P['na'] == 1 and
+                P['nbl'] == 1)
+            #print viable, P
 
 
     @unittest.skip('Problem size causes allocation failures during run of '
