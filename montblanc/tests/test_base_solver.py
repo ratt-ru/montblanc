@@ -452,7 +452,8 @@ class TestSolver(unittest.TestCase):
             # How many timesteps can we accommodate with 2GB ?
             # Don't bother with the actual value, the assert in viable_timesteps
             # actually tests things quite well
-            slvr.viable_timesteps(2*1024*1024*1024)
+            montblanc.util.viable_timesteps(2*1024*1024*1024,
+                slvr.arrays, slvr.get_properties())
 
     def test_solver_factory(self):
         """ Test that the solver factory produces the correct types """

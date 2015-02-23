@@ -202,7 +202,8 @@ class CompositeBiroSolver(BaseSolver):
             mem_budget = kwargs.get('mem_budget', free_mem-10*ONE_MB)
 
             # Work out how many timesteps we can fit in our memory budget
-            self.vtime = self.viable_timesteps(mem_budget)
+            self.vtime = montblanc.util.viable_timesteps(mem_budget,
+                self.arrays, self.get_properties())
 
             (free_mem,total_mem) = cuda.mem_get_info()
             #print 'free %s total %s ntime %s vtime %s' \

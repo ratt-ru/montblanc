@@ -260,42 +260,6 @@ class BaseSolver(Solver):
             pipeline = montblanc.factory.get_empty_pipeline()
         self.pipeline = pipeline
 
-    def viable_timesteps(self, bytes_available):
-        """
-        Returns the number of timesteps possible, given the registered arrays
-        and a memory budget defined by bytes_available
-        """
-
-        # Don't accept non-negative memory budgets
-        if bytes_available < 0: bytes_available = 0
-
-        # Figure out which arrays have an ntime dimension
-        has_time = np.array([ \
-            t.sshape.count('ntime') > 0 for t in self.arrays.values()])
-
-        # Get the shape product of each array, EXCLUDING any ntime dimension,
-        # multiplied by the size of the array type in bytes.
-        products = np.array([ \
-            np.product(montblanc.util.shape_from_str_tuple(
-                t.sshape,
-                self.get_properties(),
-                ignore=['ntime'])) * \
-            np.dtype(t.dtype).itemsize \
-            for t in self.arrays.values()])
-
-        # Determine a linear expression for the bytes
-        # required which varies by timestep. y = a + b*x
-        a = np.sum(np.logical_not(has_time)*products)
-        b = np.sum(has_time*products)
-
-        # Check that if we substitute ntime for x, we agree on the
-        # memory requirements
-        assert a + b*self.ntime == self.bytes_required()
-
-        # Given the number of bytes available,
-        # how many timesteps can we fit in our budget?
-        return (bytes_available - a + b - 1) // b
-
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
         return np.sum([montblanc.util.array_bytes(a.shape,a.dtype)

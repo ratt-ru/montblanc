@@ -245,6 +245,48 @@ def viable_dim_config(bytes_available, arrays, props,
     return True, modified_dims
 
 
+def viable_timesteps(bytes_available, arrays, props):
+    """
+    Returns the number of timesteps possible, given the registered arrays
+    and a memory budget defined by bytes_available
+    """
+
+    # Don't accept non-negative memory budgets
+    if bytes_available < 0:
+        bytes_available = 0
+
+    # Figure out which arrays have an ntime dimension
+    has_time = np.array([ \
+        t.sshape.count('ntime') > 0 for t in arrays.values()])
+
+    # Get the shape product of each array, EXCLUDING any ntime dimension,
+    # multiplied by the size of the array type in bytes.
+    products = np.array([array_bytes(
+        shape_from_str_tuple(t.sshape, props,
+            ignore=['ntime']),
+        t.dtype)
+        for t in arrays.values()])
+
+    # TODO: Remove duplicate code paths
+    # This really replicates solver.bytes_required
+    bytes_required = np.array([array_bytes(
+        shape_from_str_tuple(t.sshape, props),
+        t.dtype)
+        for t in arrays.values()]).sum()
+
+    # Determine a linear expression for the bytes
+    # required which varies by timestep. y = a + b*x
+    a = np.sum(np.logical_not(has_time)*products)
+    b = np.sum(has_time*products)
+
+    # Check that if we substitute ntime for x, we agree on the
+    # memory requirements
+    assert a + b*props['ntime'] == bytes_required
+
+    # Given the number of bytes available,
+    # how many timesteps can we fit in our budget?
+    return (bytes_available - a + b - 1) // b
+
 def dtype_from_str(sdtype, props):
     """
     Substitutes string dtype parameters
