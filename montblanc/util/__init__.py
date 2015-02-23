@@ -121,7 +121,7 @@ def flatten(nested):
 
     return flat_return
 
-def ary_size(ary, props):
+def dict_array_bytes(ary, props):
     """
     Return the number of bytes required by an array
 
@@ -144,7 +144,7 @@ def ary_size(ary, props):
 
     return array_bytes(shape, dtype)
 
-def bytes_required(arrays, props):
+def dict_array_bytes_required(arrays, props):
     """
     Return the number of bytes required by
     a dictionary of arrays.
@@ -163,7 +163,7 @@ def bytes_required(arrays, props):
     The number of bytes required to represent
     all the arrays.
     """
-    return np.sum([ary_size(ary, props)
+    return np.sum([dict_array_bytes(ary, props)
         for ary in arrays.itervalues()])
 
 def viable_dim_config(bytes_available, arrays, props,
@@ -220,7 +220,7 @@ def viable_dim_config(bytes_available, arrays, props,
 
     modified_dims = {}
 
-    bytes_used = bytes_required(arrays, props)
+    bytes_used = dict_array_bytes_required(arrays, props)
 
     # While more bytes are used than are available, set
     # dimensions to one in the order specified by the
@@ -240,7 +240,7 @@ def viable_dim_config(bytes_available, arrays, props,
             modified_dims[dim] = 1
             props[dim] = 1
 
-        bytes_used = bytes_required(arrays, props)
+        bytes_used = dict_array_bytes_required(arrays, props)
 
     return True, modified_dims
 
