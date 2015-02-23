@@ -98,38 +98,36 @@ class TestBiroV5(unittest.TestCase):
             weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
 
             A = copy.deepcopy(BSV4mod.A)
+            P = slvr.get_properties()
 
-            viable, P = slvr.viable_dim_config(
-                10*1024*1024, A,  ['ntime', 'nbl&na', 'nchan'], 1)
-            self.assertTrue(viable is True and len(P) == 1 and
-                P['ntime'] == 1)
+            viable, MP = montblanc.util.viable_dim_config(
+                10*1024*1024, A,  P, ['ntime', 'nbl&na', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MP) == 1 and
+                MP['ntime'] == 1)
+            #print viable, MP
+
+            viable, MP = montblanc.util.viable_dim_config(
+                1*1024*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1,)
+            self.assertTrue(viable is True and len(MP) == 3 and
+                MP['ntime'] == 1 and
+                MP['na'] == 1 and
+                MP['nbl'] == 1)
+
+            viable, MP = montblanc.util.viable_dim_config(
+                10*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MP) == 4 and
+                MP['ntime'] == 1 and
+                MP['na'] == 1 and
+                MP['nbl'] == 1 and
+                MP['nchan'] == 1)
+
+            viable, MP = montblanc.util.viable_dim_config(
+                1024, A, P, ['ntime', 'nbl&na'], 1)
+            self.assertTrue(viable is False and len(MP) == 3 and
+                MP['ntime'] == 1 and
+                MP['na'] == 1 and
+                MP['nbl'] == 1)
             #print viable, P
-
-            viable, P = slvr.viable_dim_config(
-                1*1024*1024, A, ['ntime', 'nbl&na', 'nchan'], 1,)
-            self.assertTrue(viable is True and len(P) == 3 and
-                P['ntime'] == 1 and
-                P['na'] == 1 and
-                P['nbl'] == 1)
-            #print viable, P
-
-            viable, P = slvr.viable_dim_config(
-                10*1024, A, ['ntime', 'nbl&na', 'nchan'], 1)
-            self.assertTrue(viable is True and len(P) == 4 and
-                P['ntime'] == 1 and
-                P['na'] == 1 and
-                P['nbl'] == 1 and
-                P['nchan'] == 1)
-            #print viable, P
-
-            viable, P = slvr.viable_dim_config(
-                1024, A, ['ntime', 'nbl&na'], 1)
-            self.assertTrue(viable is False and len(P) == 3 and
-                P['ntime'] == 1 and
-                P['na'] == 1 and
-                P['nbl'] == 1)
-            #print viable, P
-
 
     @unittest.skip('Problem size causes allocation failures during run of '
         'entire test suite.')
