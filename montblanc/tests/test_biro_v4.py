@@ -187,8 +187,6 @@ class TestBiroV4(unittest.TestCase):
             weight_vector=True,
             pipeline=Pipeline([MatrixTranspose()])) as slvr:
 
-            print '%s sources' % slvr.nsrc
-
             slvr.register_array(
                 name='matrix_in',
                 shape=('nsrc', 'nchan'),
