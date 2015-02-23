@@ -140,7 +140,7 @@ def dict_array_bytes(ary, props):
     the array.
     """
     shape = get_numeric_shape(ary['shape'], props)
-    dtype = get_actual_dtype(ary['dtype'], props)
+    dtype = dtype_from_str(ary['dtype'], props)
 
     return array_bytes(shape, dtype)
 
@@ -245,7 +245,7 @@ def viable_dim_config(bytes_available, arrays, props,
     return True, modified_dims
 
 
-def get_actual_dtype(sdtype, props):
+def dtype_from_str(sdtype, props):
     """
     Substitutes string dtype parameters
     using a a property dictionary

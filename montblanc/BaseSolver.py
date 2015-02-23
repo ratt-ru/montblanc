@@ -430,7 +430,7 @@ class BaseSolver(Solver):
 
         # Replace any string representations with the
         # appropriate data type
-        dtype = montblanc.util.get_actual_dtype(dtype, P)
+        dtype = montblanc.util.dtype_from_str(dtype, P)
 
         # Create a new record
         new = ArrayRecord(
@@ -586,7 +586,7 @@ class BaseSolver(Solver):
 
         # Replace any string representations with the
         # appropriate data type
-        dtype = montblanc.util.get_actual_dtype(dtype, P)
+        dtype = montblanc.util.dtype_from_str(dtype, P)
 
         self.properties[name]  = PropertyRecord(
             name, dtype, default, registrant)
