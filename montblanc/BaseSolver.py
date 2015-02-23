@@ -276,7 +276,7 @@ class BaseSolver(Solver):
         # Get the shape product of each array, EXCLUDING any ntime dimension,
         # multiplied by the size of the array type in bytes.
         products = np.array([ \
-            np.product(montblanc.util.get_numeric_shape(
+            np.product(montblanc.util.shape_from_str_tuple(
                 t.sshape,
                 self.get_properties(),
                 ignore=['ntime'])) * \
@@ -426,7 +426,7 @@ class BaseSolver(Solver):
 
         # Figure out the actual integer shape
         sshape = shape
-        shape = montblanc.util.get_numeric_shape(sshape, P)
+        shape = montblanc.util.shape_from_str_tuple(sshape, P)
 
         # Replace any string representations with the
         # appropriate data type

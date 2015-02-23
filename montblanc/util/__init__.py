@@ -139,7 +139,7 @@ def dict_array_bytes(ary, props):
     The number of bytes required to represent
     the array.
     """
-    shape = get_numeric_shape(ary['shape'], props)
+    shape = shape_from_str_tuple(ary['shape'], props)
     dtype = dtype_from_str(ary['dtype'], props)
 
     return array_bytes(shape, dtype)
@@ -267,7 +267,7 @@ def dtype_from_str(sdtype, props):
 
     return props[sdtype]
 
-def get_numeric_shape(sshape, variables, ignore=None):
+def shape_from_str_tuple(sshape, variables, ignore=None):
     """
     Substitutes string values in the supplied shape parameter
     with integer variables stored in a dictionary
@@ -283,7 +283,7 @@ def get_numeric_shape(sshape, variables, ignore=None):
     ignore : list
         A list of tuple strings to ignore
 
-    >>> print self.get_numeric_shape((4,'na','ntime'),ignore=['ntime'])
+    >>> print self.shape_from_str_tuple((4,'na','ntime'),ignore=['ntime'])
     (4, 3)
     """
     if ignore is None: ignore = []
@@ -318,7 +318,7 @@ def array_convert_function(sshape_one, sshape_two, variables):
     t_idx = tuple([s_one.index(v) for v in s_two])
 
     # Figure out the actual numeric shape values to use
-    n_one = get_numeric_shape(s_one, variables)
+    n_one = shape_from_str_tuple(s_one, variables)
     n_two = [eval_expr(d,variables)
         if isinstance(d,str) else d for d in sshape_two]
 

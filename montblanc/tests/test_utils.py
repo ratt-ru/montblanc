@@ -57,7 +57,7 @@ class TestUtils(unittest.TestCase):
 
         ri = np.random.randint
 
-        gns = montblanc.util.get_numeric_shape
+        gns = montblanc.util.shape_from_str_tuple
         P = { 'ntime' : ri(5,10), 'nbl' : ri(3,5), 'nchan' : 4,
             'nsrc' : ri(4,10) }
 
