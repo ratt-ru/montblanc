@@ -76,6 +76,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * sersic_shape,
     typename Tr::ft * wavelength,
     int * ant_pairs,
+    typename Tr::ct * diag_g_term,
     typename Tr::ct * jones_EK_scalar,
     int * flag,
     typename Tr::ft * weight_vector,
@@ -405,6 +406,7 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * sersic_shape, \
     ft * wavelength, \
     int * ant_pairs, \
+    ct * diag_g_term, \
     ct * jones_EK_scalar, \
     int * flag, \
     ft * weight_vector, \
@@ -413,7 +415,7 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * chi_sqrd_result) \
 { \
     rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, sersic_shape, \
-        wavelength, ant_pairs, jones_EK_scalar, flag, \
+        wavelength, ant_pairs, diag_g_term, jones_EK_scalar, flag, \
         weight_vector, visibilities, data_vis, \
         chi_sqrd_result); \
 }
@@ -489,7 +491,7 @@ class RimeGaussBSum(Node):
 
         self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic,
             slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
-            slvr.flag_gpu, slvr.weight_vector_gpu,
+            slvr.diag_g_gpu, slvr.flag_gpu, slvr.weight_vector_gpu,
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
             **self.get_kernel_params(slvr))
 

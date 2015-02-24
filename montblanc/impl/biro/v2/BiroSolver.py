@@ -162,6 +162,10 @@ A = [
         default=0,
         test=lambda slvr, ary: rary(ary)),
 
+    ary_dict('diag_g', (2, 'ntime', 'na', 'nchan'), 'ct',
+        default=1,
+        test=lambda slvr, ary: rary(ary)),
+
     # Result arrays
     ary_dict('jones_scalar', ('ntime','na','nsrc','nchan'), 'ct'),
     ary_dict('vis', (4,'ntime','nbl','nchan'), 'ct'),
