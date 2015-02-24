@@ -60,6 +60,12 @@ If you use Montblanc and find it useful, you may wish to consider citing the rel
 
 More information on BIRO can be found in this arXiv [preprint][biro] .
 
+## Caveats
+
+Montblanc is an experimental package, undergoing rapid development. The plan for 2015 is to iterate on new versions of the BIRO pipeline.
+
+In general, I will avoid making changes to BIRO v2 and v3, but everything beyond that may be changed, including the basic API residing in BaseSolver.py. So view the current API as unstable. I will make an effort to maintain the CHANGELOG.md, to record any breaking API changes.
+
 [pycuda]:http://mathema.tician.de/software/pycuda/
 [pytools]:https://pypi.python.org/pypi/pytools
 [moderngpu]:https://github.com/nvlabs/moderngpu
