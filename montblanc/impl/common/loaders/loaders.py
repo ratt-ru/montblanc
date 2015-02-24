@@ -20,7 +20,8 @@
 
 import pyrap.tables as pt
 import os
-import montblanc
+
+import montblanc.util as mbu
 
 from montblanc.api.loaders import BaseLoader
 
@@ -36,12 +37,10 @@ class MeasurementSetLoader(BaseLoader):
         self.antfile = os.path.join(self.msfile, ANTENNA_TABLE)
         self.freqfile = os.path.join(self.msfile, SPECTRAL_WINDOW)
 
-        self.tables['main'] = tm \
-                = pt.table(self.msfile, ack=False).query('ANTENNA1 != ANTENNA2')
-        self.tables['ant']  = ta \
-                = pt.table(self.antfile, ack=False)
-        self.tables['freq'] = tf \
-                = pt.table(self.freqfile, ack=False)
+        self.tables['main'] = pt.table(self.msfile, ack=False) \
+            .query('ANTENNA1 != ANTENNA2')
+        self.tables['ant']  = pt.table(self.antfile, ack=False)
+        self.tables['freq'] = pt.table(self.freqfile, ack=False)
 
     def get_dims(self, auto_correlations=False):
         """

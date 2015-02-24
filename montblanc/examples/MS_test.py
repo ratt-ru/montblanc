@@ -34,7 +34,7 @@ if __name__ == '__main__':
 
     # Get the solver.
     with montblanc.get_biro_solver(args.msfile,
-        npsrc=1, ngsrc=0, dtype=np.float64, version=args.version) as slvr:
+        npsrc=1, ngsrc=0, nssrc=0, dtype=np.float64, version=args.version) as slvr:
 
         # Create point sources at zeros
         l=slvr.ft(np.ones(slvr.nsrc))*0.1
