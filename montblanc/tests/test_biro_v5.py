@@ -18,20 +18,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import copy
 import logging
 import unittest
 import numpy as np
 import time
 
 import montblanc.factory
+import montblanc.util as mbu
 
-from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
-from montblanc.impl.biro.v3.CompositeBiroSolver import get_pipeline
+from montblanc.impl.biro.v4.cpu.RimeCPU import RimeCPU
+
+import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
 def solver(**kwargs):
-    return montblanc.factory.get_biro_solver('test',version='v3',**kwargs)
+    return montblanc.factory.get_biro_solver('test',version='v5',**kwargs)
 
-class TestBiroV3(unittest.TestCase):
+class TestBiroV5(unittest.TestCase):
     """
     TestRimes class defining the unit test cases for montblanc
     """
@@ -89,6 +92,44 @@ class TestBiroV3(unittest.TestCase):
             chi_sqrd_result_cpu = RimeCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
             self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
+    def test_smart_budget(self):
+        wv = True
+
+        with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
+            weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
+
+            A = copy.deepcopy(BSV4mod.A)
+            P = slvr.get_properties()
+
+            viable, MP = mbu.viable_dim_config(
+                10*1024*1024, A,  P, ['ntime', 'nbl&na', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MP) == 1 and
+                MP['ntime'] == 1)
+            #print viable, MP
+
+            viable, MP = mbu.viable_dim_config(
+                1*1024*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1,)
+            self.assertTrue(viable is True and len(MP) == 3 and
+                MP['ntime'] == 1 and
+                MP['na'] == 1 and
+                MP['nbl'] == 1)
+
+            viable, MP = mbu.viable_dim_config(
+                10*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MP) == 4 and
+                MP['ntime'] == 1 and
+                MP['na'] == 1 and
+                MP['nbl'] == 1 and
+                MP['nchan'] == 1)
+
+            viable, MP = mbu.viable_dim_config(
+                1024, A, P, ['ntime', 'nbl&na'], 1)
+            self.assertTrue(viable is False and len(MP) == 3 and
+                MP['ntime'] == 1 and
+                MP['na'] == 1 and
+                MP['nbl'] == 1)
+            #print viable, P
+
     @unittest.skip('Problem size causes allocation failures during run of '
         'entire test suite.')
     def test_time(self, cmp=None):
@@ -105,5 +146,5 @@ class TestBiroV3(unittest.TestCase):
                 slvr.solve()
 
 if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV3)
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV5)
     unittest.TextTestRunner(verbosity=2).run(suite)

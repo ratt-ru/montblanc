@@ -18,8 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import copy
 import numpy as np
-import sys
 import types
 
 from weakref import WeakKeyDictionary
@@ -30,7 +30,7 @@ import pycuda.gpuarray as gpuarray
 
 import montblanc
 import montblanc.factory
-import montblanc.util
+import montblanc.util as mbu
 
 class ArrayRecord(object):
     """ Records information about an array """
@@ -138,7 +138,7 @@ class Solver(object):
     pass
 
 DEFAULT_NA=3
-DEFAULT_NBL=montblanc.util.nr_of_baselines(DEFAULT_NA)
+DEFAULT_NBL=mbu.nr_of_baselines(DEFAULT_NA)
 DEFAULT_NCHAN=4
 DEFAULT_NTIME=10
 DEFAULT_NPSRC=2
@@ -206,7 +206,7 @@ class BaseSolver(Solver):
         # - gaussian sources
         # - sersic sources
         self.na = na
-        self.nbl = nbl = montblanc.util.nr_of_baselines(na,autocor)
+        self.nbl = nbl = mbu.nr_of_baselines(na,autocor)
         self.nchan = nchan
         self.ntime = ntime
         self.npsrc = npsrc
@@ -223,14 +223,14 @@ class BaseSolver(Solver):
 
         # Configure our floating point and complex types
         if dtype == np.float32:
-            self.ct = ct = np.complex64
+            self.ct = np.complex64
         elif dtype == np.float64:
-            self.ct = ct = np.complex128
+            self.ct = np.complex128
         else:
             raise TypeError, ('Must specify either np.float32 ',
                 'or np.float64 for dtype')
 
-        self.ft = ft = dtype
+        self.ft = dtype
 
         # Store the context, choosing the default if not specified
         ctx = kwargs.get('context')
@@ -239,7 +239,7 @@ class BaseSolver(Solver):
             raise Exception, 'No context was supplied to the BaseSolver'
 
         # Create a context wrapper
-        self.context = montblanc.util.ContextWrapper(ctx)
+        self.context = mbu.ContextWrapper(ctx)
 
         # Figure out the integer compute cability of the device
         # associated with the context
@@ -260,77 +260,24 @@ class BaseSolver(Solver):
             pipeline = montblanc.factory.get_empty_pipeline()
         self.pipeline = pipeline
 
-    def get_actual_dtype(self,sdtype):
-        """
-        Substitutes string dtype parameters with actual
-        NumPy dtypes.
-
-        Parameters
-        ----------
-            sdtype : string defining the dtype
-
-        """
-
-        return {
-            'ft' : self.ft,
-            'ct' : self.ct,
-            'int' : int
-        }[sdtype]
-
-    def viable_timesteps(self, bytes_available):
-        """
-        Returns the number of timesteps possible, given the registered arrays
-        and a memory budget defined by bytes_available
-        """
-
-        # Don't accept non-negative memory budgets
-        if bytes_available < 0: bytes_available = 0
-
-        # Figure out which arrays have an ntime dimension
-        has_time = np.array([ \
-            t.sshape.count('ntime') > 0 for t in self.arrays.values()])
-
-        # Get the shape product of each array, EXCLUDING any ntime dimension,
-        # multiplied by the size of the array type in bytes.
-        products = np.array([ \
-            np.product(montblanc.util.get_numeric_shape(
-                t.sshape,
-                self.get_properties(),
-                ignore=['ntime'])) * \
-            np.dtype(t.dtype).itemsize \
-            for t in self.arrays.values()])
-
-        # Determine a linear expression for the bytes
-        # required which varies by timestep. y = a + b*x
-        a = np.sum(np.logical_not(has_time)*products)
-        b = np.sum(has_time*products)
-
-        # Check that if we substitute ntime for x, we agree on the
-        # memory requirements
-        assert a + b*self.ntime == self.bytes_required()
-
-        # Given the number of bytes available,
-        # how many timesteps can we fit in our budget?
-        return (bytes_available - a + b - 1) // b
-
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
-        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
+        return np.sum([mbu.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues()])
 
     def cpu_bytes_required(self):
         """ returns the memory required by all CPU arrays in bytes. """
-        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
+        return np.sum([mbu.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_cpu_ary])
 
     def gpu_bytes_required(self):
         """ returns the memory required by all GPU arrays in bytes. """
-        return np.sum([montblanc.util.array_bytes(a.shape,a.dtype)
+        return np.sum([mbu.array_bytes(a.shape,a.dtype)
             for a in self.arrays.itervalues() if a.has_gpu_ary])
 
     def mem_required(self):
         """ Return a string representation of the total memory required """
-        return montblanc.util.fmt_bytes(self.bytes_required())
+        return mbu.fmt_bytes(self.bytes_required())
 
     def check_array(self, record_key, ary):
         """
@@ -438,12 +385,16 @@ class BaseSolver(Solver):
         create_cpu_ary = not cpu_ary_exists and want_cpu_ary
         create_gpu_ary = not gpu_ary_exists and want_gpu_ary
 
+        # Get a property dictionary to perform string replacements
+        P = self.get_properties()
+
         # Figure out the actual integer shape
         sshape = shape
-        shape = montblanc.util.get_numeric_shape(sshape, self.get_properties())
+        shape = mbu.shape_from_str_tuple(sshape, P)
 
-        if type(dtype) == str:
-            dtype = self.get_actual_dtype(dtype)
+        # Replace any string representations with the
+        # appropriate data type
+        dtype = mbu.dtype_from_str(dtype, P)
 
         # Create a new record
         new = ArrayRecord(
@@ -463,8 +414,8 @@ class BaseSolver(Solver):
         self.arrays[name] = new
 
         # Attribute names
-        cpu_name = montblanc.util.cpu_name(name)
-        gpu_name = montblanc.util.gpu_name(name)
+        cpu_name = mbu.cpu_name(name)
+        gpu_name = mbu.gpu_name(name)
 
         # Create descriptors on the class instance, even though members
         # may not necessarily be created on object instances. This is so
@@ -536,7 +487,7 @@ class BaseSolver(Solver):
                 ' to an invalid type %s' % (type(transfer_method)))
 
         # Name the transfer method
-        transfer_method_name = montblanc.util.transfer_method_name(name)
+        transfer_method_name = mbu.transfer_method_name(name)
         setattr(self,  transfer_method_name, transfer_method)
         # Create a docstring!
         getattr(transfer_method, '__func__').__doc__ = \
@@ -548,12 +499,12 @@ class BaseSolver(Solver):
 
         # Set up a member describing the shape
         if kwargs.get('shape_member', False) is True:
-            shape_name = montblanc.util.shape_name(name)
+            shape_name = mbu.shape_name(name)
             setattr(self, shape_name, shape)
 
         # Set up a member describing the dtype
         if kwargs.get('dtype_member', False) is True:
-            dtype_name = montblanc.util.dtype_name(name)
+            dtype_name = mbu.dtype_name(name)
             setattr(self, dtype_name, dtype)
 
     def register_arrays(self, array_dicts):
@@ -595,10 +546,13 @@ class BaseSolver(Solver):
 
         """
 
-        if type(dtype) == str:
-            dtype = self.get_actual_dtype(dtype)
+        P = self.get_properties()
 
-        self.properties[name] = pr = PropertyRecord(
+        # Replace any string representations with the
+        # appropriate data type
+        dtype = mbu.dtype_from_str(dtype, P)
+
+        self.properties[name]  = PropertyRecord(
             name, dtype, default, registrant)
 
         #if not hasattr(BaseSolver, name):
@@ -611,7 +565,7 @@ class BaseSolver(Solver):
 
         # Should we create a setter for this property?
         setter = kwargs.get('setter_method', True)
-        setter_name = montblanc.util.setter_name(name)
+        setter_name = mbu.setter_name(name)
 
         # Yes, create a default setter
         if isinstance(setter, types.BooleanType) and setter is True:
@@ -660,6 +614,7 @@ class BaseSolver(Solver):
         slvr = self
 
         D = {
+            # Dimensions
             'na' : slvr.na,
             'nbl' : slvr.nbl,
             'nchan' : slvr.nchan,
@@ -669,6 +624,10 @@ class BaseSolver(Solver):
             'nssrc' : slvr.nssrc,
             'nsrc'  : slvr.nsrc,
             'nvis' : slvr.nvis,
+            # Types
+            'ft' : slvr.ft,
+            'ct' : slvr.ct,
+            'int' : int
         }
 
         for p in self.properties.itervalues():
@@ -686,12 +645,12 @@ class BaseSolver(Solver):
         """ Generator generating strings describing each registered array """
         yield 'Registered Arrays'
         yield '-'*80
-        yield montblanc.util.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
+        yield mbu.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
         yield '-'*80
 
         for a in self.arrays.itervalues():
-            yield montblanc.util.fmt_array_line(a.name,
-                montblanc.util.fmt_bytes(montblanc.util.array_bytes(a.shape, a.dtype)),
+            yield mbu.fmt_array_line(a.name,
+                mbu.fmt_bytes(mbu.array_bytes(a.shape, a.dtype)),
                 np.dtype(a.dtype).name,
                 'Y' if a.has_cpu_ary else 'N',
                 'Y' if a.has_gpu_ary else 'N',
@@ -701,12 +660,12 @@ class BaseSolver(Solver):
         """ Generator generating string describing each registered property """
         yield 'Registered Properties'
         yield '-'*80
-        yield montblanc.util.fmt_property_line('Property Name',
+        yield mbu.fmt_property_line('Property Name',
             'Type', 'Value', 'Default Value')
         yield '-'*80
 
         for p in self.properties.itervalues():
-            yield montblanc.util.fmt_property_line(
+            yield mbu.fmt_property_line(
                 p.name, np.dtype(p.dtype).name,
                 getattr(self, p.name), p.default)
 
@@ -748,8 +707,8 @@ class BaseSolver(Solver):
             '%-*s: %s' % (w,'Point Sources', self.npsrc),
             '%-*s: %s' % (w,'Gaussian Sources', self.ngsrc),
             '%-*s: %s' % (w,'Sersic Sources', self.nssrc),
-            '%-*s: %s' % (w,'CPU Memory', montblanc.util.fmt_bytes(n_cpu_bytes)),
-            '%-*s: %s' % (w,'GPU Memory', montblanc.util.fmt_bytes(n_gpu_bytes))]
+            '%-*s: %s' % (w,'CPU Memory', mbu.fmt_bytes(n_cpu_bytes)),
+            '%-*s: %s' % (w,'GPU Memory', mbu.fmt_bytes(n_gpu_bytes))]
 
         l.extend([''])
         l.extend([s for s in self.gen_array_descriptions()])

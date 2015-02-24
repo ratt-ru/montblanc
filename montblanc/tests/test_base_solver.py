@@ -30,7 +30,7 @@ import pycuda.curandom
 
 import montblanc
 import montblanc.factory
-import montblanc.util
+import montblanc.util as mbu
 
 class TestSolver(unittest.TestCase):
     """
@@ -60,10 +60,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = montblanc.util.gpu_name(name)
-            cpu_name = montblanc.util.cpu_name(name)
-            shape_name = montblanc.util.shape_name(name)
-            dtype_name = montblanc.util.dtype_name(name)
+            gpu_name = mbu.gpu_name(name)
+            cpu_name = mbu.cpu_name(name)
+            shape_name = mbu.shape_name(name)
+            dtype_name = mbu.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -94,10 +94,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = montblanc.util.gpu_name(name)
-            cpu_name = montblanc.util.cpu_name(name)
-            shape_name = montblanc.util.shape_name(name)
-            dtype_name = montblanc.util.dtype_name(name)
+            gpu_name = mbu.gpu_name(name)
+            cpu_name = mbu.cpu_name(name)
+            shape_name = mbu.shape_name(name)
+            dtype_name = mbu.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -129,10 +129,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = montblanc.util.gpu_name(name)
-            cpu_name = montblanc.util.cpu_name(name)
-            shape_name = montblanc.util.shape_name(name)
-            dtype_name = montblanc.util.dtype_name(name)
+            gpu_name = mbu.gpu_name(name)
+            cpu_name = mbu.cpu_name(name)
+            shape_name = mbu.shape_name(name)
+            dtype_name = mbu.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -164,10 +164,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = montblanc.util.gpu_name(name)
-            cpu_name = montblanc.util.cpu_name(name)
-            shape_name = montblanc.util.shape_name(name)
-            dtype_name = montblanc.util.dtype_name(name)
+            gpu_name = mbu.gpu_name(name)
+            cpu_name = mbu.cpu_name(name)
+            shape_name = mbu.shape_name(name)
+            dtype_name = mbu.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -199,10 +199,10 @@ class TestSolver(unittest.TestCase):
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
-            gpu_name = montblanc.util.gpu_name(name)
-            cpu_name = montblanc.util.cpu_name(name)
-            shape_name = montblanc.util.shape_name(name)
-            dtype_name = montblanc.util.dtype_name(name)
+            gpu_name = mbu.gpu_name(name)
+            cpu_name = mbu.cpu_name(name)
+            shape_name = mbu.shape_name(name)
+            dtype_name = mbu.dtype_name(name)
 
             # Before registration, descriptors may not have been created
             # on the montblanc.factory.get_base_solver class. If they have, check that
@@ -303,10 +303,10 @@ class TestSolver(unittest.TestCase):
             ntime=10,npsrc=10,ngsrc=10) as slvr:
 
             name='uvw'
-            gpu_name = montblanc.util.gpu_name(name)
-            cpu_name = montblanc.util.cpu_name(name)
-            shape_name = montblanc.util.shape_name(name)
-            dtype_name = montblanc.util.dtype_name(name)
+            gpu_name = mbu.gpu_name(name)
+            cpu_name = mbu.cpu_name(name)
+            shape_name = mbu.shape_name(name)
+            dtype_name = mbu.dtype_name(name)
 
             shape = (3,slvr.nbl, slvr.ntime)
             dtype = np.complex64
@@ -360,10 +360,10 @@ class TestSolver(unittest.TestCase):
             slvr.register_arrays(D)
 
             for name,a in D.iteritems():
-                gpu_name = montblanc.util.gpu_name(name)
-                cpu_name = montblanc.util.cpu_name(name)
-                shape_name = montblanc.util.shape_name(name)
-                dtype_name = montblanc.util.dtype_name(name)
+                gpu_name = mbu.gpu_name(name)
+                cpu_name = mbu.cpu_name(name)
+                shape_name = mbu.shape_name(name)
+                dtype_name = mbu.dtype_name(name)
 
                 if hasattr(montblanc.factory.get_base_solver, cpu_name):
                     if a['cpu'] is False:
@@ -404,7 +404,7 @@ class TestSolver(unittest.TestCase):
             for name,a in D.iteritems():
                 self.assertTrue(hasattr(slvr,name))
 
-                setter_name = montblanc.util.setter_name(name)
+                setter_name = mbu.setter_name(name)
 
                 if a['setter']:
                     self.assertTrue(hasattr(slvr,setter_name))
@@ -423,7 +423,7 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.get_base_solver(na=na,ntime=5,
             nchan=16,npsrc=2,ngsrc=2,auto_correlations=autocor) as slvr:
 
-            self.assertTrue(slvr.nbl == montblanc.util.nr_of_baselines(na,autocor))
+            self.assertTrue(slvr.nbl == mbu.nr_of_baselines(na,autocor))
             self.assertTrue(slvr.nbl == 105)
 
         # Should have 91 baselines for 14 antenna with auto-correlations on
@@ -431,7 +431,7 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.get_base_solver(na=na,ntime=5,
             nchan=16,npsrc=2,ngsrc=2,auto_correlations=autocor) as slvr:
 
-            self.assertTrue(slvr.nbl == montblanc.util.nr_of_baselines(na,autocor))
+            self.assertTrue(slvr.nbl == mbu.nr_of_baselines(na,autocor))
             self.assertTrue(slvr.nbl == 91)
 
     def test_viable_timesteps(self):
@@ -452,7 +452,8 @@ class TestSolver(unittest.TestCase):
             # How many timesteps can we accommodate with 2GB ?
             # Don't bother with the actual value, the assert in viable_timesteps
             # actually tests things quite well
-            slvr.viable_timesteps(2*1024*1024*1024)
+            mbu.viable_timesteps(2*1024*1024*1024,
+                slvr.arrays, slvr.get_properties())
 
     def test_solver_factory(self):
         """ Test that the solver factory produces the correct types """

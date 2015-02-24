@@ -18,12 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import argparse
-import os.path
-import sys
-
-import pycuda.driver as cuda
-
 import montblanc
 
 from montblanc.node import NullNode
@@ -77,11 +71,11 @@ class Pipeline:
                 montblanc.log.debug('Initialising node \'' + node.description() + '\'')
                 node.initialise(solver, stream)
                 montblanc.log.debug('Done')
-        except PipeLineError as e:
+        except PipeLineError:
             montblanc.log.error('Pipeline Error occurred during RIME pipeline initialisation', exc_info=True)
             self.initialised = False
             return self.initialised
-        except Exception as e:
+        except Exception:
             montblanc.log.error(('Unexpected exception occurred '
                 'during RIME pipeline initialisation'), exc_info=True)
             self.initialised = False
@@ -128,10 +122,10 @@ class Pipeline:
             # Record pipeline end
             self.nr_of_executions += 1
 
-        except PipeLineError as e:
+        except PipeLineError:
             montblanc.log.error('Pipeline Error occurred during RIME pipeline execution', exc_info=True)
             return False
-        except Exception as e:
+        except Exception:
             montblanc.log.error(('Unexpected exception occurred '
                 'during RIME pipeline execution'), exc_info=True)
             return False
@@ -161,11 +155,11 @@ class Pipeline:
                 montblanc.log.debug('Shutting down node \'' + node.description() + '\'')
                 node.shutdown(solver, stream)
                 montblanc.log.debug('Done')
-            except PipeLineError as e:
+            except PipeLineError:
                 montblanc.log.error(('Pipeline Error occurred '
                     'during RIME pipeline shutdown'), exc_info=True)
                 success = False
-            except Exception as e:
+            except Exception:
                 montblanc.log.error(('Unexpected exception occurred '
                     'during RIME pipeline shutdown'), exc_info=True)
                 success = False

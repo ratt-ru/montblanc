@@ -28,7 +28,7 @@ import os
 # Import ourself. How is this... I don't even...
 # Hooray for python
 import montblanc
-import montblanc.util
+import montblanc.util as mbu
 
 from montblanc.tests import test
 

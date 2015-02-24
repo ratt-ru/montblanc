@@ -26,16 +26,12 @@ import time
 
 import montblanc.factory
 
-from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
+from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
+from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
-from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
+from montblanc.impl.biro.v4.cpu.RimeCPU import RimeCPU
 from montblanc.pipeline import Pipeline
-
-
-def solver(**kwargs):
-    """ Shorten the factory call for readability """
-    return montblanc.factory.get_biro_solver('test', version='v2', **kwargs)
-
 
 def src_perms(defaults, permute_weights=False):
     """
@@ -85,7 +81,10 @@ def src_perms(defaults, permute_weights=False):
             yield params
 
 
-class TestBiroV2(unittest.TestCase):
+def solver(**kwargs):
+    return montblanc.factory.get_biro_solver('test',version='v4',**kwargs)
+
+class TestBiroV4(unittest.TestCase):
     """
     TestRimes class defining the unit test cases for montblanc
     """
@@ -173,14 +172,45 @@ class TestBiroV2(unittest.TestCase):
         """ Test the B sum float kernel """
         for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
             with solver(dtype=np.float32, **params) as slvr:
+
                 self.B_sum_test_impl(slvr, params['weight_vector'], {'rtol': 1e-4})
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """
         for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
             with solver(dtype=np.float64, **params) as slvr:
+
                 self.B_sum_test_impl(slvr, params['weight_vector'])
 
+    def test_transpose(self):
+        with solver(na=4, npsrc=6, ntime=2, nchan=10,
+            weight_vector=True,
+            pipeline=Pipeline([MatrixTranspose()])) as slvr:
+
+            slvr.register_array(
+                name='matrix_in',
+                shape=('nsrc', 'nchan'),
+                dtype='ft',
+                registrant='test_biro_v4')
+
+            slvr.register_array(
+                name='matrix_out',
+                shape=('nchan', 'nsrc'),
+                dtype='ft',
+                registrant='test_biro_v4')
+
+            matrix = np.random.random(
+                size=(slvr.nsrc, slvr.nchan)).astype(slvr.ft)
+
+            slvr.transfer_matrix_in(matrix)
+
+            slvr.solve()
+
+            with slvr.context:
+                slvr.matrix_out_cpu = slvr.matrix_out_gpu.get()
+
+            assert np.all(slvr.matrix_in_cpu == slvr.matrix_out_cpu.T)
+
 if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV2)
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV4)
     unittest.TextTestRunner(verbosity=2).run(suite)

@@ -18,10 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import montblanc.util as mbu
-
 import numexpr as ne
 import numpy as np
+
+import montblanc.util as mbu
 
 class RimeCPU(object):
     def __init__(self, solver):
@@ -31,7 +31,7 @@ class RimeCPU(object):
         """
         Compute the shape values for the gaussian sources.
 
-        Returns a (ntime, nbl, ngsrc, nchan) matrix of floating point scalars.
+        Returns a (ngsrc, ntime, nbl, nchan) matrix of floating point scalars.
         """
 
         slvr = self.solver
@@ -59,22 +59,18 @@ class RimeCPU(object):
             # u1 = u*em - v*el
             # v1 = u*el + v*em
             u1 = ne.evaluate('u_em - v_el',
-                {'u_em': np.outer(u, em), 'v_el': np.outer(v, el)})\
-                .reshape(slvr.ntime,slvr.nbl,slvr.ngsrc)
+                {'u_em': np.outer(em, u), 'v_el': np.outer(el, v)})\
+                .reshape(slvr.ngsrc, slvr.ntime,slvr.nbl)
             v1 = ne.evaluate('u_el + v_em', {
-                'u_el' : np.outer(u,el), 'v_em' : np.outer(v, em)})\
-                .reshape(slvr.ntime,slvr.nbl,slvr.ngsrc)
-
-            # Obvious given the above reshape
-            assert u1.shape == (slvr.ntime, slvr.nbl, slvr.ngsrc)
-            assert v1.shape == (slvr.ntime, slvr.nbl, slvr.ngsrc)
+                'u_el' : np.outer(el, u), 'v_em' : np.outer(em, v)})\
+                .reshape(slvr.ngsrc, slvr.ntime,slvr.nbl)
 
             return ne.evaluate('exp(-((u1*scale_uv*R)**2 + (v1*scale_uv)**2))',
                 local_dict={
                     'u1':u1[:,:,:,np.newaxis],
                     'v1':v1[:,:,:,np.newaxis],
                     'scale_uv':(slvr.gauss_scale/slvr.wavelength_cpu)[np.newaxis,np.newaxis,np.newaxis,:],
-                    'R':R[np.newaxis,np.newaxis,:,np.newaxis]})
+                    'R':R[:,np.newaxis,np.newaxis,np.newaxis]})
 
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
@@ -83,7 +79,7 @@ class RimeCPU(object):
         """
         Compute the shape values for the sersic (exponential) sources.
 
-        Returns a (ntime, nbl, nssrc, nchan) matrix of floating point scalars.
+        Returns a (nssrc, ntime, nbl, nchan) matrix of floating point scalars.
         """
 
         slvr = self.solver
@@ -111,15 +107,15 @@ class RimeCPU(object):
             # u1 = u*(1+e1) - v*e2
             # v1 = u*e2 + v*(1-e1)
             u1 = ne.evaluate('u_1_e1 + v_e2',
-                {'u_1_e1': np.outer(u,np.ones(slvr.nssrc)+e1), 'v_e2' : np.outer(v, e2)})\
-                .reshape(slvr.ntime,slvr.nbl,slvr.nssrc)
+                {'u_1_e1': np.outer(np.ones(slvr.nssrc)+e1, u), 'v_e2' : np.outer(e2, v)})\
+                .reshape(slvr.nssrc, slvr.ntime,slvr.nbl)
             v1 = ne.evaluate('u_e2 + v_1_e1', {
-                'u_e2' : np.outer(u,e2), 'v_1_e1' : np.outer(v,np.ones(slvr.nssrc)-e1)})\
-                .reshape(slvr.ntime,slvr.nbl,slvr.nssrc)
+                'u_e2' : np.outer(e2, u), 'v_1_e1' : np.outer(np.ones(slvr.nssrc)-e1,v)})\
+                .reshape(slvr.nssrc, slvr.ntime,slvr.nbl)
 
             # Obvious given the above reshape
-            assert u1.shape == (slvr.ntime, slvr.nbl, slvr.nssrc)
-            assert v1.shape == (slvr.ntime, slvr.nbl, slvr.nssrc)
+            assert u1.shape == (slvr.nssrc, slvr.ntime, slvr.nbl)
+            assert v1.shape == (slvr.nssrc, slvr.ntime, slvr.nbl)
 
             den = ne.evaluate('1 + (u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
                 local_dict={
@@ -128,8 +124,9 @@ class RimeCPU(object):
                     'scale_uv': (slvr.two_pi / slvr.wavelength_cpu)
                         [np.newaxis, np.newaxis, np.newaxis, :],
                     'R': (R / (1 - e1 * e1 - e2 * e2))
-                        [np.newaxis,np.newaxis,:,np.newaxis]})\
-                    .reshape(slvr.ntime, slvr.nbl, slvr.nssrc, slvr.nchan)
+                        [:,np.newaxis,np.newaxis,np.newaxis]})
+
+            assert den.shape == (slvr.nssrc, slvr.ntime, slvr.nbl, slvr.nchan)
 
             return ne.evaluate('1/(den*sqrt(den))',
                 { 'den' : den[:, :, :, :] })
@@ -141,7 +138,7 @@ class RimeCPU(object):
         """
         Computes the scalar K (phase) term of the RIME per antenna.
 
-        Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
+        Returns a (nsrc,ntime,na,nchan) matrix of complex scalars.
         """
         slvr = self.solver
 
@@ -156,22 +153,21 @@ class RimeCPU(object):
             n = ne.evaluate('sqrt(1. - l**2 - m**2) - 1.',
                 {'l': l, 'm': m})
 
-            # w*n+v*m+u*l. Outer product creates array of dim ntime x na x nsrcs
-            phase = (np.outer(w, n) + np.outer(v, m) + np.outer(u, l)) \
-                    .reshape(slvr.ntime, slvr.na, slvr.nsrc)
-            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc)
+            # w*n+v*m+u*l. Outer product creates array of dim nsrcs x ntime x na
+            phase = (np.outer(n, w) + np.outer(m, v) + np.outer(l, u)) \
+                    .reshape(slvr.nsrc, slvr.ntime, slvr.na)
 
             # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength).
-            # Dim. na x ntime x nchan x nsrcs
+            # Dim. ntime x na x nchan x nsrcs
             phase = ne.evaluate('exp(2*pi*1j*p/wl)', {
                 'p': phase[:, :, :, np.newaxis],
                 'wl': wave[np.newaxis, np.newaxis, np.newaxis, :],
                 'pi': np.pi
             })
 
-            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
+            assert phase.shape == (slvr.nsrc, slvr.ntime, slvr.na , slvr.nchan)
 
-            # Dimension ntime x nsrc x nchan. Use 0.5*alpha here so that
+            # Dimension nsrc x ntime x  nchan. Use 0.5*alpha here so that
             # when the other antenna term is multiplied with this one, we
             # end up with the full power term. sqrt(n)*sqrt(n) == n.
             power = ne.evaluate('(rw/wl)**(0.5*a)', {
@@ -179,11 +175,11 @@ class RimeCPU(object):
                 'wl': wave[np.newaxis, np.newaxis, :],
                 'a': alpha[:, :, np.newaxis]
             })
-            assert power.shape == (slvr.ntime, slvr.nsrc, slvr.nchan)
+            assert power.shape == (slvr.nsrc, slvr.ntime, slvr.nchan)
 
             return ne.evaluate('phs*p', {
                 'phs': phase,
-                'p': power[:, np.newaxis, :, :]
+                'p': power[:, :, np.newaxis, :]
             }).astype(slvr.ct)  # Need a cast since numexpr upcasts
 
         except AttributeError as e:
@@ -193,7 +189,7 @@ class RimeCPU(object):
         """
         Computes the scalar K (phase) term of the RIME per baseline.
 
-        Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
+        Returns a (nsrc,ntime,nbl,nchan) matrix of complex scalars.
         """
         slvr = self.solver
 
@@ -208,7 +204,7 @@ class RimeCPU(object):
             if slvr.ngsrc > 0:
                 src_beg = slvr.npsrc
                 src_end = slvr.npsrc + slvr.ngsrc
-                k_jones_per_bl[:, :, src_beg:src_end, :] *=\
+                k_jones_per_bl[src_beg:src_end, :, :  :] *=\
                     self.compute_gaussian_shape()
                 # TODO: Would like to do this, but fails because of
                 # https://github.com/pydata/numexpr/issues/155
@@ -221,7 +217,7 @@ class RimeCPU(object):
             if slvr.nssrc > 0:
                 src_beg = slvr.npsrc+slvr.ngsrc
                 src_end = slvr.npsrc+slvr.ngsrc+slvr.nssrc
-                k_jones_per_bl[:, :, src_beg:src_end:, :] *=  \
+                k_jones_per_bl[src_beg:src_end:, :, :,  :] *=  \
                     self.compute_sersic_shape()
 
             return k_jones_per_bl
@@ -232,33 +228,36 @@ class RimeCPU(object):
         """
         Computes the scalar E (analytic cos^3) term per antenna.
 
-        Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
+        Returns a (nsrc,ntime,na,nchan) matrix of complex scalars.
         """
         slvr = self.solver
 
         try:
             # Compute the offsets for different antenna
-            # Broadcasting here produces, ntime x na x  nsrc
+            # Broadcasting here produces, nsrc x ntime x na
             E_p = ne.evaluate('sqrt((l - lp)**2 + (m - mp)**2)', {
-                'l': slvr.lm_cpu[0], 'm': slvr.lm_cpu[1],
-                'lp': slvr.point_errors_cpu[0, :, :, np.newaxis],
-                'mp': slvr.point_errors_cpu[1, :, :, np.newaxis]
+                'l': slvr.lm_cpu[0, :, np.newaxis, np.newaxis],
+                'm': slvr.lm_cpu[1, :, np.newaxis, np.newaxis],
+                'lp': slvr.point_errors_cpu[0, np.newaxis, :, :],
+                'mp': slvr.point_errors_cpu[1, np.newaxis, :, :]
             })
 
-            assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc)
+            assert E_p.shape == (slvr.nsrc, slvr.ntime, slvr.na)
 
-            # Broadcasting here produces, ntime x nbl x nsrc x nchan
+            # Broadcasting here produces, nsrc x ntime x nbl x nchan
             E_p = ne.evaluate('E*bw*1e-9*wl', {
                 'E': E_p[:, :, :, np.newaxis], 'bw': slvr.beam_width,
                 'wl': slvr.wavelength_cpu[np.newaxis, np.newaxis, np.newaxis, :]
             })
+
+            assert E_p.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
             # Clip the beam
             np.clip(E_p, np.finfo(slvr.ft).min, slvr.beam_clip, E_p)
             # Cosine it, cube it and cast because of numexpr
             E_p = ne.evaluate('cos(E)**3', {'E': E_p}).astype(slvr.ct)
 
-            assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
+            assert E_p.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
             return E_p
         except AttributeError as e:
@@ -268,7 +267,7 @@ class RimeCPU(object):
         """
         Computes the scalar E (analytic cos^3) term per baseline.
 
-        Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
+        Returns a (nsrc,ntime,nbl,nchan) matrix of complex scalars.
         """
         slvr = self.solver
 
@@ -285,7 +284,7 @@ class RimeCPU(object):
         """
         Computes the scalar EK (phase*cos^3) term of the RIME.
 
-        Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
+        Returns a (nsrc,ntime,na,nchan) matrix of complex scalars.
         """
         return self.compute_k_jones_scalar_per_ant() * \
             self.compute_e_jones_scalar_per_ant()
@@ -294,7 +293,7 @@ class RimeCPU(object):
         """
         Computes the scalar EK (phase*cos^3) term of the RIME.
 
-        Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
+        Returns a (nsrc,ntime,nbl,nchan) matrix of complex scalars.
         """
         per_bl_ek_scalar = self.compute_k_jones_scalar_per_bl() * \
             self.compute_e_jones_scalar_per_bl()
@@ -305,12 +304,12 @@ class RimeCPU(object):
         """
         Computes the B term of the RIME.
 
-        Returns a (4,ntime,nsrc) matrix of complex scalars.
+        Returns a (4,nsrc,ntime) matrix of complex scalars.
         """
         slvr = self.solver
 
         try:
-            # Create the brightness matrix. Dim 4 x ntime x nsrcs
+            # Create the brightness matrix. Dim 4 x nsrcs x ntime
             B = slvr.ct([
                 # fI+fQ + 0j
                 slvr.brightness_cpu[0]+slvr.brightness_cpu[1] + 0j,
@@ -320,7 +319,7 @@ class RimeCPU(object):
                 slvr.brightness_cpu[2] - 1j*slvr.brightness_cpu[3],
                 # fI-fQ + 0j
                 slvr.brightness_cpu[0]-slvr.brightness_cpu[1] + 0j])
-            assert B.shape == (4, slvr.ntime, slvr.nsrc)
+            assert B.shape == (4, slvr.nsrc, slvr.ntime)
 
             return B
 
@@ -332,7 +331,7 @@ class RimeCPU(object):
         Computes the jones matrices based on the
         scalar EK term and the 2x2 B term.
 
-        Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
+        Returns a (4,nsrc,ntime,nbl,nchan) matrix of complex scalars.
         """
         slvr = self.solver
 
@@ -340,8 +339,8 @@ class RimeCPU(object):
         b_jones = self.compute_b_jones()
 
         jones = per_bl_ek_scalar[np.newaxis, :, :, :, :] * \
-            b_jones[:, :, np.newaxis, :, np.newaxis]
-        assert jones.shape == (4, slvr.ntime, slvr.nbl, slvr.nsrc, slvr.nchan)
+            b_jones[:, :, :, np.newaxis, np.newaxis]
+        assert jones.shape == (4, slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan)
 
         return jones
 
@@ -350,7 +349,7 @@ class RimeCPU(object):
         Computes the jones matrices based on the
         scalar EK term and the 2x2 B term.
 
-        Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
+        Returns a (4,nsrc,ntime,nbl,nchan) matrix of complex scalars.
         """
         slvr = self.solver
 
@@ -358,8 +357,8 @@ class RimeCPU(object):
         b_jones = self.compute_b_jones()
 
         jones = per_bl_k_scalar[np.newaxis, :, :, :, :] * \
-            b_jones[:, :, np.newaxis, :, np.newaxis]
-        assert jones.shape == (4, slvr.ntime, slvr.nbl, slvr.nsrc, slvr.nchan)
+            b_jones[:, :, :, np.newaxis, np.newaxis]
+        assert jones.shape == (4, slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan)
 
         return jones
 
@@ -373,7 +372,7 @@ class RimeCPU(object):
 
         slvr = self.solver
 
-        vis = ne.evaluate('sum(ebk,3)', {'ebk': self.compute_ebk_jones()})\
+        vis = ne.evaluate('sum(ebk,1)', {'ebk': self.compute_ebk_jones()})\
             .astype(slvr.ct)
         assert vis.shape == (4, slvr.ntime, slvr.nbl, slvr.nchan)
 

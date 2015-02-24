@@ -33,7 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')
     parser.add_argument('-ns','--nssrc',dest='nssrc', type=int, default=0, help='Number of Sersic Sources')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v2','v3'],
+    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v2','v3','v4','v5'],
         help='BIRO Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
@@ -58,40 +58,37 @@ if __name__ == '__main__':
         weight_vector=False, store_cpu=False, version=args.version) as slvr:
 
         # Random point source coordinates in the l,m,n (brightness image) domain
-        l=slvr.ft(np.random.random(slvr.nsrc)*0.1)
-        m=slvr.ft(np.random.random(slvr.nsrc)*0.1)
-        lm=np.array([l,m], dtype=slvr.ft)
+        lm = (np.random.random(
+                size=slvr.lm_shape) * 0.1) \
+            .astype(slvr.lm_dtype)
 
         # Random brightness matrix for the point sources
-        fI=slvr.ft(np.ones((slvr.ntime,slvr.nsrc,)))
-        fQ=slvr.ft(np.random.random(slvr.ntime*slvr.nsrc)*0.5).reshape(slvr.ntime,slvr.nsrc)
-        fU=slvr.ft(np.random.random(slvr.ntime*slvr.nsrc)*0.5).reshape(slvr.ntime,slvr.nsrc)
-        fV=slvr.ft(np.random.random(slvr.ntime*slvr.nsrc)*0.5).reshape(slvr.ntime,slvr.nsrc)
-        alpha=slvr.ft(np.random.random(slvr.ntime*slvr.nsrc)*0.1).reshape(slvr.ntime,slvr.nsrc)
-        brightness = np.array([fI,fQ,fU,fV,alpha], dtype=slvr.ft)
+        brightness = np.random.random(
+                size=slvr.brightness_shape) \
+            .astype(slvr.brightness_dtype)
 
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
         if slvr.ngsrc > 0:
-            el = slvr.ft(np.random.random(slvr.ngsrc)*0.1)
-            em = slvr.ft(np.random.random(slvr.ngsrc)*0.1)
-            R = slvr.ft(np.random.random(slvr.ngsrc))
-            gauss_shape = np.array([el,em,R],dtype=slvr.ft)
+            gauss_shape = (np.random.random(
+                    size=slvr.gauss_shape_shape) * 0.1) \
+                .astype(slvr.gauss_shape_dtype)
             slvr.transfer_gauss_shape(gauss_shape)
 
         # Create a bayesian model and upload it to the GPU
-        nviselements = np.product(slvr.vis_shape)
-        bayes_data = (np.random.random(nviselements) + np.random.random(nviselements)*1j)\
-            .astype(slvr.ct).reshape(slvr.vis_shape)
-        slvr.transfer_bayes_data(bayes_data)
+        bayes_data = (np.random.random(size=slvr.bayes_data_shape) +
+                np.random.random(size=slvr.bayes_data_shape)*1j) \
+            .astype(slvr.bayes_data_dtype)
 
         # Generate random antenna pointing errors
-        point_errors = np.random.random(np.product(slvr.point_errors_shape))\
-            .astype(slvr.ft).reshape((slvr.point_errors_shape))
+        point_errors = np.random.random(
+                size=slvr.point_errors_shape) \
+            .astype(slvr.point_errors_dtype)
 
         # Generate and transfer a noise vector.
-        weight_vector = np.random.random(np.product(slvr.weight_vector_shape))\
-            .astype(slvr.ft).reshape((slvr.weight_vector_shape))
+        weight_vector = np.random.random(
+                size=slvr.weight_vector_shape) \
+            .astype(slvr.ft)
         slvr.transfer_weight_vector(weight_vector)
 
         # Execute the pipeline

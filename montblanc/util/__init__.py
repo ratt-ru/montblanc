@@ -19,15 +19,29 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
+import math
 
 from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 
 def nr_of_baselines(na, auto_correlations=False):
-    """ Compute the number of baselines for the
+    """
+    Compute the number of baselines for the
     given number of antenna. Can specify whether
     auto-correlations should be taken into
-    account """
-    return (na*(na-1))//2 if auto_correlations is False else (na*(na+1)/2)
+    account
+    """
+    m = (na-1) if auto_correlations is False else (na+1)
+    return (na*m)//2
+
+def nr_of_antenna(nbl, auto_correlations=False):
+    """
+    Compute the number of antenna for the
+    given number of baselines. Can specify whether
+    auto-correlations should be taken into
+    account
+    """
+    t = 1 if auto_correlations is False else -1
+    return int(t + math.sqrt(1 + 8*nbl)) // 2
 
 def cpu_name(name):
     """ Constructs a name for the CPU version of the array """
@@ -107,7 +121,195 @@ def flatten(nested):
 
     return flat_return
 
-def get_numeric_shape(sshape, variables, ignore=None):
+def dict_array_bytes(ary, props):
+    """
+    Return the number of bytes required by an array
+
+    Arguments
+    ---------------
+    ary : dict
+        Dictionary representation of an array
+    props : dict
+        A dictionary of key-values, used to replace any
+        string values in the array with concrete integral
+        values
+
+    Returns
+    -----------
+    The number of bytes required to represent
+    the array.
+    """
+    shape = shape_from_str_tuple(ary['shape'], props)
+    dtype = dtype_from_str(ary['dtype'], props)
+
+    return array_bytes(shape, dtype)
+
+def dict_array_bytes_required(arrays, props):
+    """
+    Return the number of bytes required by
+    a dictionary of arrays.
+
+    Arguments
+    ---------------
+    arrays : dict
+        A dictionary of arrays
+    props : dict
+        A dictionary of key-values, used to replace any
+        string values in the arrays with concrete integral
+        values
+
+    Returns
+    -----------
+    The number of bytes required to represent
+    all the arrays.
+    """
+    return np.sum([dict_array_bytes(ary, props)
+        for ary in arrays.itervalues()])
+
+def viable_dim_config(bytes_available, arrays, props,
+        dim_ord, nsolvers=1):
+    """
+    Returns the number of timesteps possible, given the registered arrays
+    and a memory budget defined by bytes_available
+
+    Arguments
+    ----------------
+    bytes_available : int
+        The memory budget, or available number of bytes
+        for solving the problem.
+    arrays : dict
+        Dictionary describing the arrays
+    props : dict
+        Dictionary containing key-values that will be used
+        to replace any string representations of dimensions
+        and types. slvr.get_properties() will return something
+        suitable.
+    dim_ord : list
+        list of dimension string names that the problem should be
+        subdivided by. e.g. ['ntime', 'nbl', 'nchan'].
+        Multple dimensions can be reduced simultaneously using
+        the following syntax 'nbl&na'. This is mostly useful for
+        the baseline-antenna equivalence.
+
+    Keyword Arguments
+    ----------------------------
+    nsolvers : int
+        Number of solvers to budget for. Defaults to one.
+
+    Returns
+    ----------
+    A tuple (boolean, dict). The boolean is True if the problem
+    can fit within the supplied budget, False otherwise.
+    THe dictionary contains the reduced dimensions as key and
+    the reduced size as value.
+    e.g. (True, { 'time' : 1, 'nbl' : 1 })
+
+    For a dim_ord = ['ntime', 'nbl', 'nchan'], this method will try and fit
+    a ntime x nbl x nchan problem into the available number of bytes.
+    If this is not possible, it will first set ntime=1, and then try fit an
+    1 x nbl x nchan problem into the budget, then a 1 x 1 x nchan
+    problem.
+    """
+
+    if not isinstance(dim_ord, list):
+        raise TypeError('dim_ord should be a list')
+
+    # Don't accept non-negative memory budgets
+    if bytes_available < 0:
+        bytes_available = 0
+
+    modified_dims = {}
+
+    bytes_used = dict_array_bytes_required(arrays, props)
+
+    # While more bytes are used than are available, set
+    # dimensions to one in the order specified by the
+    # dim_ord argument.
+    while bytes_used > bytes_available:
+        try:
+            dims = dim_ord.pop(0).strip().split('&')
+        except IndexError:
+            # No more dimensions available for reducing
+            # the problem size. Unable to fit the problem
+            # within the specified memory budget
+            return False, modified_dims
+
+        # Can't fit everything into memory,
+        # Set dimensions to 1 and re-evaluate
+        for dim in dims:
+            modified_dims[dim] = 1
+            props[dim] = 1
+
+        bytes_used = dict_array_bytes_required(arrays, props)
+
+    return True, modified_dims
+
+
+def viable_timesteps(bytes_available, arrays, props):
+    """
+    Returns the number of timesteps possible, given the registered arrays
+    and a memory budget defined by bytes_available
+    """
+
+    # Don't accept non-negative memory budgets
+    if bytes_available < 0:
+        bytes_available = 0
+
+    # Figure out which arrays have an ntime dimension
+    has_time = np.array([ \
+        t.sshape.count('ntime') > 0 for t in arrays.values()])
+
+    # Get the shape product of each array, EXCLUDING any ntime dimension,
+    # multiplied by the size of the array type in bytes.
+    products = np.array([array_bytes(
+        shape_from_str_tuple(t.sshape, props,
+            ignore=['ntime']),
+        t.dtype)
+        for t in arrays.values()])
+
+    # TODO: Remove duplicate code paths
+    # This really replicates solver.bytes_required
+    bytes_required = np.array([array_bytes(
+        shape_from_str_tuple(t.sshape, props),
+        t.dtype)
+        for t in arrays.values()]).sum()
+
+    # Determine a linear expression for the bytes
+    # required which varies by timestep. y = a + b*x
+    a = np.sum(np.logical_not(has_time)*products)
+    b = np.sum(has_time*products)
+
+    # Check that if we substitute ntime for x, we agree on the
+    # memory requirements
+    assert a + b*props['ntime'] == bytes_required
+
+    # Given the number of bytes available,
+    # how many timesteps can we fit in our budget?
+    return (bytes_available - a + b - 1) // b
+
+def dtype_from_str(sdtype, props):
+    """
+    Substitutes string dtype parameters
+    using a a property dictionary
+
+    Parameters
+    ----------
+        sdtype :
+            string defining the dtype
+        props
+
+    Returns
+        sdtype if it isn't a string
+        props[sdtype] otherwise
+
+    """
+
+    if not isinstance(sdtype, str):
+        return sdtype
+
+    return props[sdtype]
+
+def shape_from_str_tuple(sshape, variables, ignore=None):
     """
     Substitutes string values in the supplied shape parameter
     with integer variables stored in a dictionary
@@ -123,7 +325,7 @@ def get_numeric_shape(sshape, variables, ignore=None):
     ignore : list
         A list of tuple strings to ignore
 
-    >>> print self.get_numeric_shape((4,'na','ntime'),ignore=['ntime'])
+    >>> print self.shape_from_str_tuple((4,'na','ntime'),ignore=['ntime'])
     (4, 3)
     """
     if ignore is None: ignore = []
@@ -158,7 +360,7 @@ def array_convert_function(sshape_one, sshape_two, variables):
     t_idx = tuple([s_one.index(v) for v in s_two])
 
     # Figure out the actual numeric shape values to use
-    n_one = get_numeric_shape(s_one, variables)
+    n_one = shape_from_str_tuple(s_one, variables)
     n_two = [eval_expr(d,variables)
         if isinstance(d,str) else d for d in sshape_two]
 
