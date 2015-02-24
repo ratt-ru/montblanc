@@ -49,69 +49,6 @@ def get_pipeline(**kwargs):
     wv = kwargs.get('weight_vector', False)
     return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
 
-def ary_dict(name,shape,dtype,cpu=True,gpu=False):
-    return {
-        'name' : name,
-        'shape' : shape,
-        'dtype' : dtype,
-        'registrant' : 'BiroSolver',
-        'gpu' : gpu,
-        'cpu' : cpu,
-        'shape_member' : True,
-        'dtype_member' : True
-    }
-
-def prop_dict(name,dtype,default):
-    return {
-        'name' : name,
-        'dtype' : dtype,
-        'default' : default,
-        'registrant' : 'BiroSolver',
-        'setter' : True
-    }
-
-# Set up gaussian scaling parameters
-# Derived from https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L493
-# and https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L602
-fwhm2int = 1.0/np.sqrt(np.log(256))
-
-# Dictionary of properties
-P = {
-    # Note that we don't divide by speed of light here. meqtrees code operates
-    # on frequency, while we're dealing with wavelengths.
-    'gauss_scale' : prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi),
-    'two_pi' : prop_dict('two_pi', 'ft', 2*np.pi),
-    'ref_wave' : prop_dict('ref_wave', 'ft', 0.0),
-    'sigma_sqrd' : prop_dict('sigma_sqrd', 'ft', 1.0),
-    'X2' : prop_dict('X2', 'ft', 0.0),
-    'beam_width' : prop_dict('beam_width', 'ft', 65),
-    'beam_clip' : prop_dict('beam_clip', 'ft', 1.0881),
-}
-
-# Dictionary of arrays
-A = {
-    # Input Arrays
-    'uvw' : ary_dict('uvw', (3,'ntime','na'), 'ft'),
-    'ant_pairs' : ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32),
-
-    'lm' : ary_dict('lm', (2,'nsrc'), 'ft'),
-    'brightness' : ary_dict('brightness', (5,'ntime','nsrc'), 'ft'),
-    'gauss_shape' : ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
-    'sersic_shape' : ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
-
-    'wavelength' : ary_dict('wavelength', ('nchan',), 'ft'),
-    'point_errors' : ary_dict('point_errors', (2,'ntime','na'), 'ft'),
-    'weight_vector' : ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
-    'bayes_data' : ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
-
-    # Result arrays
-    'jones_scalar' : ary_dict('jones_scalar', ('ntime','na','nsrc','nchan'), 'ct', cpu=False),
-    'vis' : ary_dict('vis', (4,'ntime','nbl','nchan'), 'ct', cpu=False),
-    'chi_sqrd_result' : ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
-
-    'X2' : ary_dict('X2', (1, ), 'ft'),
-}
-
 ONE_KB = 1024
 ONE_MB = ONE_KB**2
 ONE_GB = ONE_KB**3
@@ -170,15 +107,25 @@ class CompositeBiroSolver(BaseSolver):
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
             pipeline=pipeline, **kwargs)
 
-        A_main = copy.deepcopy(A)
-        P_main = copy.deepcopy(P)
+        A_main = copy.deepcopy(BSV2mod.A)
+        P_main = copy.deepcopy(BSV2mod.P)
 
+        # Add a custom transfer method for transferring
+        # arrays to the sub-solver. Also, in general,
+        # only maintain CPU arrays on the main solver,
+        # but not GPU arrays, which will exist on the sub-solvers
         for name, ary in A_main.iteritems():
-            # Add a transfer method
             ary['transfer_method'] = self.get_transfer_method(name)
+            ary['gpu'] = False
+            ary['cpu'] = True
 
         for name, prop in P_main.iteritems():
             prop['setter_method'] = self.get_setter_method(name)
+
+        # Do not main CPU versions of result arrays
+        A_main['jones_scalar']['cpu'] = False
+        A_main['vis']['cpu'] = False
+        A_main['chi_sqrd_result']['cpu'] = False
 
         self.register_arrays(A_main)
         self.register_properties(P_main)
@@ -248,8 +195,8 @@ class CompositeBiroSolver(BaseSolver):
             **kwargs) for i in range(self.nsolvers)]
 
         # Register arrays on the sub-solvers
-        A_sub = copy.deepcopy(A)
-        P_sub = copy.deepcopy(P)
+        A_sub = copy.deepcopy(BSV2mod.A)
+        P_sub = copy.deepcopy(BSV2mod.P)
 
         for name, ary in A_sub.iteritems():
             # Add a transfer method

@@ -37,6 +37,69 @@ def get_pipeline(**kwargs):
     wv = kwargs.get('weight_vector', False)
     return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
 
+def ary_dict(name, shape, dtype, cpu=False, gpu=True):
+    return {
+        'name' : name,
+        'shape' : shape,
+        'dtype' : dtype,
+        'registrant' : 'BiroSolver',
+        'gpu' : gpu,
+        'cpu' : cpu,
+        'shape_member' : True,
+        'dtype_member' : True
+    }
+
+def prop_dict(name,dtype,default):
+    return {
+        'name' : name,
+        'dtype' : dtype,
+        'default' : default,
+        'registrant' : 'BiroSolver',
+        'setter' : True
+    }
+
+# Set up gaussian scaling parameters
+# Derived from https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L493
+# and https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L602
+fwhm2int = 1.0/np.sqrt(np.log(256))
+
+# Dictionary of properties
+P = {
+    # Note that we don't divide by speed of light here. meqtrees code operates
+    # on frequency, while we're dealing with wavelengths.
+    'gauss_scale' : prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi),
+    'two_pi' : prop_dict('two_pi', 'ft', 2*np.pi),
+    'ref_wave' : prop_dict('ref_wave', 'ft', 0.0),
+    'sigma_sqrd' : prop_dict('sigma_sqrd', 'ft', 1.0),
+    'X2' : prop_dict('X2', 'ft', 0.0),
+    'beam_width' : prop_dict('beam_width', 'ft', 65),
+    'beam_clip' : prop_dict('beam_clip', 'ft', 1.0881),
+}
+
+# Dictionary of arrays
+A = {
+    # Input Arrays
+    'uvw' : ary_dict('uvw', (3,'ntime','na'), 'ft'),
+    'ant_pairs' : ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32),
+
+    'lm' : ary_dict('lm', (2,'nsrc'), 'ft'),
+    'brightness' : ary_dict('brightness', (5,'ntime','nsrc'), 'ft'),
+    'gauss_shape' : ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
+    'sersic_shape' : ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
+
+    'wavelength' : ary_dict('wavelength', ('nchan',), 'ft'),
+    'point_errors' : ary_dict('point_errors', (2,'ntime','na'), 'ft'),
+    'weight_vector' : ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
+    'bayes_data' : ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
+
+    # Result arrays
+    'jones_scalar' : ary_dict('jones_scalar', ('ntime','na','nsrc','nchan'), 'ct'),
+    'vis' : ary_dict('vis', (4,'ntime','nbl','nchan'), 'ct'),
+    'chi_sqrd_result' : ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft'),
+
+    'X2' : ary_dict('X2', (1, ), 'ft'),
+}
+
 class BiroSolver(BaseSolver):
     """ Shared Data implementation for BIRO """
     def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
@@ -79,47 +142,8 @@ class BiroSolver(BaseSolver):
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
             pipeline=pipeline, **kwargs)
 
-        # Curry the register_array function for simplicity
-        def reg(name,shape,dtype):
-            self.register_array(name=name,shape=shape,dtype=dtype,
-                registrant='BaseSolver', gpu=True, cpu=False,
-                shape_member=True, dtype_member=True)
-
-        def reg_prop(name,dtype,default):
-            self.register_property(name=name,dtype=dtype,
-                default=default,registrant='BaseSolver', setter=True)
-
-        # Set up gaussian scaling parameters
-        # Derived from https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L493
-        # and https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L602
-        fwhm2int = 1.0/np.sqrt(np.log(256))
-        # Note that we don't divide by speed of light here. meqtrees code operates
-        # on frequency, while we're dealing with wavelengths.
-        reg_prop('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi)
-        reg_prop('ref_wave', 'ft', 0.0)
-        reg_prop('two_pi', 'ft', 2*np.pi)
-
-        reg_prop('sigma_sqrd', 'ft', 1.0)
-        reg_prop('X2', 'ft', 0.0)
-        reg_prop('beam_width', 'ft', 65)
-        reg_prop('beam_clip', 'ft', 1.0881)
-
-        reg(name='uvw', shape=(3,'ntime','na'), dtype='ft')
-        reg(name='ant_pairs', shape=(2,'ntime','nbl'), dtype=np.int32)
-
-        reg(name='lm', shape=(2,'nsrc'), dtype='ft')
-        reg(name='brightness', shape=(5,'ntime','nsrc'), dtype='ft')
-        reg(name='gauss_shape', shape=(3, 'ngsrc'), dtype='ft')
-        reg(name='sersic_shape', shape=(3, 'nssrc'), dtype='ft')
-
-        reg(name='wavelength', shape=('nchan',), dtype='ft')
-        reg(name='point_errors', shape=(2,'ntime','na'), dtype='ft')
-        reg(name='weight_vector', shape=(4,'ntime','nbl','nchan'), dtype='ft')
-        reg(name='bayes_data', shape=(4,'ntime','nbl','nchan'), dtype='ct')
-
-        reg(name='jones_scalar', shape=('ntime','na','nsrc','nchan'), dtype='ct')
-        reg(name='vis', shape=(4,'ntime','nbl','nchan'), dtype='ct')
-        reg(name='chi_sqrd_result', shape=('ntime','nbl','nchan'), dtype='ft')
+        self.register_arrays(A)
+        self.register_properties(P)
 
     def get_default_base_ant_pairs(self):
         """
