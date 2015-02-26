@@ -336,162 +336,160 @@ void rime_gauss_B_sum_impl(
     //
     // XX Polarisation
     //
-    typename Tr::ct temp = Isum;
-    // Load in Gp
-    int j = (TIME*NA + ANT1)*NCHAN + CHAN;
-    G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
-    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    Isum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-    Isum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
-    // Save result for Gq multiplication
-    temp = Isum;
-    // Load in Gq and conjugate
-    G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
-    G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    Isum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
-        temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-    Isum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
-        temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
-
-    i = (TIME*NBL + BL)*NCHAN + CHAN;
-    typename Tr::ct delta = data_vis[i];
-
-    // Zero polarisation if flagged
-    if(flag[i] > 0)
     {
-        Isum.x = 0; Isum.y = 0;
-        delta.x = 0; delta.y = 0;
-    }
+        typename Tr::ct temp = Isum;
+        // Load in Gp
+        i = (TIME*NA + ANT1)*NCHAN + CHAN;
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        Isum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
+            G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
+        Isum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+            G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
+        // Save result for Gq multiplication
+        temp = Isum;
+        // Load in Gq and conjugate
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        Isum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
+            temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        Isum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+            temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
-    visibilities[i] = Isum;
-    delta.x -= Isum.x; delta.y -= Isum.y;
-    delta.x *= delta.x; delta.y *= delta.y;
-    if(apply_weights)
-        { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
-    Isum.x = delta.x; Isum.y = delta.y;
+        i = (TIME*NBL + BL)*NCHAN + CHAN;
+		typename Tr::ct delta = data_vis[i];
+
+		// Zero polarisation if flagged
+		if(flag[i] > 0)
+		{
+		    Isum.x = 0; Isum.y = 0;
+		    delta.x = 0; delta.y = 0;
+		}
+
+		visibilities[i] = Isum;
+        typename Tr::ct delta = data_vis[i];
+        delta.x -= Isum.x; delta.y -= Isum.y;
+        delta.x *= delta.x; delta.y *= delta.y;
+        if(apply_weights)
+            { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
+        Isum.x = delta.x; Isum.y = delta.y;
+    }
 
     //
     // YY Polarisation
     //
-    temp = Qsum;
-    // Load in Gp
-    j = (TIME*NA + ANT1)*NCHAN + CHAN + NA*NCHAN*NTIME;
-    G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
-    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-    Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
-    // Save result for Gq multiplication
-    temp = Qsum;
-    // Load in Gq and conjugate
-    G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
-    G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
-        temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-    Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
-        temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
-
-    i += 3*NTIME*NBL*NCHAN;
-    delta = data_vis[i];
-
-    // Zero polarisation if flagged
-    if(flag[i] > 0)
     {
-        Qsum.x = 0; Qsum.y = 0;
-        delta.x = 0; delta.y = 0;
-    }
+        typename Tr::ct temp = Qsum;
+        // Load in Gp
+        i = (TIME*NA + ANT1)*NCHAN + CHAN + NA*NCHAN*NTIME;
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
+            G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
+        Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+            G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
+        // Save result for Gq multiplication
+        temp = Qsum;
+        // Load in Gq and conjugate
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
+            temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+            temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
-    visibilities[i] = Qsum;
-    delta.x -= Qsum.x; delta.y -= Qsum.y;
-    delta.x *= delta.x; delta.y *= delta.y;
-    if(apply_weights)
-        { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
-    Isum.x += delta.x; Isum.y += delta.y;
+        i = (TIME*NBL + BL)*NCHAN + CHAN + 3*NTIME*NBL*NCHAN;
+		delta = data_vis[i];
+
+		// Zero polarisation if flagged
+		if(flag[i] > 0)
+		{
+		    Qsum.x = 0; Qsum.y = 0;
+		    delta.x = 0; delta.y = 0;
+		}
+
+		visibilities[i] = Qsum;
+        delta.x -= Qsum.x; delta.y -= Qsum.y;
+        delta.x *= delta.x; delta.y *= delta.y;
+        if(apply_weights)
+            { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
+        Isum.x += delta.x; Isum.y += delta.y;
+    }
 
     //
     // YX Polarisation
     //
-    temp = Usum;
-    // Load in Gp
-    j = (TIME*NA + ANT1)*NCHAN + CHAN + NA*NCHAN*NTIME;
-    G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
-    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    Usum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-    Usum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
-    // Save result for Gq multiplication
-    temp = Usum;
-    // Load in Gq and conjugate
-    G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
-    G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    Usum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
-        temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-    Usum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
-        temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
-
-    i -= NTIME*NBL*NCHAN;
-    delta = data_vis[i];
-
-    // Zero polarisation if flagged
-    if(flag[i] > 0)
     {
-        Usum.x = 0; Usum.y = 0;
-        delta.x = 0; delta.y = 0;
-    }
+        typename Tr::ct temp = Usum;
+        // Load in Gp
+        int j = (TIME*NA + ANT1)*NCHAN + CHAN + NA*NCHAN*NTIME;
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        Usum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
+            G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
+        Usum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+            G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
+        // Save result for Gq multiplication
+        temp = Usum;
+        // Load in Gq and conjugate
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
+        G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        Usum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
+            temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        Usum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+            temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
-    visibilities[i] = Usum;
-    delta.x -= Usum.x; delta.y -= Usum.y;
-    delta.x *= delta.x; delta.y *= delta.y;
-    if(apply_weights)
-        { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
-    Isum.x += delta.x; Isum.y += delta.y;
+        i = (TIME*NBL + BL)*NCHAN + CHAN + 2*NTIME*NBL*NCHAN;
+        visibilities[i] = Usum;
+        typename Tr::ct delta = data_vis[i];
+        delta.x -= Usum.x; delta.y -= Usum.y;
+        delta.x *= delta.x; delta.y *= delta.y;
+        if(apply_weights)
+            { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
+        Isum.x += delta.x; Isum.y += delta.y;
+    }
 
     //
     // XY Polarisation
     //
-    temp = Vsum;
-    // Load in Gp
-    j = (TIME*NA + ANT1)*NCHAN + CHAN + NA*NCHAN*NTIME;
-    G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
-    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-    Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
-    // Save result for Gq multiplication
-    temp = Vsum;
-    // Load in Gq and conjugate
-    G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
-    G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-    Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
-        temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-    Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
-        temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
-
-    i -= NTIME*NBL*NCHAN;
-    delta = data_vis[i];
-
-    // Zero polarisation if flagged
-    if(flag[i] > 0)
     {
-        Vsum.x = 0; Vsum.y = 0;
-        delta.x = 0; delta.y = 0;
-    }
+        typename Tr::ct temp = Vsum;
+        // Load in Gp
+        i = (TIME*NA + ANT1)*NCHAN + CHAN + NA*NCHAN*NTIME;
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
+            G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
+        Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+            G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
+        // Save result for Gq multiplication
+        temp = Vsum;
+        // Load in Gq and conjugate
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+        Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
+            temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+            temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
-    visibilities[i] = Vsum;
-    delta.x -= Vsum.x; delta.y -= Vsum.y;
-    delta.x *= delta.x; delta.y *= delta.y;
-    if(apply_weights)
-        { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
-    Isum.x += delta.x; Isum.y += delta.y;
+        i = (TIME*NBL + BL)*NCHAN + CHAN + NTIME*NBL*NCHAN;
+		if(flag[i] > 0)
+		{
+		    Vsum.x = 0; Vsum.y = 0;
+		    delta.x = 0; delta.y = 0;
+		}
+
+		visibilities[i] = Vsum;
+		delta.x -= Vsum.x; delta.y -= Vsum.y;
+        delta.x *= delta.x; delta.y *= delta.y;
+        if(apply_weights)
+            { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
+        Isum.x += delta.x; Isum.y += delta.y;
+    }
 
     i = (TIME*NBL + BL)*NCHAN + CHAN;
     chi_sqrd_result[i] = Isum.x + Isum.y;
