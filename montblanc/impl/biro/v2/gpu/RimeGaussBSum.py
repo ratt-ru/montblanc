@@ -377,41 +377,42 @@ void rime_gauss_B_sum_impl(
     }
 
     //
-    // YY Polarisation
+    // XY Polarisation
     //
     {
-        typename Tr::ct temp = Qsum;
+        typename Tr::ct temp = Vsum;
         // Load in Gp
-        i = (TIME*NA + ANT1)*NCHAN + CHAN + NA*NCHAN*NTIME;
+        i = (TIME*NA + ANT1)*NCHAN + CHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
+        Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-        Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+        Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
         // Save result for Gq multiplication
-        temp = Qsum;
+        temp = Vsum;
         // Load in Gq and conjugate
+        i = (TIME*NA + ANT1)*NCHAN + CHAN + NTIME*NA*NCHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
+        Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-        Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+        Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
-        i = (TIME*NBL + BL)*NCHAN + CHAN + 3*NTIME*NBL*NCHAN;
+        i = (TIME*NBL + BL)*NCHAN + CHAN + NTIME*NBL*NCHAN;
 		delta = data_vis[i];
 
 		// Zero polarisation if flagged
 		if(flag[i] > 0)
 		{
-		    Qsum.x = 0; Qsum.y = 0;
+		    Vsum.x = 0; Vsum.y = 0;
 		    delta.x = 0; delta.y = 0;
 		}
 
-		visibilities[i] = Qsum;
-        delta.x -= Qsum.x; delta.y -= Qsum.y;
+        visibilities[i] = Vsum;
+        delta.x -= Vsum.x; delta.y -= Vsum.y;
         delta.x *= delta.x; delta.y *= delta.y;
         if(apply_weights)
             { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
@@ -424,8 +425,8 @@ void rime_gauss_B_sum_impl(
     {
         typename Tr::ct temp = Usum;
         // Load in Gp
-        int j = (TIME*NA + ANT1)*NCHAN + CHAN + NA*NCHAN*NTIME;
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
+        i = (TIME*NA + ANT1)*NCHAN + CHAN + NTIME*NA*NCHAN;
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Usum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
@@ -434,7 +435,8 @@ void rime_gauss_B_sum_impl(
         // Save result for Gq multiplication
         temp = Usum;
         // Load in Gq and conjugate
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[j];
+        i = (TIME*NA + ANT1)*NCHAN + CHAN;
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Usum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
@@ -453,38 +455,38 @@ void rime_gauss_B_sum_impl(
     }
 
     //
-    // XY Polarisation
+    // YY Polarisation
     //
     {
-        typename Tr::ct temp = Vsum;
+        typename Tr::ct temp = Qsum;
         // Load in Gp
-        i = (TIME*NA + ANT1)*NCHAN + CHAN + NA*NCHAN*NTIME;
+        i = (TIME*NA + ANT1)*NCHAN + CHAN + NTIME*NA*NCHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
+        Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-        Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+        Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
         // Save result for Gq multiplication
-        temp = Vsum;
+        temp = Qsum;
         // Load in Gq and conjugate
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
+        Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-        Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+        Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
-        i = (TIME*NBL + BL)*NCHAN + CHAN + NTIME*NBL*NCHAN;
+        i = (TIME*NBL + BL)*NCHAN + CHAN + 3*NTIME*NBL*NCHAN;
 		if(flag[i] > 0)
 		{
-		    Vsum.x = 0; Vsum.y = 0;
+		    Qsum.x = 0; Qsum.y = 0;
 		    delta.x = 0; delta.y = 0;
 		}
 
-		visibilities[i] = Vsum;
-		delta.x -= Vsum.x; delta.y -= Vsum.y;
+		visibilities[i] = Qsum;
+		delta.x -= Qsum.x; delta.y -= Qsum.y;
         delta.x *= delta.x; delta.y *= delta.y;
         if(apply_weights)
             { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
