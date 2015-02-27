@@ -338,23 +338,26 @@ void rime_gauss_B_sum_impl(
     //
     {
         typename Tr::ct temp = Isum;
-        // Load in Gp
+        // Load in Gp1
         i = (TIME*NA + ANT1)*NCHAN + CHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Isum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-        Isum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+        Isum.y = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y +
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
         // Save result for Gq multiplication
         temp = Isum;
-        // Load in Gq and conjugate
+        // Load in Gq1
+        i = (TIME*NA + ANT2)*NCHAN + CHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        // Conjugate
+        G[threadIdx.z][threadIdx.y][threadIdx.x].y =
+            -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Isum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-        Isum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+        Isum.y = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y +
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
         i = (TIME*NBL + BL)*NCHAN + CHAN;
@@ -381,24 +384,25 @@ void rime_gauss_B_sum_impl(
     //
     {
         typename Tr::ct temp = Vsum;
-        // Load in Gp
+        // Load in Gp1
         i = (TIME*NA + ANT1)*NCHAN + CHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-        Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+        Vsum.y = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y +
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
         // Save result for Gq multiplication
         temp = Vsum;
-        // Load in Gq and conjugate
-        i = (TIME*NA + ANT1)*NCHAN + CHAN + NTIME*NA*NCHAN;
+        // Load in Gq4
+        i = (TIME*NA + ANT2)*NCHAN + CHAN + NTIME*NA*NCHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        //  Conjugate
         G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-        Vsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+        Vsum.y = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y +
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
         i = (TIME*NBL + BL)*NCHAN + CHAN + NTIME*NBL*NCHAN;
@@ -424,24 +428,26 @@ void rime_gauss_B_sum_impl(
     //
     {
         typename Tr::ct temp = Usum;
-        // Load in Gp
+        // Load in Gp4
         i = (TIME*NA + ANT1)*NCHAN + CHAN + NTIME*NA*NCHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Usum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-        Usum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+        Usum.y = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y +
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
         // Save result for Gq multiplication
         temp = Usum;
-        // Load in Gq and conjugate
-        i = (TIME*NA + ANT1)*NCHAN + CHAN;
+        // Load in Gq1
+        i = (TIME*NA + ANT2)*NCHAN + CHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        // Conjugate
+        G[threadIdx.z][threadIdx.y][threadIdx.x].y =
+            -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Usum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-        Usum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+        Usum.y = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y +
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
         i = (TIME*NBL + BL)*NCHAN + CHAN + 2*NTIME*NBL*NCHAN;
@@ -459,23 +465,26 @@ void rime_gauss_B_sum_impl(
     //
     {
         typename Tr::ct temp = Qsum;
-        // Load in Gp
+        // Load in Gp4
         i = (TIME*NA + ANT1)*NCHAN + CHAN + NTIME*NA*NCHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
-        Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y -
+        Qsum.y = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.y +
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.x;
         // Save result for Gq multiplication
         temp = Qsum;
-        // Load in Gq and conjugate
+        // Load in Gq4
+        i = (TIME*NA + ANT2)*NCHAN + CHAN + NTIME*NA*NCHAN;
         G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
-        G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        // Conjugate
+        G[threadIdx.z][threadIdx.y][threadIdx.x].y =
+            -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].x -
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].y;
-        Qsum.x = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y -
+        Qsum.y = temp.x*G[threadIdx.z][threadIdx.y][threadIdx.x].y +
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
         i = (TIME*NBL + BL)*NCHAN + CHAN + 3*NTIME*NBL*NCHAN;

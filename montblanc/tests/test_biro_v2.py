@@ -169,11 +169,11 @@ class TestBiroV2(unittest.TestCase):
         # Call the GPU solver
         slvr.solve()
 
-        ebk_vis_cpu = slvr_cpu.compute_ebk_vis()
+        gebk_vis_cpu = slvr_cpu.compute_gebk_vis()
         with slvr.context:
-            ebk_vis_gpu = slvr.vis_gpu.get()
+            gebk_vis_gpu = slvr.vis_gpu.get()
 
-        self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
+        self.assertTrue(np.allclose(gebk_vis_cpu, gebk_vis_gpu, **cmp))
 
         chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(
             weight_vector=weight_vector)

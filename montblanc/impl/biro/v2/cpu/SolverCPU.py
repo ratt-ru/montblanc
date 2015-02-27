@@ -404,6 +404,30 @@ class SolverCPU(object):
 
         return vis
 
+    def compute_gebk_vis(self):
+        """
+        Computes the complex visibilities based on the
+        scalar EK term, the 2x2 B term and the diagonal G term.
+
+        Returns a (4,ntime,nbl,nchan) matrix of complex scalars.
+        """
+
+        slvr = self.solver
+        gebk_vis = self.compute_ebk_vis()
+        ap = slvr.get_ap_idx(chan=True)
+
+        top_g = slvr.diag_g_term_cpu[0,:,:,:][ap]
+        bot_g = slvr.diag_g_term_cpu[1,:,:,:][ap]
+        Gp1, Gq1 = top_g[0], top_g[1]
+        Gp4, Gq4 = bot_g[0], bot_g[1]
+
+        gebk_vis[0,:] = Gp1*gebk_vis[0,:]*Gq1.conj()
+        gebk_vis[1,:] = Gp1*gebk_vis[1,:]*Gq4.conj()
+        gebk_vis[2,:] = Gp4*gebk_vis[2,:]*Gq1.conj()
+        gebk_vis[3,:] = Gp4*gebk_vis[3,:]*Gq4.conj()
+
+        return gebk_vis
+
     def compute_bk_vis(self):
         """
         Computes the complex visibilities based on the
@@ -509,5 +533,5 @@ class SolverCPU(object):
 
     def compute_biro_chi_sqrd(self, weight_vector=False):
         slvr = self.solver
-        slvr.vis_cpu = self.compute_ebk_vis()
+        slvr.vis_cpu = self.compute_gebk_vis()
         return self.compute_chi_sqrd(weight_vector=weight_vector)
