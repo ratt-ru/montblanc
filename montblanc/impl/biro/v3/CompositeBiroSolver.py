@@ -319,7 +319,7 @@ class CompositeBiroSolver(BaseSolver):
         """ Solve the RIME """
         self.X2 = 0.0
 
-        with self.context as ctx:
+        with self.context:
             # Initialise the pipelines if necessary
             for i, subslvr in enumerate(self.solvers):
                 if not subslvr.pipeline.is_initialised():
@@ -328,7 +328,6 @@ class CompositeBiroSolver(BaseSolver):
                     subslvr.pipeline.initialise(subslvr, self.stream[i])
 
             t = 0
-            result = []
 
             while t < self.ntime:
                 t_begin = t
@@ -336,10 +335,12 @@ class CompositeBiroSolver(BaseSolver):
                 # Perform any memory transfers needed
                 # and execute the pipeline
                 for i, subslvr in enumerate(self.solvers):
-                    # Clip the timestep ending point at the total number of timesteps
-                    # otherwise add the sub-solvers timesteps to t_begin
-                    t_end = self.ntime if t_begin+subslvr.ntime > self.ntime \
-                        else t_begin+subslvr.ntime
+                    # Find ending timestep, clip if necessary
+                    t_end = t_begin + subslvr.ntime
+                    if t_end > self.ntime: t_end = self.ntime
+                    t_diff = t_end - t_begin
+                    if t_diff == 0: break
+
                     self.transfer_arrays(i, t_begin, t_end)
                     t_begin = t_end
                     subslvr.pipeline.execute(subslvr, stream=self.stream[i])
@@ -348,11 +349,11 @@ class CompositeBiroSolver(BaseSolver):
 
                 # Get the chi squared result for each solver.
                 for i, subslvr in enumerate(self.solvers):
-                    # Clip the timestep ending point at the total number of timesteps
-                    # otherwise add the sub-solvers timesteps to t_begin
-                    t_end = self.ntime if t_begin+subslvr.ntime > self.ntime \
-                        else t_begin+subslvr.ntime
+                    # Find ending timestep, clip if necessary
+                    t_end = t_begin + subslvr.ntime
+                    if t_end > self.ntime: t_end = self.ntime
                     t_diff = t_end - t_begin
+                    if t_diff == 0: break
 
                     # Allocate a temporary pinned array on the sub-solver
                     # Free and delete later
@@ -378,8 +379,16 @@ class CompositeBiroSolver(BaseSolver):
 
                     t_begin = t_end
 
+                t_begin = t
+
                 # Get the chi squared result for each solver.
                 for i, subslvr in enumerate(self.solvers):
+                    # Find ending timestep, clip if necessary
+                    t_end = t_begin + subslvr.ntime
+                    if t_end > self.ntime: t_end = self.ntime
+                    t_diff = t_end - t_begin
+                    if t_diff == 0: break
+
                     # Wait for this stream to finish executing
                     self.stream[i].synchronize()
 
@@ -393,6 +402,8 @@ class CompositeBiroSolver(BaseSolver):
                     # and remove it from the sub-solver
                     subslvr.X2_tmp.base.free()
                     del subslvr.X2_tmp
+
+                    t_begin = t_end
 
                 t = t_end
 
