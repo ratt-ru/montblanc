@@ -41,7 +41,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Reshape the array and correct the axes
         ms_uvw = tm.getcol('UVW')
         assert ms_uvw.shape == uvw_shape, \
-            'MS UVW shape %s != expected %s' % (ms_uvw.shape,expected_uvw_shape)
+            'MS UVW shape %s != expected %s' % (ms_uvw.shape,uvw_shape)
         uvw_rec = solver.get_array_record('uvw')
         uvw=np.empty(shape=uvw_rec.shape, dtype=uvw_rec.dtype)
         uvw[:,:,1:na] = ms_uvw.reshape(ntime, nbl, 3).transpose(2,0,1) \
