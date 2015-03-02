@@ -416,8 +416,8 @@ class SolverCPU(object):
         gebk_vis = self.compute_ebk_vis()
         ap = slvr.get_ap_idx(chan=True)
 
-        top_g = slvr.diag_g_term_cpu[0,:,:,:][ap]
-        bot_g = slvr.diag_g_term_cpu[1,:,:,:][ap]
+        top_g = slvr.diag_g_cpu[0,:,:,:][ap]
+        bot_g = slvr.diag_g_cpu[1,:,:,:][ap]
         Gp1, Gq1 = top_g[0], top_g[1]
         Gp4, Gq4 = bot_g[0], bot_g[1]
 

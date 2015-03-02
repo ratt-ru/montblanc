@@ -76,7 +76,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * sersic_shape,
     typename Tr::ft * wavelength,
     int * ant_pairs,
-    typename Tr::ct * diag_g_term,
+    typename Tr::ct * diag_g,
     typename Tr::ct * jones_EK_scalar,
     int * flag,
     typename Tr::ft * weight_vector,
@@ -340,7 +340,7 @@ void rime_gauss_B_sum_impl(
         typename Tr::ct temp = Isum;
         // Load in Gp1
         i = (TIME*NA + ANT1)*NCHAN + CHAN;
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Isum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
@@ -350,7 +350,7 @@ void rime_gauss_B_sum_impl(
         temp = Isum;
         // Load in Gq1
         i = (TIME*NA + ANT2)*NCHAN + CHAN;
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g[i];
         // Conjugate
         G[threadIdx.z][threadIdx.y][threadIdx.x].y =
             -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
@@ -386,7 +386,7 @@ void rime_gauss_B_sum_impl(
         typename Tr::ct temp = Vsum;
         // Load in Gp1
         i = (TIME*NA + ANT1)*NCHAN + CHAN;
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Vsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
@@ -396,7 +396,7 @@ void rime_gauss_B_sum_impl(
         temp = Vsum;
         // Load in Gq4
         i = (TIME*NA + ANT2)*NCHAN + CHAN + NTIME*NA*NCHAN;
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g[i];
         //  Conjugate
         G[threadIdx.z][threadIdx.y][threadIdx.x].y = -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
@@ -430,7 +430,7 @@ void rime_gauss_B_sum_impl(
         typename Tr::ct temp = Usum;
         // Load in Gp4
         i = (TIME*NA + ANT1)*NCHAN + CHAN + NTIME*NA*NCHAN;
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Usum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
@@ -440,7 +440,7 @@ void rime_gauss_B_sum_impl(
         temp = Usum;
         // Load in Gq1
         i = (TIME*NA + ANT2)*NCHAN + CHAN;
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g[i];
         // Conjugate
         G[threadIdx.z][threadIdx.y][threadIdx.x].y =
             -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
@@ -467,7 +467,7 @@ void rime_gauss_B_sum_impl(
         typename Tr::ct temp = Qsum;
         // Load in Gp4
         i = (TIME*NA + ANT1)*NCHAN + CHAN + NTIME*NA*NCHAN;
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g[i];
         // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
         Qsum.x = G[threadIdx.z][threadIdx.y][threadIdx.x].x*temp.x -
             G[threadIdx.z][threadIdx.y][threadIdx.x].y*temp.y;
@@ -477,7 +477,7 @@ void rime_gauss_B_sum_impl(
         temp = Qsum;
         // Load in Gq4
         i = (TIME*NA + ANT2)*NCHAN + CHAN + NTIME*NA*NCHAN;
-        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g_term[i];
+        G[threadIdx.z][threadIdx.y][threadIdx.x] = diag_g[i];
         // Conjugate
         G[threadIdx.z][threadIdx.y][threadIdx.x].y =
             -G[threadIdx.z][threadIdx.y][threadIdx.x].y;
@@ -525,7 +525,7 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * sersic_shape, \
     ft * wavelength, \
     int * ant_pairs, \
-    ct * diag_g_term, \
+    ct * diag_g, \
     ct * jones_EK_scalar, \
     int * flag, \
     ft * weight_vector, \
@@ -534,7 +534,7 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * chi_sqrd_result) \
 { \
     rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, sersic_shape, \
-        wavelength, ant_pairs, diag_g_term, jones_EK_scalar, flag, \
+        wavelength, ant_pairs, diag_g, jones_EK_scalar, flag, \
         weight_vector, visibilities, data_vis, \
         chi_sqrd_result); \
 }
