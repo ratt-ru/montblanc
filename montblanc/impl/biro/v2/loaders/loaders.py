@@ -226,6 +226,11 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
             solver.transfer_weight_vector(np.ascontiguousarray(weight_vector))
 
+        # The diagonal G term must be initialised to one, otherwise the
+        # resultant visibilties will be zeroed...
+        solver.transfer_diag_g(np.ones(
+            shape=solver.diag_g_shape, dtype=solver.diag_g_dtype))
+
     def __enter__(solver):
         return super(MeasurementSetLoader,solver).__enter__()
 
