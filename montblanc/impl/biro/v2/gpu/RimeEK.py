@@ -39,7 +39,7 @@ DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels
     'BLOCKDIMY' : 4,    # Number of antennas
     'BLOCKDIMZ' : 1,    # Number of timesteps
-    'maxregs'   : 44    # Maximum number of registers
+    'maxregs'   : 48    # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
