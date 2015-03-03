@@ -25,7 +25,7 @@ import time
 
 import montblanc.factory
 
-from montblanc.impl.biro.v2.cpu.RimeCPU import RimeCPU
+from montblanc.impl.biro.v2.cpu.SolverCPU import SolverCPU
 from montblanc.impl.biro.v3.CompositeBiroSolver import get_pipeline
 
 def solver(**kwargs):
@@ -63,7 +63,7 @@ class TestBiroV3(unittest.TestCase):
                 slvr.solve()
 
                 # Compare CPU and GPU results
-                chi_sqrd_result_cpu = RimeCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
+                chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
                 self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
     def test_budget(self):
@@ -86,7 +86,7 @@ class TestBiroV3(unittest.TestCase):
             slvr.solve()
 
             # Check that CPU and GPU results agree
-            chi_sqrd_result_cpu = RimeCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
+            chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
             self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
     @unittest.skip('Problem size causes allocation failures during run of '

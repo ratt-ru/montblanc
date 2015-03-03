@@ -23,7 +23,7 @@ import numpy as np
 
 import montblanc.util as mbu
 
-class RimeCPU(object):
+class SolverCPU(object):
     def __init__(self, solver):
         self.solver = solver
 

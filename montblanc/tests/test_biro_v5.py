@@ -27,7 +27,7 @@ import time
 import montblanc.factory
 import montblanc.util as mbu
 
-from montblanc.impl.biro.v4.cpu.RimeCPU import RimeCPU
+from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
@@ -66,7 +66,7 @@ class TestBiroV5(unittest.TestCase):
                 slvr.solve()
 
                 # Compare CPU and GPU results
-                chi_sqrd_result_cpu = RimeCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
+                chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
                 self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
     def test_budget(self):
@@ -89,7 +89,7 @@ class TestBiroV5(unittest.TestCase):
             slvr.solve()
 
             # Check that CPU and GPU results agree
-            chi_sqrd_result_cpu = RimeCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
+            chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
             self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
     def test_smart_budget(self):

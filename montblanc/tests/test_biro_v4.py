@@ -30,7 +30,7 @@ from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
 from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
-from montblanc.impl.biro.v4.cpu.RimeCPU import RimeCPU
+from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
 from montblanc.pipeline import Pipeline
 
 def src_perms(defaults, permute_weights=False):
@@ -113,12 +113,12 @@ class TestBiroV4(unittest.TestCase):
         # for testing the E term
         slvr.set_beam_width(65*1e5)
 
-        rime_cpu = RimeCPU(slvr)
+        slvr_cpu = SolverCPU(slvr)
 
         # Call the GPU solver
         slvr.solve()
 
-        ek_cpu = rime_cpu.compute_ek_jones_scalar_per_ant()
+        ek_cpu = slvr_cpu.compute_ek_jones_scalar_per_ant()
         with slvr.context:
             ek_gpu = slvr.jones_scalar_gpu.get()
 
@@ -152,18 +152,18 @@ class TestBiroV4(unittest.TestCase):
         slvr.set_beam_width(65*1e5)
         slvr.set_sigma_sqrd(np.random.random(1)[0])
 
-        rime_cpu = RimeCPU(slvr)
+        slvr_cpu = SolverCPU(slvr)
 
         # Call the GPU solver
         slvr.solve()
 
-        ebk_vis_cpu = rime_cpu.compute_ebk_vis()
+        ebk_vis_cpu = slvr_cpu.compute_ebk_vis()
         with slvr.context:
             ebk_vis_gpu = slvr.vis_gpu.get()
 
         self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
 
-        chi_sqrd_result_cpu = rime_cpu.compute_biro_chi_sqrd(
+        chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(
             weight_vector=weight_vector)
 
         self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))

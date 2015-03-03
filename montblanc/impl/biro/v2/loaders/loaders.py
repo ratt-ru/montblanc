@@ -189,7 +189,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         suvw = uvw.reshape(solver.ntime,solver.nbl,3)
 
         # TODO. Inefficient indexing. Figure something out based
-        # on RimeCPU.compute_gaussian_shape
+        # on SolverCPU.compute_gaussian_shape
         for t in range(solver.ntime):
             for bl in range(solver.nbl):
                 #idx[t*solver.nbl + bl] = t*solver.na + ant_pairs[0,t,bl]
