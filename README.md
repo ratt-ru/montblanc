@@ -17,7 +17,7 @@ Pre-requisites must be installed and dependent C libraries built.
 
 ### Pre-requisites
 
-You'll also need to install the [pyrap][pyrap] library, which is dependent on [casacore][casacore]. It may be easier to add the [SKA PPA][ska-ppa]  and get the binaries from there.
+You'll also need to install the [pyrap][pyrap] library, which is dependent on [casacore][casacore]. It may be easier to add the [radio astronomy PPA][radio-astro-ppa]  and get the binaries from there.
 
 ### Building the package
 
@@ -72,5 +72,5 @@ In general, I will avoid making changes to BIRO v2 and v3, but everything beyond
 [cub]:https://github.com/nvlabs/cub
 [pyrap]:https://code.google.com/p/pyrap/
 [casacore]:https://code.google.com/p/casacore/
-[ska-ppa]:https://launchpad.net/~ska-sa/+archive/main
+[radio-astro]:https://launchpad.net/~radio-astro/+archive/main
 [biro]:http://arxiv.org/abs/1501.05304
