@@ -72,5 +72,5 @@ In general, I will avoid making changes to BIRO v2 and v3, but everything beyond
 [cub]:https://github.com/nvlabs/cub
 [pyrap]:https://code.google.com/p/pyrap/
 [casacore]:https://code.google.com/p/casacore/
-[radio-astro]:https://launchpad.net/~radio-astro/+archive/main
+[radio-astro-ppa]:https://launchpad.net/~radio-astro/+archive/main
 [biro]:http://arxiv.org/abs/1501.05304
