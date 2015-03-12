@@ -194,9 +194,17 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     fU=ft(np.random.random(ntime*nsrc)*0.5)
     fV=ft(np.random.random(ntime*nsrc)*0.5)
     alpha=ft(np.random.random(ntime*nsrc)*0.1)
-    brightness = mbu.shape_list([fI,fQ,fU,fV,alpha],
-        slvr.brightness_shape, slvr.brightness_dtype)
-    slvr.transfer_brightness(brightness)
+    if version in [VERSION_TWO, VERSION_THREE]:
+        brightness = mbu.shape_list([fI,fQ,fU,fV,alpha],
+            slvr.brightness_shape, slvr.brightness_dtype)
+        slvr.transfer_brightness(brightness)
+    elif version in [VERSION_FOUR,VERSION_FIVE]:
+        stokes = mbu.shape_list([fI,fQ,fU,fV],
+            slvr.stokes_shape, slvr.stokes_dtype)
+        alpha = mbu.shape_list([alpha], slvr.alpha_shape, slvr.alpha_dtype)
+        slvr.transfer_stokes(stokes)
+        slvr.transfer_alpha(alpha)
+
 
     # Gaussian shape matrix
     el = ft(np.random.random(ngsrc)*0.5)

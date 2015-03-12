@@ -83,7 +83,8 @@ A = [
     ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32),
 
     ary_dict('lm', (2,'nsrc'), 'ft'),
-    ary_dict('brightness', (5,'nsrc','ntime'), 'ft'),
+    ary_dict('stokes', (4,'nsrc','ntime'), 'ft'),
+    ary_dict('alpha', ('nsrc','ntime'), 'ft'),
     ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
     ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
 

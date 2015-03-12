@@ -147,7 +147,6 @@ class SolverCPU(object):
 
             u, v, w = slvr.uvw_cpu[0], slvr.uvw_cpu[1], slvr.uvw_cpu[2]
             l, m = slvr.lm_cpu[0], slvr.lm_cpu[1]
-            alpha = slvr.brightness_cpu[4]
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
             n = ne.evaluate('sqrt(1. - l**2 - m**2) - 1.',
@@ -173,7 +172,7 @@ class SolverCPU(object):
             power = ne.evaluate('(rw/wl)**(0.5*a)', {
                 'rw': slvr.ref_wave,
                 'wl': wave[np.newaxis, np.newaxis, :],
-                'a': alpha[:, :, np.newaxis]
+                'a': slvr.alpha_cpu[:, :, np.newaxis]
             })
             assert power.shape == (slvr.nsrc, slvr.ntime, slvr.nchan)
 
@@ -312,13 +311,13 @@ class SolverCPU(object):
             # Create the brightness matrix. Dim 4 x nsrcs x ntime
             B = slvr.ct([
                 # fI+fQ + 0j
-                slvr.brightness_cpu[0]+slvr.brightness_cpu[1] + 0j,
+                slvr.stokes_cpu[0]+slvr.stokes_cpu[1] + 0j,
                 # fU + fV*1j
-                slvr.brightness_cpu[2] + 1j*slvr.brightness_cpu[3],
+                slvr.stokes_cpu[2] + 1j*slvr.stokes_cpu[3],
                 # fU - fV*1j
-                slvr.brightness_cpu[2] - 1j*slvr.brightness_cpu[3],
+                slvr.stokes_cpu[2] - 1j*slvr.stokes_cpu[3],
                 # fI-fQ + 0j
-                slvr.brightness_cpu[0]-slvr.brightness_cpu[1] + 0j])
+                slvr.stokes_cpu[0]-slvr.stokes_cpu[1] + 0j])
             assert B.shape == (4, slvr.nsrc, slvr.ntime)
 
             return B

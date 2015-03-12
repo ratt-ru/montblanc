@@ -70,7 +70,7 @@ template <
 __device__
 void rime_gauss_B_sum_impl(
     typename Tr::ft * uvw,
-    typename Tr::ft * brightness,
+    typename Tr::ft * stokes,
     typename Tr::ft * gauss_shape,
     typename Tr::ft * sersic_shape,
     typename Tr::ft * wavelength,
@@ -139,13 +139,13 @@ void rime_gauss_B_sum_impl(
     {
         // The following loads effect the global load efficiency.
 
-        // brightness varies by time (and source), not baseline or channel
+        // stokes varies by time (and source), not baseline or channel
         if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = SRC*NTIME + TIME;   I[threadIdx.z] = brightness[i];
-            i += NSRC*NTIME;          Q[threadIdx.z] = brightness[i];
-            i += NSRC*NTIME;          U[threadIdx.z] = brightness[i];
-            i += NSRC*NTIME;          V[threadIdx.z] = brightness[i];
+            i = SRC*NTIME + TIME;   I[threadIdx.z] = stokes[i];
+            i += NSRC*NTIME;          Q[threadIdx.z] = stokes[i];
+            i += NSRC*NTIME;          U[threadIdx.z] = stokes[i];
+            i += NSRC*NTIME;          V[threadIdx.z] = stokes[i];
         }
 
         __syncthreads();
@@ -183,13 +183,13 @@ void rime_gauss_B_sum_impl(
     {
         // The following loads effect the global load efficiency.
 
-        // brightness varies by time (and source), not baseline or channel
+        // stokes varies by time (and source), not baseline or channel
         if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = SRC*NTIME + TIME;   I[threadIdx.z] = brightness[i];
-            i += NSRC*NTIME;          Q[threadIdx.z] = brightness[i];
-            i += NSRC*NTIME;          U[threadIdx.z] = brightness[i];
-            i += NSRC*NTIME;          V[threadIdx.z] = brightness[i];
+            i = SRC*NTIME + TIME;   I[threadIdx.z] = stokes[i];
+            i += NSRC*NTIME;          Q[threadIdx.z] = stokes[i];
+            i += NSRC*NTIME;          U[threadIdx.z] = stokes[i];
+            i += NSRC*NTIME;          V[threadIdx.z] = stokes[i];
         }
 
         // gaussian shape only varies by source. Shape parameters
@@ -245,13 +245,13 @@ void rime_gauss_B_sum_impl(
     {
         // The following loads effect the global load efficiency.
 
-        // brightness varies by time (and source), not baseline or channel
+        // stokes varies by time (and source), not baseline or channel
         if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = SRC*NTIME + TIME;   I[threadIdx.z] = brightness[i];
-            i += NSRC*NTIME;          Q[threadIdx.z] = brightness[i];
-            i += NSRC*NTIME;          U[threadIdx.z] = brightness[i];
-            i += NSRC*NTIME;          V[threadIdx.z] = brightness[i];
+            i = SRC*NTIME + TIME;   I[threadIdx.z] = stokes[i];
+            i += NSRC*NTIME;          Q[threadIdx.z] = stokes[i];
+            i += NSRC*NTIME;          U[threadIdx.z] = stokes[i];
+            i += NSRC*NTIME;          V[threadIdx.z] = stokes[i];
         }
 
         // sersic shape only varies by source. Shape parameters
@@ -356,7 +356,7 @@ extern "C" {
 __global__ void \
 rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * uvw, \
-    ft * brightness, \
+    ft * stokes, \
     ft * gauss_shape, \
     ft * sersic_shape, \
     ft * wavelength, \
@@ -367,7 +367,7 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ct * data_vis, \
     ft * chi_sqrd_result) \
 { \
-    rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, sersic_shape, \
+    rime_gauss_B_sum_impl<ft, apply_weights>(uvw, stokes, gauss_shape, sersic_shape, \
         wavelength, ant_pairs, jones_EK_scalar, \
         weight_vector, visibilities, data_vis, \
         chi_sqrd_result); \
@@ -442,7 +442,7 @@ class RimeGaussBSum(Node):
         sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
             else slvr.sersic_shape_gpu
 
-        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic,
+        self.kernel(slvr.uvw_gpu, slvr.stokes_gpu, gauss, sersic,
             slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
             slvr.weight_vector_gpu,
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,

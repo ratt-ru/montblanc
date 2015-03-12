@@ -64,7 +64,7 @@ __device__
 void rime_jones_EK_impl(
     T * uvw,
     T * lm,
-    T * brightness,
+    T * alpha,
     T * wavelength,
     T * point_errors,
     typename Tr::ct * jones_scalar,
@@ -123,11 +123,11 @@ void rime_jones_EK_impl(
             i += NSRC; m[0] = lm[i];
         }
 
-        // Brightness varies by source and time , not antenna or channel
+        // alpha varies by source and time , not antenna or channel
         if(threadIdx.x == 0 && threadIdx.y == 0)
         {
-            i = (SRC + 4*NSRC)*NTIME + TIME;
-            a[threadIdx.z] = brightness[i];
+            i = SRC*NTIME + TIME;
+            a[threadIdx.z] = alpha[i];
         }
 
         __syncthreads();
@@ -172,7 +172,7 @@ __global__ void \
 rime_jones_EK_ ## ft( \
     ft * UVW, \
     ft * LM, \
-    ft * brightness, \
+    ft * alpha, \
     ft * wavelength, \
     ft * point_errors, \
     ct * jones, \
@@ -180,7 +180,7 @@ rime_jones_EK_ ## ft( \
     ft beam_width, \
     ft beam_clip) \
 { \
-    rime_jones_EK_impl<ft>(UVW, LM, brightness, wavelength, \
+    rime_jones_EK_impl<ft>(UVW, LM, alpha, wavelength, \
         point_errors, jones, ref_wave, beam_width, beam_clip); \
 }
 
@@ -242,7 +242,7 @@ class RimeEK(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
+        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.alpha_gpu,
             slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_scalar_gpu,
             slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
             stream=stream, **self.get_kernel_params(slvr))
