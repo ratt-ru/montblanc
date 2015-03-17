@@ -18,6 +18,8 @@
 #ifndef _MONTBLANC_KERNEL_TRAITS_H
 #define _MONTBLANC_KERNEL_TRAITS_H
 
+#include <cub/cub/cub.cuh>
+
 namespace montblanc {
 
 template <typename T> class kernel_traits
@@ -168,6 +170,80 @@ __device__ __forceinline__ void complex_multiply_in_place(
     lhs.x -= lhs.y*rhs.y;
     lhs.y *= rhs.x;
     lhs.y += tmp*rhs.y;
+}
+
+// Create the mask for transforming the second polarisation
+// Given:
+//   thread 0 : pol = I;
+//   thread 1 : pol = Q;
+//   thread 2 : pol = U;
+//   thread 3 : pol = V;
+// we want to obtain the following brightness matrix:
+//   thread 0 : B = I+Q;
+//   thread 1 : B = U+iV;
+//   thread 2 : B = U-iV;
+//   thread 1 : B = I-Q;
+// The second values (+Q, +iV,-iV, -Q) in the above expression must
+// be transformed with the following complex mask.
+//   thread 0 :  1 * (1 + 0j)
+//   thread 1 :  1 * (0 + 1j)
+//   thread 2 : -1 * (0 + 1j)
+//   thread 3 : -1 * (1 + 0j)
+template <
+    typename T,
+    typename Tr=montblanc::kernel_traits<T>,
+    typename Po=montblanc::kernel_policies<T> >
+__device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
+{
+    int sign = ((threadIdx.x - 2) & 0x2)  - 1;
+    mask.x = T(sign*((threadIdx.x - 1) & 0x2) >> 1);
+    mask.y = T(sign*((threadIdx.x + 1) & 0x2) >> 1);
+}
+
+// Gives the Kepler shuffle index for creating part of the
+// brightness matrix.
+// Given:
+//   thread 0 : pol = I;
+//   thread 1 : pol = Q;
+//   thread 2 : pol = U;
+//   thread 3 : pol = V;
+// we want to obtain the following brightness matrix:
+//   thread 0 : B = I+Q;
+//   thread 1 : B = U+iV;
+//   thread 2 : B = U-iV;
+//   thread 1 : B = I-Q;
+// This gives the indices of [Q,V,V,Q], [1,3,3,1].
+// Subtracting 1 from these indices gives [I,U,U,I], [0,2,2,0]
+__device__ __forceinline__ int brightness_pol_2_shfl_idx(void)
+    { return 1 + ((threadIdx.x + 1) & 0x2) + (threadIdx.x >> 2)<<2; }
+
+// Given the polarisation, generate the brightness matrix
+// Assumes that the polarisations I,Q,U,V are present in the
+// the pol variable of a group of four threads. i.e.
+//   thread 0 : pol = I;
+//   thread 1 : pol = Q;
+//   thread 2 : pol = U;
+//   thread 3 : pol = V;
+// Kepler register shuffling is used to retrieve these
+// polarisations from each thread to construct the brightness
+// value
+template <
+    typename T,
+    typename Tr=montblanc::kernel_traits<T>,
+    typename Po=montblanc::kernel_policies<T> >
+__device__ __forceinline__ void create_brightness(
+    typename Tr::ct & result,
+    const typename Tr::ft & pol)
+{
+    // Overwrite the result with the mask
+    create_brightness_mask<T>(result);
+    int shfl_idx = brightness_pol_2_shfl_idx();
+    // Get the second polarisation value and multiply it with the mask
+    T second_pol = cub::ShuffleBroadcast(pol, shfl_idx);
+    result.x *= second_pol;
+    result.y *= second_pol;
+    // Add the first polarisation to the real component
+    result.x += cub::ShuffleBroadcast(pol, shfl_idx-1);
 }
 
 } // namespace montblanc
