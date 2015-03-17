@@ -55,17 +55,28 @@ if __name__ == '__main__':
     #   solver transfer_* methods should be stored on the solver object
     with montblanc.get_biro_solver(args.msfile,
         npsrc=args.npsrc, ngsrc=args.ngsrc, nssrc=args.nssrc, init_weights=None,
-        weight_vector=False, store_cpu=False, version=args.version) as slvr:
+        weight_vector=True, store_cpu=False,
+        dtype=np.float64, version=args.version) as slvr:
 
         # Random point source coordinates in the l,m,n (brightness image) domain
         lm = (np.random.random(
                 size=slvr.lm_shape) * 0.1) \
             .astype(slvr.lm_dtype)
 
-        # Random brightness matrix for the point sources
-        brightness = np.random.random(
-                size=slvr.brightness_shape) \
-            .astype(slvr.brightness_dtype)
+        from montblanc.factory import VERSION_TWO, VERSION_THREE, VERSION_FOUR, VERSION_FIVE
+
+        if args.version in [VERSION_TWO, VERSION_THREE]:
+            # Random brightness matrix for the point sources
+            brightness = np.random.random(
+                    size=slvr.brightness_shape) \
+                .astype(slvr.brightness_dtype)
+        elif args.version in [VERSION_FOUR, VERSION_FIVE]:
+            stokes = np.random.random(
+                    size=slvr.stokes_shape) \
+                .astype(slvr.stokes_dtype)
+            alpha = np.random.random(
+                    size=slvr.alpha_shape) \
+                .astype(slvr.alpha_dtype)
 
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
@@ -95,7 +106,11 @@ if __name__ == '__main__':
         for i in range(args.count):
             # Set data on the solver object. Uploads to GPU
             slvr.transfer_lm(lm)
-            slvr.transfer_brightness(brightness)
+            if args.version in [VERSION_TWO, VERSION_THREE]:
+                slvr.transfer_brightness(brightness)
+            elif args.version in [VERSION_FOUR, VERSION_FIVE]:
+                slvr.transfer_stokes(stokes)
+                slvr.transfer_alpha(alpha)
             slvr.transfer_point_errors(point_errors)
             # Change parameters for this run
             slvr.set_sigma_sqrd((np.random.random(1)**2)[0])
