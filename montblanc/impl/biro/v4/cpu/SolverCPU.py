@@ -311,13 +311,14 @@ class SolverCPU(object):
             # Create the brightness matrix. Dim 4 x nsrcs x ntime
             B = slvr.ct([
                 # fI+fQ + 0j
-                slvr.stokes_cpu[0]+slvr.stokes_cpu[1] + 0j,
+                slvr.stokes_cpu[:,:,0]+slvr.stokes_cpu[:,:,1] + 0j,
                 # fU + fV*1j
-                slvr.stokes_cpu[2] + 1j*slvr.stokes_cpu[3],
+                slvr.stokes_cpu[:,:,2] + 1j*slvr.stokes_cpu[:,:,3],
                 # fU - fV*1j
-                slvr.stokes_cpu[2] - 1j*slvr.stokes_cpu[3],
+                slvr.stokes_cpu[:,:,2] - 1j*slvr.stokes_cpu[:,:,3],
                 # fI-fQ + 0j
-                slvr.stokes_cpu[0]-slvr.stokes_cpu[1] + 0j])
+                slvr.stokes_cpu[:,:,0]-slvr.stokes_cpu[:,:,1] + 0j])
+
             assert B.shape == (4, slvr.nsrc, slvr.ntime)
 
             return B
