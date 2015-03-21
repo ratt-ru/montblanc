@@ -13,11 +13,11 @@ Montblanc is licensed under the GNU GPL v2.0 License.
 
 ## Installation
 
-Pre-requisites must be installed and dependent C libraries built.
+Certain pre-requisites must be installed, prior to calling the `setup.py` script.
 
 ### Pre-requisites
 
-You'll also need to install the [pyrap][pyrap] library, which is dependent on [casacore][casacore]. It may be easier to add the [radio astronomy PPA][radio-astro-ppa]  and get the binaries from there.
+You'll need to manually install the [pyrap][pyrap] library which, in turn, is dependent on [casacore][casacore]. It may be easier to add the [radio astronomy PPA][radio-astro-ppa]  and get the binaries from there.
 
 ### Building the package
 
