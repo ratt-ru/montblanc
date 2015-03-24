@@ -1,0 +1,132 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2015 Simon Perkins
+#
+# This file is part of montblanc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, see <http://www.gnu.org/licenses/>.
+
+import logging
+import numpy as np
+
+import montblanc
+import montblanc.util as mbu
+
+def repeat_brightness_over_time(slvr, parser):
+    """
+    Assuming our sky model file doesn't have
+    [I Q U V alpha] values for each timestep,
+    we need to replicate these values across
+    each timestep. Figure out the time dimension
+    of the the brightness array and repeat
+    the array along it.
+    """
+    # Get the brightness matrix. In general, montblanc support
+    # time-varying brightness, but it's not practical to specify
+    # this in a sky model text file. So we assume a shape here
+    # (5, nsrc) and call fiddle_brightness to replicate these
+    # values across the time dimension
+    R = slvr.get_array_record('brightness')
+    time_dim = R.sshape.index('ntime')
+    no_time_shape = tuple([d for i, d in enumerate(R.shape) if i != time_dim])
+
+    brightness = parser.shape_arrays(['I','Q','U','V','alpha'],
+        no_time_shape, slvr.brightness_dtype)
+
+    return np.repeat(brightness, slvr.ntime, time_dim).reshape(R.shape)
+
+if __name__ == '__main__':
+    import sys
+    import argparse
+
+    parser = argparse.ArgumentParser(description='RIME MS test script')
+    parser.add_argument('msfile', help='Measurement Set File')
+    parser.add_argument('-s', '--sky-file', dest='sky_file', type=str, required=True, help='Sky Model File')
+    parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
+    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v2','v3','v4','v5'],
+        help='BIRO Pipeline Version.')
+
+    args = parser.parse_args(sys.argv[1:])
+
+    # Set the logging level
+    montblanc.log.setLevel(logging.WARN)
+
+    # Parse the sky model file
+    sky_parse = mbu.parse_sky_model(args.sky_file)
+
+    # Get the BIRO solver.
+    # init_weights : (1) None (2) 'sigma' or (3) 'weight'. Either
+    #   (1) do not initialise the weight vector, or
+    #   (2) initialise from the MS 'SIGMA' tables, or
+    #   (3) initialise from the MS 'WEIGHT' tables.
+    # weight_vector : indicates whether a weight vector should be used to
+    #   compute the chi squared or a single sigma squared value
+    # store_cpu : indicates whether copies of the data passed into the
+    #   solver transfer_* methods should be stored on the solver object
+    with montblanc.get_biro_solver(args.msfile,
+        npsrc=sky_parse.src_counts.get('npsrc', 0),
+        ngsrc=sky_parse.src_counts.get('npsrc', 0),
+        nssrc=sky_parse.src_counts.get('nssrc', 0),
+        init_weights=None, weight_vector=False,
+        store_cpu=False, version=args.version) as slvr:
+
+        # Get the lm coordinates
+        lm = sky_parse.shape_arrays(['l','m'], slvr.lm_shape, slvr.lm_dtype)
+
+        # Get the brightness values, repeating them over time
+        brightness = repeat_brightness_over_time(slvr, sky_parse)
+
+        # If there are gaussian sources, create their
+        # shape matrix and transfer it.
+        if slvr.ngsrc > 0:
+            gauss_shape = sky_parse.shape_arrays(['el','em','eR'],
+                slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
+
+        # Create a bayesian model and upload it to the GPU
+        bayes_data = (np.random.random(size=slvr.bayes_data_shape) +
+                np.random.random(size=slvr.bayes_data_shape)*1j) \
+            .astype(slvr.bayes_data_dtype)
+
+        # Generate random antenna pointing errors
+        point_errors = np.random.random(
+                size=slvr.point_errors_shape) \
+            .astype(slvr.point_errors_dtype)
+
+        # Generate and transfer a noise vector.
+        weight_vector = np.random.random(
+                size=slvr.weight_vector_shape) \
+            .astype(slvr.ft)
+        slvr.transfer_weight_vector(weight_vector)
+
+        # Execute the pipeline
+        for i in range(args.count):
+            # Set data on the solver object. Uploads to GPU
+            slvr.transfer_lm(lm)
+            slvr.transfer_brightness(brightness)
+            slvr.transfer_point_errors(point_errors)
+            # Change parameters for this run
+            slvr.set_sigma_sqrd((np.random.random(1)**2)[0])
+            # Execute the pipeline
+            slvr.solve()
+
+            # The chi squared result is set on the solver object
+            print 'Chi Squared Value', slvr.X2
+
+            # Obtain the visibilities  (slow)
+            #with slvr.context:
+            #    V = slvr.vis_gpu.get()
+
+        # Print information about the simulation
+        print slvr

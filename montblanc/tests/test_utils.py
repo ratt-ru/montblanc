@@ -21,11 +21,13 @@
 import logging
 import unittest
 import numpy as np
+import tempfile
 import time
 
 import montblanc
 import montblanc.factory
 import montblanc.util as mbu
+
 
 class TestUtils(unittest.TestCase):
     """
@@ -129,6 +131,48 @@ class TestUtils(unittest.TestCase):
         do_check(64, 64*63//2, 64*65//2)                       # MeerKAT
         do_check(3500, 3500*3499//2, 3500*3501//2)   # SKA
 
+    def test_sky_model(self):
+        """ Test sky model file loading """
+
+        sky_model_file_contents = (
+            '# format npsrc: l, m, I, Q, U, V\n'
+            '11, 12, 13, 14, 15, 16\n'
+            '21, 22, 23, 24, 25, 26\n'
+            '# format ngsrc: l, m, I, Q, U, V, el, em, eR\n'
+            '31, 32, 33, 34, 35, 36, 37, 38, 39\n'
+            '41, 42, 43, 44, 45, 46, 47, 48, 49\n')
+
+        with tempfile.NamedTemporaryFile('w') as f:
+            f.write(sky_model_file_contents)
+            f.flush()
+
+            result = mbu.parse_sky_model(f.name)
+            A, S = result.arrays, result.src_counts
+
+        self.assertTrue(S['npsrc'] == 2)
+        self.assertTrue(S['ngsrc'] == 2)
+
+        self.assertTrue(A['l'] == ['11', '21', '31', '41'])
+        self.assertTrue(A['m'] == ['12', '22', '32', '42'])
+        self.assertTrue(A['I'] == ['13', '23', '33', '43'])
+        self.assertTrue(A['Q'] == ['14', '24', '34', '44'])
+        self.assertTrue(A['U'] == ['15', '25', '35', '45'])
+        self.assertTrue(A['V'] == ['16', '26', '36', '46'])
+        self.assertTrue(A['el'] == ['37', '47'])
+        self.assertTrue(A['em'] == ['38', '48'])
+        self.assertTrue(A['eR'] == ['39', '49'])
+
+        ft = np.float32
+        shape = (2, S['npsrc'] + S['ngsrc'])
+        ary = result.shape_arrays(['l','m'], shape, ft)
+        self.assertTrue(ary.shape == shape)
+
+        fl = (((np.arange(4) + 1)*10) + 1).astype(ft)
+        fm = (((np.arange(4) + 1)*10) + 2).astype(ft)
+        self.assertTrue(np.all(ary[0] == fl))
+        self.assertTrue(np.all(ary[1] == fm))
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestUtils)
     unittest.TextTestRunner(verbosity=2).run(suite)
+
