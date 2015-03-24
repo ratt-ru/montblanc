@@ -22,7 +22,7 @@ class ParseResults(object):
         return rl
 
 
-__sky_model_re = re.compile('^\s*?#\s*?format\s+(?P<src_count>.*?):(?P<format_specifiers>.*?)$')
+__sky_model_re = re.compile('^\s*?#\s*?format\s+?(?P<src_count>\S*?)\s*?:\s*?(?P<fmt_spec>\S*?)$')
 
 def parse_sky_model(filename):
     """
@@ -31,7 +31,7 @@ def parse_sky_model(filename):
 
     results = ParseResults()
 
-    format_specifiers = []
+    fmt_specs = []
     src_count = None
 
     with open(filename, 'rb') as csv_file:
@@ -47,22 +47,22 @@ def parse_sky_model(filename):
                 # Update the format list array if we match
                 if match:
                     src_count = match.group('src_count')
-                    format_specifiers = match.group('format_specifiers').split()
+                    fmt_specs = [match.group('fmt_spec')]
+                    fmt_specs.extend([v.strip() for v in row[1:]])
                     continue
-
 
             # CSV file returns stuff separated
             # by commas in a list
             for idx, value in enumerate(row):
-                # Handle the value if we have a
-                # format specifier for it
-                if idx >= len(format_specifiers):
+                # Only handle values if we have a
+                # format specifier for them
+                if idx >= len(fmt_specs):
                     break
 
-                format_specifier = format_specifiers[idx]
-                l = results.arrays.get(format_specifier, [])
+                fmt_spec = fmt_specs[idx]
+                l = results.arrays.get(fmt_spec, [])
                 l.append(value.strip())
-                results.arrays[format_specifier] = l
+                results.arrays[fmt_spec] = l
 
             # If we've reached this point, we've
             # handled a row defining a source,
