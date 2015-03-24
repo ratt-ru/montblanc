@@ -135,10 +135,10 @@ class TestUtils(unittest.TestCase):
         """ Test sky model file loading """
 
         sky_model_file_contents = (
-            '# format: l m I Q\n'
+            '# format npsrc: l m I Q\n'
             '123423, 545, 677, 12323\n'
             '1234.454, 5434.43, 4321.1, 0903.4\n'
-            '# format: l m I Q U V\n'
+            '# format ngsrc: l m I Q U V\n'
             '123423, 545, 677, 12323, 54, 65\n'
             '1234.454, 5434.43, 4321.1, 0903.4, 89, 34, 43545, 65465\n')
 
@@ -146,7 +146,8 @@ class TestUtils(unittest.TestCase):
             f.write(sky_model_file_contents)
             f.flush()
 
-            A = mbu.parse_sky_model(f.name).arrays;
+            result = mbu.parse_sky_model(f.name)
+            A, S = result.arrays, result.src_types
 
         self.assertTrue(A['l'] == ['123423', '1234.454', '123423', '1234.454'])
         self.assertTrue(A['m'] == ['545', '5434.43', '545', '5434.43'])
