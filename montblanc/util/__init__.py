@@ -22,6 +22,7 @@ import numpy as np
 import math
 
 from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
+from sky_model_parser import parse_sky_model
 
 def nr_of_baselines(na, auto_correlations=False):
     """

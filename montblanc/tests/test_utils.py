@@ -21,11 +21,13 @@
 import logging
 import unittest
 import numpy as np
+import tempfile
 import time
 
 import montblanc
 import montblanc.factory
 import montblanc.util as mbu
+
 
 class TestUtils(unittest.TestCase):
     """
@@ -129,6 +131,31 @@ class TestUtils(unittest.TestCase):
         do_check(64, 64*63//2, 64*65//2)                       # MeerKAT
         do_check(3500, 3500*3499//2, 3500*3501//2)   # SKA
 
+    def test_sky_model(self):
+        """ Test sky model file loading """
+
+        sky_model_file_contents = (
+            '# format: l m I Q\n'
+            '123423, 545, 677, 12323\n'
+            '1234.454, 5434.43, 4321.1, 0903.4\n'
+            '# format: l m I Q U V\n'
+            '123423, 545, 677, 12323, 54, 65\n'
+            '1234.454, 5434.43, 4321.1, 0903.4, 89, 34, 43545, 65465\n')
+
+        with tempfile.NamedTemporaryFile('w') as f:
+            f.write(sky_model_file_contents)
+            f.flush()
+
+            A = mbu.parse_sky_model(f.name).arrays;
+
+        self.assertTrue(A['l'] == ['123423', '1234.454', '123423', '1234.454'])
+        self.assertTrue(A['m'] == ['545', '5434.43', '545', '5434.43'])
+        self.assertTrue(A['I'] == ['677', '4321.1', '677', '4321.1'])
+        self.assertTrue(A['Q'] == ['12323', '0903.4', '12323', '0903.4'])
+        self.assertTrue(A['U'] == ['54', '89'])
+        self.assertTrue(A['V'] == ['65', '34'])
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestUtils)
     unittest.TextTestRunner(verbosity=2).run(suite)
+
