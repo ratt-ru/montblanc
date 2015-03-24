@@ -162,6 +162,16 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(A['em'] == ['38', '48'])
         self.assertTrue(A['eR'] == ['39', '49'])
 
+        ft = np.float32
+        shape = (2, S['npsrc'] + S['ngsrc'])
+        ary = result.shape_arrays(['l','m'], shape, ft)
+        self.assertTrue(ary.shape == shape)
+
+        fl = (((np.arange(4) + 1)*10) + 1).astype(ft)
+        fm = (((np.arange(4) + 1)*10) + 2).astype(ft)
+        self.assertTrue(np.all(ary[0] == fl))
+        self.assertTrue(np.all(ary[1] == fm))
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestUtils)
     unittest.TextTestRunner(verbosity=2).run(suite)

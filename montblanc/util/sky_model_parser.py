@@ -6,21 +6,15 @@ class ParseResults(object):
         self.arrays = {}
         self.src_counts = {}
 
-    def group_arys(self, l):
+    def shape_arrays(self, fmt_list, shape, dtype):
+        """
+        Shape the arrays defined by the format specifier list, according
+        to the supplied shape and dtype. Returns an appropriate numpy array.
         """
 
-        """
-        rl = []
-
-        for a in l:
-            if not self.arrays.has_key(a):
-                raise ValueError('ParseResult object '
-                    'does not have a %s array' % a)
-
-            rl.append(self.arrays[a])
-
-        return rl
-
+        # This import is circular if global
+        from . import shape_list
+        return shape_list([self.arrays[a] for a in fmt_list], shape, dtype)
 
 __sky_model_re = re.compile('^\s*?#\s*?format\s+?(?P<src_count>\S*?)\s*?:\s*?(?P<fmt_spec>\S*?)$')
 

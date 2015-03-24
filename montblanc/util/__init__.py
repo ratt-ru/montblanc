@@ -98,10 +98,6 @@ def array_bytes(shape, dtype):
     """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
     return np.product(shape)*np.dtype(dtype).itemsize
 
-def shape_list(l,shape,dtype):
-    """ Curry the shaping and casting of a list of arrays """
-    return np.array(l, dtype=dtype).reshape(shape)
-
 def rethrow_attribute_exception(e):
     """
     Rethrows an attribute exception with more informative text.
@@ -343,6 +339,10 @@ def shape_from_str_tuple(sshape, variables, ignore=None):
 
     return tuple([int(eval_expr(v,variables)) if isinstance(v,str) else int(v)
         for v in sshape if v not in ignore])
+
+def shape_list(l,shape,dtype):
+    """ Shape a list of lists into the appropriate shape and data type """
+    return np.array(l, dtype=dtype).reshape(shape)
 
 def array_convert_function(sshape_one, sshape_two, variables):
     """ Return a function defining the conversion process between two NumPy
