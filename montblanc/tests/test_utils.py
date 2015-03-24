@@ -135,12 +135,12 @@ class TestUtils(unittest.TestCase):
         """ Test sky model file loading """
 
         sky_model_file_contents = (
-            '# format npsrc: l m I Q\n'
-            '123423, 545, 677, 12323\n'
-            '1234.454, 5434.43, 4321.1, 0903.4\n'
-            '# format ngsrc: l m I Q U V\n'
-            '123423, 545, 677, 12323, 54, 65\n'
-            '1234.454, 5434.43, 4321.1, 0903.4, 89, 34, 43545, 65465\n')
+            '# format npsrc: l m I Q U V\n'
+            '11, 12, 13, 14, 15, 16\n'
+            '21, 22, 23, 24, 25, 26\n'
+            '# format ngsrc: l m I Q U V el em eR\n'
+            '31, 32, 33, 34, 35, 36, 37, 38, 39\n'
+            '41, 42, 43, 44, 45, 46, 47, 48, 49\n')
 
         with tempfile.NamedTemporaryFile('w') as f:
             f.write(sky_model_file_contents)
@@ -152,12 +152,15 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(S['npsrc'] == 2)
         self.assertTrue(S['ngsrc'] == 2)
 
-        self.assertTrue(A['l'] == ['123423', '1234.454', '123423', '1234.454'])
-        self.assertTrue(A['m'] == ['545', '5434.43', '545', '5434.43'])
-        self.assertTrue(A['I'] == ['677', '4321.1', '677', '4321.1'])
-        self.assertTrue(A['Q'] == ['12323', '0903.4', '12323', '0903.4'])
-        self.assertTrue(A['U'] == ['54', '89'])
-        self.assertTrue(A['V'] == ['65', '34'])
+        self.assertTrue(A['l'] == ['11', '21', '31', '41'])
+        self.assertTrue(A['m'] == ['12', '22', '32', '42'])
+        self.assertTrue(A['I'] == ['13', '23', '33', '43'])
+        self.assertTrue(A['Q'] == ['14', '24', '34', '44'])
+        self.assertTrue(A['U'] == ['15', '25', '35', '45'])
+        self.assertTrue(A['V'] == ['16', '26', '36', '46'])
+        self.assertTrue(A['el'] == ['37', '47'])
+        self.assertTrue(A['em'] == ['38', '48'])
+        self.assertTrue(A['eR'] == ['39', '49'])
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestUtils)
