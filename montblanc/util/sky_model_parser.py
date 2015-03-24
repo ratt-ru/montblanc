@@ -4,7 +4,7 @@ import re
 class ParseResults(object):
     def __init__(self):
         self.arrays = {}
-        self.src_types = {}
+        self.src_counts = {}
 
     def group_arys(self, l):
         """
@@ -22,7 +22,7 @@ class ParseResults(object):
         return rl
 
 
-__sky_model_re = re.compile('^\s*?#\s*?format\s+(?P<src_type>.*?):(?P<format_specifiers>.*?)$')
+__sky_model_re = re.compile('^\s*?#\s*?format\s+(?P<src_count>.*?):(?P<format_specifiers>.*?)$')
 
 def parse_sky_model(filename):
     """
@@ -32,50 +32,43 @@ def parse_sky_model(filename):
     results = ParseResults()
 
     format_specifiers = []
-    src_type = None
+    src_count = None
 
     with open(filename, 'rb') as csv_file:
         reader = csv.reader(csv_file)
 
         for row in reader:
-            force_next_row = False
+            # Check for a format string in
+            # these values. Do a cheap comparison
+            # before using expensive regular expressions
+            if row[0].startswith('# format'):
+                match = __sky_model_re.search(row[0])
+
+                # Update the format list array if we match
+                if match:
+                    src_count = match.group('src_count')
+                    format_specifiers = match.group('format_specifiers').split()
+                    continue
+
+
             # CSV file returns stuff separated
             # by commas in a list
             for idx, value in enumerate(row):
-                # We've been told to bail out of
-                # this loop lower down
-                if force_next_row is True:
-                    break
-
-                # Check for a format string in
-                # these values. Do a cheap comparison
-                # before using expensive regular expressions
-                if value.startswith('# format'):
-                    match = __sky_model_re.search(value)
-
-                    # Update the format list array and continue
-                    # to the next row
-                    if match:
-                        src_type = match.group('src_type')
-                        format_specifiers = match.group('format_specifiers').split()
-                        force_next_row = True
-                        continue
                 # Handle the value if we have a
                 # format specifier for it
-                elif idx < len(format_specifiers):
-                    format_specifier = format_specifiers[idx]
-                    l = results.arrays.get(format_specifier, [])
-                    l.append(value.strip())
-                    results.arrays[format_specifier] = l
+                if idx >= len(format_specifiers):
+                    break
 
-            if force_next_row is True:
-                continue
+                format_specifier = format_specifiers[idx]
+                l = results.arrays.get(format_specifier, [])
+                l.append(value.strip())
+                results.arrays[format_specifier] = l
 
             # If we've reached this point, we've
             # handled a row defining a source,
             # increment the associated source type.
-            if src_type is not None:
-                t = results.src_types.get(src_type, 0)
-                results.src_types[src_type] = t+1
+            if src_count is not None:
+                t = results.src_counts.get(src_count, 0)
+                results.src_counts[src_count] = t+1
 
     return results

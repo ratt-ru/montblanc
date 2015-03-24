@@ -147,7 +147,10 @@ class TestUtils(unittest.TestCase):
             f.flush()
 
             result = mbu.parse_sky_model(f.name)
-            A, S = result.arrays, result.src_types
+            A, S = result.arrays, result.src_counts
+
+        self.assertTrue(S['npsrc'] == 2)
+        self.assertTrue(S['ngsrc'] == 2)
 
         self.assertTrue(A['l'] == ['123423', '1234.454', '123423', '1234.454'])
         self.assertTrue(A['m'] == ['545', '5434.43', '545', '5434.43'])
