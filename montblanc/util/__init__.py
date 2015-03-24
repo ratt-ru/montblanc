@@ -98,6 +98,10 @@ def array_bytes(shape, dtype):
     """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
     return np.product(shape)*np.dtype(dtype).itemsize
 
+def shape_list(l,shape,dtype):
+    """ Curry the shaping and casting of a list of arrays """
+    return np.array(l, dtype=dtype).reshape(shape)
+
 def rethrow_attribute_exception(e):
     """
     Rethrows an attribute exception with more informative text.

@@ -23,6 +23,8 @@ import numpy as np
 import pycuda.driver as cuda
 
 import montblanc
+import montblanc.util as mbu
+
 from montblanc.pipeline import Pipeline
 
 VERSION_ONE = 'v1'
@@ -166,10 +168,6 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     def make_random(shape,dtype):
         return np.random.random(size=shape).astype(dtype)
 
-    # Curry the shaping and casting of a list of arrays
-    def shape_list(list,shape,dtype):
-        return np.array(list, dtype=dtype).reshape(shape)
-
     def uvw_values(version):
         return np.arange(1,ntime*na+1)
 
@@ -177,7 +175,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     # Baseline coordinates in the u,v,w (frequency) domain
     r = uvw_values(version)
-    uvw = shape_list([30.*r, 25.*r, 20.*r],
+    uvw = mbu.shape_list([30.*r, 25.*r, 20.*r],
             shape=slvr.uvw_shape, dtype=slvr.uvw_dtype)
     # Normalise Antenna 0
     uvw[:,:,0] = 0
@@ -187,7 +185,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     # 1e-4 ~ 20 arcseconds
     l=ft(np.random.random(nsrc)*1e-4)
     m=ft(np.random.random(nsrc)*1e-4)
-    lm=shape_list([l,m], slvr.lm_shape, slvr.lm_dtype)
+    lm=mbu.shape_list([l,m], slvr.lm_shape, slvr.lm_dtype)
     slvr.transfer_lm(lm)
 
     # Brightness matrix for the point sources
@@ -196,7 +194,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     fU=ft(np.random.random(ntime*nsrc)*0.5)
     fV=ft(np.random.random(ntime*nsrc)*0.5)
     alpha=ft(np.random.random(ntime*nsrc)*0.1)
-    brightness = shape_list([fI,fQ,fU,fV,alpha],
+    brightness = mbu.shape_list([fI,fQ,fU,fV,alpha],
         slvr.brightness_shape, slvr.brightness_dtype)
     slvr.transfer_brightness(brightness)
 
@@ -204,7 +202,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     el = ft(np.random.random(ngsrc)*0.5)
     em = ft(np.random.random(ngsrc)*0.5)
     R = ft(np.ones(ngsrc)*100)
-    gauss_shape = shape_list([el,em,R],
+    gauss_shape = mbu.shape_list([el,em,R],
             slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
     if ngsrc > 0: slvr.transfer_gauss_shape(gauss_shape)
 
@@ -212,7 +210,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     e1=ft(np.zeros((nssrc)))
     e2=ft(np.zeros((nssrc)))
     scale=ft(np.ones((nssrc)))
-    sersic_shape = shape_list([e1,e2,scale],
+    sersic_shape = mbu.shape_list([e1,e2,scale],
             slvr.sersic_shape_shape, slvr.sersic_shape_dtype)
     if nssrc > 0: slvr.transfer_sersic_shape(sersic_shape)
 
