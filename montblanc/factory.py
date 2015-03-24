@@ -123,13 +123,6 @@ def get_empty_pipeline(**kwargs):
     """ Get an empty pipeline object """
     return Pipeline([])
 
-def get_bk_pipeline(**kwargs):
-    """ Get a BK pipeline """
-    from montblanc.impl.biro.v1.gpu.RimeBK import RimeBK
-    from montblanc.impl.biro.v1.gpu.RimeJonesReduce import RimeJonesReduce
-
-    return Pipeline([RimeBK(), RimeJonesReduce()])
-
 def get_base_solver(**kwargs):
     """ Get a basic solver object """
     pipeline = get_empty_pipeline(**kwargs)
