@@ -86,7 +86,7 @@ setup(name='montblanc',
     ],
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
-    license='MIT',
+    license='GPL2',
     packages=[
         'montblanc',
         'montblanc.api',
