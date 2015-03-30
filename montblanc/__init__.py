@@ -31,6 +31,7 @@ import montblanc
 import montblanc.util as mbu
 
 from montblanc.tests import test
+from montblanc.version import __version__
 
 def get_montblanc_path():
     """ Return the current path in which montblanc is installed """

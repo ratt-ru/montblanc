@@ -25,6 +25,8 @@ import os
 import sys
 import unittest
 
+import montblanc
+
 def print_versions():
     """
     Print the versions of software relied upon by montblanc.
@@ -32,6 +34,7 @@ def print_versions():
     """
     print('-=' * 38)
     print('Python version:    %s' % sys.version)
+    print('Montblanc version: %s' % montblanc.__version__)
     print('PyCUDA version:    %s' % pycuda.VERSION_TEXT)
     print("NumPy version:     %s" % numpy.__version__)
     print("Numexpr version:   %s" % numexpr.__version__)
