@@ -30,7 +30,7 @@ from setuptools import setup
 version_py = os.path.join('montblanc', 'version.py')
 
 try:
-    version_git = subprocess.check_output(['git', 'describe', '--tags', '--abbrev=0']).rstrip()
+    version_git = subprocess.check_output(['git', 'describe', '--tags']).rstrip()
 except:
     with open(version_py, 'r') as fh:
         version_git = open(version_py).read().strip().split('=')[-1].replace('"','')
