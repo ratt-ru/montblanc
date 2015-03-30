@@ -158,31 +158,38 @@ class SolverCPU(object):
 
             # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength).
             # Dim. ntime x na x nchan x nsrcs
-            phase = ne.evaluate('exp(2*pi*1j*p/wl)', {
+            cplx_phase = ne.evaluate('exp(2*pi*1j*p/wl)', {
                 'p': phase[:, :, :, np.newaxis],
                 'wl': wave[np.newaxis, np.newaxis, np.newaxis, :],
                 'pi': np.pi
             })
 
-            assert phase.shape == (slvr.nsrc, slvr.ntime, slvr.na , slvr.nchan)
+            assert cplx_phase.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
-            # Dimension nsrc x ntime x  nchan. Use 0.5*alpha here so that
-            # when the other antenna term is multiplied with this one, we
-            # end up with the full power term. sqrt(n)*sqrt(n) == n.
-            power = ne.evaluate('(rw/wl)**(0.5*a)', {
-                'rw': slvr.ref_wave,
-                'wl': wave[np.newaxis, np.newaxis, :],
-                'a': slvr.alpha_cpu[:, :, np.newaxis]
-            })
-            assert power.shape == (slvr.nsrc, slvr.ntime, slvr.nchan)
-
-            return ne.evaluate('phs*p', {
-                'phs': phase,
-                'p': power[:, :, np.newaxis, :]
-            }).astype(slvr.ct)  # Need a cast since numexpr upcasts
+            return cplx_phase
 
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
+
+    def compute_kb_jones_per_ant(self):
+        """
+        Computes the K (phase) term, multiplied by the
+        brightness matrix
+
+        Returns a (4,nsrc,ntime,na,nchan) matrix of complex scalars.
+        """
+
+        slvr = self.solver
+
+        k_jones = self.compute_k_jones_scalar_per_ant()
+        assert k_jones.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+        b_jones = self.compute_b_jones()
+        assert b_jones.shape == (4, slvr.nsrc, slvr.ntime)
+
+        result = k_jones[np.newaxis,:,:,:,:]*b_jones[:,:,:,np.newaxis,np.newaxis]
+        assert result.shape == (4, slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+
+        return result
 
     def compute_k_jones_scalar_per_bl(self):
         """
@@ -309,7 +316,7 @@ class SolverCPU(object):
 
         try:
             # Create the brightness matrix. Dim 4 x nsrcs x ntime
-            B = slvr.ct([
+            B = np.array([
                 # fI+fQ + 0j
                 slvr.stokes_cpu[:,:,0]+slvr.stokes_cpu[:,:,1] + 0j,
                 # fU + fV*1j
@@ -317,7 +324,8 @@ class SolverCPU(object):
                 # fU - fV*1j
                 slvr.stokes_cpu[:,:,2] - 1j*slvr.stokes_cpu[:,:,3],
                 # fI-fQ + 0j
-                slvr.stokes_cpu[:,:,0]-slvr.stokes_cpu[:,:,1] + 0j])
+                slvr.stokes_cpu[:,:,0]-slvr.stokes_cpu[:,:,1] + 0j],
+                dtype=slvr.ct)
 
             assert B.shape == (4, slvr.nsrc, slvr.ntime)
 

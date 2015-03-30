@@ -240,10 +240,16 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     slvr.transfer_ant_pairs(slvr.get_default_ant_pairs())
 
-    # Generate random jones scalar values
-    jones_scalar = make_random(slvr.jones_scalar_shape,
-            slvr.jones_scalar_dtype)
-    slvr.transfer_jones_scalar(jones_scalar)
+    if version in [VERSION_TWO, VERSION_THREE]:
+        # Generate random jones scalar values
+        jones_scalar = make_random(slvr.jones_scalar_shape,
+                slvr.jones_scalar_dtype)
+        slvr.transfer_jones_scalar(jones_scalar)
+    elif version in [VERSION_FOUR,VERSION_FIVE]:
+        # Generate random jones scalar values
+        jones = make_random(slvr.jones_shape,
+                slvr.jones_dtype)
+        slvr.transfer_jones(jones)
 
     vis = make_random(slvr.vis_shape, slvr.vis_dtype) + \
             make_random(slvr.vis_shape, slvr.vis_dtype)*1j
@@ -255,6 +261,9 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
             make_random(slvr.bayes_data_shape,slvr.bayes_data_dtype)*1j
     slvr.transfer_bayes_data(bayes_data)
     slvr.set_sigma_sqrd((np.random.random(1)**2).astype(ft)[0])
+
+    with slvr.context:
+        assert np.all(lm == slvr.lm_gpu.get())
 
     return slvr
 

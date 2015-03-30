@@ -473,9 +473,10 @@ class BaseSolver(Solver):
             # Create the transfer method
             def transfer(self, npary):
                 self.check_array(name, npary)
-                if create_cpu_ary: setattr(self,cpu_name,npary)
+                if create_cpu_ary:
+                    setattr(self,cpu_name,npary)
                 if create_gpu_ary:
-                    with self.context as ctx:
+                    with self.context:
                         getattr(self,gpu_name).set(npary)
 
             transfer_method = types.MethodType(transfer,self)

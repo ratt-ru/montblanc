@@ -85,6 +85,9 @@ void rime_gauss_B_sum_impl(
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
+    #define NPOL 4
+    #define POL (threadIdx.x & 0x3)
+
     if(BL >= NBL || TIME >= NTIME || CHAN >= NCHAN)
         return;
 

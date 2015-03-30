@@ -214,10 +214,9 @@ __device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
 //   thread 1 : B = I-Q;
 // This gives the indices of [Q,V,V,Q], [1,3,3,1], offset by the warp lane
 // Subtracting 1 from these indices gives [I,U,U,I], [0,2,2,0]
-__device__ __forceinline__ int brightness_pol_2_shfl_idx(void)
+__device__ __forceinline__ int brightness_pol_2_shfl_idx()
 {
-    int lane = threadIdx.x & (CUB_PTX_WARP_THREADS - 1);
-    int vis_idx = (lane >> 2) << 2;
+    int vis_idx = (cub::LaneId() >> 2) << 2;
     return ((int(threadIdx.x) + 1) & 0x2) + vis_idx + 1;
 }
 

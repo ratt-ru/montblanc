@@ -28,17 +28,17 @@ import montblanc
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
-    'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 8,    # Number of baselines
-    'BLOCKDIMZ' : 1,    # Number of timesteps
-    'maxregs'   : 48    # Maximum number of registers
+    'BLOCKDIMX': 32,   # Number of channels*4 polarisations
+    'BLOCKDIMY': 8,     # Number of baselines
+    'BLOCKDIMZ': 1,     # Number of timesteps
+    'maxregs': 48         # Maximum number of registers
 }
 
 DOUBLE_PARAMS = {
-    'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 4,    # Number of baselines
-    'BLOCKDIMZ' : 1,    # Number of timesteps
-    'maxregs'   : 63    # Maximum number of registers
+    'BLOCKDIMX': 32,   # Number of channels*4 polarisations
+    'BLOCKDIMY': 8,     # Number of baselines
+    'BLOCKDIMZ': 1,     # Number of timesteps
+    'maxregs': 48         # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -81,31 +81,19 @@ void rime_gauss_B_sum_impl(
     typename Tr::ct * data_vis,
     typename Tr::ft * chi_sqrd_result)
 {
-    int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
+    int CHAN = (blockIdx.x*blockDim.x + threadIdx.x)>>2;
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
+
+    #define NPOL 4
+    #define POL (threadIdx.x & 0x3)
 
     if(BL >= NBL || TIME >= NTIME || CHAN >= NCHAN)
         return;
 
-    __shared__ T u[BLOCKDIMZ][BLOCKDIMY];
-    __shared__ T v[BLOCKDIMZ][BLOCKDIMY];
-    __shared__ T w[BLOCKDIMZ][BLOCKDIMY];
+    volatile __shared__ T shuvw[BLOCKDIMZ][BLOCKDIMY][3];
 
-    __shared__ T el[1];
-    __shared__ T em[1];
-    __shared__ T eR[1];
-
-    __shared__ T e1[1];
-    __shared__ T e2[1];
-    __shared__ T scale[1];
-
-    __shared__ T I[BLOCKDIMZ];
-    __shared__ T Q[BLOCKDIMZ];
-    __shared__ T U[BLOCKDIMZ];
-    __shared__ T V[BLOCKDIMZ];
-
-    __shared__ T wl[BLOCKDIMX];
+    volatile __shared__ T wl[BLOCKDIMX];
 
     int i;
 
@@ -117,229 +105,76 @@ void rime_gauss_B_sum_impl(
     if(threadIdx.x == 0)
     {
         // UVW, calculated from u_pq = u_p - u_q
-        i = TIME*NA + ANT1;    u[threadIdx.z][threadIdx.y] = uvw[i];
-        i += NA*NTIME;         v[threadIdx.z][threadIdx.y] = uvw[i];
-        i += NA*NTIME;         w[threadIdx.z][threadIdx.y] = uvw[i];
+        i = TIME*NA + ANT1;    shuvw[threadIdx.z][threadIdx.y][0] = uvw[i];
+        i += NA*NTIME;         shuvw[threadIdx.z][threadIdx.y][1] = uvw[i];
+        i += NA*NTIME;         shuvw[threadIdx.z][threadIdx.y][2] = uvw[i];
 
-        i = TIME*NA + ANT2;    u[threadIdx.z][threadIdx.y] -= uvw[i];
-        i += NA*NTIME;         v[threadIdx.z][threadIdx.y] -= uvw[i];
-        i += NA*NTIME;         w[threadIdx.z][threadIdx.y] -= uvw[i];
+        i = TIME*NA + ANT2;    shuvw[threadIdx.z][threadIdx.y][0] -= uvw[i];
+        i += NA*NTIME;         shuvw[threadIdx.z][threadIdx.y][1] -= uvw[i];
+        i += NA*NTIME;         shuvw[threadIdx.z][threadIdx.y][2] -= uvw[i];
     }
 
     // Wavelength varies by channel, but not baseline and time
     if(threadIdx.y == 0 && threadIdx.z == 0)
         { wl[threadIdx.x] = wavelength[CHAN]; }
 
-    typename Tr::ct Isum = Po::make_ct(0.0, 0.0);
-    typename Tr::ct Qsum = Po::make_ct(0.0, 0.0);
-    typename Tr::ct Usum = Po::make_ct(0.0, 0.0);
-    typename Tr::ct Vsum = Po::make_ct(0.0, 0.0);
+    typename Tr::ct polsum = Po::make_ct(0.0, 0.0);
 
     for(int SRC=0;SRC<NPSRC;++SRC)
     {
-        // The following loads effect the global load efficiency.
-
-        // stokes varies by time (and source), not baseline or channel
-        if(threadIdx.x == 0 && threadIdx.y == 0)
-        {
-            i = SRC*NTIME + TIME;   I[threadIdx.z] = stokes[i];
-            i += NSRC*NTIME;          Q[threadIdx.z] = stokes[i];
-            i += NSRC*NTIME;          U[threadIdx.z] = stokes[i];
-            i += NSRC*NTIME;          V[threadIdx.z] = stokes[i];
-        }
-
-        __syncthreads();
+        i = TIME*NSRC + SRC + POL;
+        typename Tr::ft pol = stokes[i];
+        typename Tr::ct brightness;
+        montblanc::create_brightness<T>(brightness, pol);
 
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
-        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN;
-        typename Tr::ct ant_two = jones_EK_scalar[i];
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN + POL;
         typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
+        montblanc::complex_multiply_in_place<T>(brightness, ant_one);
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN + POL;
+        typename Tr::ct ant_two = jones_EK_scalar[i];
+        montblanc::complex_multiply_in_place<T>(ant_two, brightness);
 
-        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        // a = ant_two.x b=ant_two.y c=ant_one.x d = ant_one.y
-        typename Tr::ct value = Po::make_ct(
-            ant_two.x*ant_one.x - ant_two.y*ant_one.y,
-            ant_two.x*ant_one.y + ant_two.y*ant_one.x);
-
-        Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
-        Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
-
-        Qsum.x += (I[threadIdx.z]-Q[threadIdx.z])*value.x - 0.0*value.y;
-        Qsum.y += (I[threadIdx.z]-Q[threadIdx.z])*value.y - 0.0*value.x;
-
-        Usum.x += U[threadIdx.z]*value.x - -V[threadIdx.z]*value.y;
-        Usum.y += U[threadIdx.z]*value.y + -V[threadIdx.z]*value.x;
-
-        Vsum.x += U[threadIdx.z]*value.x - V[threadIdx.z]*value.y;
-        Vsum.y += U[threadIdx.z]*value.y + V[threadIdx.z]*value.x;
+        polsum.x += ant_two.x;
+        polsum.y += ant_two.y;
 
         __syncthreads();
     }
 
     for(int SRC=NPSRC;SRC<NPSRC+NGSRC;++SRC)
     {
-        // The following loads effect the global load efficiency.
+        i = TIME*NSRC + SRC + POL;
+        typename Tr::ft pol = stokes[i];
+        typename Tr::ct brightness;
+        montblanc::create_brightness<T>(brightness, pol);
 
-        // stokes varies by time (and source), not baseline or channel
-        if(threadIdx.x == 0 && threadIdx.y == 0)
-        {
-            i = SRC*NTIME + TIME;   I[threadIdx.z] = stokes[i];
-            i += NSRC*NTIME;          Q[threadIdx.z] = stokes[i];
-            i += NSRC*NTIME;          U[threadIdx.z] = stokes[i];
-            i += NSRC*NTIME;          V[threadIdx.z] = stokes[i];
-        }
-
-        // gaussian shape only varies by source. Shape parameters
-        // thus apply to the entire block and we can load them with
-        // only the first thread.
-        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
-        {
-            i = SRC-NPSRC;  el[0] = gauss_shape[i];
-            i += NGSRC;     em[0] = gauss_shape[i];
-            i += NGSRC;     eR[0] = gauss_shape[i];
-        }
-
-        __syncthreads();
-
-        T u1 = u[threadIdx.z][threadIdx.y]*em[0] - v[threadIdx.z][threadIdx.y]*el[0];
-        u1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
-        u1 *= eR[0];
-        T v1 = u[threadIdx.z][threadIdx.y]*el[0] + v[threadIdx.z][threadIdx.y]*em[0];
-        v1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
-        T exp = Po::exp(-(u1*u1 +v1*v1));
-
-        // Get the complex scalar for antenna two and multiply
+        // Get the complex scalars for antenna two and multiply
         // in the exponent term
-        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN;
-        typename Tr::ct ant_two = jones_EK_scalar[i];
-        ant_two.x *= exp; ant_two.y *= exp;
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN + POL;
         typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
+        montblanc::complex_multiply_in_place<T>(brightness, ant_one);
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN + POL;
+        typename Tr::ct ant_two = jones_EK_scalar[i];
+        montblanc::complex_multiply_in_place<T>(ant_two, brightness);
 
-        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        // a = ant_two.x b=ant_two.y c=ant_one.x d = ant_one.y
-        typename Tr::ct value = Po::make_ct(
-            ant_two.x*ant_one.x - ant_two.y*ant_one.y,
-            ant_two.x*ant_one.y + ant_two.y*ant_one.x);
-
-        Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
-        Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
-
-        Qsum.x += (I[threadIdx.z]-Q[threadIdx.z])*value.x - 0.0*value.y;
-        Qsum.y += (I[threadIdx.z]-Q[threadIdx.z])*value.y - 0.0*value.x;
-
-        Usum.x += U[threadIdx.z]*value.x - -V[threadIdx.z]*value.y;
-        Usum.y += U[threadIdx.z]*value.y + -V[threadIdx.z]*value.x;
-
-        Vsum.x += U[threadIdx.z]*value.x - V[threadIdx.z]*value.y;
-        Vsum.y += U[threadIdx.z]*value.y + V[threadIdx.z]*value.x;
+        polsum.x += ant_two.x;
+        polsum.y += ant_two.y;
 
         __syncthreads();
     }
 
-    for(int SRC=NPSRC+NGSRC;SRC<NSRC;++SRC)
-    {
-        // The following loads effect the global load efficiency.
-
-        // stokes varies by time (and source), not baseline or channel
-        if(threadIdx.x == 0 && threadIdx.y == 0)
-        {
-            i = SRC*NTIME + TIME;   I[threadIdx.z] = stokes[i];
-            i += NSRC*NTIME;          Q[threadIdx.z] = stokes[i];
-            i += NSRC*NTIME;          U[threadIdx.z] = stokes[i];
-            i += NSRC*NTIME;          V[threadIdx.z] = stokes[i];
-        }
-
-        // sersic shape only varies by source. Shape parameters
-        // thus apply to the entire block and we can load them with
-        // only the first thread.
-        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
-        {
-            i = SRC-NPSRC-NGSRC;  e1[0] = sersic_shape[i];
-            i += NSSRC;           e2[0] = sersic_shape[i];
-            i += NSSRC;           scale[0] = sersic_shape[i];
-        }
-
-        __syncthreads();
-
-        // sersic source in  the Fourier domain
-        T u1 = u[threadIdx.z][threadIdx.y]*(T(1.0)+e1[0]) + v[threadIdx.z][threadIdx.y]*e2[0];
-        u1 *= T(TWO_PI)/wl[threadIdx.x];
-        u1 *= scale[0]/(T(1.0)-e1[0]*e1[0]-e2[0]*e2[0]);
-        T v1 = u[threadIdx.z][threadIdx.y]*e2[0] + v[threadIdx.z][threadIdx.y]*(T(1.0)-e1[0]);
-        v1 *= T(TWO_PI)/wl[threadIdx.x];
-        v1 *= scale[0]/(T(1.0)-e1[0]*e1[0]-e2[0]*e2[0]);
-        T sersic_factor = T(1.0) + u1*u1+v1*v1;
-        sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));
-
-        // Get the complex scalar for antenna two and multiply
-        // in sersic factor term
-        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN;
-        typename Tr::ct ant_two = jones_EK_scalar[i];
-        ant_two.x *= sersic_factor; ant_two.y *= sersic_factor;
-        // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
-
-        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        // a = ant_two.x b=ant_two.y c=ant_one.x d = ant_one.y
-        typename Tr::ct value = Po::make_ct(
-            ant_two.x*ant_one.x - ant_two.y*ant_one.y,
-            ant_two.x*ant_one.y + ant_two.y*ant_one.x);
-
-        Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
-        Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
-
-        Qsum.x += (I[threadIdx.z]-Q[threadIdx.z])*value.x - 0.0*value.y;
-        Qsum.y += (I[threadIdx.z]-Q[threadIdx.z])*value.y - 0.0*value.x;
-
-        Usum.x += U[threadIdx.z]*value.x - -V[threadIdx.z]*value.y;
-        Usum.y += U[threadIdx.z]*value.y + -V[threadIdx.z]*value.x;
-
-        Vsum.x += U[threadIdx.z]*value.x - V[threadIdx.z]*value.y;
-        Vsum.y += U[threadIdx.z]*value.y + V[threadIdx.z]*value.x;
-
-        __syncthreads();
-    }
-
-    i = (TIME*NBL + BL)*NCHAN + CHAN;
-    visibilities[i] = Isum;
+    i = (TIME*NBL + BL)*NCHAN + CHAN + POL;
+    visibilities[i] = polsum;
     typename Tr::ct delta = data_vis[i];
-    delta.x -= Isum.x; delta.y -= Isum.y;
+    delta.x -= polsum.x; delta.y -= polsum.y;
     delta.x *= delta.x; delta.y *= delta.y;
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
-    Isum.x = delta.x; Isum.y = delta.y;
-
-    i += 3*NTIME*NBL*NCHAN;
-    visibilities[i] = Qsum;
-    delta = data_vis[i];
-    delta.x -= Qsum.x; delta.y -= Qsum.y;
-    delta.x *= delta.x; delta.y *= delta.y;
-    if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
-    Isum.x += delta.x; Isum.y += delta.y;
-
-    i -= NTIME*NBL*NCHAN;
-    visibilities[i] = Usum;
-    delta = data_vis[i];
-    delta.x -= Usum.x; delta.y -= Usum.y;
-    delta.x *= delta.x; delta.y *= delta.y;
-    if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
-    Isum.x += delta.x; Isum.y += delta.y;
-
-    i -= NTIME*NBL*NCHAN;
-    visibilities[i] = Vsum;
-    delta = data_vis[i];
-    delta.x -= Vsum.x; delta.y -= Vsum.y;
-    delta.x *= delta.x; delta.y *= delta.y;
-    if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
-    Isum.x += delta.x; Isum.y += delta.y;
 
     i = (TIME*NBL + BL)*NCHAN + CHAN;
-    chi_sqrd_result[i] = Isum.x + Isum.y;
+    chi_sqrd_result[i] = delta.x + delta.y;
 }
 
 extern "C" {

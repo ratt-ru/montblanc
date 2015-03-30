@@ -46,15 +46,17 @@ KERNEL_TEMPLATE = string.Template("""
 #include \"math_constants.h\"
 #include <montblanc/include/abstraction.cuh>
 
-#define NA ${na}
-#define NBL ${nbl}
-#define NCHAN ${nchan}
-#define NTIME ${ntime}
-#define NSRC ${nsrc}
+#define NA (${na})
+#define NBL (${nbl})
+#define NCHAN (${nchan})
+#define NTIME (${ntime})
+#define NSRC (${nsrc})
+#define NPOL (4)
+#define NPOLCHAN (NPOL*NCHAN)
 
-#define BLOCKDIMX ${BLOCKDIMX}
-#define BLOCKDIMY ${BLOCKDIMY}
-#define BLOCKDIMZ ${BLOCKDIMZ}
+#define BLOCKDIMX (${BLOCKDIMX})
+#define BLOCKDIMY (${BLOCKDIMY})
+#define BLOCKDIMZ (${BLOCKDIMZ})
 
 template <
     typename T,
@@ -64,19 +66,21 @@ __device__
 void rime_jones_EK_impl(
     T * uvw,
     T * lm,
+    T * stokes,
     T * alpha,
     T * wavelength,
     T * point_errors,
-    typename Tr::ct * jones_scalar,
+    typename Tr::ct * jones,
     T ref_wave,
     T beam_width,
     T beam_clip)
 {
-    int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
+    int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
+    #define POL (threadIdx.x & 0x3)
 
-    if(ANT >= NA || TIME >= NTIME || CHAN >= NCHAN)
+    if(TIME >= NTIME || ANT >= NA || POLCHAN >= NPOLCHAN)
         return;
 
     __shared__ T u[BLOCKDIMZ][BLOCKDIMY];
@@ -85,8 +89,8 @@ void rime_jones_EK_impl(
 
     // Shared Memory produces a faster kernel than
     // registers for some reason!
-    __shared__ T l[1];
-    __shared__ T m[1];
+    __shared__ T l;
+    __shared__ T m;
 
     __shared__ T ld[BLOCKDIMZ][BLOCKDIMY];
     __shared__ T md[BLOCKDIMZ][BLOCKDIMY];
@@ -112,55 +116,43 @@ void rime_jones_EK_impl(
 
     // Wavelengths vary by channel, not by time and antenna
     if(threadIdx.y == 0 && threadIdx.z == 0)
-        { wl[threadIdx.x] = wavelength[CHAN]; }
+        { wl[threadIdx.x] = wavelength[POLCHAN>>2]; }
+
+    __syncthreads();
 
     for(int SRC=0;SRC<NSRC;++SRC)
     {
-        // LM coordinates vary only by source, not antenna and time
-        if(threadIdx.x == 0 && threadIdx.y == 0)
+        // LM coordinates vary only by source, not antenna, time or channel
+        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.x == 0)
         {
-            i = SRC;   l[0] = lm[i];
-            i += NSRC; m[0] = lm[i];
+            i = SRC;   l = lm[i];
+            i += NSRC; m = lm[i];
         }
-
-        // alpha varies by source and time , not antenna or channel
-        if(threadIdx.x == 0 && threadIdx.y == 0)
-        {
-            i = SRC*NTIME + TIME;
-            a[threadIdx.z] = alpha[i];
-        }
-
         __syncthreads();
 
-        // Calculate the phase term for this antenna
-        T phase = Po::sqrt(T(1.0) - l[0]*l[0] - m[0]*m[0]) - T(1.0);
+        // Calculate the n coordinate.
+        T n = Po::sqrt(T(1.0) - l*l - m*m) - T(1.0);
 
-        phase = w[threadIdx.z][threadIdx.y]*phase
-            + v[threadIdx.z][threadIdx.y]*m[0]
-            + u[threadIdx.z][threadIdx.y]*l[0];
+        // Calculate the phase term for this antenna
+        T phase = w[threadIdx.z][threadIdx.y]*n
+            + v[threadIdx.z][threadIdx.y]*m
+            + u[threadIdx.z][threadIdx.y]*l;
 
         phase *= T(2.0) * Tr::cuda_pi / wl[threadIdx.x];
 
-        T real, imag;
-        Po::sincos(phase, &imag, &real);
+        typename Tr::ct cplx_phase;
+        Po::sincos(phase, &cplx_phase.y, &cplx_phase.x);
 
-        T power = Po::pow(ref_wave/wl[threadIdx.x], T(0.5)*a[threadIdx.z]);
-        real *= power; imag *= power;
+        i = (SRC*NTIME + TIME)*NPOL + POL;
+        typename Tr::ft pol = stokes[i];
+        typename Tr::ct brightness;
 
-        // Calculate the beam term for this antenna
-        T diff = l[0] - ld[threadIdx.z][threadIdx.y];
-        T E = diff*diff;
-        diff = m[0] - md[threadIdx.z][threadIdx.y];
-        E += diff*diff;
-        E = Po::sqrt(E);
-        E *= beam_width*1e-9*wl[threadIdx.x];
-        E = Po::min(E, beam_clip);
-        E = Po::cos(E);
-        E = E*E*E;
+        montblanc::create_brightness<T>(brightness, pol);
+        montblanc::complex_multiply_in_place<T>(cplx_phase, brightness);
 
-        // Write out the phase and beam values multiplied together
-        i = ((SRC*NTIME + TIME)*NA + ANT)*NCHAN + CHAN;
-        jones_scalar[i] = Po::make_ct(real*E, imag*E);
+        // Write out the phase terms
+        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
+        jones[i] = cplx_phase;
         __syncthreads();
     }
 }
@@ -172,6 +164,7 @@ __global__ void \
 rime_jones_EK_ ## ft( \
     ft * UVW, \
     ft * LM, \
+    ft * stokes, \
     ft * alpha, \
     ft * wavelength, \
     ft * point_errors, \
@@ -180,7 +173,7 @@ rime_jones_EK_ ## ft( \
     ft beam_width, \
     ft beam_clip) \
 { \
-    rime_jones_EK_impl<ft>(UVW, LM, alpha, wavelength, \
+    rime_jones_EK_impl<ft>(UVW, LM, stokes, alpha, wavelength, \
         point_errors, jones, ref_wave, beam_width, beam_clip); \
 }
 
@@ -197,8 +190,22 @@ class RimeEK(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
+        self.pol_chans = 4*slvr.nchan
+
+        # Get a property dictionary off the solver
         D = slvr.get_properties()
+        # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
+
+        # Update kernel parameters to cater for radically
+        # smaller problem sizes. Caters for a subtle bug
+        # with Kepler shuffles and warp sizes < 32
+        if self.pol_chans < D['BLOCKDIMX']:
+            D['BLOCKDIMX'] = self.pol_chans
+        if slvr.na < D['BLOCKDIMY']:
+            D['BLOCKDIMY'] = slvr.na
+        if slvr.ntime < D['BLOCKDIMZ']:
+            D['BLOCKDIMZ'] = slvr.ntime
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -207,13 +214,14 @@ class RimeEK(Node):
             if slvr.is_float() is True else \
             'rime_jones_EK_double'
 
-        self.mod = SourceModule(
-            KERNEL_TEMPLATE.substitute(**D),
+        kernel_string = KERNEL_TEMPLATE.substitute(**D)
+        self.mod = SourceModule(kernel_string,
             options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
         self.kernel = self.mod.get_function(kname)
+        self.launch_params = self.get_launch_params(slvr, D)
 
     def shutdown(self, solver, stream=None):
         pass
@@ -221,31 +229,27 @@ class RimeEK(Node):
     def pre_execution(self, solver, stream=None):
         pass
 
-    def get_kernel_params(self, solver):
-        slvr = solver
+    def get_launch_params(self, slvr, D):
+        pol_chans_per_block = D['BLOCKDIMX']
+        ants_per_block = D['BLOCKDIMY']
+        times_per_block = D['BLOCKDIMZ']
 
-        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
-
-        chans_per_block = D['BLOCKDIMX'] if slvr.nchan > D['BLOCKDIMX'] else slvr.nchan
-        ants_per_block = D['BLOCKDIMY'] if slvr.na > D['BLOCKDIMY'] else slvr.na
-        times_per_block = D['BLOCKDIMZ'] if slvr.ntime > D['BLOCKDIMZ'] else slvr.ntime
-
-        chan_blocks = self.blocks_required(slvr.nchan, chans_per_block)
+        pol_chan_blocks = self.blocks_required(self.pol_chans, pol_chans_per_block)
         ant_blocks = self.blocks_required(slvr.na, ants_per_block)
         time_blocks = self.blocks_required(slvr.ntime, times_per_block)
 
         return {
-            'block' : (chans_per_block, ants_per_block, times_per_block),
-            'grid'  : (chan_blocks, ant_blocks, time_blocks),
+            'block' : (pol_chans_per_block, ants_per_block, times_per_block),
+            'grid'  : (pol_chan_blocks, ant_blocks, time_blocks),
         }
 
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.alpha_gpu,
-            slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_scalar_gpu,
+        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.stokes_gpu, slvr.alpha_gpu,
+            slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_gpu,
             slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
-            stream=stream, **self.get_kernel_params(slvr))
+            stream=stream, **self.launch_params)
 
     def post_execution(self, solver, stream=None):
         pass
