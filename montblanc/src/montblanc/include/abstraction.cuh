@@ -195,7 +195,7 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
 {
-    int sign = ((int(threadIdx.x) - 2) & 0x2)  - 1;
+    int sign = ((int(threadIdx.x) - 2) & 0x2) - 1;
     mask.x = T(sign*((int(threadIdx.x) - 1) & 0x2) >> 1);
     mask.y = T(sign*((int(threadIdx.x) + 1) & 0x2) >> 1);
 }
@@ -215,7 +215,11 @@ __device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
 // This gives the indices of [Q,V,V,Q], [1,3,3,1], offset by the warp lane
 // Subtracting 1 from these indices gives [I,U,U,I], [0,2,2,0]
 __device__ __forceinline__ int brightness_pol_2_shfl_idx(void)
-    { return 1 + ((int(threadIdx.x) + 1) & 0x2) + ((int(threadIdx.x) >> 2) << 2); }
+{
+    int lane = threadIdx.x & (CUB_PTX_WARP_THREADS - 1);
+    int vis_idx = (lane >> 2) << 2;
+    return ((int(threadIdx.x) + 1) & 0x2) + vis_idx + 1;
+}
 
 // Given the polarisation, generate the brightness matrix
 // Assumes that the polarisations I,Q,U,V are present in the
