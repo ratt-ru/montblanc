@@ -195,9 +195,9 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
 {
-    int sign = ((threadIdx.x - 2) & 0x2)  - 1;
-    mask.x = T(sign*((threadIdx.x - 1) & 0x2) >> 1);
-    mask.y = T(sign*((threadIdx.x + 1) & 0x2) >> 1);
+    int sign = ((int(threadIdx.x) - 2) & 0x2)  - 1;
+    mask.x = T(sign*((int(threadIdx.x) - 1) & 0x2) >> 1);
+    mask.y = T(sign*((int(threadIdx.x) + 1) & 0x2) >> 1);
 }
 
 // Gives the Kepler shuffle index for creating part of the
@@ -212,10 +212,10 @@ __device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
 //   thread 1 : B = U+iV;
 //   thread 2 : B = U-iV;
 //   thread 1 : B = I-Q;
-// This gives the indices of [Q,V,V,Q], [1,3,3,1].
+// This gives the indices of [Q,V,V,Q], [1,3,3,1], offset by the warp lane
 // Subtracting 1 from these indices gives [I,U,U,I], [0,2,2,0]
 __device__ __forceinline__ int brightness_pol_2_shfl_idx(void)
-    { return 1 + ((threadIdx.x + 1) & 0x2) + (threadIdx.x >> 2)<<2; }
+    { return 1 + ((int(threadIdx.x) + 1) & 0x2) + ((int(threadIdx.x) >> 2) << 2); }
 
 // Given the polarisation, generate the brightness matrix
 // Assumes that the polarisations I,Q,U,V are present in the
