@@ -28,6 +28,7 @@ import montblanc.factory
 
 from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
 from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
@@ -216,6 +217,16 @@ class TestBiroV4(unittest.TestCase):
             with solver(dtype=np.float64, **params) as slvr:
 
                 self.B_sum_test_impl(slvr, params['weight_vector'])
+
+    def B_sqrt_test_impl(self, slvr):
+        pass
+
+    def test_B_sqrt_float(self):
+        with solver(na=7, ntime=20, chan=32,
+            npsrc=10, dtype=np.float32,
+            pipeline=Pipeline([RimeBSqrt()])) as slvr:
+
+            self.B_sqrt_test_impl(slvr)
 
     def test_transpose(self):
         with solver(na=4, npsrc=6, ntime=2, nchan=10,

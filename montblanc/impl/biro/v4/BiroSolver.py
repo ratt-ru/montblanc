@@ -94,6 +94,7 @@ A = [
     ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
 
     # Result arrays
+    ary_dict('B_sqrt', ('nsrc', 'ntime', 4), 'ct', cpu=False),
     ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct', cpu=False),
     ary_dict('vis', (4,'ntime','nbl','nchan'), 'ct', cpu=False),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
