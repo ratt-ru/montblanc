@@ -334,6 +334,47 @@ class SolverCPU(object):
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
 
+    def compute_b_sqrt_jones(self):
+        """
+        Computes the B sqrt term of the RIME.
+
+        Returns a (4,nsrc,ntime) matrix of complex scalars.
+        """
+        slvr = self.solver
+
+        try:
+            B = self.compute_b_jones()
+            I = slvr.stokes_cpu[:,:,0]
+            Q = slvr.stokes_cpu[:,:,1]
+            U = slvr.stokes_cpu[:,:,2]
+            V = slvr.stokes_cpu[:,:,3]
+
+            trace = 2*I
+            det = I**2 - Q**2 - U**2 - V**2
+
+            # We don't have a solution for some matrices
+            # But if both trace and determinant are zero
+            # the matrix itself must be zero.
+            mask = np.logical_and(trace == 0, det == 0)
+
+            s = np.sqrt(trace.astype(slvr.ct))
+            t = np.sqrt(det.astype(slvr.ct) + 2*s)
+
+            # Avoid infs and nans from divide by zero
+            t[mask] = 1
+
+            B_sqrt = np.array([B[0] + s,
+                B[1],
+                B[2],
+                B[3] + s]) / t
+
+            assert B_sqrt.shape == (4, slvr.nsrc, slvr.ntime)
+
+            return B_sqrt
+
+        except AttributeError as e:
+            mbu.rethrow_attribute_exception(e)
+
     def compute_ebk_jones(self):
         """
         Computes the jones matrices based on the

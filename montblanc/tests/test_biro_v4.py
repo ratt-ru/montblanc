@@ -229,6 +229,7 @@ class TestBiroV4(unittest.TestCase):
         # Get the B matrix on the CPU
         slvr_cpu = SolverCPU(slvr)
         b_cpu = slvr_cpu.compute_b_jones().transpose(1, 2, 0)
+        b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones().transpose(1, 2, 0)
 
         # Get the B matrix off the GPU
         with slvr.context:
