@@ -218,8 +218,23 @@ class TestBiroV4(unittest.TestCase):
 
                 self.B_sum_test_impl(slvr, params['weight_vector'])
 
-    def B_sqrt_test_impl(self, slvr):
-        pass
+    def B_sqrt_test_impl(self, slvr, cmp=None):
+        """ Type independent implementation of the KB test """
+        if cmp is None:
+            cmp = {}
+
+        # Call the GPU solver
+        slvr.solve()
+
+        # Get the B matrix on the CPU
+        slvr_cpu = SolverCPU(slvr)
+        b_cpu = slvr_cpu.compute_b_jones().transpose(1, 2, 0)
+
+        # Get the B matrix off the GPU
+        with slvr.context:
+            b_gpu = slvr.B_sqrt_gpu.get()
+
+        self.assertTrue(np.allclose(b_cpu, b_gpu))
 
     def test_B_sqrt_float(self):
         with solver(na=7, ntime=20, chan=32,

@@ -27,18 +27,18 @@ import montblanc
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
-    'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 8,    # Number of antennas
-    'BLOCKDIMZ' : 2,    # Number of timesteps
+    'BLOCKDIMX' : 32,   # Number of polarisations and timesteps
+    'BLOCKDIMY' : 8,    # Number of sources
+    'BLOCKDIMZ' : 1,    #
     'maxregs'   : 32    # Maximum number of registers
 }
 
 # 44 registers results in some spillage into
 # local memory
 DOUBLE_PARAMS = {
-    'BLOCKDIMX' : 32,   # Number of channels
-    'BLOCKDIMY' : 4,    # Number of antennas
-    'BLOCKDIMZ' : 1,    # Number of timesteps
+    'BLOCKDIMX' : 32,   # Number of polarisations and timesteps
+    'BLOCKDIMY' : 4,    # Number of sources
+    'BLOCKDIMZ' : 1,    #
     'maxregs'   : 48    # Maximum number of registers
 }
 
@@ -52,7 +52,7 @@ KERNEL_TEMPLATE = string.Template("""
 #define NTIME (${ntime})
 #define NSRC (${nsrc})
 #define NPOL (4)
-#define NPOLCHAN (NPOL*NCHAN)
+#define NPOLTIME (NPOL*NTIME)
 
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
@@ -69,29 +69,21 @@ void rime_jones_B_sqrt_impl(
     T * wavelength,
     typename Tr::ct * B_sqrt)
 {
-    int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
-    int ANT = blockIdx.y*blockDim.y + threadIdx.y;
-    int TIME = blockIdx.z*blockDim.z + threadIdx.z;
+    int POLTIME = blockIdx.x*blockDim.x + threadIdx.x;
+    int SRC = blockIdx.y*blockDim.y + threadIdx.y;
     #define POL (threadIdx.x & 0x3)
 
-    if(TIME >= NTIME || ANT >= NA || POLCHAN >= NPOLCHAN)
+    if(SRC >= NSRC || POLTIME >= NPOLTIME)
         return;
 
-    __shared__ T a[BLOCKDIMZ];
+    int i = SRC*NPOLTIME + POLTIME;
+    typename Tr::ft pol = stokes[i];
+    typename Tr::ct brightness;
 
-    for(int SRC=0;SRC<NSRC;++SRC)
-    {
-        i = (SRC*NTIME + TIME)*NPOL + POL;
-        typename Tr::ft pol = stokes[i];
-        typename Tr::ct brightness;
+    montblanc::create_brightness<T>(brightness, pol);
 
-        montblanc::create_brightness<T>(brightness, pol);
-
-        // Write out the phase terms
-        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
-        B_sqrt[i] = brightness;
-        __syncthreads();
-    }
+    // Write out the phase terms
+    B_sqrt[i] = brightness;
 }
 
 extern "C" {
@@ -121,7 +113,7 @@ class RimeBSqrt(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
-        self.pol_chans = 4*slvr.nchan
+        self.pol_times = 4*slvr.ntime
 
         # Get a property dictionary off the solver
         D = slvr.get_properties()
@@ -131,12 +123,10 @@ class RimeBSqrt(Node):
         # Update kernel parameters to cater for radically
         # smaller problem sizes. Caters for a subtle bug
         # with Kepler shuffles and warp sizes < 32
-        if self.pol_chans < D['BLOCKDIMX']:
-            D['BLOCKDIMX'] = self.pol_chans
-        if slvr.na < D['BLOCKDIMY']:
-            D['BLOCKDIMY'] = slvr.na
-        if slvr.ntime < D['BLOCKDIMZ']:
-            D['BLOCKDIMZ'] = slvr.ntime
+        if self.pol_times < D['BLOCKDIMX']:
+            D['BLOCKDIMX'] = self.pol_times
+        if slvr.nsrc < D['BLOCKDIMY']:
+            D['BLOCKDIMY'] = slvr.nsrc
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -166,24 +156,22 @@ class RimeBSqrt(Node):
         pass
 
     def get_launch_params(self, slvr, D):
-        pol_chans_per_block = D['BLOCKDIMX']
-        ants_per_block = D['BLOCKDIMY']
-        times_per_block = D['BLOCKDIMZ']
+        pol_times_per_block = D['BLOCKDIMX']
+        srcs_per_block = D['BLOCKDIMY']
 
-        pol_chan_blocks = self.blocks_required(self.pol_chans, pol_chans_per_block)
-        ant_blocks = self.blocks_required(slvr.na, ants_per_block)
-        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
+        pol_time_blocks = self.blocks_required(self.pol_times, pol_times_per_block)
+        src_blocks = self.blocks_required(slvr.nsrc, srcs_per_block)
 
         return {
-            'block' : (pol_chans_per_block, ants_per_block, times_per_block),
-            'grid'  : (pol_chan_blocks, ant_blocks, time_blocks),
+            'block' : (pol_times_per_block, srcs_per_block, 1),
+            'grid'  : (pol_time_blocks, src_blocks, 1),
         }
 
     def execute(self, solver, stream=None):
         slvr = solver
 
         self.kernel(slvr.stokes_gpu, slvr.alpha_gpu,
-            slvr.wavelength_gpu, slvr.B_sqrt,
+            slvr.wavelength_gpu, slvr.B_sqrt_gpu,
             stream=stream, **self.launch_params)
 
     def post_execution(self, solver, stream=None):
