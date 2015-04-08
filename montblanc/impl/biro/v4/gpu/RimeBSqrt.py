@@ -67,7 +67,8 @@ void rime_jones_B_sqrt_impl(
     T * stokes,
     T * alpha,
     T * wavelength,
-    typename Tr::ct * B_sqrt)
+    typename Tr::ct * B_sqrt,
+    T ref_wave)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
@@ -75,6 +76,16 @@ void rime_jones_B_sqrt_impl(
 
     if(TIME >= NTIME || POLCHAN >= NPOLCHAN)
         return;
+
+    __shared__ T wl[NCHAN];
+
+    // TODO. Using 3 times more shared memory than we
+    // really require here, since there's only
+    // one wavelength per channel.
+    if(threadIdx.y)
+    {
+        wl[threadIdx.x] = wavelength[POLCHAN >> 2];
+    }
 
     for(int SRC=0; SRC<NSRC; ++SRC)
     {
@@ -98,10 +109,11 @@ rime_jones_B_sqrt_ ## ft( \
     ft * stokes, \
     ft * alpha, \
     ft * wavelength, \
-    ct * B_sqrt) \
+    ct * B_sqrt, \
+    ft ref_wave) \
 { \
     rime_jones_B_sqrt_impl<ft>(stokes, alpha, \
-        wavelength, B_sqrt); \
+        wavelength, B_sqrt, ref_wave); \
 }
 
 stamp_jones_B_sqrt_fn(float,float2);
@@ -176,6 +188,7 @@ class RimeBSqrt(Node):
 
         self.kernel(slvr.stokes_gpu, slvr.alpha_gpu,
             slvr.wavelength_gpu, slvr.B_sqrt_gpu,
+            slvr.ref_wave,
             stream=stream, **self.launch_params)
 
     def post_execution(self, solver, stream=None):
