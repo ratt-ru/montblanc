@@ -77,7 +77,7 @@ void rime_jones_B_sqrt_impl(
     if(TIME >= NTIME || POLCHAN >= NPOLCHAN)
         return;
 
-    __shared__ T wl[NCHAN];
+    __shared__ T wl[NPOLCHAN];
 
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only
@@ -141,7 +141,7 @@ class RimeBSqrt(Node):
         # with Kepler shuffles and warp sizes < 32
         if self.polchans < D['BLOCKDIMX']:
             D['BLOCKDIMX'] = self.polchans
-        if slvr.nsrc < D['BLOCKDIMY']:
+        if slvr.ntime < D['BLOCKDIMY']:
             D['BLOCKDIMY'] = slvr.ntime
 
         regs = str(FLOAT_PARAMS['maxregs'] \
