@@ -246,6 +246,13 @@ class TestBiroV4(unittest.TestCase):
 
             self.B_sqrt_test_impl(slvr)
 
+    def test_B_sqrt_double(self):
+        with solver(na=7, ntime=200, chan=320,
+            npsrc=10, dtype=np.float64,
+            pipeline=Pipeline([RimeBSqrt()])) as slvr:
+
+            self.B_sqrt_test_impl(slvr)
+
     def test_transpose(self):
         with solver(na=4, npsrc=6, ntime=2, nchan=10,
             weight_vector=True,
