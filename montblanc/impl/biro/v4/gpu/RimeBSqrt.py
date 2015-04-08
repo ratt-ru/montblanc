@@ -28,7 +28,7 @@ from montblanc.node import Node
 
 FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels and polarisations
-    'BLOCKDIMY' : 8,    # Number of timesteps
+    'BLOCKDIMY' : 32,    # Number of timesteps
     'BLOCKDIMZ' : 1,    #
     'maxregs'   : 32    # Maximum number of registers
 }
@@ -37,7 +37,7 @@ FLOAT_PARAMS = {
 # local memory
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels and polarisations
-    'BLOCKDIMY' : 4,    # Number of timesteps
+    'BLOCKDIMY' : 16,    # Number of timesteps
     'BLOCKDIMZ' : 1,    #
     'maxregs'   : 48    # Maximum number of registers
 }
