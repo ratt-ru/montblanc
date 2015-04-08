@@ -310,7 +310,7 @@ class SolverCPU(object):
         """
         Computes the B term of the RIME.
 
-        Returns a (4,nsrc,ntime) matrix of complex scalars.
+        Returns a (4,nsrc,ntime,nchan) matrix of complex scalars.
         """
         slvr = self.solver
 
@@ -329,7 +329,15 @@ class SolverCPU(object):
 
             assert B.shape == (4, slvr.nsrc, slvr.ntime)
 
-            return B
+            B_power = ne.evaluate('B*((rw/wl)**a)', {
+                 'rw': slvr.ref_wave,
+                 'B': B[:,:,:,np.newaxis],
+                 'wl': slvr.wavelength_cpu[np.newaxis, np.newaxis, np.newaxis, :],
+                 'a': slvr.alpha_cpu[np.newaxis, :, :, np.newaxis] })
+
+            assert B_power.shape == (4, slvr.nsrc, slvr.ntime, slvr.nchan)
+
+            return B_power
 
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)

@@ -89,8 +89,12 @@ void rime_jones_B_sqrt_impl(
 
     for(int SRC=0; SRC<NSRC; ++SRC)
     {
-        int i = (SRC*NTIME + TIME)*NPOL + POL;
-        typename Tr::ft pol = stokes[i];
+        int i = SRC*NTIME + TIME;
+        typename Tr::ft wl_ratio = ref_wave/wl[threadIdx.x];
+        typename Tr::ft power = Po::pow(wl_ratio, alpha[i]);
+
+        i = i*NPOL + POL;
+        typename Tr::ft pol = stokes[i] * power;
         typename Tr::ct brightness;
 
         montblanc::create_brightness<T>(brightness, pol);
