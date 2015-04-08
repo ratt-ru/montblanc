@@ -240,14 +240,14 @@ class TestBiroV4(unittest.TestCase):
         self.assertTrue(np.allclose(b_cpu, b_gpu))
 
     def test_B_sqrt_float(self):
-        with solver(na=7, ntime=20, chan=32,
+        with solver(na=7, ntime=20, nchan=32,
             npsrc=10, dtype=np.float32,
             pipeline=Pipeline([RimeBSqrt()])) as slvr:
 
             self.B_sqrt_test_impl(slvr)
 
     def test_B_sqrt_double(self):
-        with solver(na=7, ntime=200, chan=320,
+        with solver(na=7, ntime=200, nchan=320,
             npsrc=10, dtype=np.float64,
             pipeline=Pipeline([RimeBSqrt()])) as slvr:
 
