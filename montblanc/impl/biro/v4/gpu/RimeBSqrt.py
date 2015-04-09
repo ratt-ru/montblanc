@@ -82,10 +82,12 @@ void rime_jones_B_sqrt_impl(
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only
     // one wavelength per channel.
-    if(threadIdx.y)
+    if(threadIdx.y == 0)
     {
         wl[threadIdx.x] = wavelength[POLCHAN >> 2];
     }
+
+    __syncthreads();
 
     for(int SRC=0; SRC<NSRC; ++SRC)
     {
