@@ -195,9 +195,9 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
 {
-    int sign = ((int(threadIdx.x) - 2) & 0x2) - 1;
-    mask.x = T(sign*((int(threadIdx.x) - 1) & 0x2) >> 1);
-    mask.y = T(sign*((int(threadIdx.x) + 1) & 0x2) >> 1);
+    int sign = ((int(cub::LaneId()) - 2) & 0x2) - 1;
+    mask.x = T(sign*((int(cub::LaneId()) - 1) & 0x2) >> 1);
+    mask.y = T(sign*((int(cub::LaneId()) + 1) & 0x2) >> 1);
 }
 
 // Gives the Kepler shuffle index for creating part of the
@@ -217,7 +217,7 @@ __device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
 __device__ __forceinline__ int brightness_pol_2_shfl_idx()
 {
     int vis_idx = (cub::LaneId() >> 2) << 2;
-    return ((int(threadIdx.x) + 1) & 0x2) + vis_idx + 1;
+    return ((int(cub::LaneId()) + 1) & 0x2) + vis_idx + 1;
 }
 
 // Given the polarisation, generate the brightness matrix
