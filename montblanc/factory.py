@@ -189,9 +189,9 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     slvr.transfer_lm(lm)
 
     # Stokes parameters
-    Q=ft(np.random.random(ntime*nsrc)*0.5)
-    U=ft(np.random.random(ntime*nsrc)*0.5)
-    V=ft(np.random.random(ntime*nsrc)*0.5)
+    Q=np.random.random(ntime*nsrc)-0.5
+    U=np.random.random(ntime*nsrc)-0.5
+    V=np.random.random(ntime*nsrc)-0.5
     # Determinant of a brightness matrix
     # is I^2 - Q^2 - U^2 - V^2
     # The following ensures that the determinant
