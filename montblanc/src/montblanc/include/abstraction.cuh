@@ -249,6 +249,67 @@ __device__ __forceinline__ void create_brightness(
     result.x += cub::ShuffleBroadcast(pol, shfl_idx-1);
 }
 
+
+// Computes the square root of the brightness matrix
+// in place. The brightness matrix is assumed to be
+// stored in 4 consecutive thread lanes in the pol
+// variable.
+template <
+    typename T,
+    typename Tr=montblanc::kernel_traits<T>,
+    typename Po=montblanc::kernel_policies<T> >
+__device__ __forceinline__
+void brightness_sqrt_in_place(
+    typename Tr::ct & brightness,
+    const typename Tr::ft & pol)
+{
+    // This gives us 0,0,0,0,4,4,4,4,8,8,8,8,...
+    int shfl_idx = (cub::LaneId() >> 2) << 2;
+
+    // det = I^2 - Q^2 - U^2 - V^2
+    typename Tr::ft I = cub::ShuffleBroadcast(pol, shfl_idx);
+    typename Tr::ft trace = 2*I;
+    typename Tr::ft det = I*I;
+
+    typename Tr::ft Q = cub::ShuffleBroadcast(pol, ++shfl_idx);
+    det -= Q*Q;
+
+    typename Tr::ft U = cub::ShuffleBroadcast(pol, ++shfl_idx);
+    det -= U*U;
+
+    typename Tr::ft V = cub::ShuffleBroadcast(pol, ++shfl_idx);
+    det -= V*V;
+
+    // Assumption here is that the determinant
+    // of the brightness matrix is positive
+    // I^2 - Q^2 - U^2 - V^2 > 0
+    typename Tr::ft s = Po::sqrt(det);
+
+    // This gives us 2 0 0 2 2 0 0 2 2 0 0 2
+    bool is_diag = ((int(cub::LaneId()) - 1) & 0x2) != 0;
+    // Only add s if we're in a lane corresponding to
+    // a diagonal matrix entry.
+    if(is_diag)
+        { brightness.x += s; }
+
+    // Assumption here, trace and 2*s are positive
+    // real numbers. 2*s is positive from the
+    // assumption of a positive determinant.
+    // trace = 2*I > 0 follows from I being positive
+    // and real. (although apparently negative I's
+    // are positive: see Sunyaev-Zel'dovich effect).
+    typename Tr::ft t = Po::sqrt(trace + 2*s);
+
+    // If both s and t are 0, this matrix does
+    // not have a square root. But then
+    // I,Q,U and V must all be zero. Set
+    if(t != T(0.0)) {
+        brightness.x /= t;
+        brightness.y /= t;
+    }
+}
+
+
 } // namespace montblanc
 
 #endif // _MONTBLANC_KERNEL_TRAITS_H

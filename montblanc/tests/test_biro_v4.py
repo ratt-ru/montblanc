@@ -219,7 +219,7 @@ class TestBiroV4(unittest.TestCase):
                 self.B_sum_test_impl(slvr, params['weight_vector'])
 
     def B_sqrt_test_impl(self, slvr, cmp=None):
-        """ Type independent implementation of the KB test """
+        """ Type independent implementation of the B square root test """
         if cmp is None:
             cmp = {}
 
@@ -228,25 +228,27 @@ class TestBiroV4(unittest.TestCase):
 
         # Get the B matrix on the CPU
         slvr_cpu = SolverCPU(slvr)
-        b_cpu = slvr_cpu.compute_b_jones().transpose(1, 2, 3, 0)
-        #b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones().transpose(1, 2, 0)
+        b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones().transpose(1, 2, 3, 0)
 
         # Get the B matrix off the GPU
         with slvr.context:
-            b_gpu = slvr.B_sqrt_gpu.get()
+            b_sqrt_gpu = slvr.B_sqrt_gpu.get()
 
-        self.assertTrue(np.allclose(b_cpu, b_gpu, **cmp))
+        self.assertTrue(np.allclose(b_sqrt_cpu, b_sqrt_gpu, **cmp))
 
     def test_B_sqrt_float(self):
+        """ Test the B sqrt float kernel """
+
         with solver(na=7, ntime=200, nchan=320,
-            npsrc=10, dtype=np.float32,
+            npsrc=10, ngsrc=10, dtype=np.float32,
             pipeline=Pipeline([RimeBSqrt()])) as slvr:
 
             self.B_sqrt_test_impl(slvr, cmp={'rtol': 1e-3})
 
     def test_B_sqrt_double(self):
+        """ Test the B sqrt double kernel """
         with solver(na=7, ntime=200, nchan=320,
-            npsrc=10, dtype=np.float64,
+            npsrc=10, ngsrc=10, dtype=np.float64,
             pipeline=Pipeline([RimeBSqrt()])) as slvr:
 
             self.B_sqrt_test_impl(slvr)

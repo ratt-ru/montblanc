@@ -308,7 +308,7 @@ class SolverCPU(object):
 
     def compute_b_jones(self):
         """
-        Computes the B term of the RIME.
+        Computes the brightness matrix from the stokes parameters.
 
         Returns a (4,nsrc,ntime,nchan) matrix of complex scalars.
         """
@@ -329,6 +329,7 @@ class SolverCPU(object):
 
             assert B.shape == (4, slvr.nsrc, slvr.ntime)
 
+            # Multiply the scalar power term into the matrix
             B_power = ne.evaluate('B*((rw/wl)**a)', {
                  'rw': slvr.ref_wave,
                  'B': B[:,:,:,np.newaxis],
@@ -344,41 +345,52 @@ class SolverCPU(object):
 
     def compute_b_sqrt_jones(self):
         """
-        Computes the B sqrt term of the RIME.
+        Computes the square root of the brightness matrix.
 
-        Returns a (4,nsrc,ntime) matrix of complex scalars.
+        Returns a (4,nsrc,ntime,nchan) matrix of complex scalars.
         """
         slvr = self.solver
 
         try:
-            B = self.compute_b_jones()
             I = slvr.stokes_cpu[:,:,0]
             Q = slvr.stokes_cpu[:,:,1]
             U = slvr.stokes_cpu[:,:,2]
             V = slvr.stokes_cpu[:,:,3]
 
+            # See
+            # http://en.wikipedia.org/wiki/Square_root_of_a_2_by_2_matrix
+            # Note that this code handles a special case of the above
+            # where we assume that both the trace and determinant
+            # are positive.
             trace = 2*I
             det = I**2 - Q**2 - U**2 - V**2
+
+            assert trace.shape == (slvr.nsrc, slvr.ntime)
+            assert det.shape == (slvr.nsrc, slvr.ntime)
+
+            assert np.all(det >= 0.0)
+            assert np.all(trace >= 0.0)
+
+            s = np.sqrt(det)
+            t = np.sqrt(trace + 2*s)
 
             # We don't have a solution for some matrices
             # But if both trace and determinant are zero
             # the matrix itself must be zero.
-            mask = np.logical_and(trace == 0, det == 0)
-
-            s = np.sqrt(trace.astype(slvr.ct))
-            t = np.sqrt(det.astype(slvr.ct) + 2*s)
-
             # Avoid infs and nans from divide by zero
-            t[mask] = 1
+            mask = np.logical_and(s == 0.0, t == 0.0)
+            t[mask] = 1.0
 
-            B_sqrt = np.array([B[0] + s,
-                B[1],
-                B[2],
-                B[3] + s]) / t
+            B = self.compute_b_jones()
 
-            assert B_sqrt.shape == (4, slvr.nsrc, slvr.ntime)
+            # Add s to the diagonal entries
+            B[0] += s[:,:,np.newaxis]
+            B[3] += s[:,:,np.newaxis]
 
-            return B_sqrt
+            # Divide the entire matrix by t
+            B /= t[:,:,np.newaxis]
+
+            return B
 
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
