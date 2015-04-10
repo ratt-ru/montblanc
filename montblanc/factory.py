@@ -189,29 +189,33 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     slvr.transfer_lm(lm)
 
     # Stokes parameters
-    #fI=ft(np.ones((ntime*nsrc,)))
-    fQ=ft(np.random.random(ntime*nsrc)*0.5)
-    fU=ft(np.random.random(ntime*nsrc)*0.5)
-    fV=ft(np.random.random(ntime*nsrc)*0.5)
+    Q=ft(np.random.random(ntime*nsrc)*0.5)
+    U=ft(np.random.random(ntime*nsrc)*0.5)
+    V=ft(np.random.random(ntime*nsrc)*0.5)
     # Determinant of a brightness matrix
     # is I^2 - Q^2 - U^2 - V^2
     # The following ensures that the determinant
     # is positive, and therefore the brightness matrix
     # is positive semi-definite.
-    fI=fQ**2 + fU**2 + fV**2 + np.random.random(ntime*nsrc)*0.1
-    assert np.all(fI**2 + fQ**2 + fU**2 + fV**2 > 0)
+    noise = np.random.random(ntime*nsrc)*0.1
+    I=np.sqrt(Q**2 + U**2 + V**2 + noise)
+    assert np.all(I**2 - Q**2 - U**2 - V**2 > 0.0)
     alpha=ft(np.random.random(ntime*nsrc)*0.1)
     if version in [VERSION_TWO, VERSION_THREE]:
-        brightness = mbu.shape_list([fI,fQ,fU,fV,alpha],
+        brightness = mbu.shape_list([I,Q,U,V,alpha],
             slvr.brightness_shape, slvr.brightness_dtype)
         slvr.transfer_brightness(brightness)
     elif version in [VERSION_FOUR,VERSION_FIVE]:
-        stokes = mbu.shape_list([fI,fQ,fU,fV],
-            slvr.stokes_shape, slvr.stokes_dtype)
-        alpha = mbu.shape_list([alpha], slvr.alpha_shape, slvr.alpha_dtype)
+        # stokes parameters are in the row minor position
+        # for version 4 and 5. Ensure they're in the
+        # right position
+        nax = np.newaxis
+        ary = np.hstack((I[:,nax], Q[:,nax], U[:,nax], V[:,nax]))
+        stokes = mbu.shape_list(ary, slvr.stokes_shape, slvr.stokes_dtype)
         slvr.transfer_stokes(stokes)
-        slvr.transfer_alpha(alpha)
 
+        alpha = mbu.shape_list([alpha], slvr.alpha_shape, slvr.alpha_dtype)
+        slvr.transfer_alpha(alpha)
 
     # Gaussian shape matrix
     el = ft(np.random.random(ngsrc)*0.5)
