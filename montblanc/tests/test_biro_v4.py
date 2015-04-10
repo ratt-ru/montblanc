@@ -235,16 +235,14 @@ class TestBiroV4(unittest.TestCase):
         with slvr.context:
             b_gpu = slvr.B_sqrt_gpu.get()
 
-
-        print np.allclose(b_cpu, b_gpu)
-        #self.assertTrue(np.allclose(b_cpu, b_gpu))
+        self.assertTrue(np.allclose(b_cpu, b_gpu, **cmp))
 
     def test_B_sqrt_float(self):
         with solver(na=7, ntime=200, nchan=320,
             npsrc=10, dtype=np.float32,
             pipeline=Pipeline([RimeBSqrt()])) as slvr:
 
-            self.B_sqrt_test_impl(slvr)
+            self.B_sqrt_test_impl(slvr, cmp={'rtol': 1e-3})
 
     def test_B_sqrt_double(self):
         with solver(na=7, ntime=200, nchan=320,
