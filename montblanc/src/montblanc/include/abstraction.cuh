@@ -15,8 +15,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-#ifndef _MONTBLANC_KERNEL_TRAITS_H
-#define _MONTBLANC_KERNEL_TRAITS_H
+#ifndef _MONTBLANC_KERNEL_TRAITS_CUH
+#define _MONTBLANC_KERNEL_TRAITS_CUH
 
 #include <cub/cub/cub.cuh>
 
@@ -174,4 +174,4 @@ __device__ __forceinline__ void complex_multiply_in_place(
 
 } // namespace montblanc
 
-#endif // _MONTBLANC_KERNEL_TRAITS_H
+#endif // _MONTBLANC_KERNEL_TRAITS_CUH
