@@ -164,11 +164,6 @@ class RimeBSqrt(Node):
             'rime_jones_B_sqrt_double'
 
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
-
-        with open('kernel_debug.cu', 'w') as f:
-            f.write(kernel_string)
-            f.close()
-
         self.mod = SourceModule(kernel_string,
             options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
