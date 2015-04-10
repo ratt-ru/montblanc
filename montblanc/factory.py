@@ -188,11 +188,18 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     lm=mbu.shape_list([l,m], slvr.lm_shape, slvr.lm_dtype)
     slvr.transfer_lm(lm)
 
-    # Brightness matrix for the point sources
-    fI=ft(np.ones((ntime*nsrc,)))
+    # Stokes parameters
+    #fI=ft(np.ones((ntime*nsrc,)))
     fQ=ft(np.random.random(ntime*nsrc)*0.5)
     fU=ft(np.random.random(ntime*nsrc)*0.5)
     fV=ft(np.random.random(ntime*nsrc)*0.5)
+    # Determinant of a brightness matrix
+    # is I^2 - Q^2 - U^2 - V^2
+    # The following ensures that the determinant
+    # is positive, and therefore the brightness matrix
+    # is positive semi-definite.
+    fI=fQ**2 + fU**2 + fV**2 + np.random.random(ntime*nsrc)*0.1
+    assert np.all(fI**2 + fQ**2 + fU**2 + fV**2 > 0)
     alpha=ft(np.random.random(ntime*nsrc)*0.1)
     if version in [VERSION_TWO, VERSION_THREE]:
         brightness = mbu.shape_list([fI,fQ,fU,fV,alpha],
