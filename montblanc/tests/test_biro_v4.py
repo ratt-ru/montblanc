@@ -27,8 +27,7 @@ import time
 
 import montblanc.factory
 
-from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
-from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+from montblanc.impl.biro.v4.gpu.RimeKB import RimeKB
 from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
@@ -126,7 +125,7 @@ class TestBiroV4(unittest.TestCase):
         """ Single precision KB test  """
         for params in src_perms({'na': 3, 'nchan': 4, 'ntime': 2}, True):
             with solver(type=np.float32,
-                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
+                        pipeline=Pipeline([RimeKB()]), **params) as slvr:
 
                 self.KB_test_impl(slvr, cmp={ 'rtol' : 1e-4})
 
@@ -134,7 +133,7 @@ class TestBiroV4(unittest.TestCase):
         """ Double precision KB test """
         for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
             with solver(type=np.float64,
-                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
+                        pipeline=Pipeline([RimeKB()]), **params) as slvr:
 
                 self.KB_test_impl(slvr)
 

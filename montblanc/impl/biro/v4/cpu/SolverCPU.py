@@ -184,9 +184,9 @@ class SolverCPU(object):
         k_jones = self.compute_k_jones_scalar_per_ant()
         assert k_jones.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
         b_jones = self.compute_b_jones()
-        assert b_jones.shape == (4, slvr.nsrc, slvr.ntime)
+        assert b_jones.shape == (4, slvr.nsrc, slvr.ntime, slvr.nchan)
 
-        result = k_jones[np.newaxis,:,:,:,:]*b_jones[:,:,:,np.newaxis,np.newaxis]
+        result = k_jones[np.newaxis,:,:,:,:]*b_jones[:,:,:,np.newaxis,:]
         assert result.shape == (4, slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
         return result
