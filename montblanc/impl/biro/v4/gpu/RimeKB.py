@@ -131,9 +131,14 @@ void rime_jones_KB_impl(
         typename Tr::ct cplx_phase;
         Po::sincos(phase, &cplx_phase.y, &cplx_phase.x);
 
+        i = (SRC*NTIME + TIME)*NPOLCHAN + POLCHAN;
+        typename Tr::ct brightness = B_sqrt[i];
+
+        montblanc::complex_multiply_in_place<T>(brightness, cplx_phase);
+
         // Write out the phase terms
         i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
-        jones[i] = cplx_phase;
+        jones[i] = brightness;
         __syncthreads();
     }
 }
