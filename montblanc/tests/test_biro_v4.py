@@ -123,19 +123,21 @@ class TestBiroV4(unittest.TestCase):
 
     def test_KB_float(self):
         """ Single precision KB test  """
-        for params in src_perms({'na': 3, 'nchan': 4, 'ntime': 2}, True):
+        for params in src_perms({'na': 14, 'nchan': 64, 'ntime': 20}, True):
             with solver(type=np.float32,
-                        pipeline=Pipeline([RimeKB()]), **params) as slvr:
+                        pipeline=Pipeline([RimeBSqrt(), RimeKB()]),
+                        **params) as slvr:
 
-                self.KB_test_impl(slvr, cmp={ 'rtol' : 1e-4})
+                self.KB_test_impl(slvr, cmp={ 'rtol' : 1e-3})
 
     def test_KB_double(self):
         """ Double precision KB test """
-        for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
+        for params in src_perms({'na': 14, 'nchan': 64, 'ntime': 20}, True):
             with solver(type=np.float64,
-                        pipeline=Pipeline([RimeKB()]), **params) as slvr:
+                        pipeline=Pipeline([RimeBSqrt(), RimeKB()]),
+                        **params) as slvr:
 
-                self.KB_test_impl(slvr)
+                self.KB_test_impl(slvr, cmp={ 'rtol' : 1e-4})
 
 
     def EK_test_impl(self, slvr, cmp=None):
