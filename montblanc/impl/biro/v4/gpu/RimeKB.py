@@ -140,7 +140,7 @@ void rime_jones_KB_impl(
 
 extern "C" {
 
-#define stamp_rime_kb_fn(ft,ct) \
+#define stamp_rime_KB_fn(ft,ct) \
 __global__ void \
 rime_jones_KB_ ## ft( \
     ft * UVW, \
@@ -153,8 +153,8 @@ rime_jones_KB_ ## ft( \
         wavelength, B_sqrt, jones); \
 }
 
-stamp_rime_kb_fn(float,float2)
-stamp_rime_kb_fn(double,double2)
+stamp_rime_KB_fn(float,float2)
+stamp_rime_KB_fn(double,double2)
 
 } // extern "C" {
 """)
