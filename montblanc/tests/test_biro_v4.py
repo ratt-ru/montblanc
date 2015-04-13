@@ -22,6 +22,7 @@ import itertools
 import logging
 import unittest
 import numpy as np
+import random
 import time
 
 import montblanc.factory
@@ -236,6 +237,30 @@ class TestBiroV4(unittest.TestCase):
             b_sqrt_gpu = slvr.B_sqrt_gpu.get()
 
         self.assertTrue(np.allclose(b_sqrt_cpu, b_sqrt_gpu, **cmp))
+
+        # Space of comparison is potentially just too large
+        # and I can't see any easy numpy code for avoiding
+        # looping over dimension and multiplying the jones
+        # matrices. So...
+        # Pick 16 random points in the same and
+        # check our square roots are OK for that
+        N = 16
+        rand_srcs = [random.randrange(0, slvr.nsrc) for i in range(N)]
+        rand_t = [random.randrange(0, slvr.ntime) for i in range(N)]
+        rand_ch = [random.randrange(0, slvr.nchan) for i in range(N)]
+
+        b_cpu = slvr_cpu.compute_b_jones() \
+            .transpose(1, 2, 3, 0)
+
+        # Test that the square root of B
+        # multiplied by itself yields B.
+        # Also tests that the square root of B
+        # is the Hermitian of the square root of B
+        for src, t, ch in zip(rand_srcs, rand_t, rand_ch):
+            B_sqrt = b_sqrt_cpu[src,t,ch].reshape(2,2)
+            B = b_cpu[src,t,ch].reshape(2,2)
+            self.assertTrue(np.allclose(B, np.dot(B_sqrt, B_sqrt)))
+            self.assertTrue(np.all(B_sqrt == B_sqrt.conj().T))
 
     def test_B_sqrt_float(self):
         """ Test the B sqrt float kernel """
