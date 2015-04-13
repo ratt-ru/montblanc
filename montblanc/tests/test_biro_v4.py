@@ -226,11 +226,12 @@ class TestBiroV4(unittest.TestCase):
         # Call the GPU solver
         slvr.solve()
 
-        # Get the B matrix on the CPU
+        # Calculate CPU version of the B sqrt matrix
         slvr_cpu = SolverCPU(slvr)
-        b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones().transpose(1, 2, 3, 0)
+        b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones() \
+            .transpose(1, 2, 3, 0)
 
-        # Get the B matrix off the GPU
+        # Calculate the GPU version of the B sqrt matrix
         with slvr.context:
             b_sqrt_gpu = slvr.B_sqrt_gpu.get()
 
@@ -243,6 +244,7 @@ class TestBiroV4(unittest.TestCase):
             npsrc=10, ngsrc=10, dtype=np.float32,
             pipeline=Pipeline([RimeBSqrt()])) as slvr:
 
+            # This fails more often with an rtol of 1e-4
             self.B_sqrt_test_impl(slvr, cmp={'rtol': 1e-3})
 
     def test_B_sqrt_double(self):

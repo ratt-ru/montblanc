@@ -352,43 +352,43 @@ class SolverCPU(object):
         slvr = self.solver
 
         try:
-            I = slvr.stokes_cpu[:,:,0]
-            Q = slvr.stokes_cpu[:,:,1]
-            U = slvr.stokes_cpu[:,:,2]
-            V = slvr.stokes_cpu[:,:,3]
-
             # See
             # http://en.wikipedia.org/wiki/Square_root_of_a_2_by_2_matrix
             # Note that this code handles a special case of the above
             # where we assume that both the trace and determinant
-            # are positive.
-            trace = 2*I
-            det = I**2 - Q**2 - U**2 - V**2
+            # are real and positive.
+            B = self.compute_b_jones()
 
-            assert trace.shape == (slvr.nsrc, slvr.ntime)
-            assert det.shape == (slvr.nsrc, slvr.ntime)
+            # trace = I+Q + I-Q = 2*I
+            # det = (I+Q)*(I-Q)+(U+iV)*(U-iV) = I**2-Q**2-U**2-V**2
+            trace = (B[0]+B[3]).real
+            det = (B[0]*B[3] - B[1]*B[2]).real
 
-            assert np.all(det >= 0.0)
-            assert np.all(trace >= 0.0)
+            assert trace.shape == (slvr.nsrc, slvr.ntime, slvr.nchan)
+            assert det.shape == (slvr.nsrc, slvr.ntime, slvr.nchan)
+
+            assert np.all(trace >= 0.0), \
+                'Negative brightness matrix trace'
+            assert np.all(det >= 0.0), \
+                'Negative brightness matrix determinant'
 
             s = np.sqrt(det)
             t = np.sqrt(trace + 2*s)
 
-            # We don't have a solution for some matrices
-            # But if both trace and determinant are zero
-            # the matrix itself must be zero.
+            # We don't have a solution for matrices
+            # where both s and t are zero. In the case
+            # of brightness matrices, zero s and t
+            # implies that the matrix itself is 0.
             # Avoid infs and nans from divide by zero
             mask = np.logical_and(s == 0.0, t == 0.0)
             t[mask] = 1.0
 
-            B = self.compute_b_jones()
-
             # Add s to the diagonal entries
-            B[0] += s[:,:,np.newaxis]
-            B[3] += s[:,:,np.newaxis]
+            B[0] += s
+            B[3] += s
 
             # Divide the entire matrix by t
-            B /= t[:,:,np.newaxis]
+            B /= t
 
             return B
 

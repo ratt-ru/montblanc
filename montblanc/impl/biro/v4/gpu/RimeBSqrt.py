@@ -100,11 +100,11 @@ void rime_jones_B_sqrt_impl(
         // Read in the stokes parameter,
         // multiplying it by the power term
         i = i*NPOL + POL;
-        typename Tr::ft pol = stokes[i];
+        typename Tr::ft pol = stokes[i]*power;
         typename Tr::ct brightness;
 
         // Create the brightness matrix
-        montblanc::create_brightness<T>(brightness, pol*power);
+        montblanc::create_brightness<T>(brightness, pol);
         montblanc::brightness_sqrt_in_place<T>(brightness, pol);
 
         // Write out the brightness
