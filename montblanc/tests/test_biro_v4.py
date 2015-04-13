@@ -139,45 +139,6 @@ class TestBiroV4(unittest.TestCase):
 
                 self.KB_test_impl(slvr, cmp={ 'rtol' : 1e-4})
 
-
-    def EK_test_impl(self, slvr, cmp=None):
-        """ Type independent implementation of the EK test """
-        if cmp is None:
-            cmp = {}
-
-        # This beam width produces reasonable values
-        # for testing the E term
-        slvr.set_beam_width(65*1e5)
-
-        slvr_cpu = SolverCPU(slvr)
-
-        # Call the GPU solver
-        slvr.solve()
-
-        ek_cpu = slvr_cpu.compute_ek_jones_scalar_per_ant()
-        with slvr.context:
-            ek_gpu = slvr.jones_scalar_gpu.get()
-
-        # Test that the jones CPU calculation matches
-        # that of the GPU calculation
-        self.assertTrue(np.allclose(ek_cpu, ek_gpu, **cmp))
-
-    def test_EK_float(self):
-        """ Single precision EK test  """
-        for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
-            with solver(type=np.float32,
-                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
-
-                self.EK_test_impl(slvr)
-
-    def test_EK_double(self):
-        """ Double precision EK test """
-        for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
-            with solver(type=np.float64,
-                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
-
-                self.EK_test_impl(slvr)
-
     def B_sum_test_impl(self, slvr, weight_vector=False, cmp=None):
         """ Type independent implementation of the B Sum test """
         if cmp is None:

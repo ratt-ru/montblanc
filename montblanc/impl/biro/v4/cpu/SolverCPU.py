@@ -249,82 +249,6 @@ class SolverCPU(object):
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
 
-    def compute_e_jones_scalar_per_ant(self):
-        """
-        Computes the scalar E (analytic cos^3) term per antenna.
-
-        Returns a (nsrc,ntime,na,nchan) matrix of complex scalars.
-        """
-        slvr = self.solver
-
-        try:
-            # Compute the offsets for different antenna
-            # Broadcasting here produces, nsrc x ntime x na
-            E_p = ne.evaluate('sqrt((l - lp)**2 + (m - mp)**2)', {
-                'l': slvr.lm_cpu[0, :, np.newaxis, np.newaxis],
-                'm': slvr.lm_cpu[1, :, np.newaxis, np.newaxis],
-                'lp': slvr.point_errors_cpu[0, np.newaxis, :, :],
-                'mp': slvr.point_errors_cpu[1, np.newaxis, :, :]
-            })
-
-            assert E_p.shape == (slvr.nsrc, slvr.ntime, slvr.na)
-
-            # Broadcasting here produces, nsrc x ntime x nbl x nchan
-            E_p = ne.evaluate('E*bw*1e-9*wl', {
-                'E': E_p[:, :, :, np.newaxis], 'bw': slvr.beam_width,
-                'wl': slvr.wavelength_cpu[np.newaxis, np.newaxis, np.newaxis, :]
-            })
-
-            assert E_p.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
-
-            # Clip the beam
-            np.clip(E_p, np.finfo(slvr.ft).min, slvr.beam_clip, E_p)
-            # Cosine it, cube it and cast because of numexpr
-            E_p = ne.evaluate('cos(E)**3', {'E': E_p}).astype(slvr.ct)
-
-            assert E_p.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
-
-            return E_p
-        except AttributeError as e:
-            mbu.rethrow_attribute_exception(e)
-
-    def compute_e_jones_scalar_per_bl(self):
-        """
-        Computes the scalar E (analytic cos^3) term per baseline.
-
-        Returns a (nsrc,ntime,nbl,nchan) matrix of complex scalars.
-        """
-        slvr = self.solver
-
-        try:
-            # Re-arrange per antenna terms into per baseline antenna pair values
-            ap = slvr.get_ap_idx(src=True, chan=True)
-            e_jones = self.compute_e_jones_scalar_per_ant()[ap]
-
-            return e_jones[1]*e_jones[0].conj()
-        except AttributeError as e:
-            mbu.rethrow_attribute_exception(e)
-
-    def compute_ek_jones_scalar_per_ant(self):
-        """
-        Computes the scalar EK (phase*cos^3) term of the RIME.
-
-        Returns a (nsrc,ntime,na,nchan) matrix of complex scalars.
-        """
-        return self.compute_k_jones_scalar_per_ant() * \
-            self.compute_e_jones_scalar_per_ant()
-
-    def compute_ek_jones_scalar_per_bl(self):
-        """
-        Computes the scalar EK (phase*cos^3) term of the RIME.
-
-        Returns a (nsrc,ntime,nbl,nchan) matrix of complex scalars.
-        """
-        per_bl_ek_scalar = self.compute_k_jones_scalar_per_bl() * \
-            self.compute_e_jones_scalar_per_bl()
-
-        return per_bl_ek_scalar
-
     def compute_b_jones(self):
         """
         Computes the brightness matrix from the stokes parameters.
@@ -414,24 +338,6 @@ class SolverCPU(object):
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
 
-    def compute_ebk_jones(self):
-        """
-        Computes the jones matrices based on the
-        scalar EK term and the 2x2 B term.
-
-        Returns a (4,nsrc,ntime,nbl,nchan) matrix of complex scalars.
-        """
-        slvr = self.solver
-
-        per_bl_ek_scalar = self.compute_ek_jones_scalar_per_bl()
-        b_jones = self.compute_b_jones()
-
-        jones = per_bl_ek_scalar[np.newaxis, :, :, :, :] * \
-            b_jones[:, :, :, np.newaxis, np.newaxis]
-        assert jones.shape == (4, slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan)
-
-        return jones
-
     def compute_bk_jones(self):
         """
         Computes the jones matrices based on the
@@ -449,22 +355,6 @@ class SolverCPU(object):
         assert jones.shape == (4, slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan)
 
         return jones
-
-    def compute_ebk_vis(self):
-        """
-        Computes the complex visibilities based on the
-        scalar EK term and the 2x2 B term.
-
-        Returns a (4,ntime,nbl,nchan) matrix of complex scalars.
-        """
-
-        slvr = self.solver
-
-        vis = ne.evaluate('sum(ebk,1)', {'ebk': self.compute_ebk_jones()})\
-            .astype(slvr.ct)
-        assert vis.shape == (4, slvr.ntime, slvr.nbl, slvr.nchan)
-
-        return vis
 
     def compute_bk_vis(self):
         """
