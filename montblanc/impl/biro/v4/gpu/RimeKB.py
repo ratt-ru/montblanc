@@ -67,6 +67,7 @@ void rime_jones_KB_impl(
     T * uvw,
     T * lm,
     T * wavelength,
+    typename Tr::ct * B_sqrt,
     typename Tr::ct * jones)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
@@ -145,10 +146,11 @@ rime_jones_KB_ ## ft( \
     ft * UVW, \
     ft * LM, \
     ft * wavelength, \
+    ct * B_sqrt, \
     ct * jones) \
 { \
     rime_jones_KB_impl<ft>(UVW, LM, \
-        wavelength, jones); \
+        wavelength, B_sqrt, jones); \
 }
 
 stamp_rime_kb_fn(float,float2)
@@ -220,8 +222,8 @@ class RimeKB(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.uvw_gpu, slvr.lm_gpu,
-            slvr.wavelength_gpu, slvr.jones_gpu,
+        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.wavelength_gpu,
+            slvr.B_sqrt_gpu, slvr.jones_gpu,
             stream=stream, **self.launch_params)
 
     def post_execution(self, solver, stream=None):
