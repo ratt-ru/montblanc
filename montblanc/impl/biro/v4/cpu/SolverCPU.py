@@ -191,6 +191,25 @@ class SolverCPU(object):
 
         return result
 
+    def compute_kb_sqrt_jones_per_ant(self):
+        """
+        Computes the K (phase) term, multiplied by the
+        square root of the brightness matrix
+
+        Returns a (4,nsrc,ntime,na,nchan) matrix of complex scalars.
+        """
+
+        slvr = self.solver
+
+        k_jones = self.compute_k_jones_scalar_per_ant()
+        b_sqrt_jones = self.compute_b_sqrt_jones()
+
+        result = k_jones[np.newaxis,:,:,:,:]*b_sqrt_jones[:,:,:,np.newaxis,:]
+        assert result.shape == (4, slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+
+        return result
+
+
     def compute_k_jones_scalar_per_bl(self):
         """
         Computes the scalar K (phase) term of the RIME per baseline.

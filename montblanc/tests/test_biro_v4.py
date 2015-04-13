@@ -115,7 +115,7 @@ class TestBiroV4(unittest.TestCase):
         # Call the GPU solver
         slvr.solve()
 
-        kb_cpu = slvr_cpu.compute_kb_jones_per_ant().transpose(1,2,3,4,0)
+        kb_cpu = slvr_cpu.compute_kb_sqrt_jones_per_ant().transpose(1,2,3,4,0)
         with slvr.context:
             kb_gpu = slvr.jones_gpu.get()
 
