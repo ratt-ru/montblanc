@@ -101,15 +101,14 @@ void rime_jones_B_sqrt_impl(
         // multiplying it by the power term
         i = i*NPOL + POL;
         typename Tr::ft pol = stokes[i]*power;
-        typename Tr::ct brightness;
+        typename Tr::ct B_square_root;
 
-        // Create the brightness matrix
-        montblanc::create_brightness<T>(brightness, pol);
-        montblanc::brightness_sqrt_in_place<T>(brightness, pol);
+        // Create the square root of the brightness matrix
+        montblanc::create_brightness_sqrt<T>(B_square_root, pol);
 
-        // Write out the brightness
+        // Write out the square root of the brightness
         i = (SRC*NTIME + TIME)*NPOLCHAN + POLCHAN;
-        B_sqrt[i] = brightness;
+        B_sqrt[i] = B_square_root;
     }
 }
 

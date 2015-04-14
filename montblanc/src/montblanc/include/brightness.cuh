@@ -110,10 +110,13 @@ template <
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__
-void brightness_sqrt_in_place(
+void create_brightness_sqrt(
     typename Tr::ct & brightness,
     const typename Tr::ft & pol)
 {
+    // Create the brightness matrix
+    create_brightness<T>(brightness, pol);
+
     // This gives us 0,0,0,0,4,4,4,4,8,8,8,8,...
     int shfl_idx = (cub::LaneId() >> 2) << 2;
 
