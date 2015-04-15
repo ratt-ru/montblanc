@@ -93,11 +93,11 @@ __device__ __forceinline__ void create_brightness(
     create_brightness_mask<T>(result);
     int shfl_idx = brightness_pol_2_shfl_idx();
     // Get the second polarisation value and multiply it with the mask
-    T second_pol = cub::ShuffleBroadcast(pol, shfl_idx);
+    T second_pol = cub::ShuffleIndex(pol, shfl_idx);
     result.x *= second_pol;
     result.y *= second_pol;
     // Add the first polarisation to the real component
-    result.x += cub::ShuffleBroadcast(pol, shfl_idx-1);
+    result.x += cub::ShuffleIndex(pol, shfl_idx-1);
 }
 
 
@@ -121,17 +121,17 @@ void create_brightness_sqrt(
     int shfl_idx = (cub::LaneId() >> 2) << 2;
 
     // det = I^2 - Q^2 - U^2 - V^2
-    typename Tr::ft I = cub::ShuffleBroadcast(pol, shfl_idx);
+    typename Tr::ft I = cub::ShuffleIndex(pol, shfl_idx);
     typename Tr::ft trace = 2*I;
     typename Tr::ft det = I*I;
 
-    typename Tr::ft Q = cub::ShuffleBroadcast(pol, ++shfl_idx);
+    typename Tr::ft Q = cub::ShuffleIndex(pol, ++shfl_idx);
     det -= Q*Q;
 
-    typename Tr::ft U = cub::ShuffleBroadcast(pol, ++shfl_idx);
+    typename Tr::ft U = cub::ShuffleIndex(pol, ++shfl_idx);
     det -= U*U;
 
-    typename Tr::ft V = cub::ShuffleBroadcast(pol, ++shfl_idx);
+    typename Tr::ft V = cub::ShuffleIndex(pol, ++shfl_idx);
     det -= V*V;
 
     // Assumption here is that the determinant
