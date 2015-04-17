@@ -78,6 +78,7 @@ P = [
     prop_dict('nbeaml', 'int', 50),
     prop_dict('nbeamm', 'int', 50),
     prop_dict('nbeamlambda', 'int', 50),
+    prop_dict('beam_angular_rot_velocity', 'ft', np.deg2rad(1))
 ]
 
 # List of arrays
