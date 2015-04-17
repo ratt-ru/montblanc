@@ -55,8 +55,6 @@ KERNEL_TEMPLATE = string.Template("""
 #define NPOL (4)
 #define NPOLCHAN (NPOL*NCHAN)
 
-#define BEAM_ANGULAR_ROT_VELOCITY (${beam_angular_rot_velocity})
-
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
@@ -70,7 +68,8 @@ void rime_jones_E_beam_impl(
     T * lm,
     T * wavelength,
     T * point_errors,
-    typename Tr::ct * E_beam)
+    typename Tr::ct * E_beam,
+    T * beam_rot_vel)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
@@ -123,7 +122,7 @@ void rime_jones_E_beam_impl(
         // Figure out how far the source has
         // rotated within the beam
         T sint, cost;
-        Po::sincos(BEAM_ANGULAR_ROT_VELOCITY*TIME, &sint, &cost);
+        Po::sincos(beam_rot_vel*TIME, &sint, &cost);
 
         // Rotate the source
         T l = l0[threadIdx.z]*cost - m0[threadIdx.z]*sint;
@@ -144,10 +143,12 @@ rime_jones_E_beam_ ## ft( \
     ft * lm, \
     ft * wavelength, \
     ft * point_errors, \
-    ct * E_beam) \
+    ct * E_beam, \
+    ft beam_rot_vel) \
 { \
     rime_jones_E_beam_impl<ft>( \
-        lm, wavelength, point_errors, E_beam); \
+        lm, wavelength, point_errors, E_beam,
+        beam_rot_vel); \
 }
 
 stamp_jones_E_beam_fn(float,float2);
@@ -218,6 +219,7 @@ class RimeEBeam(Node):
 
         self.kernel(slvr.lm_gpu, slvr.wavelength_gpu,
             self.point_errors_gpu, slvr.E_beam_gpu,
+            slvr.beam_rot_vel,
             stream=stream, **self.launch_params)
 
     def post_execution(self, solver, stream=None):
