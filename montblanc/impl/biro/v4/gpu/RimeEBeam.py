@@ -55,6 +55,8 @@ KERNEL_TEMPLATE = string.Template("""
 #define NPOL (4)
 #define NPOLCHAN (NPOL*NCHAN)
 
+#define BEAM_ANGULAR_ROT_VELOCITY (${beam_angular_rot_velocity})
+
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
@@ -117,6 +119,19 @@ void rime_jones_E_beam_impl(
         }
 
         __syncthreads();
+
+        // Figure out how far the source has
+        // rotated within the beam
+        T sint, cost;
+        Po::sincos(BEAM_ANGULAR_ROT_VELOCITY*TIME, &sint, &cost);
+
+        // Rotate the source
+        T l = l0[threadIdx.z]*cost - m0[threadIdx.z]*sint;
+        T m = l0[threadIdx.z]*sint + m0[threadIdx.z]*cost;
+
+        // Add the pointing errors for this antenna.
+        l += ld[threadIdx.y];
+        m += lm[threadIdx.y];
 
     }
 }
