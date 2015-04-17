@@ -79,6 +79,9 @@ void rime_jones_E_beam_impl(
 
     __shared__ T wl[BLOCKDIMX];
 
+    __shared__ T ld[BLOCKDIMY];
+    __shared__ T md[BLOCKDIMY];
+
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only
     // one wavelength per channel.
@@ -87,12 +90,21 @@ void rime_jones_E_beam_impl(
         wl[threadIdx.x] = wavelength[POLCHAN >> 2];
     }
 
+    __syncthreads();
+
+    int i = 0;
+
     for(int TIME=0; TIME < NTIME; ++TIME)
     {
+        // Pointing errors vary by time and antenna
+        if(threadIdx.z == 0 && threadIdx.x == 0)
+        {
+            i = TIME*NA + ANT; ld[threadIdx.y] = point_errors[i];
+            i += NTIME*NA;     md[threadIdx.y] = point_errors[i];
+        }
 
+        __syncthreads();
     }
-
-    __syncthreads();
 }
 
 extern "C" {
