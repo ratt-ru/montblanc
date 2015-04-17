@@ -65,6 +65,7 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__
 void rime_jones_E_beam_impl(
+    T * lm,
     T * wavelength,
     T * point_errors,
     typename Tr::ct * E_beam)
@@ -92,7 +93,8 @@ void rime_jones_E_beam_impl(
 
     __syncthreads();
 
-    int i = 0;
+    int i = SRC; T l = lm[i];
+    i += NSRC;   T m = lm[i];
 
     for(int TIME=0; TIME < NTIME; ++TIME)
     {
@@ -104,6 +106,13 @@ void rime_jones_E_beam_impl(
         }
 
         __syncthreads();
+
+        T diff = l - ld[threadIdx.y];
+        T distance_squared = diff*diff;
+        diff = m - md[threadIdx.y];
+        distance_squared += diff*diff;
+        T distance = Po::sqrt(distance);
+
     }
 }
 
@@ -112,12 +121,13 @@ extern "C" {
 #define stamp_jones_E_beam_fn(ft,ct) \
 __global__ void \
 rime_jones_E_beam_ ## ft( \
+    ft * lm, \
     ft * wavelength, \
     ft * point_errors, \
     ct * E_beam) \
 { \
     rime_jones_E_beam_impl<ft>( \
-        wavelength, point_errors, E_beam); \
+        lm, wavelength, point_errors, E_beam); \
 }
 
 stamp_jones_E_beam_fn(float,float2);
@@ -186,7 +196,7 @@ class RimeEBeam(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.wavelength_gpu,
+        self.kernel(slvr.lm_gpu, slvr.wavelength_gpu,
             self.point_errors_gpu, slvr.E_beam_gpu,
             stream=stream, **self.launch_params)
 
