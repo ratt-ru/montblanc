@@ -273,9 +273,6 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     slvr.transfer_bayes_data(bayes_data)
     slvr.set_sigma_sqrd((np.random.random(1)**2).astype(ft)[0])
 
-    with slvr.context:
-        assert np.all(lm == slvr.lm_gpu.get())
-
     return slvr
 
 def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, nssrc=0, dtype=np.float32,
