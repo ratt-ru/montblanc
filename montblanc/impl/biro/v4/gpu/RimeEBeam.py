@@ -55,6 +55,10 @@ KERNEL_TEMPLATE = string.Template("""
 #define NPOL (4)
 #define NPOLCHAN (NPOL*NCHAN)
 
+#define BEAM_LW (${beam_lw})
+#define BEAM_MW (${beam_mw})
+#define BEAM_NUW (${beam_nuw})
+
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
@@ -69,7 +73,9 @@ void rime_jones_E_beam_impl(
     T * wavelength,
     T * point_errors,
     typename Tr::ct * E_beam,
-    T * beam_rot_vel)
+    T beam_rot_vel,
+    T beam_ll, T beam_lm,
+    T beam_ul, T beam_um)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
@@ -131,7 +137,6 @@ void rime_jones_E_beam_impl(
         // Add the pointing errors for this antenna.
         l += ld[threadIdx.y];
         m += lm[threadIdx.y];
-
     }
 }
 
@@ -144,11 +149,13 @@ rime_jones_E_beam_ ## ft( \
     ft * wavelength, \
     ft * point_errors, \
     ct * E_beam, \
-    ft beam_rot_vel) \
+    ft beam_rot_vel, \
+    ft beam_ll, ft beam_lm, \
+    ft beam_ul, ft beam_um) \
 { \
     rime_jones_E_beam_impl<ft>( \
-        lm, wavelength, point_errors, E_beam,
-        beam_rot_vel); \
+        lm, wavelength, point_errors, E_beam, \
+        beam_rot_vel, beam_ll, beam_lm, beam_ul, beam_um); \
 }
 
 stamp_jones_E_beam_fn(float,float2);
@@ -220,6 +227,8 @@ class RimeEBeam(Node):
         self.kernel(slvr.lm_gpu, slvr.wavelength_gpu,
             self.point_errors_gpu, slvr.E_beam_gpu,
             slvr.beam_rot_vel,
+            slvr.beam_ll, slvr.beam_lm,
+            slvr.beam_ul, slvr.beam_um,
             stream=stream, **self.launch_params)
 
     def post_execution(self, solver, stream=None):

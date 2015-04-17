@@ -72,12 +72,17 @@ P = [
     prop_dict('ref_wave', 'ft', 0.0),
     prop_dict('sigma_sqrd', 'ft', 1.0),
     prop_dict('X2', 'ft', 0.0),
-    prop_dict('beam_width', 'ft', 65),
-    prop_dict('beam_clip', 'ft', 1.0881),
 
-    prop_dict('nbeaml', 'int', 50),
-    prop_dict('nbeamm', 'int', 50),
-    prop_dict('nbeamlambda', 'int', 50),
+    # Width of the beam cube dimension. l, m and lambda
+    prop_dict('beam_lw', 'int', 50),
+    prop_dict('beam_mw', 'int', 50),
+    prop_dict('beam_nuw', 'int', 50),
+    # Lower l and m coordinates of the beam cube
+    prop_dict('beam_ll', 'ft', 0.0),
+    prop_dict('beam_lm', 'ft', 0.0),
+    # Upper l and m coordinates of the beam cube
+    prop_dict('beam_ul', 'ft', 1.0),
+    prop_dict('beam_um', 'ft', 1.0),
     prop_dict('beam_rot_vel', 'ft', np.deg2rad(1))
 ]
 
@@ -97,7 +102,7 @@ A = [
     ary_dict('point_errors', (2,'ntime','na'), 'ft'),
     ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
     ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
-    ary_dict('E_beam', ('nbeamm', 'nbeaml', 'nbeamlambda', 4), 'ct'),
+    ary_dict('E_beam', ('beam_lw', 'beam_mw', 'beam_nuw', 4), 'ct'),
 
     # Result arrays
     ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', cpu=False),
