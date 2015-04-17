@@ -69,11 +69,11 @@ void rime_jones_E_beam_impl(
     typename Tr::ct * E_beam)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
-    int TIME = blockIdx.y*blockDim.y + threadIdx.y;
+    int ANT = blockIdx.y*blockDim.y + threadIdx.y;
     int SRC = blockIdx.z*blockDim.z + threadIdx.z;
     #define POL (threadIdx.x & 0x3)
 
-    if(TIME >= NTIME || POLCHAN >= NPOLCHAN || SRC >= NSRC)
+    if(SRC >= NSRC || ANT >= NA || POLCHAN >= NPOLCHAN)
         return;
 
     __shared__ T wl[NPOLCHAN];
@@ -84,6 +84,11 @@ void rime_jones_E_beam_impl(
     if(threadIdx.y == 0)
     {
         wl[threadIdx.x] = wavelength[POLCHAN >> 2];
+    }
+
+    for(int TIME=0; TIME < NTIME; ++TIME)
+    {
+
     }
 
     __syncthreads();
@@ -125,8 +130,8 @@ class RimeEBeam(Node):
         # smaller problem sizes. Caters for a subtle bug
         # with Kepler shuffles and warp sizes < 32
         if self.polchans < D['BLOCKDIMX']: D['BLOCKDIMX'] = self.polchans
-        if slvr.ntime < D['BLOCKDIMY']: D['BLOCKDIMY'] = slvr.ntime
-        if slvr.nsrc < D['BLOCKDIMX']: D['BLOCKDIMX'] = slvr.nsrc
+        if slvr.na < D['BLOCKDIMY']: D['BLOCKDIMY'] = slvr.na
+        if slvr.nsrc < D['BLOCKDIMZ']: D['BLOCKDIMZ'] = slvr.nsrc
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -152,16 +157,16 @@ class RimeEBeam(Node):
 
     def get_launch_params(self, slvr, D):
         polchans_per_block = D['BLOCKDIMX']
-        times_per_block = D['BLOCKDIMY']
+        ants_per_block = D['BLOCKDIMY']
         srcs_per_block = D['BLOCKDIMZ']
 
         polchan_blocks = self.blocks_required(self.polchans, polchans_per_block)
-        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
+        ant_blocks = self.blocks_required(slvr.na, ants_per_block)
         src_blocks = self.blocks_required(slvr.nsrc, srcs_per_block)
 
         return {
-            'block' : (polchans_per_block, times_per_block, srcs_per_block),
-            'grid'  : (polchan_blocks, time_blocks, src_blocks),
+            'block' : (polchans_per_block, ants_per_block, srcs_per_block),
+            'grid'  : (polchan_blocks, ant_blocks, src_blocks),
         }
 
     def execute(self, solver, stream=None):
