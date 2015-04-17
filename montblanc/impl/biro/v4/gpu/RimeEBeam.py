@@ -80,8 +80,14 @@ void rime_jones_E_beam_impl(
 
     __shared__ T wl[BLOCKDIMX];
 
+    __shared__ T l0[BLOCKDIMZ];
+    __shared__ T m0[BLOCKDIMZ];
+
     __shared__ T ld[BLOCKDIMY];
     __shared__ T md[BLOCKDIMY];
+
+
+    int i;
 
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only
@@ -91,10 +97,15 @@ void rime_jones_E_beam_impl(
         wl[threadIdx.x] = wavelength[POLCHAN >> 2];
     }
 
-    __syncthreads();
+    // LM coordinates vary by source only,
+    // not antenna or polarised channel
+    if(threadIdx.y == 0 && threadIdx.x == 0)
+    {
+        i = SRC;   l0[threadIdx.z] = lm[i];
+        i += NSRC; m0[threadIdx.z] = lm[i];
+    }
 
-    int i = SRC; T l = lm[i];
-    i += NSRC;   T m = lm[i];
+    __syncthreads();
 
     for(int TIME=0; TIME < NTIME; ++TIME)
     {
@@ -106,12 +117,6 @@ void rime_jones_E_beam_impl(
         }
 
         __syncthreads();
-
-        T diff = l - ld[threadIdx.y];
-        T distance_squared = diff*diff;
-        diff = m - md[threadIdx.y];
-        distance_squared += diff*diff;
-        T distance = Po::sqrt(distance);
 
     }
 }
