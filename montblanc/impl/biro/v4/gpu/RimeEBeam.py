@@ -77,7 +77,7 @@ void rime_jones_E_beam_impl(
     if(SRC >= NSRC || ANT >= NA || POLCHAN >= NPOLCHAN)
         return;
 
-    __shared__ T wl[NPOLCHAN];
+    __shared__ T wl[BLOCKDIMX];
 
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only

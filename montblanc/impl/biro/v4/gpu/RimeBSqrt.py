@@ -76,10 +76,10 @@ void rime_jones_B_sqrt_impl(
     int SRC = blockIdx.z*blockDim.z + threadIdx.z;
     #define POL (threadIdx.x & 0x3)
 
-    if(TIME >= NTIME || POLCHAN >= NPOLCHAN || SRC >= NSRC)
+    if(SRC >= NSRC || TIME >= NTIME || POLCHAN >= NPOLCHAN)
         return;
 
-    __shared__ T wl[NPOLCHAN];
+    __shared__ T wl[BLOCKDIMX];
 
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only
