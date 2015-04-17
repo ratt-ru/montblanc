@@ -82,7 +82,7 @@ void rime_jones_E_beam_impl(
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only
     // one wavelength per channel.
-    if(threadIdx.y == 0)
+    if(threadIdx.y == 0 && threadIdx.z == 0)
     {
         wl[threadIdx.x] = wavelength[POLCHAN >> 2];
     }
