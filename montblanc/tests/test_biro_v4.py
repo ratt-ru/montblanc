@@ -243,7 +243,7 @@ class TestBiroV4(unittest.TestCase):
 
             self.B_sqrt_test_impl(slvr)
 
-    def E_beam_test_impl(self, slvr, cmp):
+    def E_beam_test_impl(self, slvr, cmp=None):
         if cmp is None:
             cmp = {}
 
