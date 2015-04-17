@@ -150,7 +150,7 @@ class RimeBSqrt(Node):
         # with Kepler shuffles and warp sizes < 32
         if self.polchans < D['BLOCKDIMX']: D['BLOCKDIMX'] = self.polchans
         if slvr.ntime < D['BLOCKDIMY']: D['BLOCKDIMY'] = slvr.ntime
-        if slvr.nsrc < D['BLOCKDIMX']: D['BLOCKDIMX'] = slvr.nsrc
+        if slvr.nsrc < D['BLOCKDIMZ']: D['BLOCKDIMZ'] = slvr.nsrc
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
