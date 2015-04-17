@@ -66,6 +66,7 @@ template <
 __device__
 void rime_jones_E_beam_impl(
     T * wavelength,
+    T * point_errors,
     typename Tr::ct * E_beam)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
@@ -100,10 +101,11 @@ extern "C" {
 __global__ void \
 rime_jones_E_beam_ ## ft( \
     ft * wavelength, \
+    ft * point_errors, \
     ct * E_beam) \
 { \
     rime_jones_E_beam_impl<ft>( \
-        wavelength, E_beam); \
+        wavelength, point_errors, E_beam); \
 }
 
 stamp_jones_E_beam_fn(float,float2);
@@ -172,7 +174,8 @@ class RimeEBeam(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.wavelength_gpu, slvr.E_beam_gpu,
+        self.kernel(slvr.wavelength_gpu,
+            self.point_errors_gpu, slvr.E_beam_gpu,
             stream=stream, **self.launch_params)
 
     def post_execution(self, solver, stream=None):
