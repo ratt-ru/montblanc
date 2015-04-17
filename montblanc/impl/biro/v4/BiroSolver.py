@@ -74,6 +74,10 @@ P = [
     prop_dict('X2', 'ft', 0.0),
     prop_dict('beam_width', 'ft', 65),
     prop_dict('beam_clip', 'ft', 1.0881),
+
+    prop_dict('nbeaml', 'int', 50),
+    prop_dict('nbeamm', 'int', 50),
+    prop_dict('nbeamlambda', 'int', 50),
 ]
 
 # List of arrays
@@ -92,6 +96,7 @@ A = [
     ary_dict('point_errors', (2,'ntime','na'), 'ft'),
     ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
     ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
+    ary_dict('E_beam', ('nbeamm', 'nbeaml', 'nbeamlambda', 4), 'ct'),
 
     # Result arrays
     ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', cpu=False),
@@ -144,8 +149,8 @@ class BiroSolver(BaseSolver):
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
             pipeline=pipeline, **kwargs)
 
-        self.register_arrays(A)
         self.register_properties(P)
+        self.register_arrays(A)
 
     def get_default_base_ant_pairs(self):
         """

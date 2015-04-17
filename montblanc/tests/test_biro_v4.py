@@ -28,6 +28,7 @@ import time
 import montblanc.factory
 
 from montblanc.impl.biro.v4.gpu.RimeKB import RimeKB
+from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
@@ -241,6 +242,29 @@ class TestBiroV4(unittest.TestCase):
             pipeline=Pipeline([RimeBSqrt()])) as slvr:
 
             self.B_sqrt_test_impl(slvr)
+
+    def E_beam_test_impl(self, slvr, cmp):
+        if cmp is None:
+            cmp = {}
+
+    def test_E_beam_float(self):
+        """ Test the B sqrt float kernel """
+
+        with solver(na=7, ntime=200, nchan=320,
+            npsrc=10, ngsrc=10, dtype=np.float32,
+            pipeline=Pipeline([RimeEBeam()])) as slvr:
+
+            # This fails more often with an rtol of 1e-4
+            self.E_beam_test_impl(slvr, cmp={'rtol': 1e-3})
+
+    def test_E_beam_double(self):
+        """ Test the B sqrt double kernel """
+        with solver(na=7, ntime=200, nchan=320,
+            npsrc=10, ngsrc=10, dtype=np.float64,
+            pipeline=Pipeline([RimeEBeam()])) as slvr:
+
+            self.E_beam_test_impl(slvr)
+
 
     def test_transpose(self):
         with solver(na=4, npsrc=6, ntime=2, nchan=10,
