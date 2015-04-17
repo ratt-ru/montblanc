@@ -118,8 +118,8 @@ class CompositeBiroSolver(BaseSolver):
             ary['cpu'] = False
 
         # Create the arrays on the solver
-        self.register_arrays(A_main)
         self.register_properties(P_main)
+        self.register_arrays(A_main)
 
         #print 'Composite Solver Memory CPU %s GPU %s ntime %s' \
         #    % (mbu.fmt_bytes(self.cpu_bytes_required()),
@@ -192,8 +192,8 @@ class CompositeBiroSolver(BaseSolver):
             ary['gpu'] = True
 
         for i, slvr in enumerate(self.solvers):
-            slvr.register_arrays(A_sub)
             slvr.register_properties(P_sub)
+            slvr.register_arrays(A_sub)
             # Indicate that all numpy arrays on the CompositeSolver
             # have been transferred to the sub-solvers
             slvr.was_transferred = {}.fromkeys(

@@ -95,8 +95,13 @@ class CompositeBiroSolver(BaseSolver):
         super(CompositeBiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
 
-        A_main = copy.deepcopy(BSV2mod.A)
         P_main = copy.deepcopy(BSV2mod.P)
+        A_main = copy.deepcopy(BSV2mod.A)
+
+        # Add a custom setter method for transferring
+        # properties to the sub-solver.
+        for prop in P_main:
+            prop['setter_method'] = self.get_setter_method(prop['name'])
 
         # Add a custom transfer method for transferring
         # arrays to the sub-solver. Also, in general,
@@ -117,9 +122,8 @@ class CompositeBiroSolver(BaseSolver):
                 ['jones_scalar', 'vis', 'chi_sqrd_result']]:
             ary['cpu'] = False
 
-        # Create the arrays on the solver
-        self.register_arrays(A_main)
         self.register_properties(P_main)
+        self.register_arrays(A_main)
 
         #print 'Composite Solver Memory CPU %s GPU %s ntime %s' \
         #    % (mbu.fmt_bytes(self.cpu_bytes_required()),
@@ -192,8 +196,8 @@ class CompositeBiroSolver(BaseSolver):
             ary['gpu'] = True
 
         for i, slvr in enumerate(self.solvers):
-            slvr.register_arrays(A_sub)
             slvr.register_properties(P_sub)
+            slvr.register_arrays(A_sub)
             # Indicate that all numpy arrays on the CompositeSolver
             # have been transferred to the sub-solvers
             slvr.was_transferred = {}.fromkeys(
