@@ -376,22 +376,21 @@ class SolverCPU(object):
         slvr = self.solver
 
         sint = np.sin(slvr.beam_rot_vel*np.arange(slvr.ntime))
-        cost = np.sin(slvr.beam_rot_vel*np.arange(slvr.ntime))
+        cost = np.cos(slvr.beam_rot_vel*np.arange(slvr.ntime))
 
         assert sint.shape == (slvr.ntime,)
         assert cost.shape == (slvr.ntime,)
 
         l0 = slvr.lm_cpu[0]
         m0 = slvr.lm_cpu[1]
-        ld = slvr.point_errors_cpu[0]
-        md = slvr.point_errors_cpu[1]
-
         l = l0[:,np.newaxis]*cost[np.newaxis,:] - m0[:,np.newaxis]*sint[np.newaxis,:]
-        m = l0[:,np.newaxis]*sint[np.newaxis,:] - m0[:,np.newaxis]*cost[np.newaxis,:]
+        m = l0[:,np.newaxis]*sint[np.newaxis,:] + m0[:,np.newaxis]*cost[np.newaxis,:]
 
         assert l.shape == (slvr.nsrc, slvr.ntime)
         assert m.shape == (slvr.nsrc, slvr.ntime)
 
+        ld = slvr.point_errors_cpu[0]
+        md = slvr.point_errors_cpu[1]
         l = l[:,:,np.newaxis] + ld[np.newaxis,:,:]
         m = m[:,:,np.newaxis] + md[np.newaxis,:,:]
 

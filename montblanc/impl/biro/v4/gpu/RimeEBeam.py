@@ -137,7 +137,7 @@ void rime_jones_E_beam_impl(
 
         // Add the pointing errors for this antenna.
         l += ld[threadIdx.y];
-        m += lm[threadIdx.y];
+        m += md[threadIdx.y];
     }
 }
 
@@ -227,7 +227,7 @@ class RimeEBeam(Node):
         slvr = solver
 
         self.kernel(slvr.lm_gpu, slvr.wavelength_gpu,
-            self.point_errors_gpu, slvr.E_beam_gpu, slvr.E_term_gpu,
+            slvr.point_errors_gpu, slvr.E_beam_gpu, slvr.E_term_gpu,
             slvr.beam_rot_vel,
             slvr.beam_ll, slvr.beam_lm,
             slvr.beam_ul, slvr.beam_um,
