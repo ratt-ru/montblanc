@@ -56,8 +56,8 @@ KERNEL_TEMPLATE = string.Template("""
 #define NPOLCHAN (NPOL*NCHAN)
 
 #define BEAM_LW (${beam_lw})
-#define BEAM_MW (${beam_mw})
-#define BEAM_NUW (${beam_nuw})
+#define BEAM_MH (${beam_mh})
+#define BEAM_NUD (${beam_nud})
 
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
