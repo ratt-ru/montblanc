@@ -649,7 +649,7 @@ class BaseSolver(Solver):
         yield mbu.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
         yield '-'*80
 
-        for a in self.arrays.itervalues():
+        for a in sorted(self.arrays.itervalues(), key=lambda x: x.name.upper()):
             yield mbu.fmt_array_line(a.name,
                 mbu.fmt_bytes(mbu.array_bytes(a.shape, a.dtype)),
                 np.dtype(a.dtype).name,
@@ -665,7 +665,7 @@ class BaseSolver(Solver):
             'Type', 'Value', 'Default Value')
         yield '-'*80
 
-        for p in self.properties.itervalues():
+        for p in sorted(self.properties.itervalues(), key=lambda x: x.name.upper()):
             yield mbu.fmt_property_line(
                 p.name, np.dtype(p.dtype).name,
                 getattr(self, p.name), p.default)
