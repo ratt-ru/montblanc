@@ -397,6 +397,9 @@ class SolverCPU(object):
         assert l.shape == (slvr.nsrc, slvr.ntime, slvr.na)
         assert m.shape == (slvr.nsrc, slvr.ntime, slvr.na)
 
+        gl = (slvr.beam_lw * (l-slvr.beam_ll) / (slvr.beam_ul-slvr.beam_ll)).astype(np.int32)
+        gm = (slvr.beam_mh * (l-slvr.beam_lm) / (slvr.beam_um-slvr.beam_lm)).astype(np.int32)
+
     def compute_chi_sqrd_sum_terms(self, weight_vector=False):
         """
         Computes the terms of the chi squared sum,

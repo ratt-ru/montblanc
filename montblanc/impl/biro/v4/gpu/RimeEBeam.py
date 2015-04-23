@@ -138,6 +138,9 @@ void rime_jones_E_beam_impl(
         // Add the pointing errors for this antenna.
         l += ld[threadIdx.y];
         m += md[threadIdx.y];
+
+        int gl = BEAM_LW * (l - beam_ll) / (beam_ul - beam_ll);
+        int gm = BEAM_MH * (l - beam_lm) / (beam_um - beam_lm);
     }
 }
 
