@@ -73,6 +73,7 @@ void rime_jones_E_beam_impl(
     T * wavelength,
     T * point_errors,
     typename Tr::ct * E_beam,
+    typename Tr::ct * E_term,
     T beam_rot_vel,
     T beam_ll, T beam_lm,
     T beam_ul, T beam_um)
@@ -149,12 +150,13 @@ rime_jones_E_beam_ ## ft( \
     ft * wavelength, \
     ft * point_errors, \
     ct * E_beam, \
+    ct * E_term, \
     ft beam_rot_vel, \
     ft beam_ll, ft beam_lm, \
     ft beam_ul, ft beam_um) \
 { \
     rime_jones_E_beam_impl<ft>( \
-        lm, wavelength, point_errors, E_beam, \
+        lm, wavelength, point_errors, E_beam, E_term, \
         beam_rot_vel, beam_ll, beam_lm, beam_ul, beam_um); \
 }
 
@@ -225,7 +227,7 @@ class RimeEBeam(Node):
         slvr = solver
 
         self.kernel(slvr.lm_gpu, slvr.wavelength_gpu,
-            self.point_errors_gpu, slvr.E_beam_gpu,
+            self.point_errors_gpu, slvr.E_beam_gpu, slvr.E_term_gpu,
             slvr.beam_rot_vel,
             slvr.beam_ll, slvr.beam_lm,
             slvr.beam_ul, slvr.beam_um,
