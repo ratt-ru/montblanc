@@ -247,6 +247,10 @@ class TestBiroV4(unittest.TestCase):
         if cmp is None:
             cmp = {}
 
+        slvr_cpu = SolverCPU(slvr)
+
+        slvr_cpu.compute_E_beam()
+
     def test_E_beam_float(self):
         """ Test the B sqrt float kernel """
 
