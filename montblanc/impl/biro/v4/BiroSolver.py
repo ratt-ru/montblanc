@@ -29,13 +29,12 @@ from montblanc.BaseSolver import DEFAULT_NGSRC
 from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
-from montblanc.impl.biro.v4.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
 from montblanc.pipeline import Pipeline
 
 def get_pipeline(**kwargs):
     wv = kwargs.get('weight_vector', False)
-    return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
+    return Pipeline([RimeGaussBSum(weight_vector=wv)])
 
 def ary_dict(name,shape,dtype,cpu=True,gpu=True):
     return {
