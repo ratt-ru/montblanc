@@ -145,9 +145,6 @@ class TestBiroV4(unittest.TestCase):
         if cmp is None:
             cmp = {}
 
-        # This beam width produces reasonable values
-        # for testing the E term
-        slvr.set_beam_width(65*1e5)
         slvr.set_sigma_sqrd(np.random.random(1)[0])
 
         slvr_cpu = SolverCPU(slvr)
