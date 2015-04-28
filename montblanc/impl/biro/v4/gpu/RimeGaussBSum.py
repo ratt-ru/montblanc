@@ -45,6 +45,7 @@ KERNEL_TEMPLATE = string.Template("""
 #include <cstdio>
 #include \"math_constants.h\"
 #include <montblanc/include/abstraction.cuh>
+#include <montblanc/include/brightness.cuh>
 
 #define NA ${na}
 #define NBL ${nbl}
