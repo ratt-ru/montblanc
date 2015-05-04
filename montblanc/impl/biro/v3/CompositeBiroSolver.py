@@ -104,8 +104,7 @@ class CompositeBiroSolver(BaseSolver):
         pipeline = BSV2mod.get_pipeline(**kwargs) if pipeline is None else pipeline
 
         super(CompositeBiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
-            pipeline=pipeline, **kwargs)
+            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
 
         A_main = copy.deepcopy(BSV2mod.A)
         P_main = copy.deepcopy(BSV2mod.P)
@@ -191,7 +190,7 @@ class CompositeBiroSolver(BaseSolver):
         self.solvers = [BiroSolver(na=na,
             nchan=nchan, ntime=self.time_diff[i],
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc,
-            dtype=dtype, pipeline=copy.deepcopy(pipeline),
+            dtype=dtype,
             **kwargs) for i in range(self.nsolvers)]
 
         # Register arrays on the sub-solvers
@@ -212,19 +211,8 @@ class CompositeBiroSolver(BaseSolver):
             slvr.was_transferred = {}.fromkeys(
                 [v.name for v in self.arrays.itervalues()], True)
 
-            #print 'Sub-solver %s Memory CPU %s GPU %s ntime %s' \
-            #    % (i,
-            #    mbu.fmt_bytes(slvr.cpu_bytes_required()),
-            #    mbu.fmt_bytes(slvr.gpu_bytes_required()),
-            #    slvr.ntime)
-
-        #(free_mem,total_mem) = cuda.mem_get_info()
-        #print 'free %s total %s ntime %s vtime %s' \
-        #    % (mbu.fmt_bytes(free_mem),
-        #        mbu.fmt_bytes(total_mem),
-        #        ntime, self.vtime)
-
         self.use_weight_vector = kwargs.get('weight_vector', False)
+        self.initialised = False
 
     def transfer_arrays(self, sub_solver_idx, time_begin, time_end):
         """
@@ -310,22 +298,20 @@ class CompositeBiroSolver(BaseSolver):
 
     def initialise(self):
         """ Initialise the sub-solver """
-        with self.context as ctx:
-            for i, slvr in enumerate(self.solvers):
-                if not slvr.pipeline.is_initialised():
-                    slvr.pipeline.initialise(slvr, self.stream[i])
+
+        if not self.initialised:
+            with self.context as ctx:
+                for i, slvr in enumerate(self.solvers):
+                    slvr.initialise()
+
+            self.initialised = True
 
     def solve(self):
         """ Solve the RIME """
         self.X2 = 0.0
 
         with self.context:
-            # Initialise the pipelines if necessary
-            for i, subslvr in enumerate(self.solvers):
-                if not subslvr.pipeline.is_initialised():
-                    montblanc.log.warn(('Sub-solver %d not initialised'
-                        ' in CompositeBiroSolver. Initialising!') % i)
-                    subslvr.pipeline.initialise(subslvr, self.stream[i])
+            self.initialise()
 
             t = 0
 
@@ -343,7 +329,8 @@ class CompositeBiroSolver(BaseSolver):
 
                     self.transfer_arrays(i, t_begin, t_end)
                     t_begin = t_end
-                    subslvr.pipeline.execute(subslvr, stream=self.stream[i])
+                    subslvr.rime_ek.execute(subslvr, stream=self.stream[i])
+                    subslvr.b_sum.execute(subslvr, stream=self.stream[i])
 
                 t_begin = t
 
