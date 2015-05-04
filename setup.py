@@ -118,6 +118,7 @@ setup(name='montblanc',
         'numexpr',
         'pycuda',
         'pytools',
+        'transitions'
     ],
     package_data={
         'montblanc': ['log/*.json'],
