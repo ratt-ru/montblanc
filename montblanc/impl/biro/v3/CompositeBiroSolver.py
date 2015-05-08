@@ -312,6 +312,12 @@ class CompositeBiroSolver(BaseSolver):
                 for i, slvr in enumerate(self.solvers):
                     slvr.initialise()
 
+                # Get the reduction kernel
+                # loaded in and hot
+                pycuda.gpuarray.sum(
+                    self.solvers[0].chi_sqrd_result_gpu,
+                    stream=self.stream[0])
+
             self.initialised = True
 
     def solve(self):
