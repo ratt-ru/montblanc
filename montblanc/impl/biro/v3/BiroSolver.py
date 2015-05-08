@@ -72,17 +72,17 @@ class BiroSolver(BaseSolver):
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, pipeline=pipeline, **kwargs)
 
         self.rime_ek = RimeEK()
-        self.b_sum = RimeGaussBSum(weight_vector=kwargs.get('weight_vector', False))
+        self.rime_b_sum = RimeGaussBSum(weight_vector=kwargs.get('weight_vector', False))
 
     def initialise(self):
         with self.context:
             self.rime_ek.initialise(self)
-            self.b_sum.initialise(self)
+            self.rime_b_sum.initialise(self)
 
     def shutdown(self):
         with self.context:
             self.rime_ek.shutdown(self)
-            self.b_sum.shutdown(self)
+            self.rime_b_sum.shutdown(self)
 
     # Take these methods from the v2 BiroSolver
     get_default_base_ant_pairs = \
