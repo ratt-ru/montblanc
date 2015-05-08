@@ -163,7 +163,7 @@ class CompositeBiroSolver(BaseSolver):
             if ntime < self.vtime: self.vtime = ntime
 
             # Configure the number of solvers used
-            self.nsolvers = kwargs.get('nsolvers', 2)
+            self.nsolvers = kwargs.get('nsolvers', 4)
             self.time_begin = np.arange(self.nsolvers)*self.vtime//self.nsolvers
             self.time_end = np.arange(1,self.nsolvers+1)*self.vtime//self.nsolvers
             self.time_diff = self.time_end - self.time_begin
