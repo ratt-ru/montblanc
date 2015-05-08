@@ -231,8 +231,16 @@ class CompositeBiroSolver(BaseSolver):
         self.transfer_start[i].record(stream=stream)
 
         for r in self.arrays.itervalues():
-            # The array has been transferred, try the next one
-            if subslvr.was_transferred[r.name]: continue
+            # Is there anything to transfer for this array?
+            if not r.has_cpu_ary:
+                continue
+            # Check for a time dimension. If the array has it,
+            # we'll always be transferring a segment
+            has_time = r.sshape.count('ntime') > 0
+            # If this array was transferred and
+            # has no time dimension, skip it
+            if not has_time and subslvr.was_transferred[r.name]:
+                continue
 
             cpu_name = mbu.cpu_name(r.name)
             gpu_name = mbu.gpu_name(r.name)
