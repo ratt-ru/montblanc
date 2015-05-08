@@ -141,6 +141,7 @@ class TestBiroV5(unittest.TestCase):
                 slvr.transfer_lm(slvr.lm_cpu)
                 slvr.transfer_brightness(slvr.brightness_cpu)
                 slvr.transfer_weight_vector(slvr.weight_vector_cpu)
+                slvr.transfer_bayes_data(slvr.bayes_data_cpu)
                 slvr.solve()
 
 if __name__ == '__main__':
