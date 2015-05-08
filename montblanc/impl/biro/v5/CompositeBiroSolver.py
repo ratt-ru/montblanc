@@ -330,8 +330,8 @@ class CompositeBiroSolver(BaseSolver):
     def shutdown(self):
         """ Shutdown the solver """
         with self.context as ctx:
-            for i, slvr in enumerate(self.solvers):
-                slvr.pipeline.shutdown(slvr, self.stream[i])
+            for slvr in self.solvers:
+                slvr.shutdown()
 
     def get_setter_method(self,name):
         """
