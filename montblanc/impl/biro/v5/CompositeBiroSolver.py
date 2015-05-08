@@ -133,7 +133,7 @@ class CompositeBiroSolver(BaseSolver):
 
             # Work with a supplied memory budget, otherwise use
             # free memory less a small amount
-            mem_budget = kwargs.get('mem_budget', free_mem-10*ONE_MB)
+            mem_budget = kwargs.get('mem_budget', free_mem-100*ONE_MB)
 
             # Work out how many timesteps we can fit in our memory budget
             self.vtime = mbu.viable_timesteps(mem_budget,
