@@ -130,14 +130,12 @@ class TestBiroV5(unittest.TestCase):
                 MP['nbl'] == 1)
             #print viable, P
 
-    @unittest.skip('Problem size causes allocation failures during run of '
-        'entire test suite.')
     def test_time(self, cmp=None):
         """ Test for timing purposes """
         if cmp is None: cmp = {}
 
         for wv in [True]:
-            with montblanc.factory.get_biro_solver('biro',version='v3',
+            with montblanc.factory.get_biro_solver('biro',version='v5',
                 na=64,npsrc=50,ngsrc=50,ntime=200,nchan=64,weight_vector=wv) as slvr:
 
                 slvr.transfer_lm(slvr.lm_cpu)
