@@ -85,11 +85,16 @@ class TestBiroV5(unittest.TestCase):
             self.assertTrue(slvr.solvers[1].ntime == 2)
             self.assertTrue(slvr.solvers[2].ntime == 3)
 
-            # Solve the RIME
+            # Solve the RIME and store a copy of the X2
             slvr.solve()
 
             # Check that CPU and GPU results agree
             chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
+            self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+
+            # Test that solving the RIME a second time produces
+            # the same solution
+            slvr.solve()
             self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
     def test_smart_budget(self):
@@ -130,19 +135,19 @@ class TestBiroV5(unittest.TestCase):
                 MP['nbl'] == 1)
             #print viable, P
 
-    @unittest.skip('Problem size causes allocation failures during run of '
-        'entire test suite.')
+    @unittest.skip('Skip timing test')
     def test_time(self, cmp=None):
         """ Test for timing purposes """
         if cmp is None: cmp = {}
 
         for wv in [True]:
-            with montblanc.factory.get_biro_solver('biro',version='v3',
+            with montblanc.factory.get_biro_solver('biro',version='v5',
                 na=64,npsrc=50,ngsrc=50,ntime=200,nchan=64,weight_vector=wv) as slvr:
 
                 slvr.transfer_lm(slvr.lm_cpu)
                 slvr.transfer_brightness(slvr.brightness_cpu)
                 slvr.transfer_weight_vector(slvr.weight_vector_cpu)
+                slvr.transfer_bayes_data(slvr.bayes_data_cpu)
                 slvr.solve()
 
 if __name__ == '__main__':

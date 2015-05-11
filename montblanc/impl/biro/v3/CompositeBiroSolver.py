@@ -38,6 +38,7 @@ from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
 import montblanc.impl.biro.v2.BiroSolver as BSV2mod
+import montblanc.impl.biro.common
 
 from montblanc.impl.biro.v3.BiroSolver import BiroSolver
 
@@ -104,8 +105,7 @@ class CompositeBiroSolver(BaseSolver):
         pipeline = BSV2mod.get_pipeline(**kwargs) if pipeline is None else pipeline
 
         super(CompositeBiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
-            pipeline=pipeline, **kwargs)
+            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
 
         A_main = copy.deepcopy(BSV2mod.A)
         P_main = copy.deepcopy(BSV2mod.P)
@@ -147,7 +147,7 @@ class CompositeBiroSolver(BaseSolver):
 
             # Work with a supplied memory budget, otherwise use
             # free memory less a small amount
-            mem_budget = kwargs.get('mem_budget', free_mem-10*ONE_MB)
+            mem_budget = kwargs.get('mem_budget', free_mem-100*ONE_MB)
 
             # Work out how many timesteps we can fit in our memory budget
             self.vtime = mbu.viable_timesteps(mem_budget,
@@ -163,7 +163,7 @@ class CompositeBiroSolver(BaseSolver):
             if ntime < self.vtime: self.vtime = ntime
 
             # Configure the number of solvers used
-            self.nsolvers = kwargs.get('nsolvers', 2)
+            self.nsolvers = kwargs.get('nsolvers', 4)
             self.time_begin = np.arange(self.nsolvers)*self.vtime//self.nsolvers
             self.time_end = np.arange(1,self.nsolvers+1)*self.vtime//self.nsolvers
             self.time_diff = self.time_end - self.time_begin
@@ -191,7 +191,7 @@ class CompositeBiroSolver(BaseSolver):
         self.solvers = [BiroSolver(na=na,
             nchan=nchan, ntime=self.time_diff[i],
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc,
-            dtype=dtype, pipeline=copy.deepcopy(pipeline),
+            dtype=dtype,
             **kwargs) for i in range(self.nsolvers)]
 
         # Register arrays on the sub-solvers
@@ -212,19 +212,10 @@ class CompositeBiroSolver(BaseSolver):
             slvr.was_transferred = {}.fromkeys(
                 [v.name for v in self.arrays.itervalues()], True)
 
-            #print 'Sub-solver %s Memory CPU %s GPU %s ntime %s' \
-            #    % (i,
-            #    mbu.fmt_bytes(slvr.cpu_bytes_required()),
-            #    mbu.fmt_bytes(slvr.gpu_bytes_required()),
-            #    slvr.ntime)
-
-        #(free_mem,total_mem) = cuda.mem_get_info()
-        #print 'free %s total %s ntime %s vtime %s' \
-        #    % (mbu.fmt_bytes(free_mem),
-        #        mbu.fmt_bytes(total_mem),
-        #        ntime, self.vtime)
-
         self.use_weight_vector = kwargs.get('weight_vector', False)
+        self.initialised = False
+
+        self.fsm = montblanc.impl.biro.common.get_fsm(self)
 
     def transfer_arrays(self, sub_solver_idx, time_begin, time_end):
         """
@@ -243,8 +234,16 @@ class CompositeBiroSolver(BaseSolver):
         self.transfer_start[i].record(stream=stream)
 
         for r in self.arrays.itervalues():
-            # The array has been transferred, try the next one
-            if subslvr.was_transferred[r.name]: continue
+            # Is there anything to transfer for this array?
+            if not r.has_cpu_ary:
+                continue
+            # Check for a time dimension. If the array has it,
+            # we'll always be transferring a segment
+            has_time = r.sshape.count('ntime') > 0
+            # If this array was transferred and
+            # has no time dimension, skip it
+            if not has_time and subslvr.was_transferred[r.name]:
+                continue
 
             cpu_name = mbu.cpu_name(r.name)
             gpu_name = mbu.gpu_name(r.name)
@@ -310,109 +309,36 @@ class CompositeBiroSolver(BaseSolver):
 
     def initialise(self):
         """ Initialise the sub-solver """
-        with self.context as ctx:
-            for i, slvr in enumerate(self.solvers):
-                if not slvr.pipeline.is_initialised():
-                    slvr.pipeline.initialise(slvr, self.stream[i])
+
+        if not self.initialised:
+            with self.context as ctx:
+                for i, slvr in enumerate(self.solvers):
+                    slvr.initialise()
+
+                # Get the reduction kernel
+                # loaded in and hot
+                pycuda.gpuarray.sum(
+                    self.solvers[0].chi_sqrd_result_gpu,
+                    stream=self.stream[0])
+
+            self.initialised = True
 
     def solve(self):
         """ Solve the RIME """
-        self.X2 = 0.0
+        if not self.initialised:
+            self.initialise()
 
+        # Execute the finite state machine
         with self.context:
-            # Initialise the pipelines if necessary
-            for i, subslvr in enumerate(self.solvers):
-                if not subslvr.pipeline.is_initialised():
-                    montblanc.log.warn(('Sub-solver %d not initialised'
-                        ' in CompositeBiroSolver. Initialising!') % i)
-                    subslvr.pipeline.initialise(subslvr, self.stream[i])
-
-            t = 0
-
-            while t < self.ntime:
-                t_begin = t
-
-                # Perform any memory transfers needed
-                # and execute the pipeline
-                for i, subslvr in enumerate(self.solvers):
-                    # Find ending timestep, clip if necessary
-                    t_end = t_begin + subslvr.ntime
-                    if t_end > self.ntime: t_end = self.ntime
-                    t_diff = t_end - t_begin
-                    if t_diff == 0: break
-
-                    self.transfer_arrays(i, t_begin, t_end)
-                    t_begin = t_end
-                    subslvr.pipeline.execute(subslvr, stream=self.stream[i])
-
-                t_begin = t
-
-                # Get the chi squared result for each solver.
-                for i, subslvr in enumerate(self.solvers):
-                    # Find ending timestep, clip if necessary
-                    t_end = t_begin + subslvr.ntime
-                    if t_end > self.ntime: t_end = self.ntime
-                    t_diff = t_end - t_begin
-                    if t_diff == 0: break
-
-                    # Allocate a temporary pinned array on the sub-solver
-                    # Free and delete later
-                    subslvr.X2_tmp = self.pinned_mem_pool.allocate(
-                        shape=self.X2_shape, dtype=self.X2_dtype)
-
-                    # Swap the allocators for the reduction, since it uses
-                    # chi_sqrd_result_gpu's allocator internally
-                    tmp_alloc = subslvr.chi_sqrd_result_gpu.allocator
-                    subslvr.chi_sqrd_result_gpu.allocator = self.dev_mem_pool.allocate
-
-                    # OK, perform the reduction over the appropriate timestep section
-                    # of the chi squared terms.
-                    pycuda.gpuarray.sum(
-                        subslvr.chi_sqrd_result_gpu[:t_diff,:],
-                        stream=self.stream[i]) \
-                            .get_async(
-                                ary=subslvr.X2_tmp,
-                                stream=self.stream[i])
-
-                    # Advance
-                    subslvr.chi_sqrd_result_gpu.allocator = tmp_alloc
-
-                    t_begin = t_end
-
-                t_begin = t
-
-                # Get the chi squared result for each solver.
-                for i, subslvr in enumerate(self.solvers):
-                    # Find ending timestep, clip if necessary
-                    t_end = t_begin + subslvr.ntime
-                    if t_end > self.ntime: t_end = self.ntime
-                    t_diff = t_end - t_begin
-                    if t_diff == 0: break
-
-                    # Wait for this stream to finish executing
-                    self.stream[i].synchronize()
-
-                    # Divide by sigma squared if necessary
-                    if not self.use_weight_vector:
-                        self.X2 += subslvr.X2_tmp[0] / subslvr.sigma_sqrd
-                    else:
-                        self.X2 += subslvr.X2_tmp[0]
-
-                    # force release of pinned memory allocated for X2_tmp
-                    # and remove it from the sub-solver
-                    subslvr.X2_tmp.base.free()
-                    del subslvr.X2_tmp
-
-                    t_begin = t_end
-
-                t = t_end
+            while not self.fsm.model.is_done():
+                self.fsm.model.next()
 
     def shutdown(self):
         """ Shutdown the solver """
         with self.context as ctx:
-            for i, slvr in enumerate(self.solvers):
-                slvr.pipeline.shutdown(slvr, self.stream[i])
-
+            for slvr in self.solvers:
+                slvr.shutdown()
+                
     def get_setter_method(self,name):
         """
         Setter method for CompositeBiroSolver properties. Sets the property

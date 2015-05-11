@@ -38,6 +38,8 @@ from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
+import montblanc.impl.biro.common
+
 from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
 from montblanc.impl.biro.v5.BiroSolver import BiroSolver
@@ -133,7 +135,7 @@ class CompositeBiroSolver(BaseSolver):
 
             # Work with a supplied memory budget, otherwise use
             # free memory less a small amount
-            mem_budget = kwargs.get('mem_budget', free_mem-10*ONE_MB)
+            mem_budget = kwargs.get('mem_budget', free_mem-100*ONE_MB)
 
             # Work out how many timesteps we can fit in our memory budget
             self.vtime = mbu.viable_timesteps(mem_budget,
@@ -211,6 +213,9 @@ class CompositeBiroSolver(BaseSolver):
         #        ntime, self.vtime)
 
         self.use_weight_vector = kwargs.get('weight_vector', False)
+        self.initialised = False
+
+        self.fsm = montblanc.impl.biro.common.get_fsm(self)
 
     def transfer_arrays(self, sub_solver_idx, time_begin, time_end):
         """
@@ -296,97 +301,36 @@ class CompositeBiroSolver(BaseSolver):
 
     def initialise(self):
         """ Initialise the sub-solver """
-        with self.context as ctx:
-            for i, slvr in enumerate(self.solvers):
-                if not slvr.pipeline.is_initialised():
-                    slvr.pipeline.initialise(slvr, self.stream[i])
+
+        if not self.initialised:
+            with self.context as ctx:
+                for i, slvr in enumerate(self.solvers):
+                    slvr.initialise()
+
+                # Get the reduction kernel
+                # loaded in and hot
+                pycuda.gpuarray.sum(
+                    self.solvers[0].chi_sqrd_result_gpu,
+                    stream=self.stream[0])
+
+            self.initialised = True
 
     def solve(self):
         """ Solve the RIME """
-        self.X2 = 0.0
 
-        with self.context as ctx:
-            # Initialise the pipelines if necessary
-            for i, subslvr in enumerate(self.solvers):
-                if not subslvr.pipeline.is_initialised():
-                    montblanc.log.warn(('Sub-solver %d not initialised'
-                        ' in CompositeBiroSolver. Initialising!') % i)
-                    subslvr.pipeline.initialise(subslvr, self.stream[i])
+        if not self.initialised:
+            self.initialise()
 
-            t = 0
-            result = []
-
-            while t < self.ntime:
-                t_begin = t
-
-                # Perform any memory transfers needed
-                # and execute the pipeline
-                for i, subslvr in enumerate(self.solvers):
-                    # Clip the timestep ending point at the total number of timesteps
-                    # otherwise add the sub-solvers timesteps to t_begin
-                    t_end = self.ntime if t_begin+subslvr.ntime > self.ntime \
-                        else t_begin+subslvr.ntime
-                    self.transfer_arrays(i, t_begin, t_end)
-                    t_begin = t_end
-                    subslvr.pipeline.execute(subslvr, stream=self.stream[i])
-
-                t_begin = t
-
-                # Get the chi squared result for each solver.
-                for i, subslvr in enumerate(self.solvers):
-                    # Clip the timestep ending point at the total number of timesteps
-                    # otherwise add the sub-solvers timesteps to t_begin
-                    t_end = self.ntime if t_begin+subslvr.ntime > self.ntime \
-                        else t_begin+subslvr.ntime
-                    t_diff = t_end - t_begin
-
-                    # Allocate a temporary pinned array on the sub-solver
-                    # Free and delete later
-                    subslvr.X2_tmp = self.pinned_mem_pool.allocate(
-                        shape=self.X2_shape, dtype=self.X2_dtype)
-
-                    # Swap the allocators for the reduction, since it uses
-                    # chi_sqrd_result_gpu's allocator internally
-                    tmp_alloc = subslvr.chi_sqrd_result_gpu.allocator
-                    subslvr.chi_sqrd_result_gpu.allocator = self.dev_mem_pool.allocate
-
-                    # OK, perform the reduction over the appropriate timestep section
-                    # of the chi squared terms.
-                    pycuda.gpuarray.sum(
-                        subslvr.chi_sqrd_result_gpu[:t_diff,:],
-                        stream=self.stream[i]) \
-                            .get_async(
-                                ary=subslvr.X2_tmp,
-                                stream=self.stream[i])
-
-                    # Advance
-                    subslvr.chi_sqrd_result_gpu.allocator = tmp_alloc
-
-                    t_begin = t_end
-
-                # Get the chi squared result for each solver.
-                for i, subslvr in enumerate(self.solvers):
-                    # Wait for this stream to finish executing
-                    self.stream[i].synchronize()
-
-                    # Divide by sigma squared if necessary
-                    if not self.use_weight_vector:
-                        self.X2 += subslvr.X2_tmp[0] / subslvr.sigma_sqrd
-                    else:
-                        self.X2 += subslvr.X2_tmp[0]
-
-                    # force release of pinned memory allocated for X2_tmp
-                    # and remove it from the sub-solver
-                    subslvr.X2_tmp.base.free()
-                    del subslvr.X2_tmp
-
-                t = t_end
+        # Execute the finite state machine
+        with self.context:
+            while not self.fsm.model.is_done():
+                self.fsm.model.next()
 
     def shutdown(self):
         """ Shutdown the solver """
         with self.context as ctx:
-            for i, slvr in enumerate(self.solvers):
-                slvr.pipeline.shutdown(slvr, self.stream[i])
+            for slvr in self.solvers:
+                slvr.shutdown()
 
     def get_setter_method(self,name):
         """
@@ -430,4 +374,265 @@ class CompositeBiroSolver(BaseSolver):
     get_default_ant_pairs = \
         BiroSolverV4.__dict__['get_default_ant_pairs']
     get_ap_idx = \
-        BiroSolverV4.__dict__['get_ap_idx']
+        BSV4mod.BiroSolver.__dict__['get_ap_idx']
+
+# Finite State Machine Implementation
+
+TRANSFER_X2 = 'transfer_x2'
+SHOULD_TRANSFER_X2 = 'should_transfer_x2'
+TRANSFER_DATA = 'transfer_data'
+EK_KERNEL = 'ek'
+BSUM_KERNEL = 'bsum'
+REDUCE_KERNEL = 'reduce'
+NEXT_SOLVER = 'next_solver'
+ENTER_FINAL_LOOP = 'enter_final_loop'
+FINAL_NEXT_SOLVER = 'final_next_solver'
+FINAL_TRANSFER_X2 = 'final_transfer_x2'
+DONE = 'done'
+
+states = [SHOULD_TRANSFER_X2, TRANSFER_X2, TRANSFER_DATA,
+    EK_KERNEL, BSUM_KERNEL, REDUCE_KERNEL, NEXT_SOLVER,
+    ENTER_FINAL_LOOP, FINAL_NEXT_SOLVER, FINAL_TRANSFER_X2,
+    DONE]
+
+transitions = [
+    {
+        'trigger': 'next',
+        'source': TRANSFER_DATA,
+        'dest': EK_KERNEL,
+        'before': 'do_transfer_arrays'
+    },
+    {
+        'trigger': 'next',
+        'source': EK_KERNEL,
+        'dest': BSUM_KERNEL,
+        'before': 'do_ek_kernel'
+    },
+    {
+        'trigger': 'next',
+        'source': BSUM_KERNEL,
+        'dest': REDUCE_KERNEL,
+        'before': 'do_b_sum_kernel'
+    },
+    # Once the reduction is complete, we may
+    # transition to the next round of transfers
+    # and kernel executions, OR,
+    # if this is the last round of transfer and executions
+    # enter the final loop
+    {
+        'trigger': 'next',
+        'source': REDUCE_KERNEL,
+        'dest': NEXT_SOLVER,
+        'before': 'do_reduction_kernel',
+        'unless': 'at_end'
+    },
+    {
+        'trigger': 'next',
+        'source': REDUCE_KERNEL,
+        'dest': ENTER_FINAL_LOOP,
+        'before': 'do_reduction_kernel',
+        'conditions': 'at_end'
+    },
+
+    # Advance to the next solver and
+    # decide whether we should transfer
+    # X2 values
+    {
+        'trigger': 'next',
+        'source': NEXT_SOLVER,
+        'dest': SHOULD_TRANSFER_X2,
+        'before': 'next_solver'
+    },
+    # From SHOULD_TRANSFER_X2, we can transition to
+    # either TRANSFER_X2 or TRANSFER_DATA.
+    # First case occurs if we're not on the first iteration.
+    {
+        'trigger': 'next',
+        'source': SHOULD_TRANSFER_X2,
+        'dest': TRANSFER_X2,
+        'unless' : 'is_first_iteration'
+    },
+    # Second case occurs on the first iteration.
+    {
+        'trigger': 'next',
+        'source': SHOULD_TRANSFER_X2,
+        'dest': TRANSFER_DATA,
+        'conditions' : 'is_first_iteration'
+    },
+
+    # In the general case, we always go from
+    # transferring the X2 to transferring data
+    {
+        'trigger': 'next',
+        'source': TRANSFER_X2,
+        'dest': TRANSFER_DATA,
+        'before': 'do_transfer_X2'
+    },
+
+    # Here, we have states for handling the
+    # final loop, which involves pulling
+    # the final X2 values off the GPU.
+    # We prepare for this by moving
+    # back to the first solver (and timestep)
+    # for this iteration
+    {
+        'trigger': 'next',
+        'source': ENTER_FINAL_LOOP,
+        'dest': FINAL_TRANSFER_X2,
+        'before': 'prepare_final_loop'
+    },
+
+    {
+        'trigger': 'next',
+        'source': FINAL_NEXT_SOLVER,
+        'dest': FINAL_TRANSFER_X2,
+        'before': 'next_solver',
+    },
+
+    {
+        'trigger': 'next',
+        'source': FINAL_TRANSFER_X2,
+        'dest': FINAL_NEXT_SOLVER,
+        'before': 'do_transfer_X2',
+        'unless': 'at_end'
+    },
+    {
+        'trigger': 'next',
+        'source': FINAL_TRANSFER_X2,
+        'before': 'do_transfer_X2',
+        'dest': DONE,
+        'conditions': 'at_end'
+    },
+]
+
+class SolverFSM:
+    def __init__(self, composite_solver):
+        self.comp_slvr = slvr = composite_solver
+        self.current_slvr = 0
+        self.sub_time_diff = np.array([s.ntime for s in slvr.solvers])
+        self.sub_time_end = np.cumsum(self.sub_time_diff)
+        self.sub_time_begin = self.sub_time_end - self.sub_time_diff
+        self.current_time = self.sub_time_begin[self.current_slvr] = 0
+        self.current_time_diff = self.get_time_diff(
+            self.current_time, self.current_slvr)
+        self.iteration = 0
+
+        self.X2_gpu_arys = [None for s in slvr.solvers]
+
+        slvr.X2 = 0.0
+
+        with slvr.context:
+            for subslvr in slvr.solvers:
+                subslvr.X2_tmp = slvr.pinned_mem_pool.allocate(
+                    shape=slvr.X2_shape, dtype=slvr.X2_dtype)
+
+    def get_time_diff(self, current_time, current_slvr):
+        # Find the time step difference for the supplied solver.
+        # It may be smaller than the number of timesteps supported
+        # by the solver, since the actual problem may not fit
+        # exactly into the timesteps supported by each solver
+        diff = self.sub_time_diff[current_slvr]
+        spill = self.comp_slvr.ntime - (current_time + diff)
+
+        if spill < 0:
+            diff += spill
+
+        return diff
+
+    def do_transfer_arrays(self):
+        # Execute array transfer operations for
+        # the EK and B sum kernels on the current stream
+        self.comp_slvr.transfer_arrays(self.current_slvr,
+            self.current_time, self.current_time + self.current_time_diff)
+
+    def do_ek_kernel(self):
+        # Execute the EK kernel on the current stream
+        slvr, i = self.comp_slvr, self.current_slvr
+        slvr.solvers[i].rime_ek.execute(
+            slvr.solvers[i],
+            slvr.stream[i])
+
+    def do_b_sum_kernel(self):
+        # Execute the B Sum kernel on the current stream
+        slvr, i = self.comp_slvr, self.current_slvr
+        slvr.solvers[i].rime_b_sum.execute(
+            slvr.solvers[i],
+            slvr.stream[i])
+
+    def do_reduction_kernel(self):
+        # Execute the reduction kernel on the current stream
+        slvr, i = self.comp_slvr, self.current_slvr
+        subslvr, t_diff = self.comp_slvr.solvers[i], self.current_time_diff
+        # Swap the allocators for the reduction, since it uses
+        # chi_sqrd_result_gpu's allocator internally
+        tmp_alloc = subslvr.chi_sqrd_result_gpu.allocator
+        subslvr.chi_sqrd_result_gpu.allocator = slvr.dev_mem_pool.allocate
+        # OK, perform the reduction over the appropriate timestep section
+        # of the chi squared terms.
+        self.X2_gpu_arys[i] = pycuda.gpuarray.sum(
+            subslvr.chi_sqrd_result_gpu[:t_diff,:],
+            stream=slvr.stream[i])
+        # Repair the allocator
+        subslvr.chi_sqrd_result_gpu.allocator = tmp_alloc
+
+    def do_transfer_X2(self):
+        # Execute the transfer of the Chi-Squared value to the CPU
+        # on the current stream. Also synchronises on this stream
+        # and adds this value to the Chi-Squared total.
+        slvr, i = self.comp_slvr, self.current_slvr
+        subslvr = self.comp_slvr.solvers[i]
+        self.X2_gpu_arys[i].get_async(
+            ary=slvr.solvers[i].X2_tmp,
+            stream=slvr.stream[i])
+
+        slvr.stream[i].synchronize()
+
+        # Divide by sigma squared if necessary
+        if not slvr.use_weight_vector:
+            slvr.X2 += subslvr.X2_tmp[0] / subslvr.sigma_sqrd
+        else:
+            slvr.X2 += subslvr.X2_tmp[0]
+
+    def next_solver(self):
+        # Move to the next solver
+        self.current_time += self.current_time_diff
+        self.current_slvr = (self.current_slvr + 1) % self.comp_slvr.nsolvers
+        self.current_time_diff = self.get_time_diff(
+            self.current_time, self.current_slvr)
+
+        if self.current_slvr == 0:
+            self.iteration += 1
+
+    def prev_solver(self):
+        # Move to the previous solver
+        prev_slvr = (self.current_slvr - 1) % self.comp_slvr.nsolvers
+        self.current_time -= self.sub_time_diff[prev_slvr]
+        self.current_slvr = prev_slvr
+        self.current_time_diff = self.sub_time_diff[prev_slvr]
+
+        if self.current_slvr == self.comp_slvr.nsolvers - 1:
+            self.iteration -= 1
+
+    def prepare_final_loop(self):
+        # Prepare for the final loop by
+        # rewinding until we reach the first solver
+        while self.current_slvr > 0:
+            self.prev_solver()
+
+    def is_first_iteration(self):
+        return self.iteration == 0
+
+    def is_last_iteration(self):
+        time_end = self.current_time + self.sub_time_diff[self.current_time:].sum()
+        return time_end >= self.comp_slvr.ntime
+
+    def is_last_solver(self):
+        return self.current_slvr == self.comp_slvr.nsolvers - 1
+
+    def at_end(self):
+        return self.current_time + self.current_time_diff >= self.comp_slvr.ntime
+
+    def __str__(self):
+        return 'iteration %d solver %d time %d diff %d ' % \
+            (self.iteration, self.current_slvr, self.current_time,
+            self.current_time_diff, )

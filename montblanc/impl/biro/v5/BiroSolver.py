@@ -20,6 +20,9 @@
 
 from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
+from montblanc.impl.biro.v5.gpu.RimeEK import RimeEK
+from montblanc.impl.biro.v5.gpu.RimeGaussBSum import RimeGaussBSum
+
 from montblanc.BaseSolver import BaseSolver
 from montblanc.BaseSolver import DEFAULT_NA
 from montblanc.BaseSolver import DEFAULT_NCHAN
@@ -67,6 +70,20 @@ class BiroSolver(BaseSolver):
 
         super(BiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, pipeline=pipeline, **kwargs)
+
+        self.rime_ek = RimeEK()
+        self.rime_b_sum = RimeGaussBSum(weight_vector=kwargs.get('weight_vector', False))
+
+    def initialise(self):
+        with self.context:
+            self.rime_ek.initialise(self)
+            self.rime_b_sum.initialise(self)
+
+    def shutdown(self):
+        with self.context:
+            self.rime_ek.shutdown(self)
+            self.rime_b_sum.shutdown(self)
+
 
     # Take these methods from the v2 BiroSolver
     get_default_base_ant_pairs = \
