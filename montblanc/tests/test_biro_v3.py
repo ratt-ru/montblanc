@@ -89,6 +89,7 @@ class TestBiroV3(unittest.TestCase):
             chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
             self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
+    @unittest.skip('Skip timing test')
     def test_time(self, cmp=None):
         """ Test for timing purposes """
         if cmp is None: cmp = {}

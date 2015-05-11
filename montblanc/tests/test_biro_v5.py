@@ -130,6 +130,7 @@ class TestBiroV5(unittest.TestCase):
                 MP['nbl'] == 1)
             #print viable, P
 
+    @unittest.skip('Skip timing test')
     def test_time(self, cmp=None):
         """ Test for timing purposes """
         if cmp is None: cmp = {}
