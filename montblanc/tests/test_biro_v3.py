@@ -82,11 +82,16 @@ class TestBiroV3(unittest.TestCase):
             self.assertTrue(slvr.solvers[1].ntime == 2)
             self.assertTrue(slvr.solvers[2].ntime == 3)
 
-            # Solve the RIME
+            # Solve the RIME and store a copy of the X2
             slvr.solve()
 
             # Check that CPU and GPU results agree
             chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
+            self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+
+            # Test that solving the RIME a second time produces
+            # the same solution
+            slvr.solve()
             self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
     @unittest.skip('Skip timing test')
