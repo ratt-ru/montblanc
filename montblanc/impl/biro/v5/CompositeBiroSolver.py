@@ -23,7 +23,6 @@ import numpy as np
 import pycuda.driver as cuda
 import pycuda.gpuarray
 import pycuda.tools
-from transitions import Machine
 import types
 
 import montblanc
@@ -39,6 +38,8 @@ from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
+import montblanc.impl.biro.common
+
 from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
 from montblanc.impl.biro.v5.BiroSolver import BiroSolver
@@ -214,9 +215,7 @@ class CompositeBiroSolver(BaseSolver):
         self.use_weight_vector = kwargs.get('weight_vector', False)
         self.initialised = False
 
-        self.slvr_fsm = SolverFSM(self)
-        self.fsm = Machine(self.slvr_fsm, states=states, transitions=transitions,
-            initial=TRANSFER_DATA)
+        self.fsm = montblanc.impl.biro.common.get_fsm(self)
 
     def transfer_arrays(self, sub_solver_idx, time_begin, time_end):
         """
@@ -324,8 +323,8 @@ class CompositeBiroSolver(BaseSolver):
 
         # Execute the finite state machine
         with self.context:
-            while not self.slvr_fsm.is_done():
-                self.slvr_fsm.next()
+            while not self.fsm.model.is_done():
+                self.fsm.model.next()
 
     def shutdown(self):
         """ Shutdown the solver """
