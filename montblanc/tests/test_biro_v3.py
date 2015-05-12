@@ -26,7 +26,6 @@ import time
 import montblanc.factory
 
 from montblanc.impl.biro.v2.cpu.SolverCPU import SolverCPU
-from montblanc.impl.biro.v3.CompositeBiroSolver import get_pipeline
 
 def solver(**kwargs):
     return montblanc.factory.get_biro_solver('test',version='v3',**kwargs)
@@ -82,12 +81,14 @@ class TestBiroV3(unittest.TestCase):
             self.assertTrue(slvr.solvers[1].ntime == 2)
             self.assertTrue(slvr.solvers[2].ntime == 3)
 
-            # Solve the RIME and store a copy of the X2
+            # Solve the RIME
             slvr.solve()
 
             # Check that CPU and GPU results agree
             chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
             self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+
+            slvr.X2 = 0.0
 
             # Test that solving the RIME a second time produces
             # the same solution

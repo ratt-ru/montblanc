@@ -42,14 +42,6 @@ import montblanc.impl.biro.common
 
 from montblanc.impl.biro.v3.BiroSolver import BiroSolver
 
-from montblanc.impl.biro.v3.gpu.RimeEK import RimeEK
-from montblanc.impl.biro.v3.gpu.RimeGaussBSum import RimeGaussBSum
-from montblanc.pipeline import Pipeline
-
-def get_pipeline(**kwargs):
-    wv = kwargs.get('weight_vector', False)
-    return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
-
 ONE_KB = 1024
 ONE_MB = ONE_KB**2
 ONE_GB = ONE_KB**3
@@ -82,8 +74,6 @@ class CompositeBiroSolver(BaseSolver):
                 Number of sersic sources.
             dtype : np.float32 or np.float64
                 Specify single or double precision arithmetic.
-            pipeline : list of nodes
-                nodes defining the GPU kernels used to solve this RIME
         Keyword Arguments:
             context : pycuda.driver.Context
                 CUDA context to operate on.
@@ -102,8 +92,6 @@ class CompositeBiroSolver(BaseSolver):
                 problem.
         """
 
-        pipeline = BSV2mod.get_pipeline(**kwargs) if pipeline is None else pipeline
-
         super(CompositeBiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
 
@@ -119,14 +107,16 @@ class CompositeBiroSolver(BaseSolver):
             ary['gpu'] = False
             ary['cpu'] = True
 
+        # Add custom property setter method
         for name, prop in P_main.iteritems():
             prop['setter_method'] = self.get_setter_method(name)
 
-        # Do not main CPU versions of result arrays
+        # Do not create CPU versions of result arrays
         A_main['jones_scalar']['cpu'] = False
         A_main['vis']['cpu'] = False
         A_main['chi_sqrd_result']['cpu'] = False
 
+        # Create the arrays on the solver
         self.register_arrays(A_main)
         self.register_properties(P_main)
 
@@ -330,8 +320,11 @@ class CompositeBiroSolver(BaseSolver):
 
         # Execute the finite state machine
         with self.context:
+            # Go to the start condition
+            self.fsm.to_start()
+
             while not self.fsm.model.is_done():
-                self.fsm.model.next()
+                self.fsm.next()
 
     def shutdown(self):
         """ Shutdown the solver """

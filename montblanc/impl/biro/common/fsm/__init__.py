@@ -20,8 +20,10 @@
 
 import numpy as np
 import pycuda.gpuarray
+from transitions import Machine
 
 # Finite State Machine Implementation
+START = 'start'
 TRANSFER_X2 = 'transfer_x2'
 SHOULD_TRANSFER_X2 = 'should_transfer_x2'
 TRANSFER_DATA = 'transfer_data'
@@ -34,12 +36,19 @@ FINAL_NEXT_SOLVER = 'final_next_solver'
 FINAL_TRANSFER_X2 = 'final_transfer_x2'
 DONE = 'done'
 
-states = [SHOULD_TRANSFER_X2, TRANSFER_X2, TRANSFER_DATA,
+states = [START, SHOULD_TRANSFER_X2, TRANSFER_X2, TRANSFER_DATA,
     EK_KERNEL, BSUM_KERNEL, REDUCE_KERNEL, NEXT_SOLVER,
     ENTER_FINAL_LOOP, FINAL_NEXT_SOLVER, FINAL_TRANSFER_X2,
     DONE]
 
 transitions = [
+    {
+        'trigger': 'next',
+        'source': START,
+        'dest': TRANSFER_DATA,
+        'before': 'do_start',
+    },
+
     {
         'trigger': 'next',
         'source': TRANSFER_DATA,
@@ -144,31 +153,35 @@ transitions = [
         'trigger': 'next',
         'source': FINAL_TRANSFER_X2,
         'before': 'do_transfer_X2',
+        'after': 'do_done',
         'dest': DONE,
         'conditions': 'at_end'
     },
 ]
 
-class FsmModel:
+class FsmSolver(Machine):
     def __init__(self, composite_solver):
+        Machine.__init__(self, states=states, 
+            transitions=transitions, initial=START)
         self.comp_slvr = slvr = composite_solver
-        self.current_slvr = 0
         self.sub_time_diff = np.array([s.ntime for s in slvr.solvers])
         self.sub_time_end = np.cumsum(self.sub_time_diff)
         self.sub_time_begin = self.sub_time_end - self.sub_time_diff
-        self.current_time = self.sub_time_begin[self.current_slvr] = 0
-        self.current_time_diff = self.get_time_diff(
-            self.current_time, self.current_slvr)
-        self.iteration = 0
 
         self.X2_gpu_arys = [None for s in slvr.solvers]
-
-        slvr.X2 = 0.0
 
         with slvr.context:
             for subslvr in slvr.solvers:
                 subslvr.X2_tmp = slvr.pinned_mem_pool.allocate(
                     shape=slvr.X2_shape, dtype=slvr.X2_dtype)
+
+    def do_start(self):
+        self.current_slvr = 0
+        self.current_time = 0
+        self.current_time_diff = self.get_time_diff(
+            self.current_time, self.current_slvr)
+        self.iteration = 0
+        self.comp_slvr.X2 = 0.0
 
     def get_time_diff(self, current_time, current_slvr):
         # Find the time step difference for the supplied solver.
@@ -214,7 +227,7 @@ class FsmModel:
         # OK, perform the reduction over the appropriate timestep section
         # of the chi squared terms.
         self.X2_gpu_arys[i] = pycuda.gpuarray.sum(
-            subslvr.chi_sqrd_result_gpu[:t_diff,:],
+            subslvr.chi_sqrd_result_gpu[:t_diff,:,:],
             stream=slvr.stream[i])
         # Repair the allocator
         subslvr.chi_sqrd_result_gpu.allocator = tmp_alloc
@@ -262,6 +275,9 @@ class FsmModel:
         # rewinding until we reach the first solver
         while self.current_slvr > 0:
             self.prev_solver()
+
+    def do_done(self):
+		pass
 
     def is_first_iteration(self):
         return self.iteration == 0
