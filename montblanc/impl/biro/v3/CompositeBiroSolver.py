@@ -164,10 +164,6 @@ class CompositeBiroSolver(BaseSolver):
 
             # Create streams and events for the solvers
             self.stream = [cuda.Stream() for i in range(self.nsolvers)]
-            self.transfer_start = [cuda.Event(cuda.event_flags.DISABLE_TIMING)
-                for i in range(self.nsolvers)]
-            self.transfer_end = [cuda.Event(cuda.event_flags.DISABLE_TIMING)
-                for i in range(self.nsolvers)]
 
             # Create a memory pool for PyCUDA gpuarray.sum reduction results
             self.dev_mem_pool = pycuda.tools.DeviceMemoryPool()
@@ -220,8 +216,6 @@ class CompositeBiroSolver(BaseSolver):
         i = sub_solver_idx
         subslvr = self.solvers[i]
         stream = self.stream[i]
-
-        self.transfer_start[i].record(stream=stream)
 
         for r in self.arrays.itervalues():
             # Is there anything to transfer for this array?
@@ -279,8 +273,6 @@ class CompositeBiroSolver(BaseSolver):
             # we transfer the last chunk
             if r.sshape.count('ntime') == 0 or time_end == self.ntime:
                 subslvr.was_transferred[r.name] = True
-
-        self.transfer_end[i].record(stream=stream)
 
     def __enter__(self):
         """
