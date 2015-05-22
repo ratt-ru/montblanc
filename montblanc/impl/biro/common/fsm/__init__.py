@@ -161,7 +161,7 @@ transitions = [
 
 class FsmSolver(Machine):
     def __init__(self, composite_solver):
-        Machine.__init__(self, states=states, 
+        Machine.__init__(self, states=states,
             transitions=transitions, initial=START)
         self.comp_slvr = slvr = composite_solver
         self.sub_time_diff = np.array([s.ntime for s in slvr.solvers])
@@ -284,13 +284,6 @@ class FsmSolver(Machine):
 
     def is_first_iteration(self):
         return self.iteration == 0
-
-    def is_last_iteration(self):
-        time_end = self.current_time + self.sub_time_diff[self.current_time:].sum()
-        return time_end >= self.comp_slvr.ntime
-
-    def is_last_solver(self):
-        return self.current_slvr == self.comp_slvr.nsolvers - 1
 
     def at_end(self):
         return self.current_time + self.current_time_diff >= self.comp_slvr.ntime
