@@ -272,9 +272,12 @@ class FsmSolver(Machine):
 
     def prepare_final_loop(self):
         # Prepare for the final loop by
-        # rewinding until we reach the first solver
-        while self.current_slvr > 0:
+        # rewinding N-1 solvers
+        i, N = 1, self.comp_slvr.nsolvers
+
+        while i < N and self.current_time > 0:
             self.prev_solver()
+            i += 1
 
     def do_done(self):
 		pass

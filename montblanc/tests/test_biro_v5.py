@@ -71,33 +71,28 @@ class TestBiroV5(unittest.TestCase):
 
     def test_budget(self):
         """
-        Test that the CompositeSolver handles a memory budget, as well as
-        dissimilar timesteps on the sub-solvers
+        Test that the CompositeSolver handles a memory budget
         """
         cmp = { 'rtol' : 1e-4}
         wv = True
 
-        with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
-            weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
+        for t in [17, 27, 53]:
+            with solver(na=28, npsrc=50, ngsrc=50, ntime=t, nchan=32,
+                weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
 
-            # Test for some variation in the sub-solvers
-            self.assertTrue(slvr.solvers[0].ntime == 2)
-            self.assertTrue(slvr.solvers[1].ntime == 2)
-            self.assertTrue(slvr.solvers[2].ntime == 3)
+                # Solve the RIME
+                slvr.solve()
 
-            # Solve the RIME
-            slvr.solve()
+                # Check that CPU and GPU results agree
+                chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
+                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
-            # Check that CPU and GPU results agree
-            chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
-            self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+                slvr.X2 = 0.0
 
-            slvr.X2 = 0.0
-
-            # Test that solving the RIME a second time produces
-            # the same solution
-            slvr.solve()
-            self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+                # Test that solving the RIME a second time produces
+                # the same solution
+                slvr.solve()
+                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
     def test_smart_budget(self):
         wv = True
