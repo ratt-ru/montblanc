@@ -77,11 +77,11 @@ P = [
     prop_dict('beam_mh', 'int', 50),
     prop_dict('beam_nud', 'int', 50),
     # Lower l and m coordinates of the beam cube
-    prop_dict('beam_ll', 'ft', 0.0),
-    prop_dict('beam_lm', 'ft', 0.0),
+    prop_dict('beam_ll', 'ft', -0.5),
+    prop_dict('beam_lm', 'ft', -0.5),
     # Upper l and m coordinates of the beam cube
-    prop_dict('beam_ul', 'ft', 1.0),
-    prop_dict('beam_um', 'ft', 1.0),
+    prop_dict('beam_ul', 'ft', 0.5),
+    prop_dict('beam_um', 'ft', 0.5),
     prop_dict('beam_rot_vel', 'ft', np.deg2rad(1))
 ]
 
@@ -101,7 +101,7 @@ A = [
     ary_dict('point_errors', (2,'ntime','na'), 'ft'),
     ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
     ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
-    ary_dict('E_beam', ('beam_mh', 'beam_lw', 'beam_nud', 4), 'ct'),
+    ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct'),
 
     # Result arrays
     ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', cpu=False),
