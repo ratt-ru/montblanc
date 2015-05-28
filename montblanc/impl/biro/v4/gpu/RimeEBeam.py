@@ -186,6 +186,10 @@ void rime_jones_E_beam_impl(
 
         typename Tr::ct sum = Po::make_ct(0.0, 0.0);
 
+        // Load in the complex values from the E beam
+        // at the supplied coordinate offsets.
+        // Save the sum of abs in sum.real
+        // and the sum of args in sum.imag
         bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
             0.0f, 0.0f, 0.0f);
         bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
@@ -203,23 +207,20 @@ void rime_jones_E_beam_impl(
             0.0f, 1.0f, 1.0f);
         bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
             1.0f, 1.0f, 1.0f);
-        /*
 
+        // Normalise both sum of abs and args
         sum.x /= T(8.0);
         sum.y /= T(8.0);
 
+        // Take the complex exponent of the sum of args
+        // and multiply by the sum of abs
         typename Tr::ct value;
-
         Po::sincos(sum.y, &value.y, &value.x);
         value.x *= sum.x;
         value.y *= sum.x;
 
         i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
-        E_term[i] = Po::make_ct(gl, gm);
         E_term[i] = value;
-*/
-        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
-        E_term[i] = sum;
     }
 }
 

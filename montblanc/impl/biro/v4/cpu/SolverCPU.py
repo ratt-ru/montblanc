@@ -447,8 +447,13 @@ class SolverCPU(object):
         assert gm.shape == (slvr.nsrc, slvr.ntime, slvr.na)
         assert gchan.shape == (slvr.nchan,)
 
+        # Initialise the sum to zero
         sum = np.zeros_like(slvr.E_term_cpu)
 
+        # Load in the complex values from the E beam
+        # at the supplied coordinate offsets.
+        # Save the sum of abs in sum.real
+        # and the sum of args in sum.imag
         self.bilinear_interpolate(sum, gl, gm, gchan, 0, 0, 0)
         self.bilinear_interpolate(sum, gl, gm, gchan, 1, 0, 0)
         self.bilinear_interpolate(sum, gl, gm, gchan, 0, 1, 0)
@@ -459,7 +464,12 @@ class SolverCPU(object):
         self.bilinear_interpolate(sum, gl, gm, gchan, 0, 1, 1)
         self.bilinear_interpolate(sum, gl, gm, gchan, 1, 1, 1)
 
-        return sum
+        # Normalise both sum of abs and args
+        sum /= 8.0
+
+        # Take the complex exponent of the sum of args
+        # and multiply by the sum of abs
+        return sum.real*np.exp(1j*sum.imag)
 
     def compute_chi_sqrd_sum_terms(self, weight_vector=False):
         """
