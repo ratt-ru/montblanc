@@ -78,12 +78,13 @@ void bilinear_interpolate(
 
     float l = floorf(gl) + ld;
     float m = floorf(gm) + md;
+    float ch = floorf(gchan) + chd;
 
     // If this coordinate is outside the cube, do nothing
-    if(l < 0 || l >= BEAM_LW || m < 0 || m >= BEAM_MH)
+    if(l < 0 || l >= BEAM_LW ||
+        m < 0 || m >= BEAM_MH ||
+        ch < 0 || ch >= BEAM_NUD)
         { return; }
-
-    float ch = floorf(gchan) + chd;
 
     T ldiff = (l-gl);
     T weight = ldiff*ldiff;
@@ -187,7 +188,6 @@ void rime_jones_E_beam_impl(
 
         bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
             0.0f, 0.0f, 0.0f);
-/*
         bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
             1.0f, 0.0f, 0.0f);
         bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
@@ -203,6 +203,7 @@ void rime_jones_E_beam_impl(
             0.0f, 1.0f, 1.0f);
         bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
             1.0f, 1.0f, 1.0f);
+        /*
 
         sum.x /= T(8.0);
         sum.y /= T(8.0);

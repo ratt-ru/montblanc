@@ -372,7 +372,7 @@ class SolverCPU(object):
 
         return vis
 
-    def bilinear_interpolate(self,
+    def bilinear_interpolate(self, sum,
             gl, gm, gchan,
             ld, lm, chd):
         slvr = self.solver
@@ -383,12 +383,14 @@ class SolverCPU(object):
 
         invalid_l = np.logical_or(l < 0.0, l >= slvr.beam_lw)
         invalid_m = np.logical_or(m < 0.0, m >= slvr.beam_mh)
+        invalid_ch = np.logical_or(ch < 0.0, ch >= slvr.beam_nud)
         invalid_lm = np.logical_or.reduce((invalid_l, invalid_m))
 
         assert invalid_lm.shape == (slvr.nsrc, slvr.ntime, slvr.na)
 
         l[invalid_lm] = 0
         m[invalid_lm] = 0
+        ch[invalid_ch] = 0
 
         ldiff, mdiff, chdiff = l - gl, m - gm, ch - gchan
         assert ldiff.shape == (slvr.nsrc, slvr.ntime, slvr.na)
@@ -403,15 +405,14 @@ class SolverCPU(object):
 
         weights = np.sqrt(weight_sum)
         weights[invalid_lm,:] = 0
+        weights[:,:,:,invalid_ch] = 0
         assert weights.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
         pols = slvr.E_beam_cpu[l.astype(np.int32),m.astype(np.int32),:][:,:,:,ch.astype(np.int32),:]
         assert pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
 
-        result = np.zeros_like(pols)
-        result.real = weights[:,:,:,:,np.newaxis]*np.abs(pols)
-        result.imag = weights[:,:,:,:,np.newaxis]*np.angle(pols)
-        return result
+        sum.real += weights[:,:,:,:,np.newaxis]*np.abs(pols)
+        sum.imag += weights[:,:,:,:,np.newaxis]*np.angle(pols)
 
     def compute_E_beam(self):
         slvr = self.solver
@@ -446,7 +447,19 @@ class SolverCPU(object):
         assert gm.shape == (slvr.nsrc, slvr.ntime, slvr.na)
         assert gchan.shape == (slvr.nchan,)
 
-        return self.bilinear_interpolate(gl, gm, gchan, 0, 0, 0)
+        sum = np.zeros_like(slvr.E_term_cpu)
+
+        self.bilinear_interpolate(sum, gl, gm, gchan, 0, 0, 0)
+        self.bilinear_interpolate(sum, gl, gm, gchan, 1, 0, 0)
+        self.bilinear_interpolate(sum, gl, gm, gchan, 0, 1, 0)
+        self.bilinear_interpolate(sum, gl, gm, gchan, 1, 1, 0)
+
+        self.bilinear_interpolate(sum, gl, gm, gchan, 0, 0, 1)
+        self.bilinear_interpolate(sum, gl, gm, gchan, 1, 0, 1)
+        self.bilinear_interpolate(sum, gl, gm, gchan, 0, 1, 1)
+        self.bilinear_interpolate(sum, gl, gm, gchan, 1, 1, 1)
+
+        return sum
 
     def compute_chi_sqrd_sum_terms(self, weight_vector=False):
         """
