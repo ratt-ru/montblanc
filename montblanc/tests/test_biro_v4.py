@@ -247,26 +247,31 @@ class TestBiroV4(unittest.TestCase):
             cmp = {}
 
         slvr_cpu = SolverCPU(slvr)
+        E_term_cpu = slvr_cpu.compute_E_beam()
 
-        slvr_cpu.compute_E_beam()
+        slvr.solve()
+
+        with slvr.context:
+            E_term_gpu = slvr.E_term_gpu.get()
+
+        self.assertTrue(np.allclose(E_term_cpu, E_term_gpu, **cmp))
 
     def test_E_beam_float(self):
         """ Test the B sqrt float kernel """
 
-        with solver(na=7, ntime=200, nchan=320,
+        with solver(na=14, ntime=50, nchan=64,
             npsrc=10, ngsrc=10, dtype=np.float32,
             pipeline=Pipeline([RimeEBeam()])) as slvr:
 
-            # This fails more often with an rtol of 1e-4
-            self.E_beam_test_impl(slvr, cmp={'rtol': 1e-3})
+            self.E_beam_test_impl(slvr, cmp={'rtol' : 1e-3})
 
     def test_E_beam_double(self):
         """ Test the B sqrt double kernel """
-        with solver(na=7, ntime=200, nchan=320,
+        with solver(na=14, ntime=50, nchan=64,
             npsrc=10, ngsrc=10, dtype=np.float64,
             pipeline=Pipeline([RimeEBeam()])) as slvr:
 
-            self.E_beam_test_impl(slvr)
+            self.E_beam_test_impl(slvr, cmp={'rtol' : 1e-4})
 
 
     def test_transpose(self):
