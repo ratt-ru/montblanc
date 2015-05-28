@@ -49,6 +49,7 @@ template <> class kernel_policies<float>
 {
 public:
 	typedef kernel_traits<float> Tr;
+    typedef kernel_policies<float> Po;
 
 	__device__ __forceinline__ static
 	Tr::ct make_ct(const Tr::ft & real, const Tr::ft & imag)
@@ -85,6 +86,26 @@ public:
 	__device__ __forceinline__ static
 	void sincos(const Tr::ft & value, Tr::ft * sinptr, Tr::ft * cosptr)
 		{ ::sincosf(value, sinptr, cosptr); }
+
+    __device__ __forceinline__ static
+    Tr::ft atan2(const Tr::ft & y, const Tr::ft & x)
+        { return ::atan2f(y, x); }
+
+    __device__ __forceinline__ static
+    Tr::ft arg(const Tr::ct & value)
+        { return Po::atan2(value.y, value.x); }
+
+    __device__ __forceinline__ static
+    Tr::ft arg(const Tr::ft & value)
+        { return Po::atan2(0.0f, value); }
+
+    __device__ __forceinline__ static
+    Tr::ft abs(const Tr::ct & value)
+        { return Po::sqrt(value.x*value.x + value.y*value.y); }
+
+    __device__ __forceinline__ static
+    Tr::ft abs(const Tr::ft & value)
+        { return ::fabs(value); }
 };
 
 template <>
@@ -103,6 +124,7 @@ template <> class kernel_policies<double>
 {
 public:
 	typedef kernel_traits<double> Tr;
+    typedef kernel_policies<double> Po;
 
 	__device__ __forceinline__ static
 	Tr::ct make_ct(const Tr::ft & real, const Tr::ft & imag)
@@ -139,6 +161,26 @@ public:
 	__device__ __forceinline__ static
 	void sincos(const Tr::ft & value, Tr::ft * sinptr, Tr::ft * cosptr)
 		{ ::sincos(value, sinptr, cosptr); }
+
+    __device__ __forceinline__ static
+    Tr::ft atan2(const Tr::ft & y, const Tr::ft & x)
+        { return ::atan2(y, x); }
+
+    __device__ __forceinline__ static
+    Tr::ft arg(const Tr::ct & value)
+        { return Po::atan2(value.y, value.x); }
+
+    __device__ __forceinline__ static
+    Tr::ft arg(const Tr::ft & value)
+        { return Po::atan2(0.0, value); }
+
+    __device__ __forceinline__ static
+    Tr::ft abs(const Tr::ct & value)
+        { return Po::sqrt(value.x*value.x + value.y*value.y); }
+
+    __device__ __forceinline__ static
+    Tr::ft abs(const Tr::ft & value)
+        { return ::abs(value); }
 };
 
 template <
