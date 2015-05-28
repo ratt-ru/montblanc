@@ -372,6 +372,47 @@ class SolverCPU(object):
 
         return vis
 
+    def bilinear_interpolate(self,
+            gl, gm, gchan,
+            ld, lm, chd):
+        slvr = self.solver
+
+        l = np.floor(gl) + ld
+        m = np.floor(gm) + lm
+        ch = np.floor(gchan) + chd
+
+        invalid_l = np.logical_or(l < 0.0, l >= slvr.beam_lw)
+        invalid_m = np.logical_or(m < 0.0, m >= slvr.beam_mh)
+        invalid_lm = np.logical_or.reduce((invalid_l, invalid_m))
+
+        assert invalid_lm.shape == (slvr.nsrc, slvr.ntime, slvr.na)
+
+        l[invalid_lm] = 0
+        m[invalid_lm] = 0
+
+        ldiff, mdiff, chdiff = l - gl, m - gm, ch - gchan
+        assert ldiff.shape == (slvr.nsrc, slvr.ntime, slvr.na)
+        assert mdiff.shape == (slvr.nsrc, slvr.ntime, slvr.na)
+        assert chdiff.shape == (slvr.nchan,)
+
+        coord_diff_sqrd = ldiff**2 + mdiff**2
+        ch_diff_sqrd = chdiff**2
+        weight_sum = coord_diff_sqrd[:,:,:,np.newaxis] + \
+            ch_diff_sqrd[np.newaxis,np.newaxis,np.newaxis,:]
+        assert weight_sum.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+
+        weights = np.sqrt(weight_sum)
+        weights[invalid_lm,:] = 0
+        assert weights.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+
+        pols = slvr.E_beam_cpu[l.astype(np.int32),m.astype(np.int32),:][:,:,:,ch.astype(np.int32),:]
+        assert pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+
+        result = np.zeros_like(pols)
+        result.real = weights[:,:,:,:,np.newaxis]*np.abs(pols)
+        result.imag = weights[:,:,:,:,np.newaxis]*np.angle(pols)
+        return result
+
     def compute_E_beam(self):
         slvr = self.solver
 
@@ -397,8 +438,15 @@ class SolverCPU(object):
         assert l.shape == (slvr.nsrc, slvr.ntime, slvr.na)
         assert m.shape == (slvr.nsrc, slvr.ntime, slvr.na)
 
-        gl = (slvr.beam_lw * (l-slvr.beam_ll) / (slvr.beam_ul-slvr.beam_ll)).astype(np.int32)
-        gm = (slvr.beam_mh * (l-slvr.beam_lm) / (slvr.beam_um-slvr.beam_lm)).astype(np.int32)
+        gl = slvr.beam_lw * (l - slvr.beam_ll) / (slvr.beam_ul - slvr.beam_ll)
+        gm = slvr.beam_mh * (m - slvr.beam_lm) / (slvr.beam_um - slvr.beam_lm)
+        gchan = slvr.beam_nud * np.arange(slvr.nchan).astype(slvr.ft) / slvr.ft(slvr.nchan)
+
+        assert gl.shape == (slvr.nsrc, slvr.ntime, slvr.na)
+        assert gm.shape == (slvr.nsrc, slvr.ntime, slvr.na)
+        assert gchan.shape == (slvr.nchan,)
+
+        return self.bilinear_interpolate(gl, gm, gchan, 0, 0, 0)
 
     def compute_chi_sqrd_sum_terms(self, weight_vector=False):
         """

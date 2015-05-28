@@ -39,7 +39,7 @@ DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels and polarisations
     'BLOCKDIMY' : 16,    # Number of timesteps
     'BLOCKDIMZ' : 1,    #
-    'maxregs'   : 48    # Maximum number of registers
+    'maxregs'   : 52    # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -62,6 +62,46 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
+
+template <
+    typename T,
+    typename Tr=montblanc::kernel_traits<T>,
+    typename Po=montblanc::kernel_policies<T> >
+__device__ __forceinline__
+void bilinear_interpolate(
+    typename Tr::ct & sum,
+    typename Tr::ct * E_beam,
+    float gl, float gm, float gchan,
+    const float ld, const float md, const float chd)
+{
+    #define POL (threadIdx.x & 0x3)
+
+    float l = floorf(gl) + ld;
+    float m = floorf(gm) + md;
+
+    // If this coordinate is outside the cube, do nothing
+    if(l < 0 || l >= BEAM_LW || m < 0 || m >= BEAM_MH)
+        { return; }
+
+    float ch = floorf(gchan) + chd;
+
+    T ldiff = (l-gl);
+    T weight = ldiff*ldiff;
+    T mdiff = (m-gm);
+    weight += mdiff*mdiff;
+    T chdiff = (ch-gchan);
+    weight += chdiff*chdiff;
+    weight = Po::sqrt(weight);
+
+    int i = ((int(l)*BEAM_MH + int(m))*BEAM_NUD + int(ch))*4 + POL;
+
+    // Perhaps unnecessary as long as BLOCKDIMX is 32
+    typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
+    sum.x += weight*Po::abs(pol);
+    sum.y += weight*Po::arg(pol);
+
+    #undef POL
+}
 
 template <
     typename T,
@@ -139,8 +179,46 @@ void rime_jones_E_beam_impl(
         l += ld[threadIdx.y];
         m += md[threadIdx.y];
 
-        int gl = BEAM_LW * (l - beam_ll) / (beam_ul - beam_ll);
-        int gm = BEAM_MH * (l - beam_lm) / (beam_um - beam_lm);
+        float gl = BEAM_LW * (l - beam_ll) / (beam_ul - beam_ll);
+        float gm = BEAM_MH * (m - beam_lm) / (beam_um - beam_lm);
+        float gchan = BEAM_NUD * float((POLCHAN>>2))/float(NCHAN);
+
+        typename Tr::ct sum = Po::make_ct(0.0, 0.0);
+
+        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+            0.0f, 0.0f, 0.0f);
+/*
+        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+            1.0f, 0.0f, 0.0f);
+        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+            0.0f, 1.0f, 0.0f);
+        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+            1.0f, 1.0f, 0.0f);
+
+        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+            0.0f, 0.0f, 1.0f);
+        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+            1.0f, 0.0f, 1.0f);
+        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+            0.0f, 1.0f, 1.0f);
+        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+            1.0f, 1.0f, 1.0f);
+
+        sum.x /= T(8.0);
+        sum.y /= T(8.0);
+
+        typename Tr::ct value;
+
+        Po::sincos(sum.y, &value.y, &value.x);
+        value.x *= sum.x;
+        value.y *= sum.x;
+
+        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
+        E_term[i] = Po::make_ct(gl, gm);
+        E_term[i] = value;
+*/
+        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
+        E_term[i] = sum;
     }
 }
 
@@ -198,6 +276,10 @@ class RimeEBeam(Node):
             'rime_jones_E_beam_double'
 
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
+
+        with open(kname+'.cu', 'w') as f:
+            f.write(kernel_string)
+
         self.mod = SourceModule(kernel_string,
             options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
