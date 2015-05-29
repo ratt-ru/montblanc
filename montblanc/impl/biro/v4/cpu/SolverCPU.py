@@ -372,7 +372,7 @@ class SolverCPU(object):
 
         return vis
 
-    def bilinear_interpolate(self, sum,
+    def bilinear_interpolate(self, sum, abs_sum,
             gl, gm, gchan,
             ld, lm, chd):
         slvr = self.solver
@@ -411,8 +411,8 @@ class SolverCPU(object):
         pols = slvr.E_beam_cpu[l.astype(np.int32),m.astype(np.int32),:][:,:,:,ch.astype(np.int32),:]
         assert pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
 
-        sum.real += weights[:,:,:,:,np.newaxis]*np.abs(pols)
-        sum.imag += weights[:,:,:,:,np.newaxis]*np.angle(pols)
+        sum += weights[:,:,:,:,np.newaxis]*pols
+        abs_sum += weights[:,:,:,:,np.newaxis]*np.abs(pols)
 
     def compute_E_beam(self):
         slvr = self.solver
@@ -449,27 +449,30 @@ class SolverCPU(object):
 
         # Initialise the sum to zero
         sum = np.zeros_like(slvr.E_term_cpu)
+        abs_sum = np.zeros(shape=sum.shape, dtype=slvr.ft)
 
         # Load in the complex values from the E beam
         # at the supplied coordinate offsets.
         # Save the sum of abs in sum.real
         # and the sum of args in sum.imag
-        self.bilinear_interpolate(sum, gl, gm, gchan, 0, 0, 0)
-        self.bilinear_interpolate(sum, gl, gm, gchan, 1, 0, 0)
-        self.bilinear_interpolate(sum, gl, gm, gchan, 0, 1, 0)
-        self.bilinear_interpolate(sum, gl, gm, gchan, 1, 1, 0)
+        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 0, 0, 0)
+        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 1, 0, 0)
+        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 0, 1, 0)
+        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 1, 1, 0)
 
-        self.bilinear_interpolate(sum, gl, gm, gchan, 0, 0, 1)
-        self.bilinear_interpolate(sum, gl, gm, gchan, 1, 0, 1)
-        self.bilinear_interpolate(sum, gl, gm, gchan, 0, 1, 1)
-        self.bilinear_interpolate(sum, gl, gm, gchan, 1, 1, 1)
+        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 0, 0, 1)
+        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 1, 0, 1)
+        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 0, 1, 1)
+        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 1, 1, 1)
 
-        # Normalise both sum of abs and args
-        sum /= 8.0
+        # Determine the normalised angle of the polarisation
+        # and absolute polarisation sums
+        angle = np.angle(sum / 8.0)
+        abs_sum /= 8.0
 
-        # Take the complex exponent of the sum of args
+        # Take the complex exponent of the angle
         # and multiply by the sum of abs
-        return sum.real*np.exp(1j*sum.imag)
+        return abs_sum*np.exp(1j*angle)
 
     def compute_chi_sqrd_sum_terms(self, weight_vector=False):
         """

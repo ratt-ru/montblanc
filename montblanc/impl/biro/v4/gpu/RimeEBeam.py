@@ -70,6 +70,7 @@ template <
 __device__ __forceinline__
 void bilinear_interpolate(
     typename Tr::ct & sum,
+    typename Tr::ft & abs_sum,
     typename Tr::ct * E_beam,
     float gl, float gm, float gchan,
     const float ld, const float md, const float chd)
@@ -98,8 +99,9 @@ void bilinear_interpolate(
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
     typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
-    sum.x += weight*Po::abs(pol);
-    sum.y += weight*Po::arg(pol);
+    sum.x += weight*pol.x;
+    sum.y += weight*pol.y;
+    abs_sum += weight*Po::abs(pol);
 
     #undef POL
 }
@@ -185,39 +187,45 @@ void rime_jones_E_beam_impl(
         float gchan = BEAM_NUD * float((POLCHAN>>2))/float(NCHAN);
 
         typename Tr::ct sum = Po::make_ct(0.0, 0.0);
+        typename Tr::ft abs_sum = T(0.0);
 
         // Load in the complex values from the E beam
         // at the supplied coordinate offsets.
         // Save the sum of abs in sum.real
         // and the sum of args in sum.imag
-        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
             0.0f, 0.0f, 0.0f);
-        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
             1.0f, 0.0f, 0.0f);
-        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
             0.0f, 1.0f, 0.0f);
-        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
             1.0f, 1.0f, 0.0f);
 
-        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
             0.0f, 0.0f, 1.0f);
-        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
             1.0f, 0.0f, 1.0f);
-        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
             0.0f, 1.0f, 1.0f);
-        bilinear_interpolate<T>(sum, E_beam, gl, gm, gchan,
+        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
             1.0f, 1.0f, 1.0f);
 
-        // Normalise both sum of abs and args
+        // Normalise the polarisation
+        // and absolute polarisation sums
         sum.x /= T(8.0);
         sum.y /= T(8.0);
+        abs_sum /= T(8.0);
 
-        // Take the complex exponent of the sum of args
+        // Determine the normalised angle
+        typename Tr::ft angle = Po::arg(sum);
+
+        // Take the complex exponent of the angle
         // and multiply by the sum of abs
         typename Tr::ct value;
-        Po::sincos(sum.y, &value.y, &value.x);
-        value.x *= sum.x;
-        value.y *= sum.x;
+        Po::sincos(angle, &value.y, &value.x);
+        value.x *= abs_sum;
+        value.y *= abs_sum;
 
         i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
         E_term[i] = value;
