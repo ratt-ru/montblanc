@@ -182,9 +182,15 @@ void rime_jones_E_beam_impl(
         l += ld[threadIdx.y];
         m += md[threadIdx.y];
 
-        float gl = BEAM_LW * (l - beam_ll) / (beam_ul - beam_ll);
-        float gm = BEAM_MH * (m - beam_lm) / (beam_um - beam_lm);
-        float gchan = BEAM_NUD * float((POLCHAN>>2))/float(NCHAN);
+        float gl = (l - beam_ll) / (beam_ul - beam_ll);
+        if(fabsf(0.0f - gl) < 1e-8) { gl = 0.0f; }
+        gl *= T(BEAM_LW);
+
+        float gm = (m - beam_lm) / (beam_um - beam_lm);
+        if(fabsf(0.0f - gm) < 1e-8) { gm = 0.0f; }
+        gm *= T(BEAM_MH);
+
+        float gchan = T(BEAM_NUD) * float((POLCHAN>>2))/float(NCHAN);
 
         typename Tr::ct sum = Po::make_ct(0.0, 0.0);
         typename Tr::ft abs_sum = T(0.0);

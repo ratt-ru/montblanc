@@ -439,8 +439,13 @@ class SolverCPU(object):
         assert l.shape == (slvr.nsrc, slvr.ntime, slvr.na)
         assert m.shape == (slvr.nsrc, slvr.ntime, slvr.na)
 
-        gl = slvr.beam_lw * (l - slvr.beam_ll) / (slvr.beam_ul - slvr.beam_ll)
-        gm = slvr.beam_mh * (m - slvr.beam_lm) / (slvr.beam_um - slvr.beam_lm)
+        gl = (l - slvr.beam_ll) / (slvr.beam_ul - slvr.beam_ll)
+        gm = (m - slvr.beam_lm) / (slvr.beam_um - slvr.beam_lm)
+        gl[np.abs(0.0 - gl) < 1e-8] = 0.0
+        gl[np.abs(0.0 - gm) < 1e-8] = 0.0
+        gl = slvr.beam_lw * gl
+        gm = slvr.beam_mh * gm
+
         gchan = slvr.beam_nud * np.arange(slvr.nchan).astype(slvr.ft) / slvr.ft(slvr.nchan)
 
         assert gl.shape == (slvr.nsrc, slvr.ntime, slvr.na)
