@@ -129,8 +129,6 @@ void rime_jones_E_beam_impl(
     if(SRC >= NSRC || ANT >= NA || POLCHAN >= NPOLCHAN)
         return;
 
-    __shared__ T wl[BLOCKDIMX];
-
     __shared__ T l0[BLOCKDIMZ];
     __shared__ T m0[BLOCKDIMZ];
 
@@ -139,14 +137,6 @@ void rime_jones_E_beam_impl(
 
 
     int i;
-
-    // TODO. Using 3 times more shared memory than we
-    // really require here, since there's only
-    // one wavelength per channel.
-    if(threadIdx.y == 0 && threadIdx.z == 0)
-    {
-        wl[threadIdx.x] = wavelength[POLCHAN >> 2];
-    }
 
     // LM coordinates vary by source only,
     // not antenna or polarised channel
