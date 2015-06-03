@@ -183,8 +183,8 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     # Point source coordinates in the l,m,n (sky image) domain
     # 1e-4 ~ 20 arcseconds
-    l=ft(np.random.random(nsrc)*1e-4)
-    m=ft(np.random.random(nsrc)*1e-4)
+    l=ft(np.random.random(nsrc)-0.5)*1e-4
+    m=ft(np.random.random(nsrc)-0.5)*1e-4
     lm=mbu.shape_list([l,m], slvr.lm_shape, slvr.lm_dtype)
     slvr.transfer_lm(lm)
 
@@ -246,8 +246,8 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     slvr.set_ref_wave(wavelength[nchan//2])
 
     # Generate the antenna pointing errors
-    point_errors = make_random(slvr.point_errors_shape,
-            slvr.point_errors_dtype)
+    point_errors = (make_random(slvr.point_errors_shape,
+            slvr.point_errors_dtype)-0.5)*1e-5
     slvr.transfer_point_errors(point_errors)
 
     # Generate the noise vector
