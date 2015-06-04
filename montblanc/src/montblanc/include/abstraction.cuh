@@ -105,7 +105,15 @@ public:
 
     __device__ __forceinline__ static
     Tr::ft abs(const Tr::ft & value)
-        { return ::fabs(value); }
+        { return ::fabsf(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft round(const Tr::ft & value)
+        { return ::roundf(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft rint(const Tr::ft & value)
+        { return ::rintf(value); }
 };
 
 template <>
@@ -181,6 +189,14 @@ public:
     __device__ __forceinline__ static
     Tr::ft abs(const Tr::ft & value)
         { return ::abs(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft round(const Tr::ft & value)
+        { return ::round(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft rint(const Tr::ft & value)
+        { return ::rint(value); }
 };
 
 template <
