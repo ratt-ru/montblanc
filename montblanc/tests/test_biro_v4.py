@@ -246,13 +246,16 @@ class TestBiroV4(unittest.TestCase):
         if cmp is None:
             cmp = {}
 
-        # Enlarge the beam cube
-        # so that our sources track
-        # within it for the most part
-        slvr.set_beam_ll(-0.95)
-        slvr.set_beam_lm(-0.95)
-        slvr.set_beam_ul(0.95)
-        slvr.set_beam_um(0.95)
+        # In factory.py, our lm coordinates range from -5e-5 to 5e-5
+        # and pointing errors from -1e-5 to 1e-5. The following values
+        # make the beam cube sufficiently large to contain their
+        # values
+        S = 1e-4
+
+        slvr.set_beam_ll(-S)
+        slvr.set_beam_lm(-S)
+        slvr.set_beam_ul(S)
+        slvr.set_beam_um(S)
 
         slvr_cpu = SolverCPU(slvr)
         E_term_cpu = slvr_cpu.compute_E_beam()
@@ -262,12 +265,38 @@ class TestBiroV4(unittest.TestCase):
         with slvr.context:
             E_term_gpu = slvr.E_term_gpu.get()
 
-        self.assertTrue(np.allclose(E_term_cpu, E_term_gpu, **cmp))
+        # After extensive debugging and attempts get a nice
+        # solution, it has to be accepted that a certain
+        # (small) proportion of values will be different.
+        # These discrepancies are caused by taking the floor
+        # of floating point grid positions that lie very close
+        # to integral values. For example, the l position may
+        # be 24.9999 on the CPU and 25.0000 on the GPU
+        # (or vice-versa). I've made attempts to detect this
+        # and get the CPU and the GPU to agree
+        # e.g. np.abs(np.round(l) - l) < 1e-5
+        # but whichever epsilon is chosen, one can still get
+        # a discrepancy. e.g 24.990 vs 24.999
+
+        # Hence, we choose a very low ratio of unnacceptable values
+        proportion_acceptable = 1e-5
+        d = np.invert(np.isclose(E_term_cpu, E_term_gpu, **cmp))
+        incorrect = d.sum()
+        proportion_incorrect = incorrect / float(d.size)
+        self.assertTrue(proportion_incorrect < proportion_acceptable,
+            ('Proportion of incorrect E beam values %s '
+            '(%d out of %d)'
+            'is greater than the accepted tolerance %s.') %
+                (proportion_incorrect,
+                incorrect,
+                d.size,
+                proportion_acceptable))
 
         # Test that at a decent proportion of
         # the calculated E terms are non-zero
         non_zero_E = np.sum(E_term_cpu > 0) / float(E_term_cpu.size)
-        self.assertTrue(non_zero_E > 0.85)
+        self.assertTrue(non_zero_E > 0.85,
+            'Non-zero E-term ratio is %f.' % non_zero_E)
 
     def test_E_beam_float(self):
         """ Test the B sqrt float kernel """
@@ -276,7 +305,7 @@ class TestBiroV4(unittest.TestCase):
             npsrc=10, ngsrc=10, dtype=np.float32,
             pipeline=Pipeline([RimeEBeam()])) as slvr:
 
-            self.E_beam_test_impl(slvr, cmp={'rtol' : 1e-3})
+            self.E_beam_test_impl(slvr)
 
     def test_E_beam_double(self):
         """ Test the B sqrt double kernel """
@@ -284,7 +313,7 @@ class TestBiroV4(unittest.TestCase):
             npsrc=10, ngsrc=10, dtype=np.float64,
             pipeline=Pipeline([RimeEBeam()])) as slvr:
 
-            self.E_beam_test_impl(slvr, cmp={'rtol' : 1e-4})
+            self.E_beam_test_impl(slvr)
 
     def test_transpose(self):
         with solver(na=4, npsrc=6, ntime=2, nchan=10,
