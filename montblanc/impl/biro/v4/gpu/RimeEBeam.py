@@ -115,6 +115,7 @@ void rime_jones_E_beam_impl(
     T * lm,
     T * wavelength,
     T * point_errors,
+    T * antenna_scaling,
     typename Tr::ct * E_beam,
     typename Tr::ct * E_term,
     T beam_rot_vel,
@@ -135,6 +136,8 @@ void rime_jones_E_beam_impl(
     __shared__ T ld[BLOCKDIMY][BLOCKDIMX];
     __shared__ T md[BLOCKDIMY][BLOCKDIMX];
 
+    __shared__ T a[BLOCKDIMY][BLOCKDIMX];
+    __shared__ T b[BLOCKDIMY][BLOCKDIMX];
 
     int i;
 
@@ -144,6 +147,16 @@ void rime_jones_E_beam_impl(
     {
         i = SRC;   l0[threadIdx.z] = lm[i];
         i += NSRC; m0[threadIdx.z] = lm[i];
+    }
+
+    // Antenna scaling factors vary by antenna and channel,
+    // but not source or timestep
+    if(threadIdx.z == 0)
+    {
+        i = ANT*NCHAN + (POLCHAN >> 2);
+        a[threadIdx.y][threadIdx.x] = antenna_scaling[i];
+        i += NA*NCHAN;
+        b[threadIdx.y][threadIdx.x] = antenna_scaling[i];
     }
 
     __syncthreads();
@@ -174,6 +187,10 @@ void rime_jones_E_beam_impl(
         // Add the pointing errors for this antenna.
         l += ld[threadIdx.y][threadIdx.x];
         m += md[threadIdx.y][threadIdx.x];
+
+        // Multiply by the antenna scaling factors.
+        l *= a[threadIdx.y][threadIdx.x];
+        m *= b[threadIdx.y][threadIdx.x];
 
         float gl = T(BEAM_LW) * (l - beam_ll) / (beam_ul - beam_ll);
         float gm = T(BEAM_MH) * (m - beam_lm) / (beam_um - beam_lm);
@@ -234,6 +251,7 @@ rime_jones_E_beam_ ## ft( \
     ft * lm, \
     ft * wavelength, \
     ft * point_errors, \
+    ft * antenna_scaling, \
     ct * E_beam, \
     ct * E_term, \
     ft beam_rot_vel, \
@@ -241,7 +259,7 @@ rime_jones_E_beam_ ## ft( \
     ft beam_ul, ft beam_um) \
 { \
     rime_jones_E_beam_impl<ft>( \
-        lm, wavelength, point_errors, E_beam, E_term, \
+        lm, wavelength, point_errors, antenna_scaling, E_beam, E_term, \
         beam_rot_vel, beam_ll, beam_lm, beam_ul, beam_um); \
 }
 
@@ -316,7 +334,8 @@ class RimeEBeam(Node):
         slvr = solver
 
         self.kernel(slvr.lm_gpu, slvr.wavelength_gpu,
-            slvr.point_errors_gpu, slvr.E_beam_gpu, slvr.E_term_gpu,
+            slvr.point_errors_gpu, slvr.antenna_scaling_gpu,
+            slvr.E_beam_gpu, slvr.E_term_gpu,
             slvr.beam_rot_vel,
             slvr.beam_ll, slvr.beam_lm,
             slvr.beam_ul, slvr.beam_um,

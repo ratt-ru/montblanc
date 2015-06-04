@@ -250,6 +250,12 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
             slvr.point_errors_dtype)-0.5)*1e-5
     slvr.transfer_point_errors(point_errors)
 
+    # Generate antenna scaling coefficients
+    if version in [VERSION_FOUR, VERSION_FIVE]:
+        antenna_scaling = make_random(slvr.antenna_scaling_shape,
+            slvr.antenna_scaling_dtype)
+        slvr.transfer_antenna_scaling(antenna_scaling)
+
     # Generate the noise vector
     weight_vector = make_random(slvr.weight_vector_shape,
             slvr.weight_vector_dtype)

@@ -99,6 +99,7 @@ A = [
 
     ary_dict('wavelength', ('nchan',), 'ft'),
     ary_dict('point_errors', (2,'ntime','na','nchan'), 'ft'),
+    ary_dict('antenna_scaling', (2,'na','nchan'), 'ft'),
     ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
     ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
     ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct'),
