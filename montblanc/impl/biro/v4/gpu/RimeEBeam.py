@@ -95,7 +95,7 @@ void bilinear_interpolate(
     weight += chdiff*chdiff;
     weight = Po::sqrt(weight);
 
-    int i = ((int(l)*BEAM_MH + int(m))*BEAM_NUD + int(ch))*4 + POL;
+    int i = ((int(l)*BEAM_MH + int(m))*BEAM_NUD + int(ch))*NPOL + POL;
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
     typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
@@ -132,8 +132,8 @@ void rime_jones_E_beam_impl(
     __shared__ T l0[BLOCKDIMZ];
     __shared__ T m0[BLOCKDIMZ];
 
-    __shared__ T ld[BLOCKDIMY];
-    __shared__ T md[BLOCKDIMY];
+    __shared__ T ld[BLOCKDIMY][BLOCKDIMX];
+    __shared__ T md[BLOCKDIMY][BLOCKDIMX];
 
 
     int i;
@@ -150,11 +150,14 @@ void rime_jones_E_beam_impl(
 
     for(int TIME=0; TIME < NTIME; ++TIME)
     {
-        // Pointing errors vary by time and antenna
-        if(threadIdx.z == 0 && threadIdx.x == 0)
+        // Pointing errors vary by time, antenna and channel,
+        // but not source
+        if(threadIdx.z == 0)
         {
-            i = TIME*NA + ANT; ld[threadIdx.y] = point_errors[i];
-            i += NTIME*NA;     md[threadIdx.y] = point_errors[i];
+            i = (TIME*NA + ANT)*NCHAN + (POLCHAN >> 2);
+            ld[threadIdx.y][threadIdx.x] = point_errors[i];
+            i += NTIME*NA*NCHAN;
+            md[threadIdx.y][threadIdx.x] = point_errors[i];
         }
 
         __syncthreads();
@@ -169,17 +172,11 @@ void rime_jones_E_beam_impl(
         T m = l0[threadIdx.z]*sint + m0[threadIdx.z]*cost;
 
         // Add the pointing errors for this antenna.
-        l += ld[threadIdx.y];
-        m += md[threadIdx.y];
+        l += ld[threadIdx.y][threadIdx.x];
+        m += md[threadIdx.y][threadIdx.x];
 
-        float gl = (l - beam_ll) / (beam_ul - beam_ll);
-        if(fabsf(0.0f - gl) < 1e-8) { gl = 0.0f; }
-        gl *= T(BEAM_LW);
-
-        float gm = (m - beam_lm) / (beam_um - beam_lm);
-        if(fabsf(0.0f - gm) < 1e-8) { gm = 0.0f; }
-        gm *= T(BEAM_MH);
-
+        float gl = T(BEAM_LW) * (l - beam_ll) / (beam_ul - beam_ll);
+        float gm = T(BEAM_MH) * (m - beam_lm) / (beam_um - beam_lm);
         float gchan = T(BEAM_NUD) * float((POLCHAN>>2))/float(NCHAN);
 
         typename Tr::ct sum = Po::make_ct(0.0, 0.0);
@@ -225,6 +222,7 @@ void rime_jones_E_beam_impl(
 
         i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
         E_term[i] = value;
+        __syncthreads();
     }
 }
 

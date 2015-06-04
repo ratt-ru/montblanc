@@ -386,29 +386,33 @@ class SolverCPU(object):
         invalid_ch = np.logical_or(ch < 0.0, ch >= slvr.beam_nud)
         invalid_lm = np.logical_or.reduce((invalid_l, invalid_m))
 
-        assert invalid_lm.shape == (slvr.nsrc, slvr.ntime, slvr.na)
+        assert invalid_lm.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
         l[invalid_lm] = 0
         m[invalid_lm] = 0
         ch[invalid_ch] = 0
 
         ldiff, mdiff, chdiff = l - gl, m - gm, ch - gchan
-        assert ldiff.shape == (slvr.nsrc, slvr.ntime, slvr.na)
-        assert mdiff.shape == (slvr.nsrc, slvr.ntime, slvr.na)
+        assert ldiff.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+        assert mdiff.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
         assert chdiff.shape == (slvr.nchan,)
 
         coord_diff_sqrd = ldiff**2 + mdiff**2
         ch_diff_sqrd = chdiff**2
-        weight_sum = coord_diff_sqrd[:,:,:,np.newaxis] + \
+        weight_sum = coord_diff_sqrd + \
             ch_diff_sqrd[np.newaxis,np.newaxis,np.newaxis,:]
         assert weight_sum.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
         weights = np.sqrt(weight_sum)
-        weights[invalid_lm,:] = 0
+        weights[invalid_lm] = 0
         weights[:,:,:,invalid_ch] = 0
         assert weights.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
-        pols = slvr.E_beam_cpu[l.astype(np.int32),m.astype(np.int32),:][:,:,:,ch.astype(np.int32),:]
+        l_idx = l.astype(np.int32)
+        m_idx = m.astype(np.int32)
+        ch_idx = ch.astype(np.int32)[np.newaxis,np.newaxis,np.newaxis,:]
+
+        pols = slvr.E_beam_cpu[l_idx,m_idx,ch_idx]
         assert pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
 
         sum += weights[:,:,:,:,np.newaxis]*pols
@@ -433,23 +437,18 @@ class SolverCPU(object):
 
         ld = slvr.point_errors_cpu[0]
         md = slvr.point_errors_cpu[1]
-        l = l[:,:,np.newaxis] + ld[np.newaxis,:,:]
-        m = m[:,:,np.newaxis] + md[np.newaxis,:,:]
+        l = l[:,:,np.newaxis,np.newaxis] + ld[np.newaxis,:,:,:]
+        m = m[:,:,np.newaxis,np.newaxis] + md[np.newaxis,:,:,:]
 
-        assert l.shape == (slvr.nsrc, slvr.ntime, slvr.na)
-        assert m.shape == (slvr.nsrc, slvr.ntime, slvr.na)
+        assert l.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+        assert m.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
-        gl = (l - slvr.beam_ll) / (slvr.beam_ul - slvr.beam_ll)
-        gm = (m - slvr.beam_lm) / (slvr.beam_um - slvr.beam_lm)
-        gl[np.abs(0.0 - gl) < 1e-8] = 0.0
-        gl[np.abs(0.0 - gm) < 1e-8] = 0.0
-        gl = slvr.beam_lw * gl
-        gm = slvr.beam_mh * gm
-
+        gl = slvr.beam_lw * (l - slvr.beam_ll) / (slvr.beam_ul - slvr.beam_ll)
+        gm = slvr.beam_mh * (m - slvr.beam_lm) / (slvr.beam_um - slvr.beam_lm)
         gchan = slvr.beam_nud * np.arange(slvr.nchan).astype(slvr.ft) / slvr.ft(slvr.nchan)
 
-        assert gl.shape == (slvr.nsrc, slvr.ntime, slvr.na)
-        assert gm.shape == (slvr.nsrc, slvr.ntime, slvr.na)
+        assert gl.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+        assert gm.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
         assert gchan.shape == (slvr.nchan,)
 
         # Initialise the sum to zero
