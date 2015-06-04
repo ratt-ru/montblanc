@@ -118,7 +118,7 @@ void rime_jones_E_beam_impl(
     T * antenna_scaling,
     typename Tr::ct * E_beam,
     typename Tr::ct * E_term,
-    T beam_rot_vel,
+    T parallactic_angle,
     T beam_ll, T beam_lm,
     T beam_ul, T beam_um)
 {
@@ -178,7 +178,7 @@ void rime_jones_E_beam_impl(
         // Figure out how far the source has
         // rotated within the beam
         T sint, cost;
-        Po::sincos(beam_rot_vel*TIME, &sint, &cost);
+        Po::sincos(parallactic_angle*TIME, &sint, &cost);
 
         // Rotate the source
         T l = l0[threadIdx.z]*cost - m0[threadIdx.z]*sint;
@@ -254,13 +254,13 @@ rime_jones_E_beam_ ## ft( \
     ft * antenna_scaling, \
     ct * E_beam, \
     ct * E_term, \
-    ft beam_rot_vel, \
+    ft parallactic_angle, \
     ft beam_ll, ft beam_lm, \
     ft beam_ul, ft beam_um) \
 { \
     rime_jones_E_beam_impl<ft>( \
         lm, wavelength, point_errors, antenna_scaling, E_beam, E_term, \
-        beam_rot_vel, beam_ll, beam_lm, beam_ul, beam_um); \
+        parallactic_angle, beam_ll, beam_lm, beam_ul, beam_um); \
 }
 
 stamp_jones_E_beam_fn(float,float2);
@@ -336,7 +336,7 @@ class RimeEBeam(Node):
         self.kernel(slvr.lm_gpu, slvr.wavelength_gpu,
             slvr.point_errors_gpu, slvr.antenna_scaling_gpu,
             slvr.E_beam_gpu, slvr.E_term_gpu,
-            slvr.beam_rot_vel,
+            slvr.parallactic_angle,
             slvr.beam_ll, slvr.beam_lm,
             slvr.beam_ul, slvr.beam_um,
             stream=stream, **self.launch_params)

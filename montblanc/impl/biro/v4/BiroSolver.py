@@ -82,7 +82,7 @@ P = [
     # Upper l and m coordinates of the beam cube
     prop_dict('beam_ul', 'ft', 0.5),
     prop_dict('beam_um', 'ft', 0.5),
-    prop_dict('beam_rot_vel', 'ft', np.deg2rad(1))
+    prop_dict('parallactic_angle', 'ft', 0.0),
 ]
 
 # List of arrays

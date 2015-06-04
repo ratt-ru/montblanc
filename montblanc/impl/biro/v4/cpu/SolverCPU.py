@@ -421,8 +421,8 @@ class SolverCPU(object):
     def compute_E_beam(self):
         slvr = self.solver
 
-        sint = np.sin(slvr.beam_rot_vel*np.arange(slvr.ntime))
-        cost = np.cos(slvr.beam_rot_vel*np.arange(slvr.ntime))
+        sint = np.sin(slvr.parallactic_angle*np.arange(slvr.ntime))
+        cost = np.cos(slvr.parallactic_angle*np.arange(slvr.ntime))
 
         assert sint.shape == (slvr.ntime,)
         assert cost.shape == (slvr.ntime,)

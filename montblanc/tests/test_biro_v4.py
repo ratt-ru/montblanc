@@ -257,6 +257,11 @@ class TestBiroV4(unittest.TestCase):
         slvr.set_beam_ul(S)
         slvr.set_beam_um(S)
 
+        # Default parallactic angle is 0
+        # Set it to 1 degree so that our
+        # sources rotate through the cube.
+        slvr.set_parallactic_angle(np.deg2rad(1))
+
         slvr_cpu = SolverCPU(slvr)
         E_term_cpu = slvr_cpu.compute_E_beam()
 
