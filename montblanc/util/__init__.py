@@ -152,8 +152,8 @@ def dict_array_bytes_required(arrays, props):
 
     Arguments
     ---------------
-    arrays : dict
-        A dictionary of arrays
+    arrays : list
+        A list of dictionaries defining the arrays
     props : dict
         A dictionary of key-values, used to replace any
         string values in the arrays with concrete integral
@@ -165,7 +165,7 @@ def dict_array_bytes_required(arrays, props):
     all the arrays.
     """
     return np.sum([dict_array_bytes(ary, props)
-        for ary in arrays.itervalues()])
+        for ary in arrays])
 
 def viable_dim_config(bytes_available, arrays, props,
         dim_ord, nsolvers=1):
@@ -178,8 +178,8 @@ def viable_dim_config(bytes_available, arrays, props,
     bytes_available : int
         The memory budget, or available number of bytes
         for solving the problem.
-    arrays : dict
-        Dictionary describing the arrays
+    arrays : list
+        List of dictionaries describing the arrays
     props : dict
         Dictionary containing key-values that will be used
         to replace any string representations of dimensions

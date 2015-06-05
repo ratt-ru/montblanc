@@ -63,42 +63,42 @@ def prop_dict(name,dtype,default):
 # and https://github.com/ska-sa/meqtrees-timba/blob/master/MeqNodes/src/PSVTensor.cc#L602
 fwhm2int = 1.0/np.sqrt(np.log(256))
 
-# Dictionary of properties
-P = {
+# List of properties
+P = [
     # Note that we don't divide by speed of light here. meqtrees code operates
     # on frequency, while we're dealing with wavelengths.
-    'gauss_scale' : prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi),
-    'two_pi' : prop_dict('two_pi', 'ft', 2*np.pi),
-    'ref_wave' : prop_dict('ref_wave', 'ft', 0.0),
-    'sigma_sqrd' : prop_dict('sigma_sqrd', 'ft', 1.0),
-    'X2' : prop_dict('X2', 'ft', 0.0),
-    'beam_width' : prop_dict('beam_width', 'ft', 65),
-    'beam_clip' : prop_dict('beam_clip', 'ft', 1.0881),
-}
+    prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi),
+    prop_dict('two_pi', 'ft', 2*np.pi),
+    prop_dict('ref_wave', 'ft', 0.0),
+    prop_dict('sigma_sqrd', 'ft', 1.0),
+    prop_dict('X2', 'ft', 0.0),
+    prop_dict('beam_width', 'ft', 65),
+    prop_dict('beam_clip', 'ft', 1.0881),
+]
 
-# Dictionary of arrays
-A = {
+# List of arrays
+A = [
     # Input Arrays
-    'uvw' : ary_dict('uvw', (3,'ntime','na'), 'ft'),
-    'ant_pairs' : ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32),
+    ary_dict('uvw', (3,'ntime','na'), 'ft'),
+    ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32),
 
-    'lm' : ary_dict('lm', (2,'nsrc'), 'ft'),
-    'brightness' : ary_dict('brightness', (5,'nsrc','ntime'), 'ft'),
-    'gauss_shape' : ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
-    'sersic_shape' : ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
+    ary_dict('lm', (2,'nsrc'), 'ft'),
+    ary_dict('brightness', (5,'nsrc','ntime'), 'ft'),
+    ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
+    ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
 
-    'wavelength' : ary_dict('wavelength', ('nchan',), 'ft'),
-    'point_errors' : ary_dict('point_errors', (2,'ntime','na'), 'ft'),
-    'weight_vector' : ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
-    'bayes_data' : ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
+    ary_dict('wavelength', ('nchan',), 'ft'),
+    ary_dict('point_errors', (2,'ntime','na'), 'ft'),
+    ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
+    ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
 
     # Result arrays
-    'jones_scalar' : ary_dict('jones_scalar', ('nsrc','ntime','na','nchan'), 'ct', cpu=False),
-    'vis' : ary_dict('vis', (4,'ntime','nbl','nchan'), 'ct', cpu=False),
-    'chi_sqrd_result' : ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
+    ary_dict('jones_scalar', ('nsrc','ntime','na','nchan'), 'ct', cpu=False),
+    ary_dict('vis', (4,'ntime','nbl','nchan'), 'ct', cpu=False),
+    ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
 
-    'X2' : ary_dict('X2', (1, ), 'ft'),
-}
+    ary_dict('X2', (1, ), 'ft'),
+]
 
 class BiroSolver(BaseSolver):
     """ Shared Data implementation for BIRO """

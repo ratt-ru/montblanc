@@ -507,18 +507,18 @@ class BaseSolver(Solver):
             dtype_name = mbu.dtype_name(name)
             setattr(self, dtype_name, dtype)
 
-    def register_arrays(self, array_dicts):
+    def register_arrays(self, array_list):
         """
-        Register arrays using a dictionary defining the arrays.
+        Register arrays using a list of dictionaries defining the arrays.
 
-        The dictionary should itself contain dictionaries. i.e.
+        The list should itself contain dictionaries. i.e.
 
-        >>> D = {
+        >>> D = [
             'uvw' : { 'name':'uvw', 'shape':(3,'ntime','nbl'),'dtype':np.float32 },
             'lm' : { 'name':'lm', 'shape':(2,'nsrc'),'dtype':np.float32 }
-        }
+        ]
         """
-        for name, ary in array_dicts.iteritems():
+        for ary in array_list:
             self.register_array(**ary)
 
     def register_property(self, name, dtype, default, registrant, **kwargs):
@@ -588,18 +588,18 @@ class BaseSolver(Solver):
             raise TypeError, ('setter keyword argument set',
                 ' to an invalid type %s' % (type(setter)))
 
-    def register_properties(self, property_dicts):
+    def register_properties(self, property_list):
         """
-        Register properties using a dictionary defining the properties.
+        Register properties using a list defining the properties.
 
         The dictionary should itself contain dictionaries. i.e.
 
-        >>> D = {
-            'ref_wave' : { 'name':'ref_wave','dtype':np.float32,
+        >>> D = [
+            { 'name':'ref_wave','dtype':np.float32,
                 'default':1.41e6, 'registrant':'solver' },
-        }
+        ]
         """
-        for name, prop in property_dicts.iteritems():
+        for prop in property_list:
             self.register_property(**prop)
 
     def get_array_record(self, name):

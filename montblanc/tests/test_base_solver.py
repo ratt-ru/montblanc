@@ -337,29 +337,30 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(getattr(slvr, shape_name) == shape)
             self.assertTrue(getattr(slvr, dtype_name) == dtype)
 
-    def test_register_array_dictionary(self):
-        """ Test registration of arrays by dictionary construction """
-        D = {
-            'uvw': { 'name':'uvw', 'shape':(3,'ntime','na'),
+    def test_register_array_list(self):
+        """ Test registration of arrays by list """
+        D = [
+            { 'name':'uvw', 'shape':(3,'ntime','na'),
                 'dtype':np.float32, 'registrant':'test_base_solver',
                 'cpu':True, 'gpu':True,
                 'dtype_member':True, 'shape_member':True },
-            'brightness' : { 'name':'brightness', 'shape':(5,'ntime','nsrc'),
+            { 'name':'brightness', 'shape':(5,'ntime','nsrc'),
                 'dtype':np.complex64, 'registrant':'test_base_solver',
                 'cpu':False, 'gpu':True,
                 'dtype_member':True, 'shape_member':True },
-            'lm' : { 'name':'lm', 'shape':(2,'nsrc'),
+            { 'name':'lm', 'shape':(2,'nsrc'),
                 'dtype':np.float32, 'registrant':'test_base_solver',
                 'cpu':True, 'gpu':False,
                 'dtype_member':False, 'shape_member':False }
-        }
+        ]
 
         with montblanc.factory.get_base_solver(na=3,nchan=32,
             ntime=10,npsrc=10,ngsrc=10) as slvr:
 
             slvr.register_arrays(D)
 
-            for name,a in D.iteritems():
+            for a in D:
+                name = a['name']
                 gpu_name = mbu.gpu_name(name)
                 cpu_name = mbu.cpu_name(name)
                 shape_name = mbu.shape_name(name)
@@ -387,21 +388,22 @@ class TestSolver(unittest.TestCase):
                 else:
                     self.assertTrue(not hasattr(slvr,shape_name))
 
-    def test_register_property_dictionary(self):
-        """ Test registration of properties by dictionary construction """
-        D = {
-            'ref_wave' : { 'name':'ref_wave','dtype':np.float32,
+    def test_register_property_list(self):
+        """ Test registration of properties by list """
+        D = [
+            { 'name':'ref_wave','dtype':np.float32,
                 'default':1.41e6, 'registrant':'test_base_solver', 'setter':True },
-            'beam_width' : { 'name':'beam_width','dtype':np.float32,
+            { 'name':'beam_width','dtype':np.float32,
                 'default':65, 'registrant':'test_base_solver', 'setter':True },
-        }
+        ]
 
         with montblanc.factory.get_base_solver(na=3,nchan=32,
             ntime=10,npsrc=10,ngsrc=10) as slvr:
 
             slvr.register_properties(D)
 
-            for name,a in D.iteritems():
+            for a in D:
+                name = a['name']
                 self.assertTrue(hasattr(slvr,name))
 
                 setter_name = mbu.setter_name(name)

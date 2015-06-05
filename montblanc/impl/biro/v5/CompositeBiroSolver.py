@@ -102,19 +102,20 @@ class CompositeBiroSolver(BaseSolver):
         # arrays to the sub-solver. Also, in general,
         # only maintain CPU arrays on the main solver,
         # but not GPU arrays, which will exist on the sub-solvers
-        for name, ary in A_main.iteritems():
-            ary['transfer_method'] = self.get_transfer_method(name)
+        for ary in A_main:
+            ary['transfer_method'] = self.get_transfer_method(ary['name'])
             ary['gpu'] = False
             ary['cpu'] = True
 
         # Add custom property setter method
-        for name, prop in P_main.iteritems():
-            prop['setter_method'] = self.get_setter_method(name)
+        for prop in P_main:
+            prop['setter_method'] = self.get_setter_method(ary['name'])
 
         # Do not create CPU versions of result arrays
-        A_main['jones_scalar']['cpu'] = False
-        A_main['vis']['cpu'] = False
-        A_main['chi_sqrd_result']['cpu'] = False
+
+        for ary in [a for a in A_main if a['name'] in
+                ['jones_scalar', 'vis', 'chi_sqrd_result']]:
+            ary['cpu'] = False
 
         # Create the arrays on the solver
         self.register_arrays(A_main)
@@ -184,9 +185,9 @@ class CompositeBiroSolver(BaseSolver):
         A_sub = copy.deepcopy(BSV4mod.A)
         P_sub = copy.deepcopy(BSV4mod.P)
 
-        for name, ary in A_sub.iteritems():
+        for ary in A_sub:
             # Add a transfer method
-            ary['transfer_method'] = self.get_sub_transfer_method(name)
+            ary['transfer_method'] = self.get_sub_transfer_method(ary['name'])
             ary['cpu'] = False
             ary['gpu'] = True
 
@@ -323,7 +324,7 @@ class CompositeBiroSolver(BaseSolver):
         with self.context as ctx:
             for slvr in self.solvers:
                 slvr.shutdown()
-                
+
     def get_setter_method(self,name):
         """
         Setter method for CompositeBiroSolver properties. Sets the property
