@@ -480,6 +480,32 @@ class SolverCPU(object):
         # and multiply by the sum of abs
         return abs_sum*np.exp(1j*angle)
 
+    @staticmethod
+    def jones_multiply(A, B, N):
+        # Based on
+        # https://jameshensman.wordpress.com/2010/06/14/multiple-matrix-multiplication-in-numpy/
+
+        AR = A.reshape(N, 2, 2)
+        #b = B.reshape(N, 2, 2)
+
+        return np.sum(
+            AR.transpose(0,2,1).reshape(N,2,2,1)*B.reshape(N,2,1,2),
+            -3)
+
+    def compute_ekb_sqrt_jones_per_ant(self):
+        slvr = self.solver
+        N = slvr.nsrc*slvr.ntime*slvr.na*slvr.nchan
+
+        E_beam = self.compute_E_beam()
+        kb_sqrt = self.compute_kb_sqrt_jones_per_ant().transpose(1,2,3,4,0)
+
+        assert E_beam.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+        assert kb_sqrt.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+
+        result = SolverCPU.jones_multiply(E_beam, kb_sqrt,
+            slvr.nsrc*slvr.ntime*slvr.na*slvr.nchan)
+        return result.reshape(slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+
     def compute_chi_sqrd_sum_terms(self, weight_vector=False):
         """
         Computes the terms of the chi squared sum,

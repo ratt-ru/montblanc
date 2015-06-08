@@ -45,6 +45,7 @@ DOUBLE_PARAMS = {
 KERNEL_TEMPLATE = string.Template("""
 #include \"math_constants.h\"
 #include <montblanc/include/abstraction.cuh>
+#include <montblanc/include/jones.cuh>
 
 #define NA (${na})
 #define NBL (${nbl})
@@ -63,7 +64,7 @@ template <
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
-void rime_jones_KB_impl(
+void rime_jones_EKBSqrt_impl(
     T * uvw,
     T * lm,
     T * wavelength,
@@ -132,41 +133,46 @@ void rime_jones_KB_impl(
         Po::sincos(phase, &cplx_phase.y, &cplx_phase.x);
 
         i = (SRC*NTIME + TIME)*NPOLCHAN + POLCHAN;
-        typename Tr::ct brightness = B_sqrt[i];
+        // Load in the brightness square root
+        typename Tr::ct brightness_sqrt = B_sqrt[i];
+        montblanc::complex_multiply_in_place<T>(cplx_phase, brightness_sqrt);
 
-        montblanc::complex_multiply_in_place<T>(brightness, cplx_phase);
-
-        // Write out the phase terms
         i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
-        jones[i] = brightness;
+        // Load in the E Beam, and multiply it by KB
+        typename Tr::ct J = jones[i];
+        montblanc::jones_multiply_4x4_in_place<T>(J, cplx_phase);
+
+        // Write out the jones matrices
+        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
+        jones[i] = J;
         __syncthreads();
     }
 }
 
 extern "C" {
 
-#define stamp_rime_KB_fn(ft,ct) \
+#define stamp_rime_EKBSqrt_fn(ft,ct) \
 __global__ void \
-rime_jones_KB_ ## ft( \
+rime_jones_EKBSqrt_ ## ft( \
     ft * UVW, \
     ft * LM, \
     ft * wavelength, \
     ct * B_sqrt, \
     ct * jones) \
 { \
-    rime_jones_KB_impl<ft>(UVW, LM, \
+    rime_jones_EKBSqrt_impl<ft>(UVW, LM, \
         wavelength, B_sqrt, jones); \
 }
 
-stamp_rime_KB_fn(float,float2)
-stamp_rime_KB_fn(double,double2)
+stamp_rime_EKBSqrt_fn(float,float2)
+stamp_rime_EKBSqrt_fn(double,double2)
 
 } // extern "C" {
 """)
 
-class RimeKB(Node):
+class RimeEKBSqrt(Node):
     def __init__(self):
-        super(RimeKB, self).__init__()
+        super(RimeEKBSqrt, self).__init__()
 
     def initialise(self, solver, stream=None):
         slvr = solver
@@ -191,9 +197,9 @@ class RimeKB(Node):
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
 
-        kname = 'rime_jones_KB_float' \
+        kname = 'rime_jones_EKBSqrt_float' \
             if slvr.is_float() is True else \
-            'rime_jones_KB_double'
+            'rime_jones_EKBSqrt_double'
 
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
         self.mod = SourceModule(kernel_string,

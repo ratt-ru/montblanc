@@ -27,7 +27,7 @@ import time
 
 import montblanc.factory
 
-from montblanc.impl.biro.v4.gpu.RimeKB import RimeKB
+from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
@@ -106,7 +106,7 @@ class TestBiroV4(unittest.TestCase):
         """ Tear down each test case """
         pass
 
-    def KB_test_impl(self, slvr, cmp=None):
+    def EKB_test_impl(self, slvr, cmp=None):
         """ Type independent implementation of the KB test """
         if cmp is None:
             cmp = {}
@@ -116,29 +116,50 @@ class TestBiroV4(unittest.TestCase):
         # Call the GPU solver
         slvr.solve()
 
-        kb_cpu = slvr_cpu.compute_kb_sqrt_jones_per_ant().transpose(1,2,3,4,0)
+        ekb_cpu = slvr_cpu.compute_ekb_sqrt_jones_per_ant()
+
         with slvr.context:
-            kb_gpu = slvr.jones_gpu.get()
+            ekb_gpu = slvr.jones_gpu.get()
 
-        self.assertTrue(np.allclose(kb_cpu, kb_gpu, **cmp))
+        # Some proportion of values will be out due to
+        # discrepancies on the CPU and GPU when computing
+        # the E beam (See E_beam_test_impl below)
+        proportion_acceptable = 1e-2
+        d = np.invert(np.isclose(ekb_cpu, ekb_gpu, **cmp))
+        incorrect = d.sum()
+        proportion_incorrect = incorrect / float(d.size)
+        self.assertTrue(proportion_incorrect < proportion_acceptable,
+            ('Proportion of incorrect EKB %s '
+            '(%d out of %d) '
+            'is greater than the accepted tolerance %s.') %
+                (proportion_incorrect,
+                incorrect,
+                d.size,
+                proportion_acceptable))
 
-    def test_KB_float(self):
+        # Test that at a decent proportion of
+        # the calculated EKB terms are non-zero
+        non_zero = np.sum(ekb_cpu > 0) / float(ekb_cpu.size)
+        self.assertTrue(non_zero > 0.85,
+            'Non-zero EKB ratio is %f.' % non_zero)
+
+    def test_EKB_float(self):
         """ Single precision KB test  """
         for params in src_perms({'na': 14, 'nchan': 64, 'ntime': 20}, True):
-            with solver(type=np.float32,
-                        pipeline=Pipeline([RimeBSqrt(), RimeKB()]),
-                        **params) as slvr:
+            with solver(dtype=np.float32,
+                pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]),
+                **params) as slvr:
 
-                self.KB_test_impl(slvr, cmp={ 'rtol' : 1e-3})
+                self.EKB_test_impl(slvr, cmp={'rtol': 1e-4})
 
-    def test_KB_double(self):
+    def test_EKB_double(self):
         """ Double precision KB test """
         for params in src_perms({'na': 14, 'nchan': 64, 'ntime': 20}, True):
-            with solver(type=np.float64,
-                        pipeline=Pipeline([RimeBSqrt(), RimeKB()]),
-                        **params) as slvr:
+            with solver(dtype=np.float64,
+                pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]),
+                **params) as slvr:
 
-                self.KB_test_impl(slvr, cmp={ 'rtol' : 1e-4})
+                self.EKB_test_impl(slvr, cmp={'rtol': 1e-5})
 
     def B_sum_test_impl(self, slvr, weight_vector=False, cmp=None):
         """ Type independent implementation of the B Sum test """
@@ -290,7 +311,7 @@ class TestBiroV4(unittest.TestCase):
         proportion_incorrect = incorrect / float(d.size)
         self.assertTrue(proportion_incorrect < proportion_acceptable,
             ('Proportion of incorrect E beam values %s '
-            '(%d out of %d)'
+            '(%d out of %d) '
             'is greater than the accepted tolerance %s.') %
                 (proportion_incorrect,
                 incorrect,
