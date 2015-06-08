@@ -117,7 +117,7 @@ void rime_jones_E_beam_impl(
     T * point_errors,
     T * antenna_scaling,
     typename Tr::ct * E_beam,
-    typename Tr::ct * E_term,
+    typename Tr::ct * jones,
     T parallactic_angle,
     T beam_ll, T beam_lm,
     T beam_ul, T beam_um)
@@ -238,7 +238,7 @@ void rime_jones_E_beam_impl(
         value.y *= abs_sum;
 
         i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
-        E_term[i] = value;
+        jones[i] = value;
         __syncthreads();
     }
 }
@@ -253,13 +253,13 @@ rime_jones_E_beam_ ## ft( \
     ft * point_errors, \
     ft * antenna_scaling, \
     ct * E_beam, \
-    ct * E_term, \
+    ct * jones, \
     ft parallactic_angle, \
     ft beam_ll, ft beam_lm, \
     ft beam_ul, ft beam_um) \
 { \
     rime_jones_E_beam_impl<ft>( \
-        lm, wavelength, point_errors, antenna_scaling, E_beam, E_term, \
+        lm, wavelength, point_errors, antenna_scaling, E_beam, jones, \
         parallactic_angle, beam_ll, beam_lm, beam_ul, beam_um); \
 }
 
@@ -335,7 +335,7 @@ class RimeEBeam(Node):
 
         self.kernel(slvr.lm_gpu, slvr.wavelength_gpu,
             slvr.point_errors_gpu, slvr.antenna_scaling_gpu,
-            slvr.E_beam_gpu, slvr.E_term_gpu,
+            slvr.E_beam_gpu, slvr.jones_gpu,
             slvr.parallactic_angle,
             slvr.beam_ll, slvr.beam_lm,
             slvr.beam_ul, slvr.beam_um,

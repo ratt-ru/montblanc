@@ -454,7 +454,7 @@ class SolverCPU(object):
         assert gchan.shape == (slvr.nchan,)
 
         # Initialise the sum to zero
-        sum = np.zeros_like(slvr.E_term_cpu)
+        sum = np.zeros_like(slvr.jones_cpu)
         abs_sum = np.zeros(shape=sum.shape, dtype=slvr.ft)
 
         # Load in the complex values from the E beam

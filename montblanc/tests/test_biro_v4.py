@@ -268,7 +268,7 @@ class TestBiroV4(unittest.TestCase):
         slvr.solve()
 
         with slvr.context:
-            E_term_gpu = slvr.E_term_gpu.get()
+            E_term_gpu = slvr.jones_gpu.get()
 
         # After extensive debugging and attempts get a nice
         # solution, it has to be accepted that a certain
