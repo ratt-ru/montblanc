@@ -35,12 +35,12 @@ void jones_multiply_4x4_in_place(
     typename Tr::ct & J,
     const typename Tr::ct & K)
 {
-    #define VIS_BASE_IDX ((cub::LaneId() >> 2) << 2)
-    #define IS_ODD (cub::LaneId() & 0x1)
+    #define _MONTBLANC_VIS_BASE_IDX ((cub::LaneId() >> 2) << 2)
+    #define _MONTBLANC_IS_ODD (cub::LaneId() & 0x1)
 
     // This will produce indexes with the following pattern
     // 1 2 1 2 5 6 5 6 9 10 9 10 13 14 13 14
-    int shfl_idx = VIS_BASE_IDX + 1 + IS_ODD;
+    int shfl_idx = _MONTBLANC_VIS_BASE_IDX + 1 + _MONTBLANC_IS_ODD;
     // Load in the value to multiply.
     typename Tr::ct shfl_K = cub::ShuffleIndex(K, shfl_idx);
 
@@ -53,21 +53,18 @@ void jones_multiply_4x4_in_place(
     // Now shuffle the sums
     // This will produce indexes with the following pattern
     // 1 0 3 2 5 4 7 6 9 8 11 10 13 12 15 14
-    shfl_idx = cub::LaneId() + 1 + -2*IS_ODD;
+    shfl_idx = cub::LaneId() + 1 + -2*_MONTBLANC_IS_ODD;
     sum = cub::ShuffleIndex(sum, shfl_idx);
 
     // This will produce indexes with the following pattern
     // 0 3 0 3 4 7 4 7 8 11 8 11 12 15 12 15
-    shfl_idx = VIS_BASE_IDX + 3*IS_ODD;
+    shfl_idx = _MONTBLANC_VIS_BASE_IDX + 3*_MONTBLANC_IS_ODD;
     // Load in the polarisation to multiply.
     shfl_K = cub::ShuffleIndex(K, shfl_idx);
     sum.x += J.x*shfl_K.x - J.y*shfl_K.y;
     sum.y += J.x*shfl_K.y + J.y*shfl_K.x;
 
     J = sum;
-
-    #undef VIS_BASE_IDX
-    #undef IS_ODD
 }
 
 } // namespace montblanc
