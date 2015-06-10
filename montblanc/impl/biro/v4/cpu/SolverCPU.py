@@ -209,46 +209,6 @@ class SolverCPU(object):
 
         return result
 
-
-    def compute_k_jones_scalar_per_bl(self):
-        """
-        Computes the scalar K (phase) term of the RIME per baseline.
-
-        Returns a (nsrc,ntime,nbl,nchan) matrix of complex scalars.
-        """
-        slvr = self.solver
-
-        try:
-            # Re-arrange per antenna terms into per baseline antenna pair values
-            ap = slvr.get_ap_idx(src=True, chan=True)
-            k_jones = self.compute_k_jones_scalar_per_ant()[ap]
-
-            k_jones_per_bl = k_jones[1]*k_jones[0].conj()
-
-            # Add in the shape terms of the gaussian sources.
-            if slvr.ngsrc > 0:
-                src_beg = slvr.npsrc
-                src_end = slvr.npsrc + slvr.ngsrc
-                k_jones_per_bl[src_beg:src_end, :, :  :] *=\
-                    self.compute_gaussian_shape()
-                # TODO: Would like to do this, but fails because of
-                # https://github.com/pydata/numexpr/issues/155
-                #gsrc_view = k_jones_per_bl[:,:,slvr.npsrc:,:]
-                #gshape = self.compute_gaussian_shape()
-                #ne.evaluate('kjones*complex(gshape.real,0.0)',
-                #    {'kjones' : gsrc_view, 'gshape':gshape }, out=gsrc_view)
-
-            # Add in the shape terms of the sersic sources.
-            if slvr.nssrc > 0:
-                src_beg = slvr.npsrc+slvr.ngsrc
-                src_end = slvr.npsrc+slvr.ngsrc+slvr.nssrc
-                k_jones_per_bl[src_beg:src_end:, :, :,  :] *=  \
-                    self.compute_sersic_shape()
-
-            return k_jones_per_bl
-        except AttributeError as e:
-            mbu.rethrow_attribute_exception(e)
-
     def compute_b_jones(self):
         """
         Computes the brightness matrix from the stokes parameters.
@@ -337,40 +297,6 @@ class SolverCPU(object):
 
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
-
-    def compute_bk_jones(self):
-        """
-        Computes the jones matrices based on the
-        scalar EK term and the 2x2 B term.
-
-        Returns a (4,nsrc,ntime,nbl,nchan) matrix of complex scalars.
-        """
-        slvr = self.solver
-
-        per_bl_k_scalar = self.compute_k_jones_scalar_per_bl()
-        b_jones = self.compute_b_jones()
-
-        jones = per_bl_k_scalar[np.newaxis, :, :, :, :] * \
-            b_jones[:, :, :, np.newaxis, np.newaxis]
-        assert jones.shape == (4, slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan)
-
-        return jones
-
-    def compute_bk_vis(self):
-        """
-        Computes the complex visibilities based on the
-        scalar K term and the 2x2 B term.
-
-        Returns a (4,ntime,nbl,nchan) matrix of complex scalars.
-        """
-
-        slvr = self.solver
-
-        vis = ne.evaluate('sum(bk,3)', {'bk': self.compute_bk_jones()})\
-            .astype(slvr.ct)
-        assert vis.shape == (4, slvr.ntime, slvr.nbl, slvr.nchan)
-
-        return vis
 
     def bilinear_interpolate(self, sum, abs_sum,
             gl, gm, gchan,
