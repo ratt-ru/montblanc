@@ -144,7 +144,7 @@ class TestBiroV4(unittest.TestCase):
             'Non-zero EKB ratio is %f.' % non_zero)
 
     def test_EKB_float(self):
-        """ Single precision KB test  """
+        """ Single precision EKB test  """
         for params in src_perms({'na': 14, 'nchan': 64, 'ntime': 20}, True):
             with solver(dtype=np.float32,
                 pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]),
@@ -153,7 +153,7 @@ class TestBiroV4(unittest.TestCase):
                 self.EKB_test_impl(slvr, cmp={'rtol': 1e-4})
 
     def test_EKB_double(self):
-        """ Double precision KB test """
+        """ Double precision EKB test """
         for params in src_perms({'na': 14, 'nchan': 64, 'ntime': 20}, True):
             with solver(dtype=np.float64,
                 pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]),
@@ -325,7 +325,7 @@ class TestBiroV4(unittest.TestCase):
             'Non-zero E-term ratio is %f.' % non_zero_E)
 
     def test_E_beam_float(self):
-        """ Test the B sqrt float kernel """
+        """ Test the E Beam float kernel """
 
         with solver(na=14, ntime=50, nchan=64,
             npsrc=10, ngsrc=10, dtype=np.float32,
@@ -334,7 +334,7 @@ class TestBiroV4(unittest.TestCase):
             self.E_beam_test_impl(slvr)
 
     def test_E_beam_double(self):
-        """ Test the B sqrt double kernel """
+        """ Test the E Beam double kernel """
         with solver(na=14, ntime=50, nchan=64,
             npsrc=10, ngsrc=10, dtype=np.float64,
             pipeline=Pipeline([RimeEBeam()])) as slvr:
