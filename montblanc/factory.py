@@ -223,6 +223,12 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
             make_random(slvr.E_beam_cpu.shape, slvr.E_beam_cpu.dtype)*1j
         slvr.transfer_E_beam(E_beam)
 
+    # G term
+    if version in [VERSION_FOUR, VERSION_FIVE]:
+        G_term = make_random(slvr.G_term_cpu.shape, slvr.G_term_cpu.dtype) + \
+            make_random(slvr.G_term_cpu.shape, slvr.G_term_cpu.dtype)*1j
+        slvr.transfer_G_term(G_term)
+
     # Gaussian shape matrix
     el = ft(np.random.random(ngsrc)*0.5)
     em = ft(np.random.random(ngsrc)*0.5)

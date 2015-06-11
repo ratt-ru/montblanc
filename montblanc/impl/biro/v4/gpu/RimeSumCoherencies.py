@@ -80,6 +80,7 @@ void rime_sum_coherencies_impl(
     typename Tr::ct * jones,
     typename Tr::ft * weight_vector,
     typename Tr::ct * bayes_data,
+    typename Tr::ct * G_term,
     typename Tr::ct * visibilities,
     typename Tr::ft * chi_sqrd_result)
 {
@@ -297,13 +298,14 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ct * jones, \
     ft * weight_vector, \
     ct * bayes_data, \
+    ct * G_term, \
     ct * visibilities, \
     ft * chi_sqrd_result) \
 { \
     rime_sum_coherencies_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
         wavelength, ant_pairs, jones, \
-        weight_vector, bayes_data, visibilities, \
-        chi_sqrd_result); \
+        weight_vector, bayes_data, G_term, \
+        visibilities, chi_sqrd_result); \
 }
 
 stamp_sum_coherencies_fn(float, float2, false, u)
@@ -383,7 +385,8 @@ class RimeSumCoherencies(Node):
 
         self.kernel(slvr.uvw_gpu, gauss, sersic,
             slvr.wavelength_gpu, slvr.ant_pairs_gpu,
-            slvr.jones_gpu, slvr.weight_vector_gpu, slvr.bayes_data_gpu,
+            slvr.jones_gpu, slvr.weight_vector_gpu,
+            slvr.bayes_data_gpu, slvr.G_term_gpu,
             slvr.vis_gpu, slvr.chi_sqrd_result_gpu,
             **self.launch_params)
 

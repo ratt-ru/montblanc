@@ -110,6 +110,7 @@ A = [
     ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft'),
     ary_dict('bayes_data', ('ntime','nbl','nchan',4), 'ct'),
     ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct'),
+    ary_dict('G_term', ('ntime', 'na', 'nchan', 4), 'ct'),
 
     # Result arrays
     ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', cpu=False),
