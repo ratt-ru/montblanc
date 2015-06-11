@@ -30,7 +30,7 @@ import montblanc.factory
 from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
-from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
 from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
 from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
@@ -162,8 +162,8 @@ class TestBiroV4(unittest.TestCase):
 
                 self.EKB_test_impl(slvr, cmp={'rtol': 1e-5})
 
-    def B_sum_test_impl(self, slvr, weight_vector=False, cmp=None):
-        """ Type independent implementation of the B Sum test """
+    def sum_coherencies_test_impl(self, slvr, weight_vector=False, cmp=None):
+        """ Type independent implementation of the coherency sum test """
         if cmp is None:
             cmp = {}
 
@@ -207,32 +207,32 @@ class TestBiroV4(unittest.TestCase):
 
         self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
-    def test_B_sum_float(self):
-        """ Test the B sum float kernel """
+    def test_sum_coherencies_float(self):
+        """ Test the coherency sum float kernel """
         params = src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True)
 
         for p in params:
             wv = p['weight_vector']
             with solver(dtype=np.float32,
-                pipeline=Pipeline([RimeGaussBSum(p['weight_vector'])]),
+                pipeline=Pipeline([RimeSumCoherencies(p['weight_vector'])]),
                 **p) as slvr:
 
-                self.B_sum_test_impl(slvr,
+                self.sum_coherencies_test_impl(slvr,
                     cmp={'rtol': 1e-4},
                     weight_vector=p['weight_vector'])
 
 
-    def test_B_sum_double(self):
-        """ Test the B sum double kernel """
+    def test_sum_coherencies_double(self):
+        """ Test the coherency sum double kernel """
         params = src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True)
 
         for p in params:
             wv = p['weight_vector']
             with solver(dtype=np.float64,
-                pipeline=Pipeline([RimeGaussBSum(p['weight_vector'])]),
+                pipeline=Pipeline([RimeSumCoherencies(p['weight_vector'])]),
                 **p) as slvr:
 
-                self.B_sum_test_impl(slvr,
+                self.sum_coherencies_test_impl(slvr,
                     weight_vector=p['weight_vector'])
 
     def B_sqrt_test_impl(self, slvr, cmp=None):

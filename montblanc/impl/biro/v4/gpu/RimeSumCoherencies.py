@@ -71,7 +71,7 @@ template <
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
-void rime_gauss_B_sum_impl(
+void rime_sum_coherencies_impl(
     typename Tr::ft * uvw,
     typename Tr::ft * gauss_shape,
     typename Tr::ft * sersic_shape,
@@ -286,9 +286,9 @@ extern "C" {
 // - apply_weights: boolean indicating whether we're weighting our visibilities
 // - symbol: u or w depending on whether we're handling unweighted/weighted visibilities.
 
-#define stamp_gauss_b_sum_fn(ft, ct, apply_weights, symbol) \
+#define stamp_sum_coherencies_fn(ft, ct, apply_weights, symbol) \
 __global__ void \
-rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
+rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ft * uvw, \
     ft * gauss_shape, \
     ft * sersic_shape, \
@@ -300,23 +300,23 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ct * visibilities, \
     ft * chi_sqrd_result) \
 { \
-    rime_gauss_B_sum_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
+    rime_sum_coherencies_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
         wavelength, ant_pairs, jones, \
         weight_vector, bayes_data, visibilities, \
         chi_sqrd_result); \
 }
 
-stamp_gauss_b_sum_fn(float, float2, false, u)
-stamp_gauss_b_sum_fn(float, float2, true, w)
-stamp_gauss_b_sum_fn(double, double2, false, u)
-stamp_gauss_b_sum_fn(double, double2, true, w)
+stamp_sum_coherencies_fn(float, float2, false, u)
+stamp_sum_coherencies_fn(float, float2, true, w)
+stamp_sum_coherencies_fn(double, double2, false, u)
+stamp_sum_coherencies_fn(double, double2, true, w)
 
 } // extern "C" {
 """)
 
-class RimeGaussBSum(Node):
+class RimeSumCoherencies(Node):
     def __init__(self, weight_vector=False):
-        super(RimeGaussBSum, self).__init__()
+        super(RimeSumCoherencies, self).__init__()
         self.weight_vector = weight_vector
 
     def initialise(self, solver, stream=None):
@@ -337,7 +337,7 @@ class RimeGaussBSum(Node):
         regs = str(FLOAT_PARAMS['maxregs'] \
             if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
 
-        kname = 'rime_gauss_B_sum_' + \
+        kname = 'rime_sum_coherencies_' + \
             ('w' if self.weight_vector else 'u') + 'chi_' + \
             ('float' if slvr.is_float() is True else 'double')
 

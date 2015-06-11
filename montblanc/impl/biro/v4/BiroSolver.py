@@ -32,7 +32,7 @@ from montblanc.BaseSolver import DEFAULT_DTYPE
 from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
-from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
 
 from montblanc.pipeline import Pipeline
 
@@ -41,7 +41,7 @@ def get_pipeline(**kwargs):
     return Pipeline([RimeEBeam(),
         RimeBSqrt(),
         RimeEKBSqrt(),
-        RimeGaussBSum(weight_vector=wv)])
+        RimeSumCoherencies(weight_vector=wv)])
 
 def ary_dict(name,shape,dtype,cpu=True,gpu=True):
     return {
