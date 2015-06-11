@@ -79,8 +79,8 @@ void rime_gauss_B_sum_impl(
     int * ant_pairs,
     typename Tr::ct * jones,
     typename Tr::ft * weight_vector,
+    typename Tr::ct * bayes_data,
     typename Tr::ct * visibilities,
-    typename Tr::ct * data_vis,
     typename Tr::ft * chi_sqrd_result)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
@@ -238,7 +238,7 @@ void rime_gauss_B_sum_impl(
     visibilities[i] = polsum;
 
     // Compute the chi squared sum terms
-    typename Tr::ct delta = data_vis[i];
+    typename Tr::ct delta = bayes_data[i];
     delta.x -= polsum.x; delta.y -= polsum.y;
     delta.x *= delta.x; delta.y *= delta.y;
 
@@ -296,13 +296,13 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     int * ant_pairs, \
     ct * jones, \
     ft * weight_vector, \
+    ct * bayes_data, \
     ct * visibilities, \
-    ct * data_vis, \
     ft * chi_sqrd_result) \
 { \
     rime_gauss_B_sum_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
         wavelength, ant_pairs, jones, \
-        weight_vector, visibilities, data_vis, \
+        weight_vector, bayes_data, visibilities, \
         chi_sqrd_result); \
 }
 
@@ -383,8 +383,8 @@ class RimeGaussBSum(Node):
 
         self.kernel(slvr.uvw_gpu, gauss, sersic,
             slvr.wavelength_gpu, slvr.ant_pairs_gpu,
-            slvr.jones_gpu, slvr.weight_vector_gpu,
-            slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
+            slvr.jones_gpu, slvr.weight_vector_gpu, slvr.bayes_data_gpu,
+            slvr.vis_gpu, slvr.chi_sqrd_result_gpu,
             **self.launch_params)
 
         # Call the pycuda reduction kernel.
