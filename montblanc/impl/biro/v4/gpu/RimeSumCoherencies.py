@@ -233,14 +233,23 @@ void rime_sum_coherencies_impl(
         polsum.y += ant_two.y;
     }
 
+    // Multiply the visibility by antenna 2's g term
+    i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
+    typename Tr::ct ant2_g_term = G_term[i];
+    montblanc::jones_multiply_4x4_in_place<T>(ant2_g_term, polsum);
+
+    // Multiply the visibility by antenna 1's g term
+    i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
+    typename Tr::ct ant1_g_term = G_term[i];
+    montblanc::jones_multiply_4x4_in_place<T>(ant2_g_term, ant1_g_term);
 
     // Write out the visibilities
     i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
-    visibilities[i] = polsum;
+    visibilities[i] = ant2_g_term;
 
     // Compute the chi squared sum terms
     typename Tr::ct delta = bayes_data[i];
-    delta.x -= polsum.x; delta.y -= polsum.y;
+    delta.x -= ant2_g_term.x; delta.y -= ant2_g_term.y;
     delta.x *= delta.x; delta.y *= delta.y;
 
     // Apply any necessary weighting factors

@@ -187,15 +187,16 @@ class TestBiroV4(unittest.TestCase):
         # match each other
         ekb_per_bl = slvr_cpu.compute_ekb_jones_per_bl(ekb_jones)
         ekb_vis_cpu = slvr_cpu.compute_ekb_vis(ekb_per_bl)
+        gekb_vis_cpu = slvr_cpu.compute_gekb_vis(ekb_vis_cpu)
         with slvr.context:
-            ekb_vis_gpu = slvr.vis_gpu.get()
+            gekb_vis_gpu = slvr.vis_gpu.get()
 
-        self.assertTrue(np.allclose(ekb_vis_cpu, ekb_vis_gpu, **cmp))
+        self.assertTrue(np.allclose(gekb_vis_cpu, gekb_vis_gpu, **cmp))
 
         # Check that the chi squared sum terms
         # match each other
         chi_sqrd_sum_terms_cpu = slvr_cpu.compute_chi_sqrd_sum_terms(
-            vis=ekb_vis_cpu, weight_vector=weight_vector)
+            vis=gekb_vis_cpu, weight_vector=weight_vector)
         with slvr.context:
             chi_sqrd_sum_terms_gpu = slvr.chi_sqrd_result_gpu.get()
 
@@ -203,7 +204,7 @@ class TestBiroV4(unittest.TestCase):
             chi_sqrd_sum_terms_gpu, **cmp))
 
         chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(
-            vis=ekb_vis_cpu, weight_vector=weight_vector)
+            vis=gekb_vis_cpu, weight_vector=weight_vector)
 
         self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 

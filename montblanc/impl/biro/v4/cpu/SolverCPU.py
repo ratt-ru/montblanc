@@ -506,6 +506,43 @@ class SolverCPU(object):
 
         return vis
 
+    def compute_gekb_vis(self, ekb_vis=None):
+        """
+        Computes the complex visibilities based on the
+        scalar EK term and the 2x2 B term.
+
+        Returns a (ntime,nbl,nchan,4) matrix of complex scalars.
+        """
+
+        slvr = self.solver
+
+        if ekb_vis is None:
+            ekb_vis = self.compute_ekb_vis()
+
+        want_shape = (slvr.ntime, slvr.nbl, slvr.nchan, 4)
+        assert ekb_vis.shape == want_shape, \
+            'Expected shape %s. Got %s instead.' % \
+            (want_shape, ekb_vis.shape)
+
+        ap = slvr.get_ap_idx(chan=True)
+        g_term = slvr.G_term_cpu[ap]
+
+        assert g_term.shape == (2, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+
+        result = self.jones_multiply(g_term[1],
+            ekb_vis,
+            slvr.ntime*slvr.nbl*slvr.nchan) \
+                .reshape(slvr.ntime, slvr.nbl, slvr.nchan, 4)
+
+        result = self.jones_multiply(result,
+            g_term[0],
+            slvr.ntime*slvr.nbl*slvr.nchan) \
+                .reshape(slvr.ntime, slvr.nbl, slvr.nchan, 4)
+
+
+        return result
+
+
     def compute_chi_sqrd_sum_terms(self, vis=None, bayes_data=None, weight_vector=False):
         """
         Computes the terms of the chi squared sum,
