@@ -419,6 +419,13 @@ class SolverCPU(object):
             -3)
 
     def compute_ekb_sqrt_jones_per_ant(self):
+        """
+        Computes the per antenna jones matrices, the product
+        of E x K x B_sqrt
+
+        Returns a (nsrc,ntime,na,nchan,4) matrix of complex scalars.
+        """
+
         slvr = self.solver
         N = slvr.nsrc*slvr.ntime*slvr.na*slvr.nchan
 
@@ -432,7 +439,74 @@ class SolverCPU(object):
             slvr.nsrc*slvr.ntime*slvr.na*slvr.nchan)
         return result.reshape(slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
 
-    def compute_chi_sqrd_sum_terms(self, weight_vector=False):
+    def compute_ekb_jones_per_bl(self, ekb_sqrt=None):
+        """
+        Computes per baseline jones matrices based on the
+        scalar EKB Square root terms
+
+        Returns a (nsrc,ntime,nbl,nchan,4) matrix of complex scalars.
+        """
+
+        slvr = self.solver
+
+        try:
+            if ekb_sqrt is None:
+                ekb_sqrt = self.compute_ekb_sqrt_jones_per_ant()
+
+            ap = slvr.get_ap_idx(src=True, chan=True)
+            ekb_sqrt_idx = ekb_sqrt[ap]
+            assert ekb_sqrt_idx.shape == (2, slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+
+            result = self.jones_multiply(ekb_sqrt_idx[1],
+                ekb_sqrt_idx[0].conj(),
+                slvr.nsrc*slvr.ntime*slvr.nbl*slvr.nchan) \
+                    .reshape(slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+
+            # Multiply in Gaussian Shape Terms
+            if slvr.ngsrc > 0:
+                src_beg = slvr.npsrc
+                src_end = slvr.npsrc + slvr.ngsrc
+                gauss_shape = self.compute_gaussian_shape()
+                result[src_beg:src_end,:,:,:,:] *= gauss_shape[:,:,:,:,np.newaxis]
+
+            # Multiply in Sersic Shape Terms
+            if slvr.nssrc > 0:
+                src_beg = slvr.npsrc + slvr.ngsrc
+                src_end = slvr.npsrc + slvr.ngsrc + slvr.nssrc
+                sersic_shape = self.compute_sersic_shape()
+                result[src_beg:src_end,:,:,:,:] *= sersic_shape[:,:,:,:,np.newaxis]
+
+            return result
+            #return ebk_sqrt[1]*ebk_sqrt[0].conj()
+        except AttributeError as e:
+            mbu.rethrow_attribute_exception(e)
+
+    def compute_ekb_vis(self, ekb_jones=None):
+        """
+        Computes the complex visibilities based on the
+        scalar EK term and the 2x2 B term.
+
+        Returns a (ntime,nbl,nchan,4) matrix of complex scalars.
+        """
+
+        slvr = self.solver
+
+        if ekb_jones is None:
+            ekb_jones = self.compute_ekb_jones_per_bl()
+
+        want_shape = (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+        assert ekb_jones.shape == want_shape, \
+            'Expected shape %s. Got %s instead.' % \
+            (want_shape, ekb_jones.shape)
+
+        vis = ne.evaluate('sum(ebk,0)',
+            {'ebk': ekb_jones }) \
+            .astype(slvr.ct)
+        assert vis.shape == (slvr.ntime, slvr.nbl, slvr.nchan, 4)
+
+        return vis
+
+    def compute_chi_sqrd_sum_terms(self, vis=None, bayes_data=None, weight_vector=False):
         """
         Computes the terms of the chi squared sum,
         but does not perform the sum itself.
@@ -447,12 +521,15 @@ class SolverCPU(object):
         slvr = self.solver
 
         try:
+            if vis is None: vis = self.compute_ekb_vis()
+            if bayes_data is None: bayes_data = slvr.bayes_data_cpu
+
             # Take the difference between the visibilities and the model
             # (4,nbl,nchan,ntime)
             d = ne.evaluate('vis - bayes', {
-                'vis': slvr.vis_cpu,
-                'bayes': slvr.bayes_data_cpu})
-            assert d.shape == (4, slvr.ntime, slvr.nbl, slvr.nchan)
+                'vis': vis,
+                'bayes': bayes_data })
+            assert d.shape == (slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
             # Square of the real and imaginary components
             re = ne.evaluate('re**2', {'re': d.real})
@@ -470,8 +547,8 @@ class SolverCPU(object):
 
             # Sum the real and imaginary terms together
             # for the final result.
-            re_sum = ne.evaluate('sum(re,0)', {'re': re})
-            im_sum = ne.evaluate('sum(im,0)', {'im': im})
+            re_sum = ne.evaluate('sum(re,3)', {'re': re})
+            im_sum = ne.evaluate('sum(im,3)', {'im': im})
             chi_sqrd_terms = ne.evaluate('re_sum + im_sum',
                 {'re_sum': re_sum, 'im_sum': im_sum})
             assert chi_sqrd_terms.shape == (slvr.ntime, slvr.nbl, slvr.nchan)
@@ -481,7 +558,7 @@ class SolverCPU(object):
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
 
-    def compute_chi_sqrd(self, weight_vector=False):
+    def compute_chi_sqrd(self, vis=None, bayes_data=None, weight_vector=False):
         """ Computes the chi squared value.
 
         Parameters:
@@ -498,15 +575,22 @@ class SolverCPU(object):
         # divide by the sigma squared.
         # Otherwise, simply return the sum
         try:
+            if vis is None: vis = self.compute_ekb_vis()
+            if bayes_data is None: bayes_data = slvr.bayes_data_cpu
+
             chi_sqrd_terms = self.compute_chi_sqrd_sum_terms(
-                weight_vector=weight_vector)
+                vis=vis, bayes_data=bayes_data, weight_vector=weight_vector)
             term_sum = ne.evaluate('sum(terms)', {'terms': chi_sqrd_terms})
             return term_sum if weight_vector is True \
                 else term_sum / slvr.sigma_sqrd
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
 
-    def compute_biro_chi_sqrd(self, weight_vector=False):
+    def compute_biro_chi_sqrd(self, vis=None, bayes_data=None, weight_vector=False):
         slvr = self.solver
-        slvr.vis_cpu = self.compute_ebk_vis()
-        return self.compute_chi_sqrd(weight_vector=weight_vector)
+
+        if vis is None: vis = self.compute_ekb_vis()
+        if bayes_data is None: bayes_data = slvr.bayes_data_cpu
+
+        return self.compute_chi_sqrd(vis=vis, bayes_data=bayes_data,
+            weight_vector=weight_vector)

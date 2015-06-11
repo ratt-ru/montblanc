@@ -45,7 +45,7 @@ KERNEL_TEMPLATE = string.Template("""
 #include <cstdio>
 #include \"math_constants.h\"
 #include <montblanc/include/abstraction.cuh>
-#include <montblanc/include/brightness.cuh>
+#include <montblanc/include/jones.cuh>
 
 #define NA ${na}
 #define NBL ${nbl}
@@ -55,6 +55,8 @@ KERNEL_TEMPLATE = string.Template("""
 #define NGSRC ${ngsrc}
 #define NSSRC ${nssrc}
 #define NSRC ${nsrc}
+#define NPOL (4)
+#define NPOLCHAN (NPOL*NCHAN)
 
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
@@ -71,30 +73,36 @@ template <
 __device__
 void rime_gauss_B_sum_impl(
     typename Tr::ft * uvw,
-    typename Tr::ft * stokes,
     typename Tr::ft * gauss_shape,
     typename Tr::ft * sersic_shape,
     typename Tr::ft * wavelength,
     int * ant_pairs,
-    typename Tr::ct * jones_EK_scalar,
+    typename Tr::ct * jones,
     typename Tr::ft * weight_vector,
     typename Tr::ct * visibilities,
     typename Tr::ct * data_vis,
     typename Tr::ft * chi_sqrd_result)
 {
-    int CHAN = (blockIdx.x*blockDim.x + threadIdx.x)>>2;
+    int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
-    #define NPOL 4
-    #define POL (threadIdx.x & 0x3)
-
-    if(BL >= NBL || TIME >= NTIME || CHAN >= NCHAN)
+    if(TIME >= NTIME || BL >= NBL || POLCHAN >= NPOLCHAN)
         return;
 
-    volatile __shared__ T shuvw[BLOCKDIMZ][BLOCKDIMY][3];
+    __shared__ T u[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T v[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ T w[BLOCKDIMZ][BLOCKDIMY];
 
-    volatile __shared__ T wl[BLOCKDIMX];
+    __shared__ T el;
+    __shared__ T em;
+    __shared__ T eR;
+
+    __shared__ T e1;
+    __shared__ T e2;
+    __shared__ T sersic_scale;
+
+    __shared__ T wl[BLOCKDIMX];
 
     int i;
 
@@ -102,64 +110,79 @@ void rime_gauss_B_sum_impl(
     i = TIME*NBL + BL;   int ANT1 = ant_pairs[i];
     i += NBL*NTIME;      int ANT2 = ant_pairs[i];
 
-    // UVW coordinates vary by baseline and time, but not channel
+    // UVW coordinates vary by baseline and time, but not polarised channel
     if(threadIdx.x == 0)
     {
         // UVW, calculated from u_pq = u_p - u_q
-        i = TIME*NA + ANT1;    shuvw[threadIdx.z][threadIdx.y][0] = uvw[i];
-        i += NA*NTIME;         shuvw[threadIdx.z][threadIdx.y][1] = uvw[i];
-        i += NA*NTIME;         shuvw[threadIdx.z][threadIdx.y][2] = uvw[i];
+        i = TIME*NA + ANT1;    u[threadIdx.z][threadIdx.y] = uvw[i];
+        i += NA*NTIME;         v[threadIdx.z][threadIdx.y] = uvw[i];
+        i += NA*NTIME;         w[threadIdx.z][threadIdx.y] = uvw[i];
 
-        i = TIME*NA + ANT2;    shuvw[threadIdx.z][threadIdx.y][0] -= uvw[i];
-        i += NA*NTIME;         shuvw[threadIdx.z][threadIdx.y][1] -= uvw[i];
-        i += NA*NTIME;         shuvw[threadIdx.z][threadIdx.y][2] -= uvw[i];
+        i = TIME*NA + ANT2;    u[threadIdx.z][threadIdx.y] -= uvw[i];
+        i += NA*NTIME;         v[threadIdx.z][threadIdx.y] -= uvw[i];
+        i += NA*NTIME;         w[threadIdx.z][threadIdx.y] -= uvw[i];
     }
 
     // Wavelength varies by channel, but not baseline and time
+    // TODO uses 4 times the actually required space, since
+    // we don't need to store a wavelength per polarisation
     if(threadIdx.y == 0 && threadIdx.z == 0)
-        { wl[threadIdx.x] = wavelength[CHAN]; }
+        { wl[threadIdx.x] = wavelength[POLCHAN >> 2]; }
 
+    // Complex Number containing the sum
+    // for this polarisation
     typename Tr::ct polsum = Po::make_ct(0.0, 0.0);
 
+    // Point Sources
     for(int SRC=0;SRC<NPSRC;++SRC)
     {
-        i = TIME*NSRC + SRC + POL;
-        typename Tr::ft pol = stokes[i];
-        typename Tr::ct brightness;
-        montblanc::create_brightness<T>(brightness, pol);
-
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN + POL;
-        typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
-        montblanc::complex_multiply_in_place<T>(brightness, ant_one);
-        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN + POL;
-        typename Tr::ct ant_two = jones_EK_scalar[i];
-        montblanc::complex_multiply_in_place<T>(ant_two, brightness);
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
+        typename Tr::ct ant_one = jones[i]; ant_one.y = -ant_one.y;
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
+        typename Tr::ct ant_two = jones[i];
+        montblanc::jones_multiply_4x4_in_place<T>(ant_two, ant_one);
 
         polsum.x += ant_two.x;
         polsum.y += ant_two.y;
-
-        __syncthreads();
     }
 
+    // Gaussian sources
     for(int SRC=NPSRC;SRC<NPSRC+NGSRC;++SRC)
     {
-        i = TIME*NSRC + SRC + POL;
-        typename Tr::ft pol = stokes[i];
-        typename Tr::ct brightness;
-        montblanc::create_brightness<T>(brightness, pol);
+        // gaussian shape only varies by source. Shape parameters
+        // thus apply to the entire block and we can load them with
+        // only the first thread.
+        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+        {
+            i = SRC-NPSRC;  el = gauss_shape[i];
+            i += NGSRC;     em = gauss_shape[i];
+            i += NGSRC;     eR = gauss_shape[i];
+        }
+
+        __syncthreads();
+
+        T u1 = u[threadIdx.z][threadIdx.y]*em - v[threadIdx.z][threadIdx.y]*el;
+        u1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
+        u1 *= eR;
+        T v1 = u[threadIdx.z][threadIdx.y]*el + v[threadIdx.z][threadIdx.y]*em;
+        v1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
+        T exp = Po::exp(-(u1*u1 +v1*v1));
 
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*NTIME + TIME)*NA + ANT1)*NCHAN + CHAN + POL;
-        typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
-        montblanc::complex_multiply_in_place<T>(brightness, ant_one);
-        i = ((SRC*NTIME + TIME)*NA + ANT2)*NCHAN + CHAN + POL;
-        typename Tr::ct ant_two = jones_EK_scalar[i];
-        montblanc::complex_multiply_in_place<T>(ant_two, brightness);
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
+        typename Tr::ct ant_one = jones[i];
+        ant_one.y = -ant_one.y;
+        // Multiple in the gaussian shape
+        ant_one.x *= exp;
+        ant_one.y *= exp;
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
+        typename Tr::ct ant_two = jones[i];
+        montblanc::jones_multiply_4x4_in_place<T>(ant_two, ant_one);
 
         polsum.x += ant_two.x;
         polsum.y += ant_two.y;
@@ -167,15 +190,90 @@ void rime_gauss_B_sum_impl(
         __syncthreads();
     }
 
-    i = (TIME*NBL + BL)*NCHAN + CHAN + POL;
+    // Sersic Sources
+    for(int SRC=NPSRC+NGSRC;SRC<NPSRC+NGSRC+NSSRC;++SRC)
+    {
+        // sersic shape only varies by source. Shape parameters
+        // thus apply to the entire block and we can load them with
+        // only the first thread.
+        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+        {
+            i = SRC-NPSRC-NGSRC;  e1 = sersic_shape[i];
+            i += NSSRC;           e2 = sersic_shape[i];
+            i += NSSRC;           sersic_scale = sersic_shape[i];
+        }
+
+        __syncthreads();
+
+        // sersic source in  the Fourier domain
+        T u1 = u[threadIdx.z][threadIdx.y]*(T(1.0)+e1) + v[threadIdx.z][threadIdx.y]*e2;
+        u1 *= T(TWO_PI)/wl[threadIdx.x];
+        u1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
+        T v1 = u[threadIdx.z][threadIdx.y]*e2 + v[threadIdx.z][threadIdx.y]*(T(1.0)-e1);
+        v1 *= T(TWO_PI)/wl[threadIdx.x];
+        v1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
+        T sersic_factor = T(1.0) + u1*u1+v1*v1;
+        sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));
+
+
+        // Get the complex scalars for antenna two and multiply
+        // in the exponent term
+        // Get the complex scalar for antenna one and conjugate it
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
+        typename Tr::ct ant_one = jones[i];
+        ant_one.y = -ant_one.y;
+        ant_one.x *= sersic_factor;
+        ant_one.y *= sersic_factor;
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
+        typename Tr::ct ant_two = jones[i];
+        montblanc::jones_multiply_4x4_in_place<T>(ant_two, ant_one);
+
+        polsum.x += ant_two.x;
+        polsum.y += ant_two.y;
+    }
+
+
+    // Write out the visibilities
+    i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
     visibilities[i] = polsum;
+
+    // Compute the chi squared sum terms
     typename Tr::ct delta = data_vis[i];
     delta.x -= polsum.x; delta.y -= polsum.y;
     delta.x *= delta.x; delta.y *= delta.y;
-    if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
 
-    i = (TIME*NBL + BL)*NCHAN + CHAN;
-    chi_sqrd_result[i] = delta.x + delta.y;
+    // Apply any necessary weighting factors
+    if(apply_weights)
+    {
+        T w = weight_vector[i];
+        delta.x *= w;
+        delta.y *= w;
+    }
+
+    // Now, add the real and imaginary components
+    // of each adjacent group of four polarisations
+    // into the first polarisation.
+    typename Tr::ct other = cub::ShuffleIndex(delta, cub::LaneId() + 2);
+
+    // And polarisations 2 and 3 to 0 and 1
+    if((POLCHAN & 0x3) < 2)
+    {
+        delta.x += other.x;
+        delta.y += other.y;
+    }
+
+    other = cub::ShuffleIndex(delta, cub::LaneId() + 1);
+
+    // And polarisation 1 to 0
+    // and write out this chi squared sum term
+    // if this is the first polarisation
+    if((POLCHAN & 0x3) == 0) {
+        delta.x += other.x;
+        delta.y += other.y;
+
+        i = (TIME*NBL + BL)*NCHAN + (POLCHAN >> 2);
+        chi_sqrd_result[i] = delta.x + delta.y;
+    }
 }
 
 extern "C" {
@@ -192,19 +290,18 @@ extern "C" {
 __global__ void \
 rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * uvw, \
-    ft * stokes, \
     ft * gauss_shape, \
     ft * sersic_shape, \
     ft * wavelength, \
     int * ant_pairs, \
-    ct * jones_EK_scalar, \
+    ct * jones, \
     ft * weight_vector, \
     ct * visibilities, \
     ct * data_vis, \
     ft * chi_sqrd_result) \
 { \
-    rime_gauss_B_sum_impl<ft, apply_weights>(uvw, stokes, gauss_shape, sersic_shape, \
-        wavelength, ant_pairs, jones_EK_scalar, \
+    rime_gauss_B_sum_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
+        wavelength, ant_pairs, jones, \
         weight_vector, visibilities, data_vis, \
         chi_sqrd_result); \
 }
@@ -225,8 +322,17 @@ class RimeGaussBSum(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
+        self.polchans = 4*slvr.nchan
+
         D = slvr.get_properties()
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
+
+        # Update kernel parameters to cater for radically
+        # smaller problem sizes. Caters for a subtle bug
+        # with Kepler shuffles and warp sizes < 32
+        if self.polchans < D['BLOCKDIMX']: D['BLOCKDIMX'] = self.polchans
+        if slvr.nbl < D['BLOCKDIMY']: D['BLOCKDIMY'] = slvr.nbl
+        if slvr.ntime < D['BLOCKDIMZ']: D['BLOCKDIMZ'] = slvr.ntime
 
         regs = str(FLOAT_PARAMS['maxregs'] \
             if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -242,6 +348,7 @@ class RimeGaussBSum(Node):
             no_extern_c=True)
 
         self.kernel = self.mod.get_function(kname)
+        self.launch_params = self.get_launch_params(slvr, D)
 
     def shutdown(self, solver, stream=None):
         pass
@@ -249,22 +356,18 @@ class RimeGaussBSum(Node):
     def pre_execution(self, solver, stream=None):
         pass
 
-    def get_kernel_params(self, solver):
-        slvr = solver
+    def get_launch_params(self, slvr, D):
+        polchans_per_block = D['BLOCKDIMX']
+        bl_per_block = D['BLOCKDIMY']
+        times_per_block = D['BLOCKDIMZ']
 
-        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
-
-        chans_per_block = D['BLOCKDIMX'] if slvr.nchan > D['BLOCKDIMX'] else slvr.nchan
-        bl_per_block = D['BLOCKDIMY'] if slvr.nbl > D['BLOCKDIMY'] else slvr.nbl
-        times_per_block = D['BLOCKDIMZ'] if slvr.ntime > D['BLOCKDIMZ'] else slvr.ntime
-
-        chan_blocks = self.blocks_required(slvr.nchan, chans_per_block)
+        polchan_blocks = self.blocks_required(self.polchans, polchans_per_block)
         bl_blocks = self.blocks_required(slvr.nbl, bl_per_block)
         time_blocks = self.blocks_required(slvr.ntime, times_per_block)
 
         return {
-            'block' : (chans_per_block, bl_per_block, times_per_block),
-            'grid'  : (chan_blocks, bl_blocks, time_blocks),
+            'block' : (polchans_per_block, bl_per_block, times_per_block),
+            'grid'  : (polchan_blocks, bl_blocks, time_blocks),
         }
 
     def execute(self, solver, stream=None):
@@ -278,11 +381,11 @@ class RimeGaussBSum(Node):
         sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
             else slvr.sersic_shape_gpu
 
-        self.kernel(slvr.uvw_gpu, slvr.stokes_gpu, gauss, sersic,
-            slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
-            slvr.weight_vector_gpu,
+        self.kernel(slvr.uvw_gpu, gauss, sersic,
+            slvr.wavelength_gpu, slvr.ant_pairs_gpu,
+            slvr.jones_gpu, slvr.weight_vector_gpu,
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
-            **self.get_kernel_params(slvr))
+            **self.launch_params)
 
         # Call the pycuda reduction kernel.
         # Divide by the single sigma squared value if a weight vector

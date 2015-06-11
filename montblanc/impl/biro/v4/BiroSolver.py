@@ -29,12 +29,19 @@ from montblanc.BaseSolver import DEFAULT_NGSRC
 from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
+from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
+from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
+from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
+
 from montblanc.pipeline import Pipeline
 
 def get_pipeline(**kwargs):
     wv = kwargs.get('weight_vector', False)
-    return Pipeline([RimeGaussBSum(weight_vector=wv)])
+    return Pipeline([RimeEBeam(),
+        RimeBSqrt(),
+        RimeEKBSqrt(),
+        RimeGaussBSum(weight_vector=wv)])
 
 def ary_dict(name,shape,dtype,cpu=True,gpu=True):
     return {
@@ -100,14 +107,14 @@ A = [
     ary_dict('wavelength', ('nchan',), 'ft'),
     ary_dict('point_errors', (2,'ntime','na','nchan'), 'ft'),
     ary_dict('antenna_scaling', (2,'na','nchan'), 'ft'),
-    ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
-    ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
+    ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft'),
+    ary_dict('bayes_data', ('ntime','nbl','nchan',4), 'ct'),
     ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct'),
 
     # Result arrays
     ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', cpu=False),
     ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct', cpu=False),
-    ary_dict('vis', (4,'ntime','nbl','nchan'), 'ct', cpu=False),
+    ary_dict('vis', ('ntime','nbl','nchan',4), 'ct', cpu=False),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
 
     ary_dict('X2', (1, ), 'ft'),

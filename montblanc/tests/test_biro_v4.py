@@ -30,6 +30,7 @@ import montblanc.factory
 from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
+from montblanc.impl.biro.v4.gpu.RimeGaussBSum import RimeGaussBSum
 from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
 from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
@@ -168,39 +169,71 @@ class TestBiroV4(unittest.TestCase):
 
         slvr.set_sigma_sqrd(np.random.random(1)[0])
 
+        # The pipeline for this test case doesn't
+        # create the jones terms. Create some
+        # random terms and transfer them to the GPU
+        sh, dt = slvr.jones_shape, slvr.jones_dtype
+        D = {'size': slvr.jones_shape}
+        ekb_jones = np.random.random(size=sh).astype(dt) + \
+            1j*np.random.random(size=sh).astype(dt)
+        slvr.transfer_jones(ekb_jones)
+
         slvr_cpu = SolverCPU(slvr)
 
         # Call the GPU solver
         slvr.solve()
 
-        ebk_vis_cpu = slvr_cpu.compute_ebk_vis()
+        # Check that the CPU and GPU visibilities
+        # match each other
+        ekb_per_bl = slvr_cpu.compute_ekb_jones_per_bl(ekb_jones)
+        ekb_vis_cpu = slvr_cpu.compute_ekb_vis(ekb_per_bl)
         with slvr.context:
-            ebk_vis_gpu = slvr.vis_gpu.get()
+            ekb_vis_gpu = slvr.vis_gpu.get()
 
-        #self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
-        print np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp)
+        self.assertTrue(np.allclose(ekb_vis_cpu, ekb_vis_gpu, **cmp))
+
+        # Check that the chi squared sum terms
+        # match each other
+        chi_sqrd_sum_terms_cpu = slvr_cpu.compute_chi_sqrd_sum_terms(
+            vis=ekb_vis_cpu, weight_vector=weight_vector)
+        with slvr.context:
+            chi_sqrd_sum_terms_gpu = slvr.chi_sqrd_result_gpu.get()
+
+        self.assertTrue(np.allclose(chi_sqrd_sum_terms_cpu,
+            chi_sqrd_sum_terms_gpu, **cmp))
 
         chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(
-            weight_vector=weight_vector)
+            vis=ekb_vis_cpu, weight_vector=weight_vector)
 
-        #self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
-        print np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp)
+        self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
-    @unittest.skip('Broken for now')
     def test_B_sum_float(self):
         """ Test the B sum float kernel """
-        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
-            with solver(dtype=np.float32, **params) as slvr:
+        params = src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True)
 
-                self.B_sum_test_impl(slvr, params['weight_vector'], {'rtol': 1e-4})
+        for p in params:
+            wv = p['weight_vector']
+            with solver(dtype=np.float32,
+                pipeline=Pipeline([RimeGaussBSum(p['weight_vector'])]),
+                **p) as slvr:
 
-    @unittest.skip('Broken for now')
+                self.B_sum_test_impl(slvr,
+                    cmp={'rtol': 1e-4},
+                    weight_vector=p['weight_vector'])
+
+
     def test_B_sum_double(self):
         """ Test the B sum double kernel """
-        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
-            with solver(dtype=np.float64, **params) as slvr:
+        params = src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True)
 
-                self.B_sum_test_impl(slvr, params['weight_vector'])
+        for p in params:
+            wv = p['weight_vector']
+            with solver(dtype=np.float64,
+                pipeline=Pipeline([RimeGaussBSum(p['weight_vector'])]),
+                **p) as slvr:
+
+                self.B_sum_test_impl(slvr,
+                    weight_vector=p['weight_vector'])
 
     def B_sqrt_test_impl(self, slvr, cmp=None):
         """ Type independent implementation of the B square root test """
