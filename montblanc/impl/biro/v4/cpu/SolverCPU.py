@@ -418,6 +418,21 @@ class SolverCPU(object):
             AR.transpose(0,2,1).reshape(N,2,2,1)*B.reshape(N,2,1,2),
             -3)
 
+    @staticmethod
+    def jones_multiply_hermitian_transpose(A, B, N):
+        # Based on
+        # https://jameshensman.wordpress.com/2010/06/14/multiple-matrix-multiplication-in-numpy/
+
+        AR = A.reshape(N, 2, 2)
+        BRT = B.reshape(N, 2, 2).transpose(0,2,1).conj()
+        #b = B.reshape(N, 2, 2)
+
+        result = np.sum(
+            AR.transpose(0,2,1).reshape(N,2,2,1)*BRT.reshape(N,2,1,2),
+            -3)
+
+        return result
+
     def compute_ekb_sqrt_jones_per_ant(self):
         """
         Computes the per antenna jones matrices, the product
@@ -457,8 +472,8 @@ class SolverCPU(object):
             ekb_sqrt_idx = ekb_sqrt[ap]
             assert ekb_sqrt_idx.shape == (2, slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
-            result = self.jones_multiply(ekb_sqrt_idx[1],
-                ekb_sqrt_idx[0].conj(),
+            result = self.jones_multiply_hermitian_transpose(
+                ekb_sqrt_idx[1], ekb_sqrt_idx[0],
                 slvr.nsrc*slvr.ntime*slvr.nbl*slvr.nchan) \
                     .reshape(slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
@@ -529,19 +544,17 @@ class SolverCPU(object):
 
         assert g_term.shape == (2, slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
-        result = self.jones_multiply(g_term[1],
-            ekb_vis,
+        result = self.jones_multiply_hermitian_transpose(
+            g_term[1], ekb_vis,
             slvr.ntime*slvr.nbl*slvr.nchan) \
                 .reshape(slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
-        result = self.jones_multiply(result,
-            g_term[0],
+        result = self.jones_multiply_hermitian_transpose(
+            result, g_term[0],
             slvr.ntime*slvr.nbl*slvr.nchan) \
                 .reshape(slvr.ntime, slvr.nbl, slvr.nchan, 4)
-
 
         return result
-
 
     def compute_chi_sqrd_sum_terms(self, vis=None, bayes_data=None, weight_vector=False):
         """
