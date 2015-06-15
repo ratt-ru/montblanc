@@ -23,8 +23,11 @@
 
 namespace montblanc {
 
+// The base visibility index. 0 0 0 0 4 4 4 4 8 8 8 8
 #define _MONTBLANC_VIS_BASE_IDX (cub::LaneId() & 28)
+// Odd polarisation? 0 1 0 1 0 1 0 1 0 1 0 1
 #define _MONTBLANC_IS_ODD_POL (cub::LaneId() & 0x1)
+// Even polarisation? 1 0 1 0 1 0 1 0 1 0 1 0
 #define _MONTBLANC_IS_EVEN_POL int(_MONTBLANC_IS_ODD_POL == 0)
 
 // | J0   J1 |     | K0   K1 |        | J0.K0+J1.K2     J0.K1+J1.K3 |
@@ -109,6 +112,10 @@ void jones_multiply_4x4_hermitian_transpose_in_place(
 
     J = sum;
 }
+
+#undef _MONTBLANC_VIS_BASE_IDX
+#undef _MONTBLANC_IS_ODD_POL
+#undef _MONTBLANC_IS_EVEN_POL
 
 } // namespace montblanc
 
