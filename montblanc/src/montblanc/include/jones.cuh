@@ -23,10 +23,9 @@
 
 namespace montblanc {
 
-#define _MONTBLANC_VIS_BASE_IDX ((cub::LaneId() >> 2) << 2)
+#define _MONTBLANC_VIS_BASE_IDX (cub::LaneId() & 28)
 #define _MONTBLANC_IS_ODD_POL (cub::LaneId() & 0x1)
 #define _MONTBLANC_IS_EVEN_POL int(_MONTBLANC_IS_ODD_POL == 0)
-
 
 // | J0   J1 |     | K0   K1 |        | J0.K0+J1.K2     J0.K1+J1.K3 |
 // |         |  *  |         |    =   |                             |
