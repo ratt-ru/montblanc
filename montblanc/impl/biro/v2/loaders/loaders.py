@@ -23,6 +23,10 @@ import numpy as np
 import montblanc
 import montblanc.impl.common.loaders
 
+ORDER_CASA = 'casa'
+ORDER_OTHER = 'other'
+VALID_ORDERINGS = [ORDER_CASA, ORDER_OTHER]
+
 class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
     def load(self, solver, **kwargs):
         """
@@ -34,6 +38,19 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
         na, nbl, ntime, nchan = solver.na, solver.nbl, solver.ntime, solver.nchan
 
+	uvw_order = kwargs.get('uvw_order', ORDER_OTHER)
+        if uvw_order not in VALID_ORDERINGS:
+                raise ValueError('Invalid UVW ordering %s', uvw_order)
+
+        # Define transpose axes to convert file uvw order 
+	# to montblanc array shape: (3, ntime, nbl)
+        if uvw_order == ORDER_CASA:
+                file_uvw_shape = (nbl, ntime, 3)
+                uvw_transpose = (2,1,0)
+        else:
+                file_uvw_shape = (ntime, nbl,  3)
+                uvw_transpose = (2,0,1)
+
         # Check that we're getting the correct shape...
         uvw_shape = (ntime*nbl, 3)
 
@@ -43,8 +60,9 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         assert ms_uvw.shape == uvw_shape, \
             'MS UVW shape %s != expected %s' % (ms_uvw.shape,uvw_shape)
         uvw_rec = solver.get_array_record('uvw')
+
         uvw=np.empty(shape=uvw_rec.shape, dtype=uvw_rec.dtype)
-        uvw[:,:,1:na] = ms_uvw.reshape(ntime, nbl, 3).transpose(2,0,1) \
+        uvw[:,:,1:na] = ms_uvw.reshape(file_uvw_shape).transpose(uvw_transpose) \
             .astype(solver.ft)[:,:,:na-1]
         uvw[:,:,0] = solver.ft(0)
         solver.transfer_uvw(np.ascontiguousarray(uvw))
