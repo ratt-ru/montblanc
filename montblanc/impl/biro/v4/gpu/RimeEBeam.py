@@ -299,9 +299,6 @@ class RimeEBeam(Node):
 
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
 
-        with open(kname+'.cu', 'w') as f:
-            f.write(kernel_string)
-
         self.mod = SourceModule(kernel_string,
             options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
