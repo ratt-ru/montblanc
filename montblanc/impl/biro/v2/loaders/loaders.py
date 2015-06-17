@@ -43,13 +43,17 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                 raise ValueError('Invalid UVW ordering %s', uvw_order)
 
         # Define transpose axes to convert file uvw order 
-	# to montblanc array shape: (3, ntime, nbl)
+	# to montblanc array shape: (ntime, nbl)
         if uvw_order == ORDER_CASA:
                 file_uvw_shape = (nbl, ntime, 3)
                 uvw_transpose = (2,1,0)
+		file_weight_shape = (nbl, ntime, nchan,4)
+                weight_transpose = (3,1,0,2)
         else:
                 file_uvw_shape = (ntime, nbl,  3)
                 uvw_transpose = (2,0,1)
+		file_weight_shape = (ntime, nbl, nchan,4)
+                weight_transpose = (3,0,1,2)
 
         # Check that we're getting the correct shape...
         uvw_shape = (ntime*nbl, 3)
@@ -157,8 +161,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
             assert weight_vector.shape == (ntime*nbl, nchan, 4)
 
-            weight_vector = weight_vector.reshape(ntime,nbl,nchan,4) \
-                .transpose(3,0,1,2).astype(solver.ft)
+            weight_vector = weight_vector.reshape(file_weight_shape) \
+                .transpose(weight_transpose).astype(solver.ft)
 
             solver.transfer_weight_vector(np.ascontiguousarray(weight_vector))
 
