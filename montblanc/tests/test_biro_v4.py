@@ -391,6 +391,88 @@ class TestBiroV4(unittest.TestCase):
 
             self.E_beam_test_impl(slvr)
 
+    def test_sqrt_multiply(self):
+        """
+        Confirm that multiplying the square root
+        of the brightness matrix into the
+        per antenna jones terms results in the same
+        jones matrices as multiplying the
+        brightness matrix into the per baseline
+        jones matrices.
+         """
+        with solver(na=14, ntime=10, nchan=16,
+            npsrc=10, ngsrc=10, dtype=np.float64,
+            pipeline=Pipeline([])) as slvr:
+
+            slvr_cpu = SolverCPU(slvr)
+
+            # Calculate per baseline antenna pair indexes
+            idx = slvr.get_ap_idx(src=True, chan=True)
+
+            # Get the brightness matrix
+            B = slvr_cpu.compute_b_jones()
+
+            # Fill in the jones_cpu matrix with random values
+            slvr.jones_cpu[:] = np.random.random(
+                    size=slvr.jones_shape).astype(slvr.jones_dtype) + \
+                np.random.random(
+                    size=slvr.jones_shape).astype(slvr.jones_dtype)
+
+            # Superfluous really, but makes below readable
+            assert slvr.jones_shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+
+            # Get per baseline jones matrices from
+            # the per antenna jones matrices
+            J2, J1 = slvr.jones_cpu[idx]
+            assert J1.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+            assert J2.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+
+            # Tile the brightness term over the baseline dimension
+            # and transpose so that polarisations are last
+            JB = np.tile(B[:,:,:,np.newaxis,:],
+                (1,1,1,slvr.nbl,1)).transpose(1,2,3,4,0)
+
+            assert JB.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+
+            # Calculate the first result using the classic equation
+            # J2.B.J1^H
+            res_one = SolverCPU.jones_multiply(J2, JB, J2.size/4)
+            res_one = SolverCPU.jones_multiply_hermitian_transpose(
+                res_one, J1, res_one.size/4)
+
+            # Compute the square root of the
+            # brightness matrix
+            B_sqrt = slvr_cpu.compute_b_sqrt_jones(B)
+
+            # Tile the brightness square root term over
+            # the antenna dimension and transpose so that
+            # polarisations are last
+            JBsqrt = np.tile(B[:,:,:,np.newaxis,:],
+                (1,1,1,slvr.na,1)).transpose(1,2,3,4,0)
+
+            assert JBsqrt.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+
+            # Multiply the square root of the brightness matrix
+            # into the per antenna jones terms
+            J = SolverCPU.jones_multiply(slvr.jones_cpu, JBsqrt, JBsqrt.size/4) \
+                .reshape(slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+
+            # Get per baseline jones matrices from
+            # the per antenna jones matrices
+            J2, J1 = J[idx]
+            assert J2.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+            assert J1.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+
+            # Calculate the first result using the optimised version
+            # (J2.sqrt(B)).(J1.sqrt(B))^H == J2.sqrt(B).sqrt(B)^H.J1^H
+            # == J2.sqrt(B).sqrt(B).J1^H
+            # == J2.B.J1^H
+            res_two = SolverCPU.jones_multiply_hermitian_transpose(
+                J2, J1, J2.size/4)
+
+            # Results from two different methods should be the same
+            self.assertTrue(np.allclose(res_one, res_two))
+
     def test_transpose(self):
         with solver(na=4, npsrc=6, ntime=2, nchan=10,
             weight_vector=True,
