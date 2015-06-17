@@ -112,6 +112,22 @@ class TestBiroV4(unittest.TestCase):
         if cmp is None:
             cmp = {}
 
+        # In factory.py, our lm coordinates range from -5e-5 to 5e-5
+        # and pointing errors from -1e-5 to 1e-5. The following values
+        # make the beam cube sufficiently large to contain their
+        # values
+        S = 1e-4
+
+        slvr.set_beam_ll(-S)
+        slvr.set_beam_lm(-S)
+        slvr.set_beam_ul(S)
+        slvr.set_beam_um(S)
+
+        # Default parallactic angle is 0
+        # Set it to 1 degree so that our
+        # sources rotate through the cube.
+        slvr.set_parallactic_angle(np.deg2rad(1))
+
         slvr_cpu = SolverCPU(slvr)
 
         # Call the GPU solver
