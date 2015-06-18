@@ -23,9 +23,8 @@ import numpy as np
 import montblanc
 import montblanc.impl.common.loaders
 
-ORDER_CASA = 'casa'
-ORDER_OTHER = 'other'
-VALID_ORDERINGS = [ORDER_CASA, ORDER_OTHER]
+ORDER_TIME_BL = 'casa'
+ORDER_BL_TIME = 'other'
 
 class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
     def load(self, solver, **kwargs):
@@ -37,25 +36,27 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         tf = self.tables['freq']
 
         na, nbl, ntime, nchan = solver.na, solver.nbl, solver.ntime, solver.nchan
-
-	uvw_order = kwargs.get('uvw_order', ORDER_OTHER)
-        if uvw_order not in VALID_ORDERINGS:
-                raise ValueError('Invalid UVW ordering %s', uvw_order)
-
-        # Define transpose axes to convert file uvw order 
+	data_order = kwargs.get('data_order', ORDER_TIME_BL)
+        
+	# Define transpose axes to convert file uvw order 
 	# to montblanc array shape: (ntime, nbl)
-        if uvw_order == ORDER_CASA:
+        if data_order == ORDER_BL_TIME:
                 file_uvw_shape = (nbl, ntime, 3)
                 uvw_transpose = (2,1,0)
-		file_weight_shape = (nbl, ntime, nchan,4)
-                weight_transpose = (3,1,0,2)
-        else:
+		file_ant_shape = (nbl, ntime)
+		ant_transpose = (1,0)
+		file_data_shape = (nbl, ntime, nchan,4)
+                data_transpose = (3,1,0,2)
+        elif data_order == ORDER_TIME_BL:
                 file_uvw_shape = (ntime, nbl,  3)
                 uvw_transpose = (2,0,1)
-		file_weight_shape = (ntime, nbl, nchan,4)
-                weight_transpose = (3,0,1,2)
-
-        # Check that we're getting the correct shape...
+		file_ant_shape = (ntime, nbl)
+		file_data_shape = (ntime, nbl, nchan,4)
+                data_transpose = (3,0,1,2)
+	else:
+		raise ValueError('Invalid UVW ordering %s', uvw_order)
+        
+	# Check that we're getting the correct shape...
         uvw_shape = (ntime*nbl, 3)
 
         # Read in UVW
@@ -81,8 +82,11 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         solver.set_ref_wave(montblanc.constants.C/tf.getcol('REF_FREQUENCY')[0])
 
         # Get the baseline antenna pairs and correct the axes
-        ant1 = tm.getcol('ANTENNA1').reshape(ntime,nbl)
-        ant2 = tm.getcol('ANTENNA2').reshape(ntime,nbl)
+        ant1 = tm.getcol('ANTENNA1').reshape(file_ant_shape)
+        ant2 = tm.getcol('ANTENNA2').reshape(file_ant_shape)
+	if (data_order == ORDER_BL_TIME):
+		ant1.transpose(ant_transpose)
+		ant2.transpose(ant_transpose)
 
         expected_ant_shape = (ntime,nbl)
 
@@ -101,8 +105,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         if tm.colnames().count('DATA') > 0:
             # Obtain visibilities stored in the DATA column
             # This comes in as (ntime*nbl,nchan,4)
-            vis_data = tm.getcol('DATA').reshape(ntime,nbl,nchan,4) \
-                .transpose(3,0,1,2).astype(solver.ct)
+            vis_data = tm.getcol('DATA').reshape(file_data_shape) \
+                .transpose(data_transpose).astype(solver.ct)
             solver.transfer_bayes_data(np.ascontiguousarray(vis_data))
 
         # Should we initialise our weights from the MS data?
@@ -161,8 +165,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
             assert weight_vector.shape == (ntime*nbl, nchan, 4)
 
-            weight_vector = weight_vector.reshape(file_weight_shape) \
-                .transpose(weight_transpose).astype(solver.ft)
+            weight_vector = weight_vector.reshape(file_data_shape) \
+                .transpose(data_transpose).astype(solver.ft)
 
             solver.transfer_weight_vector(np.ascontiguousarray(weight_vector))
 
