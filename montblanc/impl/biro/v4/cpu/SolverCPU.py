@@ -520,6 +520,13 @@ class SolverCPU(object):
         vis = ne.evaluate('sum(ebk,0)',
             {'ebk': ekb_jones }) \
             .astype(slvr.ct)
+
+        # Due to this bug
+        # https://github.com/pydata/numexpr/issues/79
+        # numexpr may not reduce a source axis of size 1
+        # Work around this
+        vis = vis.squeeze(0) if slvr.nsrc <= 1 else vis
+
         assert vis.shape == (slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
         return vis
