@@ -98,10 +98,14 @@ void bilinear_interpolate(
     int i = ((int(l)*BEAM_MH + int(m))*BEAM_NUD + int(ch))*NPOL + POL;
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
-    typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
-    sum.x += weight*pol.x;
-    sum.y += weight*pol.y;
-    abs_sum += weight*Po::abs(pol);
+    // Load in the beam polarisation and weight it
+    typename Tr::ct beam_pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
+    beam_pol.x *= weight;
+    beam_pol.y *= weight;
+
+    sum.x += beam_pol.x;
+    sum.y += beam_pol.y;
+    abs_sum += Po::abs(beam_pol);
 
     #undef POL
 }
