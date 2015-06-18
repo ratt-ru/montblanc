@@ -373,7 +373,10 @@ class SolverCPU(object):
 
         slvr = self.solver
 
-        vis = ne.evaluate('sum(ebk,3)', {'ebk': self.compute_ebk_jones()})\
+	if (slvr.nsrc == 1):
+		vis = self.compute_ebk_jones().reshape(4, slvr.ntime, slvr.nbl, slvr.nchan)
+        else:
+		vis = ne.evaluate('sum(ebk,3)', {'ebk': self.compute_ebk_jones()})\
             .astype(slvr.ct)
         assert vis.shape == (4, slvr.ntime, slvr.nbl, slvr.nchan)
 
