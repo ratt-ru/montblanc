@@ -301,6 +301,14 @@ class SolverCPU(object):
     def bilinear_interpolate(self, sum, abs_sum,
             gl, gm, gchan,
             ld, lm, chd):
+        """
+        Given a grid position in the beam cube (gl, gm, gchan),
+        and positive unit offsets from this position (ld, lm, chd),
+        round the grid position to integer positions and add the offset.
+        Then, load in the complex number at the computed grid position,
+        weight it with the distance from the original grid position,
+        and add it to the sum and abs_sum arguments.
+        """
         slvr = self.solver
 
         l = np.floor(gl) + ld
@@ -348,6 +356,20 @@ class SolverCPU(object):
         abs_sum += np.abs(beam_pols)
 
     def compute_E_beam(self):
+        """
+        Rotates sources through a beam cube. At each timestep,
+        the source position is computed within the grid defining
+        the cube, taking into account pointing errors and
+        scaling parameters for each antenna.
+
+        The complex numbers at the eight grid points surrounding
+        the source are bilinearly interpolated together to
+        produce a single complex number, the
+        Direction-Dependent Effect for the source at a particular
+        time, antenna and frequency.
+
+        Returns a (nsrc,ntime,na,nchan,4) matrix of complex scalars.
+        """
         slvr = self.solver
 
         sint = np.sin(slvr.parallactic_angle*np.arange(slvr.ntime))
@@ -404,6 +426,9 @@ class SolverCPU(object):
         # and absolute polarisation sums
         angle = np.angle(sum / 8.0)
         abs_sum /= 8.0
+
+        assert angle.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+        assert abs_sum.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
 
         # Take the complex exponent of the angle
         # and multiply by the sum of abs
