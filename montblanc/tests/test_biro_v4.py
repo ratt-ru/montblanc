@@ -107,8 +107,8 @@ class TestBiroV4(unittest.TestCase):
         """ Tear down each test case """
         pass
 
-    def EKB_test_impl(self, slvr, cmp=None):
-        """ Type independent implementation of the KB test """
+    def EKBSqrt_test_impl(self, slvr, cmp=None):
+        """ Type independent implementation of the EKBSqrt test """
         if cmp is None:
             cmp = {}
 
@@ -160,23 +160,23 @@ class TestBiroV4(unittest.TestCase):
         self.assertTrue(non_zero > 0.85,
             'Non-zero EKB ratio is %f.' % non_zero)
 
-    def test_EKB_float(self):
-        """ Single precision EKB test  """
-        for params in src_perms({'na': 14, 'nchan': 64, 'ntime': 20}, True):
-            with solver(dtype=np.float32,
-                pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]),
-                **params) as slvr:
+    def test_EKBSqrt_float(self):
+        """ Single precision EKBSqrt test  """
+        default_params = {
+            'na': 14, 'nchan': 64, 'ntime': 20, 'dtype': np.float32,
+            'pipeline': Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()])}
 
-                self.EKB_test_impl(slvr, cmp={'rtol': 1e-4})
+        with solver(**default_params) as slvr:
+            self.EKBSqrt_test_impl(slvr, cmp={'rtol': 1e-4})
 
-    def test_EKB_double(self):
-        """ Double precision EKB test """
-        for params in src_perms({'na': 14, 'nchan': 64, 'ntime': 20}, True):
-            with solver(dtype=np.float64,
-                pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]),
-                **params) as slvr:
+    def test_EKBSqrt_double(self):
+        """ Double precision EKBSqrt test """
+        default_params = {
+            'na': 14, 'nchan': 64, 'ntime': 20, 'dtype': np.float64,
+            'pipeline': Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()])}
 
-                self.EKB_test_impl(slvr, cmp={'rtol': 1e-5})
+        with solver(**default_params) as slvr:
+            self.EKBSqrt_test_impl(slvr, cmp={'rtol': 1e-5})
 
     def sum_coherencies_test_impl(self, slvr, weight_vector=False, cmp=None):
         """ Type independent implementation of the coherency sum test """
@@ -226,31 +226,30 @@ class TestBiroV4(unittest.TestCase):
 
     def test_sum_coherencies_float(self):
         """ Test the coherency sum float kernel """
-        params = src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True)
+        default_params = {'na': 14, 'ntime': 20, 'nchan': 48,
+            'dtype': np.float32 }
 
-        for p in params:
+        for p in src_perms(default_params, permute_weights=True):
             wv = p['weight_vector']
-            with solver(dtype=np.float32,
-                pipeline=Pipeline([RimeSumCoherencies(p['weight_vector'])]),
-                **p) as slvr:
+            p['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
+            with solver(**p) as slvr:
 
                 self.sum_coherencies_test_impl(slvr,
                     cmp={'rtol': 1e-4},
-                    weight_vector=p['weight_vector'])
-
+                    weight_vector=wv)
 
     def test_sum_coherencies_double(self):
         """ Test the coherency sum double kernel """
-        params = src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True)
+        default_params = {'na': 14, 'ntime': 20, 'nchan': 48,
+            'dtype': np.float64 }
 
-        for p in params:
+        for p in src_perms(default_params, permute_weights=True):
             wv = p['weight_vector']
-            with solver(dtype=np.float64,
-                pipeline=Pipeline([RimeSumCoherencies(p['weight_vector'])]),
-                **p) as slvr:
+            p['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
+            with solver(**p) as slvr:
 
                 self.sum_coherencies_test_impl(slvr,
-                    weight_vector=p['weight_vector'])
+                    weight_vector=wv)
 
     def B_sqrt_test_impl(self, slvr, cmp=None):
         """ Type independent implementation of the B square root test """
