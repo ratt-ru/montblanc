@@ -130,6 +130,7 @@ void rime_jones_E_beam_impl(
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
     int SRC = blockIdx.z*blockDim.z + threadIdx.z;
     #define POL (threadIdx.x & 0x3)
+    #define BLOCKCHANS (BLOCKDIMX >> 2)
 
     if(SRC >= NSRC || ANT >= NA || POLCHAN >= NPOLCHAN)
         return;
@@ -137,11 +138,11 @@ void rime_jones_E_beam_impl(
     __shared__ T l0[BLOCKDIMZ];
     __shared__ T m0[BLOCKDIMZ];
 
-    __shared__ T ld[BLOCKDIMY][BLOCKDIMX];
-    __shared__ T md[BLOCKDIMY][BLOCKDIMX];
+    __shared__ T ld[BLOCKDIMY][BLOCKCHANS];
+    __shared__ T md[BLOCKDIMY][BLOCKCHANS];
 
-    __shared__ T a[BLOCKDIMY][BLOCKDIMX];
-    __shared__ T b[BLOCKDIMY][BLOCKDIMX];
+    __shared__ T a[BLOCKDIMY][BLOCKCHANS];
+    __shared__ T b[BLOCKDIMY][BLOCKCHANS];
 
     int i;
 
@@ -155,12 +156,13 @@ void rime_jones_E_beam_impl(
 
     // Antenna scaling factors vary by antenna and channel,
     // but not source or timestep
-    if(threadIdx.z == 0)
+    if(threadIdx.z == 0 && (threadIdx.x & 0x3) == 0)
     {
+        int blockchan = threadIdx.x >> 2;
         i = ANT*NCHAN + (POLCHAN >> 2);
-        a[threadIdx.y][threadIdx.x] = antenna_scaling[i];
+        a[threadIdx.y][blockchan] = antenna_scaling[i];
         i += NA*NCHAN;
-        b[threadIdx.y][threadIdx.x] = antenna_scaling[i];
+        b[threadIdx.y][blockchan] = antenna_scaling[i];
     }
 
     __syncthreads();
@@ -169,12 +171,13 @@ void rime_jones_E_beam_impl(
     {
         // Pointing errors vary by time, antenna and channel,
         // but not source
-        if(threadIdx.z == 0)
+        if(threadIdx.z == 0 && (threadIdx.x & 0x3) == 0)
         {
+            int blockchan = threadIdx.x >> 2;
             i = (TIME*NA + ANT)*NCHAN + (POLCHAN >> 2);
-            ld[threadIdx.y][threadIdx.x] = point_errors[i];
+            ld[threadIdx.y][blockchan] = point_errors[i];
             i += NTIME*NA*NCHAN;
-            md[threadIdx.y][threadIdx.x] = point_errors[i];
+            md[threadIdx.y][blockchan] = point_errors[i];
         }
 
         __syncthreads();
@@ -189,12 +192,13 @@ void rime_jones_E_beam_impl(
         T m = l0[threadIdx.z]*sint + m0[threadIdx.z]*cost;
 
         // Add the pointing errors for this antenna.
-        l += ld[threadIdx.y][threadIdx.x];
-        m += md[threadIdx.y][threadIdx.x];
+        int blockchan = threadIdx.x >> 2;
+        l += ld[threadIdx.y][blockchan];
+        m += md[threadIdx.y][blockchan];
 
         // Multiply by the antenna scaling factors.
-        l *= a[threadIdx.y][threadIdx.x];
-        m *= b[threadIdx.y][threadIdx.x];
+        l *= a[threadIdx.y][blockchan];
+        m *= b[threadIdx.y][blockchan];
 
         float gl = T(BEAM_LW) * (l - beam_ll) / (beam_ul - beam_ll);
         float gm = T(BEAM_MH) * (m - beam_lm) / (beam_um - beam_lm);
