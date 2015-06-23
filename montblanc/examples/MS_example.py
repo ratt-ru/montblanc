@@ -22,6 +22,9 @@ import logging
 import numpy as np
 
 import montblanc
+import montblanc.util as mbu
+
+from montblanc.factory import VERSION_TWO, VERSION_THREE, VERSION_FOUR, VERSION_FIVE
 
 if __name__ == '__main__':
     import sys
@@ -55,7 +58,7 @@ if __name__ == '__main__':
     #   solver transfer_* methods should be stored on the solver object
     with montblanc.get_biro_solver(args.msfile,
         npsrc=args.npsrc, ngsrc=args.ngsrc, nssrc=args.nssrc, init_weights=None,
-        weight_vector=True, store_cpu=False,
+        weight_vector=False, store_cpu=False,
         dtype=np.float64, version=args.version) as slvr:
 
         # Random point source coordinates in the l,m,n (brightness image) domain
@@ -63,20 +66,33 @@ if __name__ == '__main__':
                 size=slvr.lm_shape) * 0.1) \
             .astype(slvr.lm_dtype)
 
-        from montblanc.factory import VERSION_TWO, VERSION_THREE, VERSION_FOUR, VERSION_FIVE
-
         if args.version in [VERSION_TWO, VERSION_THREE]:
             # Random brightness matrix for the point sources
             brightness = np.random.random(
                     size=slvr.brightness_shape) \
                 .astype(slvr.brightness_dtype)
         elif args.version in [VERSION_FOUR, VERSION_FIVE]:
-            stokes = np.random.random(
-                    size=slvr.stokes_shape) \
-                .astype(slvr.stokes_dtype)
+            # Need a positive semi-definite brightness
+            # matrix for v4 and v5
+            Q=np.random.random(slvr.ntime*slvr.nsrc)-0.5
+            U=np.random.random(slvr.ntime*slvr.nsrc)-0.5
+            V=np.random.random(slvr.ntime*slvr.nsrc)-0.5
+            # Determinant of a brightness matrix
+            # is I^2 - Q^2 - U^2 - V^2
+            # The following ensures that the determinant
+            # is positive, and therefore the brightness matrix
+            # is positive semi-definite.
+            noise = np.random.random(slvr.ntime*slvr.nsrc)*0.1
+            I=np.sqrt(Q**2 + U**2 + V**2 + noise)
+            nax = np.newaxis
+            ary = np.hstack((I[:,nax], Q[:,nax], U[:,nax], V[:,nax]))
+            stokes = mbu.shape_list(ary, slvr.stokes_shape, slvr.stokes_dtype)
+            slvr.transfer_stokes(stokes)
+
             alpha = np.random.random(
                     size=slvr.alpha_shape) \
                 .astype(slvr.alpha_dtype)
+            slvr.transfer_alpha(alpha)
 
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
