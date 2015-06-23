@@ -38,8 +38,8 @@ from montblanc.pipeline import Pipeline
 
 def get_pipeline(**kwargs):
     wv = kwargs.get('weight_vector', False)
-    return Pipeline([RimeEBeam(),
-        RimeBSqrt(),
+    return Pipeline([RimeBSqrt(),
+        RimeEBeam(),
         RimeEKBSqrt(),
         RimeSumCoherencies(weight_vector=wv)])
 
