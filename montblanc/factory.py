@@ -142,8 +142,10 @@ def create_biro_solver_from_ms(slvr_class_type, **kwargs):
     check_msfile(kwargs.get('msfile',None))
     version = kwargs.get('version')
 
-    if version in [VERSION_TWO, VERSION_THREE, VERSION_FOUR, VERSION_FIVE]:
+    if version in [VERSION_TWO, VERSION_THREE]:
         from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
+    elif version in [VERSION_FOUR, VERSION_FIVE]:
+        from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
     else:
         raise Exception, 'Incorrect version %s' % version
 
