@@ -376,7 +376,7 @@ class TestBiroV4(unittest.TestCase):
     def test_E_beam_float(self):
         """ Test the E Beam float kernel """
 
-        with solver(na=14, ntime=50, nchan=64,
+        with solver(na=32, ntime=50, nchan=64,
             npsrc=10, ngsrc=10, dtype=np.float32,
             pipeline=Pipeline([RimeEBeam()])) as slvr:
 
@@ -384,7 +384,7 @@ class TestBiroV4(unittest.TestCase):
 
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
-        with solver(na=14, ntime=50, nchan=64,
+        with solver(na=32, ntime=50, nchan=64,
             npsrc=10, ngsrc=10, dtype=np.float64,
             pipeline=Pipeline([RimeEBeam()])) as slvr:
 

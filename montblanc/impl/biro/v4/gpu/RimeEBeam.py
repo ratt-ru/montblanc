@@ -28,18 +28,16 @@ from montblanc.node import Node
 
 FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels and polarisations
-    'BLOCKDIMY' : 32,    # Number of timesteps
+    'BLOCKDIMY' : 32,   # Number of antenna
     'BLOCKDIMZ' : 1,    #
     'maxregs'   : 32    # Maximum number of registers
 }
 
-# 44 registers results in some spillage into
-# local memory
 DOUBLE_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels and polarisations
-    'BLOCKDIMY' : 16,    # Number of timesteps
+    'BLOCKDIMY' : 16,   # Number of antenna
     'BLOCKDIMZ' : 1,    #
-    'maxregs'   : 52    # Maximum number of registers
+    'maxregs'   : 63    # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
