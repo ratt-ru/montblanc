@@ -66,12 +66,14 @@ template <>
 class EKBTraits<float> {
 public:
     typedef float3 UVWType;
+    typedef float2 LMType;
 };
 
 template <>
 class EKBTraits<double> {
 public:
     typedef double3 UVWType;
+    typedef double2 LMType;
 };
 
 template <
@@ -81,7 +83,7 @@ template <
 __device__
 void rime_jones_EKBSqrt_impl(
     typename EKBTraits<T>::UVWType * uvw,
-    T * lm,
+    typename EKBTraits<T>::LMType * lm,
     T * wavelength,
     typename Tr::ct * B_sqrt,
     typename Tr::ct * jones)
@@ -98,8 +100,7 @@ void rime_jones_EKBSqrt_impl(
 
     // Shared Memory produces a faster kernel than
     // registers for some reason!
-    __shared__ T l;
-    __shared__ T m;
+    __shared__ typename EKBTraits<T>::LMType s_lm;
 
     __shared__ T wl[BLOCKDIMX];
 
@@ -123,18 +124,17 @@ void rime_jones_EKBSqrt_impl(
         // LM coordinates vary only by source, not antenna, time or channel
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.x == 0)
         {
-            i = SRC;   l = lm[i];
-            i += NSRC; m = lm[i];
+            i = SRC;   s_lm = lm[i];
         }
         __syncthreads();
 
         // Calculate the n coordinate.
-        T n = Po::sqrt(T(1.0) - l*l - m*m) - T(1.0);
+        T n = Po::sqrt(T(1.0) - s_lm.x*s_lm.x - s_lm.y*s_lm.y) - T(1.0);
 
         // Calculate the phase term for this antenna
         T phase = s_uvw[threadIdx.z][threadIdx.y].z*n
-            + s_uvw[threadIdx.z][threadIdx.y].y*m
-            + s_uvw[threadIdx.z][threadIdx.y].x*l;
+            + s_uvw[threadIdx.z][threadIdx.y].y*s_lm.y
+            + s_uvw[threadIdx.z][threadIdx.y].x*s_lm.x;
 
         phase *= T(2.0) * Tr::cuda_pi / wl[threadIdx.x];
 
@@ -160,11 +160,11 @@ void rime_jones_EKBSqrt_impl(
 
 extern "C" {
 
-#define stamp_rime_EKBSqrt_fn(ft,ct,uvwt) \
+#define stamp_rime_EKBSqrt_fn(ft,ct,uvw_type,lm_type) \
 __global__ void \
 rime_jones_EKBSqrt_ ## ft( \
-    uvwt * UVW, \
-    ft * LM, \
+    uvw_type * UVW, \
+    lm_type * LM, \
     ft * wavelength, \
     ct * B_sqrt, \
     ct * jones) \
@@ -173,8 +173,8 @@ rime_jones_EKBSqrt_ ## ft( \
         wavelength, B_sqrt, jones); \
 }
 
-stamp_rime_EKBSqrt_fn(float,float2,float3)
-stamp_rime_EKBSqrt_fn(double,double2,double3)
+stamp_rime_EKBSqrt_fn(float,float2,float3,float2)
+stamp_rime_EKBSqrt_fn(double,double2,double3,double2)
 
 } // extern "C" {
 """)

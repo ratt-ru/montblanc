@@ -101,13 +101,28 @@ void bilinear_interpolate(
     #undef POL
 }
 
+template <typename T> class EBeamTraits {};
+
+template <> class EBeamTraits<float>
+{
+public:
+    typedef float2 LMType;
+};
+
+template <> class EBeamTraits<double>
+{
+public:
+    typedef double2 LMType;
+};
+
+
 template <
     typename T,
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
 void rime_jones_E_beam_impl(
-    T * lm,
+    typename EBeamTraits<T>::LMType * lm,
     T * wavelength,
     T * point_errors,
     T * antenna_scaling,
@@ -126,8 +141,7 @@ void rime_jones_E_beam_impl(
     if(SRC >= NSRC || ANT >= NA || POLCHAN >= NPOLCHAN)
         return;
 
-    __shared__ T l0[BLOCKDIMZ];
-    __shared__ T m0[BLOCKDIMZ];
+    __shared__ typename EBeamTraits<T>::LMType s_lm0[BLOCKDIMZ];
 
     __shared__ T ld[BLOCKDIMY][BLOCKCHANS];
     __shared__ T md[BLOCKDIMY][BLOCKCHANS];
@@ -141,8 +155,7 @@ void rime_jones_E_beam_impl(
     // not antenna or polarised channel
     if(threadIdx.y == 0 && threadIdx.x == 0)
     {
-        i = SRC;   l0[threadIdx.z] = lm[i];
-        i += NSRC; m0[threadIdx.z] = lm[i];
+        i = SRC;   s_lm0[threadIdx.z] = lm[i];
     }
 
     // Antenna scaling factors vary by antenna and channel,
@@ -179,8 +192,8 @@ void rime_jones_E_beam_impl(
         Po::sincos(parallactic_angle*TIME, &sint, &cost);
 
         // Rotate the source
-        T l = l0[threadIdx.z]*cost - m0[threadIdx.z]*sint;
-        T m = l0[threadIdx.z]*sint + m0[threadIdx.z]*cost;
+        T l = s_lm0[threadIdx.z].x*cost - s_lm0[threadIdx.z].y*sint;
+        T m = s_lm0[threadIdx.z].x*sint + s_lm0[threadIdx.z].y*cost;
 
         // Add the pointing errors for this antenna.
         int blockchan = threadIdx.x >> 2;
@@ -238,10 +251,10 @@ void rime_jones_E_beam_impl(
 
 extern "C" {
 
-#define stamp_jones_E_beam_fn(ft,ct) \
+#define stamp_jones_E_beam_fn(ft,ct,lm_type) \
 __global__ void \
 rime_jones_E_beam_ ## ft( \
-    ft * lm, \
+    lm_type * lm, \
     ft * wavelength, \
     ft * point_errors, \
     ft * antenna_scaling, \
@@ -256,8 +269,8 @@ rime_jones_E_beam_ ## ft( \
         parallactic_angle, beam_ll, beam_lm, beam_ul, beam_um); \
 }
 
-stamp_jones_E_beam_fn(float,float2);
-stamp_jones_E_beam_fn(double,double2);
+stamp_jones_E_beam_fn(float,float2,float2);
+stamp_jones_E_beam_fn(double,double2,double2);
 
 } // extern "C" {
 """)

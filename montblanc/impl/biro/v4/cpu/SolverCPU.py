@@ -146,7 +146,7 @@ class SolverCPU(object):
             wave = slvr.wavelength_cpu
 
             u, v, w = slvr.uvw_cpu[:,:,0], slvr.uvw_cpu[:,:,1], slvr.uvw_cpu[:,:,2]
-            l, m = slvr.lm_cpu[0], slvr.lm_cpu[1]
+            l, m = slvr.lm_cpu[:,0], slvr.lm_cpu[:,1]
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
             n = ne.evaluate('sqrt(1. - l**2 - m**2) - 1.',
@@ -376,7 +376,7 @@ class SolverCPU(object):
         assert sint.shape == (slvr.ntime,)
         assert cost.shape == (slvr.ntime,)
 
-        l0, m0 = slvr.lm_cpu[0], slvr.lm_cpu[1]
+        l0, m0 = slvr.lm_cpu[:,0], slvr.lm_cpu[:,1]
         l = l0[:,np.newaxis]*cost[np.newaxis,:] - m0[:,np.newaxis]*sint[np.newaxis,:]
         m = l0[:,np.newaxis]*sint[np.newaxis,:] + m0[:,np.newaxis]*cost[np.newaxis,:]
 
