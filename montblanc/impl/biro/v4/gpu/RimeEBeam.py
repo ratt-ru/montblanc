@@ -107,12 +107,16 @@ template <> class EBeamTraits<float>
 {
 public:
     typedef float2 LMType;
+    typedef float2 PointErrorType;
+    typedef float2 AntennaScaleType;
 };
 
 template <> class EBeamTraits<double>
 {
 public:
     typedef double2 LMType;
+    typedef double2 PointErrorType;
+    typedef double2 AntennaScaleType;
 };
 
 
@@ -124,8 +128,8 @@ __device__
 void rime_jones_E_beam_impl(
     typename EBeamTraits<T>::LMType * lm,
     T * wavelength,
-    T * point_errors,
-    T * antenna_scaling,
+    typename EBeamTraits<T>::PointErrorType * point_errors,
+    typename EBeamTraits<T>::AntennaScaleType * antenna_scaling,
     typename Tr::ct * E_beam,
     typename Tr::ct * jones,
     T parallactic_angle,
@@ -142,12 +146,8 @@ void rime_jones_E_beam_impl(
         return;
 
     __shared__ typename EBeamTraits<T>::LMType s_lm0[BLOCKDIMZ];
-
-    __shared__ T ld[BLOCKDIMY][BLOCKCHANS];
-    __shared__ T md[BLOCKDIMY][BLOCKCHANS];
-
-    __shared__ T a[BLOCKDIMY][BLOCKCHANS];
-    __shared__ T b[BLOCKDIMY][BLOCKCHANS];
+    __shared__ typename EBeamTraits<T>::PointErrorType s_lmd[BLOCKDIMY][BLOCKCHANS];
+    __shared__ typename EBeamTraits<T>::AntennaScaleType s_ab[BLOCKDIMY][BLOCKCHANS];
 
     int i;
 
@@ -164,9 +164,7 @@ void rime_jones_E_beam_impl(
     {
         int blockchan = threadIdx.x >> 2;
         i = ANT*NCHAN + (POLCHAN >> 2);
-        a[threadIdx.y][blockchan] = antenna_scaling[i];
-        i += NA*NCHAN;
-        b[threadIdx.y][blockchan] = antenna_scaling[i];
+        s_ab[threadIdx.y][blockchan] = antenna_scaling[i];
     }
 
     __syncthreads();
@@ -179,9 +177,7 @@ void rime_jones_E_beam_impl(
         {
             int blockchan = threadIdx.x >> 2;
             i = (TIME*NA + ANT)*NCHAN + (POLCHAN >> 2);
-            ld[threadIdx.y][blockchan] = point_errors[i];
-            i += NTIME*NA*NCHAN;
-            md[threadIdx.y][blockchan] = point_errors[i];
+            s_lmd[threadIdx.y][blockchan] = point_errors[i];
         }
 
         __syncthreads();
@@ -197,12 +193,12 @@ void rime_jones_E_beam_impl(
 
         // Add the pointing errors for this antenna.
         int blockchan = threadIdx.x >> 2;
-        l += ld[threadIdx.y][blockchan];
-        m += md[threadIdx.y][blockchan];
+        l += s_lmd[threadIdx.y][blockchan].x;
+        m += s_lmd[threadIdx.y][blockchan].y;
 
         // Multiply by the antenna scaling factors.
-        l *= a[threadIdx.y][blockchan];
-        m *= b[threadIdx.y][blockchan];
+        l *= s_ab[threadIdx.y][blockchan].x;
+        m *= s_ab[threadIdx.y][blockchan].y;
 
         float gl = T(BEAM_LW) * (l - beam_ll) / (beam_ul - beam_ll);
         float gm = T(BEAM_MH) * (m - beam_lm) / (beam_um - beam_lm);
@@ -251,13 +247,13 @@ void rime_jones_E_beam_impl(
 
 extern "C" {
 
-#define stamp_jones_E_beam_fn(ft,ct,lm_type) \
+#define stamp_jones_E_beam_fn(ft,ct,lm_type,pe_type,as_type) \
 __global__ void \
 rime_jones_E_beam_ ## ft( \
     lm_type * lm, \
     ft * wavelength, \
-    ft * point_errors, \
-    ft * antenna_scaling, \
+    pe_type * point_errors, \
+    as_type * antenna_scaling, \
     ct * E_beam, \
     ct * jones, \
     ft parallactic_angle, \
@@ -269,8 +265,8 @@ rime_jones_E_beam_ ## ft( \
         parallactic_angle, beam_ll, beam_lm, beam_ul, beam_um); \
 }
 
-stamp_jones_E_beam_fn(float,float2,float2);
-stamp_jones_E_beam_fn(double,double2,double2);
+stamp_jones_E_beam_fn(float,float2,float2,float2,float2);
+stamp_jones_E_beam_fn(double,double2,double2,double2,double2);
 
 } // extern "C" {
 """)

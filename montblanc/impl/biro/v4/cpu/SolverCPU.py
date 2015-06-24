@@ -383,14 +383,14 @@ class SolverCPU(object):
         assert l.shape == (slvr.nsrc, slvr.ntime)
         assert m.shape == (slvr.nsrc, slvr.ntime)
 
-        ld, md = slvr.point_errors_cpu[0], slvr.point_errors_cpu[1]
+        ld, md = slvr.point_errors_cpu[:,:,:,0], slvr.point_errors_cpu[:,:,:,1]
         l = l[:,:,np.newaxis,np.newaxis] + ld[np.newaxis,:,:,:]
         m = m[:,:,np.newaxis,np.newaxis] + md[np.newaxis,:,:,:]
 
         assert l.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
         assert m.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
-        a, b = slvr.antenna_scaling_cpu[0], slvr.antenna_scaling_cpu[1]
+        a, b = slvr.antenna_scaling_cpu[:,:,0], slvr.antenna_scaling_cpu[:,:,1]
         l *= a[np.newaxis, np.newaxis, :, :]
         m *= b[np.newaxis, np.newaxis, :, :]
 
