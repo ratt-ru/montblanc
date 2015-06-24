@@ -95,7 +95,7 @@ P = [
 # List of arrays
 A = [
     # Input Arrays
-    ary_dict('uvw', (3,'ntime','na'), 'ft'),
+    ary_dict('uvw', ('ntime','na', 3), 'ft'),
     ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32),
 
     ary_dict('lm', (2,'nsrc'), 'ft'),

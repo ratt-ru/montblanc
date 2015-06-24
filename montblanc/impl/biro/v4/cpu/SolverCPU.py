@@ -40,15 +40,15 @@ class SolverCPU(object):
             ap = slvr.get_ap_idx()
 
             # Calculate per baseline u from per antenna u
-            u = slvr.uvw_cpu[0][ap]
+            u = slvr.uvw_cpu[:,:,0][ap]
             u = ne.evaluate('ap-aq', {'ap': u[1], 'aq': u[0]})
 
             # Calculate per baseline v from per antenna v
-            v = slvr.uvw_cpu[1][ap]
+            v = slvr.uvw_cpu[:,:,1][ap]
             v = ne.evaluate('ap-aq', {'ap': v[1], 'aq': v[0]})
 
             # Calculate per baseline w from per antenna w
-            w = slvr.uvw_cpu[2][ap]
+            w = slvr.uvw_cpu[:,:,2][ap]
             w = ne.evaluate('ap-aq', {'ap': w[1], 'aq': w[0]})
 
             el = slvr.gauss_shape_cpu[0]
@@ -88,15 +88,15 @@ class SolverCPU(object):
             ap = slvr.get_ap_idx()
 
             # Calculate per baseline u from per antenna u
-            u = slvr.uvw_cpu[0][ap]
+            u = slvr.uvw_cpu[:,:,0][ap]
             u = ne.evaluate('ap-aq', {'ap': u[1], 'aq': u[0]})
 
             # Calculate per baseline v from per antenna v
-            v = slvr.uvw_cpu[1][ap]
+            v = slvr.uvw_cpu[:,:,1][ap]
             v = ne.evaluate('ap-aq', {'ap': v[1], 'aq': v[0]})
 
             # Calculate per baseline w from per antenna w
-            w = slvr.uvw_cpu[2][ap]
+            w = slvr.uvw_cpu[:,:,2][ap]
             w = ne.evaluate('ap-aq', {'ap': w[1], 'aq': w[0]})
 
             e1 = slvr.sersic_shape_cpu[0]
@@ -145,7 +145,7 @@ class SolverCPU(object):
         try:
             wave = slvr.wavelength_cpu
 
-            u, v, w = slvr.uvw_cpu[0], slvr.uvw_cpu[1], slvr.uvw_cpu[2]
+            u, v, w = slvr.uvw_cpu[:,:,0], slvr.uvw_cpu[:,:,1], slvr.uvw_cpu[:,:,2]
             l, m = slvr.lm_cpu[0], slvr.lm_cpu[1]
 
             # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
@@ -347,11 +347,11 @@ class SolverCPU(object):
         m_idx = m.astype(np.int32)
         ch_idx = ch.astype(np.int32)[np.newaxis,np.newaxis,np.newaxis,:]
 
-        pols = slvr.E_beam_cpu[l_idx,m_idx,ch_idx]
-        assert pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+        beam_pols = slvr.E_beam_cpu[l_idx,m_idx,ch_idx]
+        assert beam_pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
 
-        sum += weight[:,:,:,:,np.newaxis]*pols
-        abs_sum += weight[:,:,:,:,np.newaxis]*np.abs(pols)
+        sum += weight[:,:,:,:,np.newaxis]*beam_pols
+        abs_sum += weight[:,:,:,:,np.newaxis]*np.abs(beam_pols)
 
     def compute_E_beam(self):
         """

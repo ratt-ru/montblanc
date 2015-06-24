@@ -180,7 +180,11 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     uvw = mbu.shape_list([30.*r, 25.*r, 20.*r],
             shape=slvr.uvw_shape, dtype=slvr.uvw_dtype)
     # Normalise Antenna 0
-    uvw[:,:,0] = 0
+    if version in [VERSION_TWO, VERSION_THREE]:
+        uvw[:,:,0] = 0
+    elif version in [VERSION_FOUR, VERSION_FIVE]:
+        uvw[:,0,:] = 0
+
     slvr.transfer_uvw(uvw)
 
     # Point source coordinates in the l,m,n (sky image) domain

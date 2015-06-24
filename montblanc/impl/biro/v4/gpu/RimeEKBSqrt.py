@@ -59,13 +59,28 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
 
+template <typename T>
+class EKBTraits {};
+
+template <>
+class EKBTraits<float> {
+public:
+    typedef float3 UVWType;
+};
+
+template <>
+class EKBTraits<double> {
+public:
+    typedef double3 UVWType;
+};
+
 template <
     typename T,
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
 void rime_jones_EKBSqrt_impl(
-    T * uvw,
+    typename EKBTraits<T>::UVWType * uvw,
     T * lm,
     T * wavelength,
     typename Tr::ct * B_sqrt,
@@ -79,9 +94,7 @@ void rime_jones_EKBSqrt_impl(
     if(TIME >= NTIME || ANT >= NA || POLCHAN >= NPOLCHAN)
         return;
 
-    __shared__ T u[BLOCKDIMZ][BLOCKDIMY];
-    __shared__ T v[BLOCKDIMZ][BLOCKDIMY];
-    __shared__ T w[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ typename EKBTraits<T>::UVWType s_uvw[BLOCKDIMZ][BLOCKDIMY];
 
     // Shared Memory produces a faster kernel than
     // registers for some reason!
@@ -96,11 +109,7 @@ void rime_jones_EKBSqrt_impl(
     if(threadIdx.x == 0)
     {
         i = TIME*NA + ANT;
-        u[threadIdx.z][threadIdx.y] = uvw[i];
-        i += NA*NTIME;
-        v[threadIdx.z][threadIdx.y] = uvw[i];
-        i += NA*NTIME;
-        w[threadIdx.z][threadIdx.y] = uvw[i];
+        s_uvw[threadIdx.z][threadIdx.y] = uvw[i];
     }
 
     // Wavelengths vary by channel, not by time and antenna
@@ -123,9 +132,9 @@ void rime_jones_EKBSqrt_impl(
         T n = Po::sqrt(T(1.0) - l*l - m*m) - T(1.0);
 
         // Calculate the phase term for this antenna
-        T phase = w[threadIdx.z][threadIdx.y]*n
-            + v[threadIdx.z][threadIdx.y]*m
-            + u[threadIdx.z][threadIdx.y]*l;
+        T phase = s_uvw[threadIdx.z][threadIdx.y].z*n
+            + s_uvw[threadIdx.z][threadIdx.y].y*m
+            + s_uvw[threadIdx.z][threadIdx.y].x*l;
 
         phase *= T(2.0) * Tr::cuda_pi / wl[threadIdx.x];
 
@@ -151,10 +160,10 @@ void rime_jones_EKBSqrt_impl(
 
 extern "C" {
 
-#define stamp_rime_EKBSqrt_fn(ft,ct) \
+#define stamp_rime_EKBSqrt_fn(ft,ct,uvwt) \
 __global__ void \
 rime_jones_EKBSqrt_ ## ft( \
-    ft * UVW, \
+    uvwt * UVW, \
     ft * LM, \
     ft * wavelength, \
     ct * B_sqrt, \
@@ -164,8 +173,8 @@ rime_jones_EKBSqrt_ ## ft( \
         wavelength, B_sqrt, jones); \
 }
 
-stamp_rime_EKBSqrt_fn(float,float2)
-stamp_rime_EKBSqrt_fn(double,double2)
+stamp_rime_EKBSqrt_fn(float,float2,float3)
+stamp_rime_EKBSqrt_fn(double,double2,double3)
 
 } // extern "C" {
 """)

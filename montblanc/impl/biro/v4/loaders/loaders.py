@@ -44,9 +44,9 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             'MS UVW shape %s != expected %s' % (ms_uvw.shape,uvw_shape)
         uvw_rec = solver.get_array_record('uvw')
         uvw=np.empty(shape=uvw_rec.shape, dtype=uvw_rec.dtype)
-        uvw[:,:,1:na] = ms_uvw.reshape(ntime, nbl, 3).transpose(2,0,1) \
-            .astype(solver.ft)[:,:,:na-1]
-        uvw[:,:,0] = solver.ft(0)
+        uvw[:,1:na,:] = ms_uvw.reshape(ntime, nbl, 3) \
+            .astype(solver.ft)[:,:na-1,:]
+        uvw[:,0,:] = solver.ft(0)
         solver.transfer_uvw(np.ascontiguousarray(uvw))
 
         # Determine the wavelengths

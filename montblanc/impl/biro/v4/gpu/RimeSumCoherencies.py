@@ -28,17 +28,17 @@ import montblanc
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
-    'BLOCKDIMX': 32,   # Number of channels*4 polarisations
+    'BLOCKDIMX': 32,    # Number of channels*4 polarisations
     'BLOCKDIMY': 8,     # Number of baselines
     'BLOCKDIMZ': 1,     # Number of timesteps
-    'maxregs': 48         # Maximum number of registers
+    'maxregs': 48       # Maximum number of registers
 }
 
 DOUBLE_PARAMS = {
-    'BLOCKDIMX': 32,   # Number of channels*4 polarisations
+    'BLOCKDIMX': 32,    # Number of channels*4 polarisations
     'BLOCKDIMY': 8,     # Number of baselines
     'BLOCKDIMZ': 1,     # Number of timesteps
-    'maxregs': 48         # Maximum number of registers
+    'maxregs': 63       # Maximum number of registers
 }
 
 KERNEL_TEMPLATE = string.Template("""
@@ -65,6 +65,22 @@ KERNEL_TEMPLATE = string.Template("""
 #define GAUSS_SCALE ${gauss_scale}
 #define TWO_PI ${two_pi}
 
+template <typename T>
+class SumCohTraits {};
+
+template <>
+class SumCohTraits<float> {
+public:
+    typedef float3 UVWType;
+};
+
+template <>
+class SumCohTraits<double> {
+public:
+    typedef double3 UVWType;
+};
+
+
 template <
     typename T,
     bool apply_weights=false,
@@ -72,7 +88,7 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__
 void rime_sum_coherencies_impl(
-    typename Tr::ft * uvw,
+    typename SumCohTraits<T>::UVWType * uvw,
     typename Tr::ft * gauss_shape,
     typename Tr::ft * sersic_shape,
     typename Tr::ft * wavelength,
@@ -91,9 +107,7 @@ void rime_sum_coherencies_impl(
     if(TIME >= NTIME || BL >= NBL || POLCHAN >= NPOLCHAN)
         return;
 
-    __shared__ T u[BLOCKDIMZ][BLOCKDIMY];
-    __shared__ T v[BLOCKDIMZ][BLOCKDIMY];
-    __shared__ T w[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ typename SumCohTraits<T>::UVWType s_uvw[BLOCKDIMZ][BLOCKDIMY];
 
     __shared__ T el;
     __shared__ T em;
@@ -115,13 +129,14 @@ void rime_sum_coherencies_impl(
     if(threadIdx.x == 0)
     {
         // UVW, calculated from u_pq = u_p - u_q
-        i = TIME*NA + ANT1;    u[threadIdx.z][threadIdx.y] = uvw[i];
-        i += NA*NTIME;         v[threadIdx.z][threadIdx.y] = uvw[i];
-        i += NA*NTIME;         w[threadIdx.z][threadIdx.y] = uvw[i];
+        i = TIME*NA + ANT1;
+        s_uvw[threadIdx.z][threadIdx.y] = uvw[i];
 
-        i = TIME*NA + ANT2;    u[threadIdx.z][threadIdx.y] -= uvw[i];
-        i += NA*NTIME;         v[threadIdx.z][threadIdx.y] -= uvw[i];
-        i += NA*NTIME;         w[threadIdx.z][threadIdx.y] -= uvw[i];
+        i = TIME*NA + ANT2;
+        typename SumCohTraits<T>::UVWType ant2_uvw = uvw[i];
+        s_uvw[threadIdx.z][threadIdx.y].x -= ant2_uvw.x;
+        s_uvw[threadIdx.z][threadIdx.y].y -= ant2_uvw.y;
+        s_uvw[threadIdx.z][threadIdx.y].z -= ant2_uvw.z;
     }
 
     // Wavelength varies by channel, but not baseline and time
@@ -165,10 +180,12 @@ void rime_sum_coherencies_impl(
 
         __syncthreads();
 
-        T u1 = u[threadIdx.z][threadIdx.y]*em - v[threadIdx.z][threadIdx.y]*el;
+        T u1 = s_uvw[threadIdx.z][threadIdx.y].x*em -
+            s_uvw[threadIdx.z][threadIdx.y].y*el;
         u1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
         u1 *= eR;
-        T v1 = u[threadIdx.z][threadIdx.y]*el + v[threadIdx.z][threadIdx.y]*em;
+        T v1 = s_uvw[threadIdx.z][threadIdx.y].x*el +
+            s_uvw[threadIdx.z][threadIdx.y].y*em;
         v1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
@@ -206,10 +223,12 @@ void rime_sum_coherencies_impl(
         __syncthreads();
 
         // sersic source in  the Fourier domain
-        T u1 = u[threadIdx.z][threadIdx.y]*(T(1.0)+e1) + v[threadIdx.z][threadIdx.y]*e2;
+        T u1 = s_uvw[threadIdx.z][threadIdx.y].x*(T(1.0)+e1) +
+            s_uvw[threadIdx.z][threadIdx.y].y*e2;
         u1 *= T(TWO_PI)/wl[threadIdx.x];
         u1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
-        T v1 = u[threadIdx.z][threadIdx.y]*e2 + v[threadIdx.z][threadIdx.y]*(T(1.0)-e1);
+        T v1 = s_uvw[threadIdx.z][threadIdx.y].x*e2 +
+            s_uvw[threadIdx.z][threadIdx.y].y*(T(1.0)-e1);
         v1 *= T(TWO_PI)/wl[threadIdx.x];
         v1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
         T sersic_factor = T(1.0) + u1*u1+v1*v1;
@@ -294,10 +313,10 @@ extern "C" {
 // - apply_weights: boolean indicating whether we're weighting our visibilities
 // - symbol: u or w depending on whether we're handling unweighted/weighted visibilities.
 
-#define stamp_sum_coherencies_fn(ft, ct, apply_weights, symbol) \
+#define stamp_sum_coherencies_fn(ft, ct, uvwt, apply_weights, symbol) \
 __global__ void \
 rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
-    ft * uvw, \
+    uvwt * uvw, \
     ft * gauss_shape, \
     ft * sersic_shape, \
     ft * wavelength, \
@@ -315,10 +334,10 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
         visibilities, chi_sqrd_result); \
 }
 
-stamp_sum_coherencies_fn(float, float2, false, u)
-stamp_sum_coherencies_fn(float, float2, true, w)
-stamp_sum_coherencies_fn(double, double2, false, u)
-stamp_sum_coherencies_fn(double, double2, true, w)
+stamp_sum_coherencies_fn(float, float2, float3, false, u)
+stamp_sum_coherencies_fn(float, float2, float3, true, w)
+stamp_sum_coherencies_fn(double, double2, double3, false, u)
+stamp_sum_coherencies_fn(double, double2, double3, true, w)
 
 } // extern "C" {
 """)
