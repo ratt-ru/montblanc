@@ -41,18 +41,18 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 	# Define transpose axes to convert file uvw order 
 	# to montblanc array shape: (ntime, nbl)
         if data_order == ORDER_BL_TIME:
-                file_uvw_shape = (nbl, ntime, 3)
-                uvw_transpose = (2,1,0)
+		file_uvw_shape = (nbl, ntime, 3)
+		uvw_transpose = (2,1,0)
 		file_ant_shape = (nbl, ntime)
 		ant_transpose = (1,0)
 		file_data_shape = (nbl, ntime, nchan,4)
-                data_transpose = (3,1,0,2)
+		data_transpose = (3,1,0,2)
         elif data_order == ORDER_TIME_BL:
-                file_uvw_shape = (ntime, nbl,  3)
-                uvw_transpose = (2,0,1)
+		file_uvw_shape = (ntime, nbl,  3)
+		uvw_transpose = (2,0,1)
 		file_ant_shape = (ntime, nbl)
 		file_data_shape = (ntime, nbl, nchan,4)
-                data_transpose = (3,0,1,2)
+		data_transpose = (3,0,1,2)
 	else:
 		raise ValueError('Invalid UVW ordering %s', uvw_order)
         
@@ -85,8 +85,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         ant1 = tm.getcol('ANTENNA1').reshape(file_ant_shape)
         ant2 = tm.getcol('ANTENNA2').reshape(file_ant_shape)
 	if (data_order == ORDER_BL_TIME):
-		ant1.transpose(ant_transpose)
-		ant2.transpose(ant_transpose)
+		ant1 = ant1.transpose(ant_transpose)
+		ant2 = ant2.transpose(ant_transpose)
 
         expected_ant_shape = (ntime,nbl)
 
