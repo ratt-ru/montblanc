@@ -36,27 +36,27 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         tf = self.tables['freq']
 
         na, nbl, ntime, nchan = solver.na, solver.nbl, solver.ntime, solver.nchan
-	data_order = kwargs.get('data_order', ORDER_TIME_BL)
-        
-	# Define transpose axes to convert file uvw order 
-	# to montblanc array shape: (ntime, nbl)
+        data_order = kwargs.get('data_order', ORDER_TIME_BL)
+
+        # Define transpose axes to convert file uvw order
+        # to montblanc array shape: (ntime, nbl)
         if data_order == ORDER_BL_TIME:
-		file_uvw_shape = (nbl, ntime, 3)
-		uvw_transpose = (2,1,0)
-		file_ant_shape = (nbl, ntime)
-		ant_transpose = (1,0)
-		file_data_shape = (nbl, ntime, nchan,4)
-		data_transpose = (3,1,0,2)
+            file_uvw_shape = (nbl, ntime, 3)
+            uvw_transpose = (2,1,0)
+            file_ant_shape = (nbl, ntime)
+            ant_transpose = (1,0)
+            file_data_shape = (nbl, ntime, nchan,4)
+            data_transpose = (3,1,0,2)
         elif data_order == ORDER_TIME_BL:
-		file_uvw_shape = (ntime, nbl,  3)
-		uvw_transpose = (2,0,1)
-		file_ant_shape = (ntime, nbl)
-		file_data_shape = (ntime, nbl, nchan,4)
-		data_transpose = (3,0,1,2)
-	else:
-		raise ValueError('Invalid UVW ordering %s', uvw_order)
-        
-	# Check that we're getting the correct shape...
+            file_uvw_shape = (ntime, nbl,  3)
+            uvw_transpose = (2,0,1)
+            file_ant_shape = (ntime, nbl)
+            file_data_shape = (ntime, nbl, nchan,4)
+            data_transpose = (3,0,1,2)
+        else:
+            raise ValueError('Invalid UVW ordering %s', uvw_order)
+
+        # Check that we're getting the correct shape...
         uvw_shape = (ntime*nbl, 3)
 
         # Read in UVW
@@ -84,9 +84,9 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Get the baseline antenna pairs and correct the axes
         ant1 = tm.getcol('ANTENNA1').reshape(file_ant_shape)
         ant2 = tm.getcol('ANTENNA2').reshape(file_ant_shape)
-	if (data_order == ORDER_BL_TIME):
-		ant1 = ant1.transpose(ant_transpose)
-		ant2 = ant2.transpose(ant_transpose)
+        if data_order == ORDER_BL_TIME:
+            ant1 = ant1.transpose(ant_transpose)
+            ant2 = ant2.transpose(ant_transpose)
 
         expected_ant_shape = (ntime,nbl)
 
@@ -129,8 +129,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             flag = np.logical_or(flag, flag_row[:,np.newaxis,np.newaxis])
 
             if init_weights == 'weight':
-                # Obtain weighting information from WEIGHT_SPECTRUM
-                # preferably, otherwise WEIGHtm.
+            # Obtain weighting information from WEIGHT_SPECTRUM
+            # preferably, otherwise WEIGHtm.
                 if tm.colnames().count('WEIGHT_SPECTRUM') > 0:
                     # Try obtain the weightings from WEIGHT_SPECTRUM firstm.
                     # It has the same dimensions as 'FLAG'
