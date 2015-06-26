@@ -346,14 +346,11 @@ class SolverCPU(object):
         m_idx = m.astype(np.int32)
         ch_idx = ch.astype(np.int32)[np.newaxis,np.newaxis,np.newaxis,:]
 
-        beam_pols = slvr.E_beam_cpu[l_idx,m_idx,ch_idx]
-        assert beam_pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+        pols = slvr.E_beam_cpu[l_idx,m_idx,ch_idx]
+        assert pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
 
-        # Weight the polarisations
-        beam_pols *= weights[:,:,:,:,np.newaxis] 
-
-        sum += beam_pols
-        abs_sum += np.abs(beam_pols)
+        sum += weights[:,:,:,:,np.newaxis]*pols
+        abs_sum += weights[:,:,:,:,np.newaxis]*np.abs(pols)
 
     def compute_E_beam(self):
         """
