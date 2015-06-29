@@ -354,7 +354,7 @@ class TestBiroV4(unittest.TestCase):
         # a discrepancy. e.g 24.990 vs 24.999
 
         # Hence, we choose a very low ratio of unnacceptable values
-        proportion_acceptable = 1e-5
+        proportion_acceptable = 1e-4
         d = np.invert(np.isclose(E_term_cpu, E_term_gpu, **cmp))
         incorrect = d.sum()
         proportion_incorrect = incorrect / float(d.size)

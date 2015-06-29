@@ -85,14 +85,11 @@ void bilinear_interpolate(
         ch < 0 || ch >= BEAM_NUD)
         { return; }
 
-    T ldiff = (l-gl);
-    T weight = ldiff*ldiff;
-    T mdiff = (m-gm);
-    weight += mdiff*mdiff;
-    T chdiff = (ch-gchan);
-    weight += chdiff*chdiff;
-    weight = Po::sqrt(weight);
-
+    // The bilinear weighting is constructed by multiplying
+    // absolute differences. Note that we don't have
+    // to divide by the product of each dimension's grid distance
+    // since they are all 1.0.
+    T weight = fabsf(l-gl)*fabsf(m-gm)*fabsf(ch-gchan);
     int i = ((int(l)*BEAM_MH + int(m))*BEAM_NUD + int(ch))*NPOL + POL;
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
@@ -222,12 +219,6 @@ void rime_jones_E_beam_impl(
             0.0f, 1.0f, 1.0f);
         bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
             1.0f, 1.0f, 1.0f);
-
-        // Normalise the polarisation
-        // and absolute polarisation sums
-        sum.x /= T(8.0);
-        sum.y /= T(8.0);
-        abs_sum /= T(8.0);
 
         // Determine the normalised angle
         typename Tr::ft angle = Po::arg(sum);

@@ -326,21 +326,22 @@ class SolverCPU(object):
         m[invalid_lm] = 0
         ch[invalid_ch] = 0
 
-        ldiff, mdiff, chdiff = l - gl, m - gm, ch - gchan
+        ldiff, mdiff, chdiff = np.abs(l - gl), np.abs(m - gm), np.abs(ch - gchan)
         assert ldiff.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
         assert mdiff.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
         assert chdiff.shape == (slvr.nchan,)
 
-        coord_diff_sqrd = ldiff**2 + mdiff**2
-        ch_diff_sqrd = chdiff**2
-        weight_sum = coord_diff_sqrd + \
-            ch_diff_sqrd[np.newaxis,np.newaxis,np.newaxis,:]
-        assert weight_sum.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+        # The bilinear weighting is constructed by multiplying
+        # absolute differences. Note that we don't have
+        # to divide by the product of each dimension's grid distance
+        # since they are all 1.0.
+        weight = (ldiff*mdiff) * \
+            chdiff[np.newaxis,np.newaxis,np.newaxis,:]
+        assert weight.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
-        weights = np.sqrt(weight_sum)
-        weights[invalid_lm] = 0
-        weights[:,:,:,invalid_ch] = 0
-        assert weights.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+        weight[invalid_lm] = 0
+        weight[:,:,:,invalid_ch] = 0
+        assert weight.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
         l_idx = l.astype(np.int32)
         m_idx = m.astype(np.int32)
@@ -349,8 +350,8 @@ class SolverCPU(object):
         pols = slvr.E_beam_cpu[l_idx,m_idx,ch_idx]
         assert pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
 
-        sum += weights[:,:,:,:,np.newaxis]*pols
-        abs_sum += weights[:,:,:,:,np.newaxis]*np.abs(pols)
+        sum += weight[:,:,:,:,np.newaxis]*pols
+        abs_sum += weight[:,:,:,:,np.newaxis]*np.abs(pols)
 
     def compute_E_beam(self):
         """
@@ -419,10 +420,8 @@ class SolverCPU(object):
         self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 0, 1, 1)
         self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 1, 1, 1)
 
-        # Determine the normalised angle of the polarisation
-        # and absolute polarisation sums
-        angle = np.angle(sum / 8.0)
-        abs_sum /= 8.0
+        # Determine the angle of the polarisation
+        angle = np.angle(sum)
 
         assert angle.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
         assert abs_sum.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
