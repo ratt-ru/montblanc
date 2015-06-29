@@ -63,6 +63,12 @@ def get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs):
 
     Keyword Arguments
     -----------------
+    data_order : string
+	    Indicates what is the MeasurementSet data ordering: time x baseline or baseline x time.
+	    None - Assume Montblanc's default ordering (time x baseline)
+	    'casa' - Assume CASA's default ordering. It matches Montblanc's default ordering, so it can be avoided.
+	    'other' - Assume baseline x time ordering
+    
     init_weights : string
             Indicates how the weight vector should be initialised from the Measurementset.
             None - Don't initialise the weight vector.

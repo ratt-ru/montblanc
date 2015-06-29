@@ -150,7 +150,7 @@ def create_biro_solver_from_ms(slvr_class_type, **kwargs):
     with MeasurementSetLoader(kwargs.get('msfile')) as loader:
         ntime,na,nchan = loader.get_dims()
         slvr = slvr_class_type(na=na,ntime=ntime,nchan=nchan,**kwargs)
-        loader.load(slvr)
+        loader.load(slvr, **kwargs)
         return slvr
 
 def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
