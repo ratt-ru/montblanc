@@ -68,7 +68,7 @@ def suite():
         test_suite.addTest(unittest.makeSuite(TestSolver))
         test_suite.addTest(unittest.makeSuite(TestUtils))
         # Test recent code first, as it will be more likely to fail
-        test_suite.addTest(unittest.makeSuite(TestBiroV5))
+        #test_suite.addTest(unittest.makeSuite(TestBiroV5))
         test_suite.addTest(unittest.makeSuite(TestBiroV4))
         test_suite.addTest(unittest.makeSuite(TestBiroV3))
         test_suite.addTest(unittest.makeSuite(TestBiroV2))
