@@ -127,7 +127,6 @@ template <
 __device__
 void rime_jones_E_beam_impl(
     typename EBeamTraits<T>::LMType * lm,
-    T * wavelength,
     typename EBeamTraits<T>::PointErrorType * point_errors,
     typename EBeamTraits<T>::AntennaScaleType * antenna_scaling,
     typename Tr::ct * E_beam,
@@ -251,7 +250,6 @@ extern "C" {
 __global__ void \
 rime_jones_E_beam_ ## ft( \
     lm_type * lm, \
-    ft * wavelength, \
     pe_type * point_errors, \
     as_type * antenna_scaling, \
     ct * E_beam, \
@@ -261,7 +259,7 @@ rime_jones_E_beam_ ## ft( \
     ft beam_ul, ft beam_um) \
 { \
     rime_jones_E_beam_impl<ft>( \
-        lm, wavelength, point_errors, antenna_scaling, E_beam, jones, \
+        lm, point_errors, antenna_scaling, E_beam, jones, \
         parallactic_angle, beam_ll, beam_lm, beam_ul, beam_um); \
 }
 
@@ -332,7 +330,7 @@ class RimeEBeam(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.lm_gpu, slvr.wavelength_gpu,
+        self.kernel(slvr.lm_gpu,
             slvr.point_errors_gpu, slvr.antenna_scaling_gpu,
             slvr.E_beam_gpu, slvr.jones_gpu,
             slvr.parallactic_angle,

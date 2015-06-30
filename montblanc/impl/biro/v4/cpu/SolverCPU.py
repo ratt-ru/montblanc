@@ -21,6 +21,7 @@
 import numexpr as ne
 import numpy as np
 
+import montblanc
 import montblanc.util as mbu
 
 class SolverCPU(object):
@@ -65,11 +66,14 @@ class SolverCPU(object):
                 'u_el' : np.outer(el, u), 'v_em' : np.outer(em, v)})\
                 .reshape(slvr.ngsrc, slvr.ntime,slvr.nbl)
 
+            scale_uv = (slvr.gauss_scale*slvr.frequency_cpu)\
+                [np.newaxis,np.newaxis,np.newaxis,:] / montblanc.constants.C
+
             return ne.evaluate('exp(-((u1*scale_uv*R)**2 + (v1*scale_uv)**2))',
                 local_dict={
                     'u1':u1[:,:,:,np.newaxis],
                     'v1':v1[:,:,:,np.newaxis],
-                    'scale_uv':(slvr.gauss_scale/slvr.wavelength_cpu)[np.newaxis,np.newaxis,np.newaxis,:],
+                    'scale_uv': scale_uv,
                     'R':R[:,np.newaxis,np.newaxis,np.newaxis]})
 
         except AttributeError as e:
@@ -117,12 +121,14 @@ class SolverCPU(object):
             assert u1.shape == (slvr.nssrc, slvr.ntime, slvr.nbl)
             assert v1.shape == (slvr.nssrc, slvr.ntime, slvr.nbl)
 
+            scale_uv = (slvr.two_pi * slvr.frequency_cpu)\
+                [np.newaxis, np.newaxis, np.newaxis, :] / montblanc.constants.C
+
             den = ne.evaluate('1 + (u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
                 local_dict={
                     'u1': u1[:, :, :, np.newaxis],
                     'v1': v1[:, :, :, np.newaxis],
-                    'scale_uv': (slvr.two_pi / slvr.wavelength_cpu)
-                        [np.newaxis, np.newaxis, np.newaxis, :],
+                    'scale_uv': scale_uv,
                     'R': (R / (1 - e1 * e1 - e2 * e2))
                         [:,np.newaxis,np.newaxis,np.newaxis]})
 
@@ -143,7 +149,7 @@ class SolverCPU(object):
         slvr = self.solver
 
         try:
-            wave = slvr.wavelength_cpu
+            freq = slvr.frequency_cpu
 
             u, v, w = slvr.uvw_cpu[:,:,0], slvr.uvw_cpu[:,:,1], slvr.uvw_cpu[:,:,2]
             l, m = slvr.lm_cpu[:,0], slvr.lm_cpu[:,1]
@@ -156,11 +162,12 @@ class SolverCPU(object):
             phase = (np.outer(n, w) + np.outer(m, v) + np.outer(l, u)) \
                     .reshape(slvr.nsrc, slvr.ntime, slvr.na)
 
-            # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength).
+            # e^(2*pi*sqrt(u*l+v*m+w*n)*frequency/C).
             # Dim. ntime x na x nchan x nsrcs
-            cplx_phase = ne.evaluate('exp(2*pi*1j*p/wl)', {
+            cplx_phase = ne.evaluate('exp(2*pi*1j*p*f/C)', {
                 'p': phase[:, :, :, np.newaxis],
-                'wl': wave[np.newaxis, np.newaxis, np.newaxis, :],
+                'f': freq[np.newaxis, np.newaxis, np.newaxis, :],
+                'C': montblanc.constants.C,
                 'pi': np.pi
             })
 
@@ -233,10 +240,10 @@ class SolverCPU(object):
             assert B.shape == (4, slvr.nsrc, slvr.ntime)
 
             # Multiply the scalar power term into the matrix
-            B_power = ne.evaluate('B*((rw/wl)**a)', {
-                 'rw': slvr.ref_wave,
+            B_power = ne.evaluate('B*((f/rf)**a)', {
+                 'rf': slvr.ref_freq,
                  'B': B[:,:,:,np.newaxis],
-                 'wl': slvr.wavelength_cpu[np.newaxis, np.newaxis, np.newaxis, :],
+                 'f': slvr.frequency_cpu[np.newaxis, np.newaxis, np.newaxis, :],
                  'a': slvr.alpha_cpu[np.newaxis, :, :, np.newaxis] })
 
             assert B_power.shape == (4, slvr.nsrc, slvr.ntime, slvr.nchan)

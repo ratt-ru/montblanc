@@ -49,14 +49,13 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         uvw[:,0,:] = solver.ft(0)
         solver.transfer_uvw(np.ascontiguousarray(uvw))
 
-        # Determine the wavelengths
+        # Determine the frequencys
         freqs = tf.getcol('CHAN_FREQ')
-        wavelength = (montblanc.constants.C/freqs[0]).astype(solver.ft)
-        solver.transfer_wavelength(wavelength)
+        solver.transfer_frequency(freqs[0].astype(solver.ft))
 
         # First dimension also seems to be of size 1 here...
-        # Divide speed of light by frequency to get the wavelength here.
-        solver.set_ref_wave(montblanc.constants.C/tf.getcol('REF_FREQUENCY')[0])
+        # Divide speed of light by frequency to get the frequency here.
+        solver.set_ref_freq(tf.getcol('REF_FREQUENCY')[0])
 
         # Get the baseline antenna pairs and correct the axes
         ant1 = tm.getcol('ANTENNA1').reshape(ntime,nbl)
@@ -72,7 +71,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
         ant_pairs = np.vstack((ant1,ant2)).reshape(solver.ant_pairs_shape)
 
-        # Transfer the uvw coordinates, antenna pairs and wavelengths to the GPU
+        # Transfer the uvw coordinates, antenna pairs and frequencys to the GPU
         solver.transfer_ant_pairs(np.ascontiguousarray(ant_pairs))
 
         # Load in visibility data, if it exists.

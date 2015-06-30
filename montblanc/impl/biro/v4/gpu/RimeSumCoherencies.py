@@ -62,6 +62,7 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMY ${BLOCKDIMY}
 #define BLOCKDIMZ ${BLOCKDIMZ}
 
+#define C (${LIGHTSPEED})
 #define GAUSS_SCALE ${gauss_scale}
 #define TWO_PI ${two_pi}
 
@@ -91,7 +92,7 @@ void rime_sum_coherencies_impl(
     typename SumCohTraits<T>::UVWType * uvw,
     typename Tr::ft * gauss_shape,
     typename Tr::ft * sersic_shape,
-    typename Tr::ft * wavelength,
+    typename Tr::ft * frequency,
     int * ant_pairs,
     typename Tr::ct * jones,
     typename Tr::ft * weight_vector,
@@ -117,7 +118,7 @@ void rime_sum_coherencies_impl(
     __shared__ T e2;
     __shared__ T sersic_scale;
 
-    __shared__ T wl[BLOCKDIMX];
+    __shared__ T freq[BLOCKDIMX];
 
     int i;
 
@@ -141,9 +142,9 @@ void rime_sum_coherencies_impl(
 
     // Wavelength varies by channel, but not baseline and time
     // TODO uses 4 times the actually required space, since
-    // we don't need to store a wavelength per polarisation
+    // we don't need to store a frequency per polarisation
     if(threadIdx.y == 0 && threadIdx.z == 0)
-        { wl[threadIdx.x] = wavelength[POLCHAN >> 2]; }
+        { freq[threadIdx.x] = frequency[POLCHAN >> 2]; }
 
     // Complex Number containing the sum
     // for this polarisation
@@ -182,11 +183,11 @@ void rime_sum_coherencies_impl(
 
         T u1 = s_uvw[threadIdx.z][threadIdx.y].x*em -
             s_uvw[threadIdx.z][threadIdx.y].y*el;
-        u1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
+        u1 *= T(GAUSS_SCALE)*freq[threadIdx.x]/T(C);
         u1 *= eR;
         T v1 = s_uvw[threadIdx.z][threadIdx.y].x*el +
             s_uvw[threadIdx.z][threadIdx.y].y*em;
-        v1 *= T(GAUSS_SCALE)/wl[threadIdx.x];
+        v1 *= T(GAUSS_SCALE)*freq[threadIdx.x]/T(C);
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
         // Get the complex scalars for antenna two and multiply
@@ -225,11 +226,11 @@ void rime_sum_coherencies_impl(
         // sersic source in  the Fourier domain
         T u1 = s_uvw[threadIdx.z][threadIdx.y].x*(T(1.0)+e1) +
             s_uvw[threadIdx.z][threadIdx.y].y*e2;
-        u1 *= T(TWO_PI)/wl[threadIdx.x];
+        u1 *= T(TWO_PI)*freq[threadIdx.x]/T(C);
         u1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
         T v1 = s_uvw[threadIdx.z][threadIdx.y].x*e2 +
             s_uvw[threadIdx.z][threadIdx.y].y*(T(1.0)-e1);
-        v1 *= T(TWO_PI)/wl[threadIdx.x];
+        v1 *= T(TWO_PI)*freq[threadIdx.x]/T(C);
         v1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
         T sersic_factor = T(1.0) + u1*u1+v1*v1;
         sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));
@@ -319,7 +320,7 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     uvwt * uvw, \
     ft * gauss_shape, \
     ft * sersic_shape, \
-    ft * wavelength, \
+    ft * frequency, \
     int * ant_pairs, \
     ct * jones, \
     ft * weight_vector, \
@@ -329,7 +330,7 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ft * chi_sqrd_result) \
 { \
     rime_sum_coherencies_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
-        wavelength, ant_pairs, jones, \
+        frequency, ant_pairs, jones, \
         weight_vector, bayes_data, G_term, \
         visibilities, chi_sqrd_result); \
 }
@@ -410,7 +411,7 @@ class RimeSumCoherencies(Node):
             else slvr.sersic_shape_gpu
 
         self.kernel(slvr.uvw_gpu, gauss, sersic,
-            slvr.wavelength_gpu, slvr.ant_pairs_gpu,
+            slvr.frequency_gpu, slvr.ant_pairs_gpu,
             slvr.jones_gpu, slvr.weight_vector_gpu,
             slvr.bayes_data_gpu, slvr.G_term_gpu,
             slvr.vis_gpu, slvr.chi_sqrd_result_gpu,

@@ -67,9 +67,9 @@ __device__
 void rime_jones_B_sqrt_impl(
     T * stokes,
     T * alpha,
-    T * wavelength,
+    T * frequency,
     typename Tr::ct * B_sqrt,
-    T ref_wave)
+    T ref_freq)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
@@ -79,22 +79,22 @@ void rime_jones_B_sqrt_impl(
     if(SRC >= NSRC || TIME >= NTIME || POLCHAN >= NPOLCHAN)
         return;
 
-    __shared__ T wl[BLOCKDIMX];
+    __shared__ T freq[BLOCKDIMX];
 
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only
-    // one wavelength per channel.
+    // one frequency per channel.
     if(threadIdx.y == 0 && threadIdx.z == 0)
     {
-        wl[threadIdx.x] = wavelength[POLCHAN >> 2];
+        freq[threadIdx.x] = frequency[POLCHAN >> 2];
     }
 
     __syncthreads();
 
     // Calculate the power term
     int i = SRC*NTIME + TIME;
-    typename Tr::ft wl_ratio = ref_wave/wl[threadIdx.x];
-    typename Tr::ft power = Po::pow(wl_ratio, alpha[i]);
+    typename Tr::ft freq_ratio = freq[threadIdx.x]/ref_freq;
+    typename Tr::ft power = Po::pow(freq_ratio, alpha[i]);
 
     // Read in the stokes parameter,
     // multiplying it by the power term
@@ -117,12 +117,12 @@ __global__ void \
 rime_jones_B_sqrt_ ## ft( \
     ft * stokes, \
     ft * alpha, \
-    ft * wavelength, \
+    ft * frequency, \
     ct * B_sqrt, \
-    ft ref_wave) \
+    ft ref_freq) \
 { \
     rime_jones_B_sqrt_impl<ft>(stokes, alpha, \
-        wavelength, B_sqrt, ref_wave); \
+        frequency, B_sqrt, ref_freq); \
 }
 
 stamp_jones_B_sqrt_fn(float,float2);
@@ -192,8 +192,8 @@ class RimeBSqrt(Node):
         slvr = solver
 
         self.kernel(slvr.stokes_gpu, slvr.alpha_gpu,
-            slvr.wavelength_gpu, slvr.B_sqrt_gpu,
-            slvr.ref_wave,
+            slvr.frequency_gpu, slvr.B_sqrt_gpu,
+            slvr.ref_freq,
             stream=stream, **self.launch_params)
 
     def post_execution(self, solver, stream=None):

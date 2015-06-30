@@ -59,6 +59,8 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
 
+#define C (${LIGHTSPEED})
+
 template <typename T>
 class EKBTraits {};
 
@@ -84,7 +86,7 @@ __device__
 void rime_jones_EKBSqrt_impl(
     typename EKBTraits<T>::UVWType * uvw,
     typename EKBTraits<T>::LMType * lm,
-    T * wavelength,
+    T * frequency,
     typename Tr::ct * B_sqrt,
     typename Tr::ct * jones)
 {
@@ -115,7 +117,7 @@ void rime_jones_EKBSqrt_impl(
 
     // Wavelengths vary by channel, not by time and antenna
     if(threadIdx.y == 0 && threadIdx.z == 0)
-        { wl[threadIdx.x] = wavelength[POLCHAN>>2]; }
+        { wl[threadIdx.x] = C/frequency[POLCHAN>>2]; }
 
     __syncthreads();
 
@@ -165,12 +167,12 @@ __global__ void \
 rime_jones_EKBSqrt_ ## ft( \
     uvw_type * UVW, \
     lm_type * LM, \
-    ft * wavelength, \
+    ft * frequency, \
     ct * B_sqrt, \
     ct * jones) \
 { \
     rime_jones_EKBSqrt_impl<ft>(UVW, LM, \
-        wavelength, B_sqrt, jones); \
+        frequency, B_sqrt, jones); \
 }
 
 stamp_rime_EKBSqrt_fn(float,float2,float3,float2)
@@ -242,7 +244,7 @@ class RimeEKBSqrt(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.wavelength_gpu,
+        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.frequency_gpu,
             slvr.B_sqrt_gpu, slvr.jones_gpu,
             stream=stream, **self.launch_params)
 

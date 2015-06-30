@@ -628,7 +628,9 @@ class BaseSolver(Solver):
             # Types
             'ft' : slvr.ft,
             'ct' : slvr.ct,
-            'int' : int
+            'int' : int,
+            # Constants
+            'LIGHTSPEED': montblanc.constants.C,
         }
 
         for p in self.properties.itervalues():

@@ -253,9 +253,13 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     # Generate nchan frequencies/wavelengths
     frequencies = ft(np.linspace(1e6,2e6,nchan))
-    wavelength = ft(montblanc.constants.C/frequencies)
-    slvr.transfer_wavelength(wavelength)
-    slvr.set_ref_wave(wavelength[nchan//2])
+    if version in [VERSION_TWO, VERSION_THREE]:
+        wavelength = ft(montblanc.constants.C/frequencies)
+        slvr.transfer_wavelength(wavelength)
+        slvr.set_ref_wave(wavelength[nchan//2])
+    elif version in [VERSION_FOUR, VERSION_FIVE]:
+        slvr.transfer_frequency(frequencies)
+        slvr.set_ref_freq(frequencies[nchan//2])
 
     # Generate the antenna pointing errors
     point_errors = (make_random(slvr.point_errors_shape,

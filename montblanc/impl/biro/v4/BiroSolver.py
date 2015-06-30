@@ -20,6 +20,8 @@
 
 import numpy as np
 
+import montblanc
+
 from montblanc.BaseSolver import BaseSolver
 from montblanc.BaseSolver import DEFAULT_NA
 from montblanc.BaseSolver import DEFAULT_NCHAN
@@ -71,11 +73,9 @@ fwhm2int = 1.0/np.sqrt(np.log(256))
 
 # List of properties
 P = [
-    # Note that we don't divide by speed of light here. meqtrees code operates
-    # on frequency, while we're dealing with wavelengths.
     prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi),
     prop_dict('two_pi', 'ft', 2*np.pi),
-    prop_dict('ref_wave', 'ft', 0.0),
+    prop_dict('ref_freq', 'ft', 0.0),
     prop_dict('sigma_sqrd', 'ft', 1.0),
     prop_dict('X2', 'ft', 0.0),
 
@@ -104,7 +104,7 @@ A = [
     ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
     ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
 
-    ary_dict('wavelength', ('nchan',), 'ft'),
+    ary_dict('frequency', ('nchan',), 'ft'),
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft'),
     ary_dict('antenna_scaling', ('na','nchan',2), 'ft'),
     ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft'),
