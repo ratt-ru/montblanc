@@ -238,20 +238,36 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
         slvr.transfer_G_term(G_term)
 
     # Gaussian shape matrix
-    el = ft(np.random.random(ngsrc)*0.5)
-    em = ft(np.random.random(ngsrc)*0.5)
-    R = ft(np.ones(ngsrc)*100)
-    gauss_shape = mbu.shape_list([el,em,R],
-            slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
-    if ngsrc > 0: slvr.transfer_gauss_shape(gauss_shape)
+    if ngsrc > 0:
+        gauss_shape = np.empty(shape=slvr.gauss_shape_shape,
+            dtype=slvr.gauss_shape_dtype)
+
+        if version in [VERSION_TWO, VERSION_THREE]:
+            el, em, eR = gauss_shape[0,:], gauss_shape[1,:], gauss_shape[2,:]
+        elif version in [VERSION_FOUR, VERSION_FIVE]:
+            el, em, eR = gauss_shape[:,0], gauss_shape[:,1], gauss_shape[:,2]
+
+        el[:] = np.random.random(size=el.shape)*0.5
+        em[:] = np.random.random(size=em.shape)*0.5
+        eR[:] = 50 + np.random.random(size=eR.shape)*10.0
+
+        slvr.transfer_gauss_shape(gauss_shape)
 
     # Sersic (exponential) shape matrix
-    e1=ft(np.zeros((nssrc)))
-    e2=ft(np.zeros((nssrc)))
-    scale=ft(np.ones((nssrc)))
-    sersic_shape = mbu.shape_list([e1,e2,scale],
-            slvr.sersic_shape_shape, slvr.sersic_shape_dtype)
-    if nssrc > 0: slvr.transfer_sersic_shape(sersic_shape)
+    if nssrc > 0:
+        sersic_shape = np.empty(shape=slvr.sersic_shape_shape,
+            dtype=slvr.sersic_shape_dtype)
+
+        if version in [VERSION_TWO, VERSION_THREE]:
+            e1, e2, es = sersic_shape[0,:], sersic_shape[1,:], sersic_shape[2,:]
+        elif version in [VERSION_FOUR, VERSION_FIVE]:
+            e1, e2, es = sersic_shape[:,0], sersic_shape[:,1], sersic_shape[:,2]
+
+        e1[:] = 0
+        e2[:] = 0
+        es[:] = 1
+        
+        slvr.transfer_sersic_shape(sersic_shape)
 
     # Generate nchan frequencies/wavelengths
     frequencies = ft(np.linspace(1e6,2e6,nchan))
