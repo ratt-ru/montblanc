@@ -74,19 +74,16 @@ if __name__ == '__main__':
         elif args.version in [VERSION_FOUR, VERSION_FIVE]:
             # Need a positive semi-definite brightness
             # matrix for v4 and v5
-            Q=np.random.random(slvr.ntime*slvr.nsrc)-0.5
-            U=np.random.random(slvr.ntime*slvr.nsrc)-0.5
-            V=np.random.random(slvr.ntime*slvr.nsrc)-0.5
+            stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
+            I, Q, U, V = stokes[:,:,0], stokes[:,:,1], stokes[:,:,2], stokes[:,:,3]
+            Q[:] = np.random.random(size=Q.shape)-0.5
+            U[:] = np.random.random(size=U.shape)-0.5
+            V[:] = np.random.random(size=V.shape)-0.5
+            noise = np.random.random(size=(Q.shape))*0.1
             # Determinant of a brightness matrix
-            # is I^2 - Q^2 - U^2 - V^2
-            # The following ensures that the determinant
-            # is positive, and therefore the brightness matrix
-            # is positive semi-definite.
-            noise = np.random.random(slvr.ntime*slvr.nsrc)*0.1
-            I=np.sqrt(Q**2 + U**2 + V**2 + noise)
-            nax = np.newaxis
-            ary = np.hstack((I[:,nax], Q[:,nax], U[:,nax], V[:,nax]))
-            stokes = mbu.shape_list(ary, slvr.stokes_shape, slvr.stokes_dtype)
+            # is I^2 - Q^2 - U^2 - V^2, noise ensures
+            # positive semi-definite matrix
+            I[:] = np.sqrt(Q**2 + U**2 + V**2 + noise)
             slvr.transfer_stokes(stokes)
 
             alpha = np.random.random(

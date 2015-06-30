@@ -194,33 +194,35 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     lm=mbu.shape_list([l,m], slvr.lm_shape, slvr.lm_dtype)
     slvr.transfer_lm(lm)
 
-    # Stokes parameters
-    Q=np.random.random(ntime*nsrc)-0.5
-    U=np.random.random(ntime*nsrc)-0.5
-    V=np.random.random(ntime*nsrc)-0.5
-    # Determinant of a brightness matrix
-    # is I^2 - Q^2 - U^2 - V^2
-    # The following ensures that the determinant
-    # is positive, and therefore the brightness matrix
-    # is positive semi-definite.
-    noise = np.random.random(ntime*nsrc)*0.1
-    I=np.sqrt(Q**2 + U**2 + V**2 + noise)
-    assert np.all(I**2 - Q**2 - U**2 - V**2 > 0.0)
-    alpha=ft(np.random.random(ntime*nsrc)*0.1)
+    # Brightness matrices
     if version in [VERSION_TWO, VERSION_THREE]:
-        brightness = mbu.shape_list([I,Q,U,V,alpha],
-            slvr.brightness_shape, slvr.brightness_dtype)
-        slvr.transfer_brightness(brightness)
+        B = np.empty(shape=slvr.brightness_shape, dtype=slvr.brightness_dtype)
+        I, Q, U, V = B[0,:,:], B[1,:,:], B[2,:,:], B[3,:,:]
+        alpha = B[4,:,:]
     elif version in [VERSION_FOUR,VERSION_FIVE]:
-        # stokes parameters are in the row minor position
-        # for version 4 and 5. Ensure they're in the
-        # right position
-        nax = np.newaxis
-        ary = np.hstack((I[:,nax], Q[:,nax], U[:,nax], V[:,nax]))
-        stokes = mbu.shape_list(ary, slvr.stokes_shape, slvr.stokes_dtype)
-        slvr.transfer_stokes(stokes)
+        # Stokes parameters
+        # Need a positive semi-definite brightness
+        # matrix for v4 and v5
+        stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
+        I, Q, U, V = stokes[:,:,0], stokes[:,:,1], stokes[:,:,2], stokes[:,:,3]
+        alpha=np.empty_like(I)
 
-        alpha = mbu.shape_list([alpha], slvr.alpha_shape, slvr.alpha_dtype)
+    Q[:] = np.random.random(size=Q.shape)-0.5
+    U[:] = np.random.random(size=U.shape)-0.5
+    V[:] = np.random.random(size=V.shape)-0.5
+    noise = np.random.random(size=(Q.shape))*0.1
+    # Determinant of a brightness matrix
+    # is I^2 - Q^2 - U^2 - V^2, noise ensures
+    # positive semi-definite matrix
+    I[:] = np.sqrt(Q**2 + U**2 + V**2 + noise)
+    assert np.all(I**2 - Q**2 - U**2 - V**2 > 0.0)
+
+    alpha[:] = np.random.random(size=I.shape)*0.1
+
+    if version in [VERSION_TWO, VERSION_THREE]:
+        slvr.transfer_brightness(B)
+    elif version in [VERSION_FOUR,VERSION_FIVE]:
+        slvr.transfer_stokes(stokes)
         slvr.transfer_alpha(alpha)
 
     # E beam
