@@ -107,17 +107,25 @@ void rime_sum_coherencies_impl(
     if(TIME >= NTIME || BL >= NBL || POLCHAN >= NPOLCHAN)
         return;
 
-    __shared__ typename SumCohTraits<T>::UVWType s_uvw[BLOCKDIMZ][BLOCKDIMY];
+    __shared__ struct {
+        typename SumCohTraits<T>::UVWType uvw[BLOCKDIMZ][BLOCKDIMY];
 
-    __shared__ T el;
-    __shared__ T em;
-    __shared__ T eR;
+        T el;
+        T em;
+        T eR;
 
-    __shared__ T e1;
-    __shared__ T e2;
-    __shared__ T sersic_scale;
+        T e1;
+        T e2;
+        T sersic_scale;
 
-    __shared__ T freq[BLOCKDIMX];
+        T freq[BLOCKDIMX];
+
+    } shared;
+
+    T & U = shared.uvw[threadIdx.z][threadIdx.y].x; 
+    T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
+    T & W = shared.uvw[threadIdx.z][threadIdx.y].z; 
+
 
     int i;
 
@@ -130,20 +138,20 @@ void rime_sum_coherencies_impl(
     {
         // UVW, calculated from u_pq = u_p - u_q
         i = TIME*NA + ANT1;
-        s_uvw[threadIdx.z][threadIdx.y] = uvw[i];
+        shared.uvw[threadIdx.z][threadIdx.y] = uvw[i];
 
         i = TIME*NA + ANT2;
         typename SumCohTraits<T>::UVWType ant2_uvw = uvw[i];
-        s_uvw[threadIdx.z][threadIdx.y].x -= ant2_uvw.x;
-        s_uvw[threadIdx.z][threadIdx.y].y -= ant2_uvw.y;
-        s_uvw[threadIdx.z][threadIdx.y].z -= ant2_uvw.z;
+        U -= ant2_uvw.x;
+        V -= ant2_uvw.y;
+        W -= ant2_uvw.z;
     }
 
     // Wavelength varies by channel, but not baseline and time
     // TODO uses 4 times the actually required space, since
     // we don't need to store a frequency per polarisation
     if(threadIdx.y == 0 && threadIdx.z == 0)
-        { freq[threadIdx.x] = frequency[POLCHAN >> 2]; }
+        { shared.freq[threadIdx.x] = frequency[POLCHAN >> 2]; }
 
     // Complex Number containing the sum
     // for this polarisation
@@ -173,20 +181,23 @@ void rime_sum_coherencies_impl(
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC-NPSRC;  el = gauss_shape[i];
-            i += NGSRC;     em = gauss_shape[i];
-            i += NGSRC;     eR = gauss_shape[i];
+            i = SRC-NPSRC;  shared.el = gauss_shape[i];
+            i += NGSRC;     shared.em = gauss_shape[i];
+            i += NGSRC;     shared.eR = gauss_shape[i];
         }
 
         __syncthreads();
 
-        T u1 = s_uvw[threadIdx.z][threadIdx.y].x*em -
-            s_uvw[threadIdx.z][threadIdx.y].y*el;
-        u1 *= T(GAUSS_SCALE)*freq[threadIdx.x];
-        u1 *= eR;
-        T v1 = s_uvw[threadIdx.z][threadIdx.y].x*el +
-            s_uvw[threadIdx.z][threadIdx.y].y*em;
-        v1 *= T(GAUSS_SCALE)*freq[threadIdx.x];
+        // Create references to a
+        // complicated part of shared memory
+        const T & U = shared.uvw[threadIdx.z][threadIdx.y].x; 
+        const T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
+
+        T u1 = U*shared.em - V*shared.el;
+        u1 *= T(GAUSS_SCALE)*shared.freq[threadIdx.x];
+        u1 *= shared.eR;
+        T v1 = U*shared.el + V*shared.em;
+        v1 *= T(GAUSS_SCALE)*shared.freq[threadIdx.x];
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
         // Get the complex scalars for antenna two and multiply
@@ -215,25 +226,27 @@ void rime_sum_coherencies_impl(
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC-NPSRC-NGSRC;  e1 = sersic_shape[i];
-            i += NSSRC;           e2 = sersic_shape[i];
-            i += NSSRC;           sersic_scale = sersic_shape[i];
+            i = SRC-NPSRC-NGSRC;  shared.e1 = sersic_shape[i];
+            i += NSSRC;           shared.e2 = sersic_shape[i];
+            i += NSSRC;           shared.sersic_scale = sersic_shape[i];
         }
 
         __syncthreads();
 
+        // Create references to a
+        // complicated part of shared memory
+        const T & U = shared.uvw[threadIdx.z][threadIdx.y].x; 
+        const T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
+
         // sersic source in  the Fourier domain
-        T u1 = s_uvw[threadIdx.z][threadIdx.y].x*(T(1.0)+e1) +
-            s_uvw[threadIdx.z][threadIdx.y].y*e2;
-        u1 *= T(TWO_PI_OVER_C)*freq[threadIdx.x];
-        u1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
-        T v1 = s_uvw[threadIdx.z][threadIdx.y].x*e2 +
-            s_uvw[threadIdx.z][threadIdx.y].y*(T(1.0)-e1);
-        v1 *= T(TWO_PI_OVER_C)*freq[threadIdx.x];
-        v1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
+        T u1 = U*(T(1.0)+shared.e1) + V*shared.e2;
+        u1 *= T(TWO_PI_OVER_C)*shared.freq[threadIdx.x];
+        u1 *= shared.sersic_scale/(T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2);
+        T v1 = U*shared.e2 + V*(T(1.0)-shared.e1);
+        v1 *= T(TWO_PI_OVER_C)*shared.freq[threadIdx.x];
+        v1 *= shared.sersic_scale/(T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2);
         T sersic_factor = T(1.0) + u1*u1+v1*v1;
         sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));
-
 
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
