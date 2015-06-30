@@ -62,9 +62,8 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMY ${BLOCKDIMY}
 #define BLOCKDIMZ ${BLOCKDIMZ}
 
-#define C (${LIGHTSPEED})
 #define GAUSS_SCALE ${gauss_scale}
-#define TWO_PI ${two_pi}
+#define TWO_PI_OVER_C ${two_pi_over_c}
 
 template <typename T>
 class SumCohTraits {};
@@ -183,11 +182,11 @@ void rime_sum_coherencies_impl(
 
         T u1 = s_uvw[threadIdx.z][threadIdx.y].x*em -
             s_uvw[threadIdx.z][threadIdx.y].y*el;
-        u1 *= T(GAUSS_SCALE)*freq[threadIdx.x]/T(C);
+        u1 *= T(GAUSS_SCALE)*freq[threadIdx.x];
         u1 *= eR;
         T v1 = s_uvw[threadIdx.z][threadIdx.y].x*el +
             s_uvw[threadIdx.z][threadIdx.y].y*em;
-        v1 *= T(GAUSS_SCALE)*freq[threadIdx.x]/T(C);
+        v1 *= T(GAUSS_SCALE)*freq[threadIdx.x];
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
         // Get the complex scalars for antenna two and multiply
@@ -226,11 +225,11 @@ void rime_sum_coherencies_impl(
         // sersic source in  the Fourier domain
         T u1 = s_uvw[threadIdx.z][threadIdx.y].x*(T(1.0)+e1) +
             s_uvw[threadIdx.z][threadIdx.y].y*e2;
-        u1 *= T(TWO_PI)*freq[threadIdx.x]/T(C);
+        u1 *= T(TWO_PI_OVER_C)*freq[threadIdx.x];
         u1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
         T v1 = s_uvw[threadIdx.z][threadIdx.y].x*e2 +
             s_uvw[threadIdx.z][threadIdx.y].y*(T(1.0)-e1);
-        v1 *= T(TWO_PI)*freq[threadIdx.x]/T(C);
+        v1 *= T(TWO_PI_OVER_C)*freq[threadIdx.x];
         v1 *= sersic_scale/(T(1.0)-e1*e1-e2*e2);
         T sersic_factor = T(1.0) + u1*u1+v1*v1;
         sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));

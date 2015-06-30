@@ -59,7 +59,7 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
 
-#define C (${LIGHTSPEED})
+#define TWO_PI_OVER_C (${two_pi_over_c})
 
 template <typename T>
 class EKBTraits {};
@@ -104,7 +104,7 @@ void rime_jones_EKBSqrt_impl(
     // registers for some reason!
     __shared__ typename EKBTraits<T>::LMType s_lm;
 
-    __shared__ T wl[BLOCKDIMX];
+    __shared__ T freq[BLOCKDIMX];
 
     int i;
 
@@ -117,7 +117,7 @@ void rime_jones_EKBSqrt_impl(
 
     // Wavelengths vary by channel, not by time and antenna
     if(threadIdx.y == 0 && threadIdx.z == 0)
-        { wl[threadIdx.x] = C/frequency[POLCHAN>>2]; }
+        { freq[threadIdx.x] = frequency[POLCHAN>>2]; }
 
     __syncthreads();
 
@@ -138,7 +138,7 @@ void rime_jones_EKBSqrt_impl(
             + s_uvw[threadIdx.z][threadIdx.y].y*s_lm.y
             + s_uvw[threadIdx.z][threadIdx.y].x*s_lm.x;
 
-        phase *= T(2.0) * Tr::cuda_pi / wl[threadIdx.x];
+        phase *= T(TWO_PI_OVER_C) * freq[threadIdx.x];
 
         typename Tr::ct cplx_phase;
         Po::sincos(phase, &cplx_phase.y, &cplx_phase.x);

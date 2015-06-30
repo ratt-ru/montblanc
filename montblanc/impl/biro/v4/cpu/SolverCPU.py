@@ -67,7 +67,7 @@ class SolverCPU(object):
                 .reshape(slvr.ngsrc, slvr.ntime,slvr.nbl)
 
             scale_uv = (slvr.gauss_scale*slvr.frequency_cpu)\
-                [np.newaxis,np.newaxis,np.newaxis,:] / montblanc.constants.C
+                [np.newaxis,np.newaxis,np.newaxis,:]
 
             return ne.evaluate('exp(-((u1*scale_uv*R)**2 + (v1*scale_uv)**2))',
                 local_dict={
@@ -121,8 +121,8 @@ class SolverCPU(object):
             assert u1.shape == (slvr.nssrc, slvr.ntime, slvr.nbl)
             assert v1.shape == (slvr.nssrc, slvr.ntime, slvr.nbl)
 
-            scale_uv = (slvr.two_pi * slvr.frequency_cpu)\
-                [np.newaxis, np.newaxis, np.newaxis, :] / montblanc.constants.C
+            scale_uv = (slvr.two_pi_over_c * slvr.frequency_cpu)\
+                [np.newaxis, np.newaxis, np.newaxis, :]
 
             den = ne.evaluate('1 + (u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
                 local_dict={
