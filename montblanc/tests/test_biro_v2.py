@@ -173,7 +173,7 @@ class TestBiroV2(unittest.TestCase):
         """ Test the B sum float kernel """
         for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
             with solver(dtype=np.float32, **params) as slvr:
-                self.B_sum_test_impl(slvr, params['weight_vector'], {'rtol': 1e-4})
+                self.B_sum_test_impl(slvr, params['weight_vector'], {'rtol': 1e-3})
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """

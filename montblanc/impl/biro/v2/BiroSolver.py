@@ -142,8 +142,8 @@ class BiroSolver(BaseSolver):
             npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
             pipeline=pipeline, **kwargs)
 
-        self.register_arrays(A)
         self.register_properties(P)
+        self.register_arrays(A)
 
     def get_default_base_ant_pairs(self):
         """

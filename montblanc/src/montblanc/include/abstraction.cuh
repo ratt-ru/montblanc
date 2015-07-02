@@ -15,8 +15,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-#ifndef _MONTBLANC_KERNEL_TRAITS_H
-#define _MONTBLANC_KERNEL_TRAITS_H
+#ifndef _MONTBLANC_KERNEL_TRAITS_CUH
+#define _MONTBLANC_KERNEL_TRAITS_CUH
+
+#include <cub/cub/cub.cuh>
 
 namespace montblanc {
 
@@ -47,6 +49,7 @@ template <> class kernel_policies<float>
 {
 public:
 	typedef kernel_traits<float> Tr;
+    typedef kernel_policies<float> Po;
 
 	__device__ __forceinline__ static
 	Tr::ct make_ct(const Tr::ft & real, const Tr::ft & imag)
@@ -83,6 +86,34 @@ public:
 	__device__ __forceinline__ static
 	void sincos(const Tr::ft & value, Tr::ft * sinptr, Tr::ft * cosptr)
 		{ ::sincosf(value, sinptr, cosptr); }
+
+    __device__ __forceinline__ static
+    Tr::ft atan2(const Tr::ft & y, const Tr::ft & x)
+        { return ::atan2f(y, x); }
+
+    __device__ __forceinline__ static
+    Tr::ft arg(const Tr::ct & value)
+        { return Po::atan2(value.y, value.x); }
+
+    __device__ __forceinline__ static
+    Tr::ft arg(const Tr::ft & value)
+        { return Po::atan2(0.0f, value); }
+
+    __device__ __forceinline__ static
+    Tr::ft abs(const Tr::ct & value)
+        { return Po::sqrt(value.x*value.x + value.y*value.y); }
+
+    __device__ __forceinline__ static
+    Tr::ft abs(const Tr::ft & value)
+        { return ::fabsf(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft round(const Tr::ft & value)
+        { return ::roundf(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft rint(const Tr::ft & value)
+        { return ::rintf(value); }
 };
 
 template <>
@@ -101,6 +132,7 @@ template <> class kernel_policies<double>
 {
 public:
 	typedef kernel_traits<double> Tr;
+    typedef kernel_policies<double> Po;
 
 	__device__ __forceinline__ static
 	Tr::ct make_ct(const Tr::ft & real, const Tr::ft & imag)
@@ -137,8 +169,67 @@ public:
 	__device__ __forceinline__ static
 	void sincos(const Tr::ft & value, Tr::ft * sinptr, Tr::ft * cosptr)
 		{ ::sincos(value, sinptr, cosptr); }
+
+    __device__ __forceinline__ static
+    Tr::ft atan2(const Tr::ft & y, const Tr::ft & x)
+        { return ::atan2(y, x); }
+
+    __device__ __forceinline__ static
+    Tr::ft arg(const Tr::ct & value)
+        { return Po::atan2(value.y, value.x); }
+
+    __device__ __forceinline__ static
+    Tr::ft arg(const Tr::ft & value)
+        { return Po::atan2(0.0, value); }
+
+    __device__ __forceinline__ static
+    Tr::ft abs(const Tr::ct & value)
+        { return Po::sqrt(value.x*value.x + value.y*value.y); }
+
+    __device__ __forceinline__ static
+    Tr::ft abs(const Tr::ft & value)
+        { return ::abs(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft round(const Tr::ft & value)
+        { return ::round(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft rint(const Tr::ft & value)
+        { return ::rint(value); }
 };
+
+template <
+    typename T,
+    typename Tr=kernel_traits<T>,
+    typename Po=kernel_policies<T> >
+__device__ __forceinline__ void complex_multiply(
+    typename Tr::ct & result,
+    const typename Tr::ct & lhs,
+    const typename Tr::ct & rhs)
+{
+    // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+    // a = lhs.x b=lhs.y c=rhs.x d = rhs.y
+    result.x = lhs.x*rhs.x - lhs.y*rhs.y;
+    result.y = lhs.x*rhs.y + lhs.y*rhs.x;
+}
+
+template <
+    typename T,
+    typename Tr=kernel_traits<T>,
+    typename Po=kernel_policies<T> >
+__device__ __forceinline__ void complex_multiply_in_place(
+    typename Tr::ct & lhs,
+    const typename Tr::ct & rhs)
+{
+    typename Tr::ft tmp = lhs.x;
+
+    lhs.x *= rhs.x;
+    lhs.x -= lhs.y*rhs.y;
+    lhs.y *= rhs.x;
+    lhs.y += tmp*rhs.y;
+}
 
 } // namespace montblanc
 
-#endif // _MONTBLANC_KERNEL_TRAITS_H
+#endif // _MONTBLANC_KERNEL_TRAITS_CUH

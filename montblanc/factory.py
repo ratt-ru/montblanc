@@ -142,8 +142,10 @@ def create_biro_solver_from_ms(slvr_class_type, **kwargs):
     check_msfile(kwargs.get('msfile',None))
     version = kwargs.get('version')
 
-    if version in [VERSION_TWO, VERSION_THREE, VERSION_FOUR, VERSION_FIVE]:
+    if version in [VERSION_TWO, VERSION_THREE]:
         from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
+    elif version in [VERSION_FOUR, VERSION_FIVE]:
+        from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
     else:
         raise Exception, 'Incorrect version %s' % version
 
@@ -178,25 +180,62 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     uvw = mbu.shape_list([30.*r, 25.*r, 20.*r],
             shape=slvr.uvw_shape, dtype=slvr.uvw_dtype)
     # Normalise Antenna 0
-    uvw[:,:,0] = 0
+    if version in [VERSION_TWO, VERSION_THREE]:
+        uvw[:,:,0] = 0
+    elif version in [VERSION_FOUR, VERSION_FIVE]:
+        uvw[:,0,:] = 0
+
     slvr.transfer_uvw(uvw)
 
     # Point source coordinates in the l,m,n (sky image) domain
     # 1e-4 ~ 20 arcseconds
-    l=ft(np.random.random(nsrc)*1e-4)
-    m=ft(np.random.random(nsrc)*1e-4)
+    l=ft(np.random.random(nsrc)-0.5)*1e-4
+    m=ft(np.random.random(nsrc)-0.5)*1e-4
     lm=mbu.shape_list([l,m], slvr.lm_shape, slvr.lm_dtype)
     slvr.transfer_lm(lm)
 
-    # Brightness matrix for the point sources
-    fI=ft(np.ones((ntime*nsrc,)))
-    fQ=ft(np.random.random(ntime*nsrc)*0.5)
-    fU=ft(np.random.random(ntime*nsrc)*0.5)
-    fV=ft(np.random.random(ntime*nsrc)*0.5)
-    alpha=ft(np.random.random(ntime*nsrc)*0.1)
-    brightness = mbu.shape_list([fI,fQ,fU,fV,alpha],
-        slvr.brightness_shape, slvr.brightness_dtype)
-    slvr.transfer_brightness(brightness)
+    # Brightness matrices
+    if version in [VERSION_TWO, VERSION_THREE]:
+        B = np.empty(shape=slvr.brightness_shape, dtype=slvr.brightness_dtype)
+        I, Q, U, V = B[0,:,:], B[1,:,:], B[2,:,:], B[3,:,:]
+        alpha = B[4,:,:]
+    elif version in [VERSION_FOUR,VERSION_FIVE]:
+        # Stokes parameters
+        # Need a positive semi-definite brightness
+        # matrix for v4 and v5
+        stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
+        I, Q, U, V = stokes[:,:,0], stokes[:,:,1], stokes[:,:,2], stokes[:,:,3]
+        alpha=np.empty_like(I)
+
+    Q[:] = np.random.random(size=Q.shape)-0.5
+    U[:] = np.random.random(size=U.shape)-0.5
+    V[:] = np.random.random(size=V.shape)-0.5
+    noise = np.random.random(size=(Q.shape))*0.1
+    # Determinant of a brightness matrix
+    # is I^2 - Q^2 - U^2 - V^2, noise ensures
+    # positive semi-definite matrix
+    I[:] = np.sqrt(Q**2 + U**2 + V**2 + noise)
+    assert np.all(I**2 - Q**2 - U**2 - V**2 > 0.0)
+
+    alpha[:] = np.random.random(size=I.shape)*0.1
+
+    if version in [VERSION_TWO, VERSION_THREE]:
+        slvr.transfer_brightness(B)
+    elif version in [VERSION_FOUR,VERSION_FIVE]:
+        slvr.transfer_stokes(stokes)
+        slvr.transfer_alpha(alpha)
+
+    # E beam
+    if version in [VERSION_FOUR, VERSION_FIVE]:
+        E_beam = make_random(slvr.E_beam_cpu.shape, slvr.E_beam_cpu.dtype) + \
+            make_random(slvr.E_beam_cpu.shape, slvr.E_beam_cpu.dtype)*1j
+        slvr.transfer_E_beam(E_beam)
+
+    # G term
+    if version in [VERSION_FOUR, VERSION_FIVE]:
+        G_term = make_random(slvr.G_term_cpu.shape, slvr.G_term_cpu.dtype) + \
+            make_random(slvr.G_term_cpu.shape, slvr.G_term_cpu.dtype)*1j
+        slvr.transfer_G_term(G_term)
 
     # Gaussian shape matrix
     el = ft(np.random.random(ngsrc)*0.5)
@@ -216,14 +255,24 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     # Generate nchan frequencies/wavelengths
     frequencies = ft(np.linspace(1e6,2e6,nchan))
-    wavelength = ft(montblanc.constants.C/frequencies)
-    slvr.transfer_wavelength(wavelength)
-    slvr.set_ref_wave(wavelength[nchan//2])
+    if version in [VERSION_TWO, VERSION_THREE]:
+        wavelength = ft(montblanc.constants.C/frequencies)
+        slvr.transfer_wavelength(wavelength)
+        slvr.set_ref_wave(wavelength[nchan//2])
+    elif version in [VERSION_FOUR, VERSION_FIVE]:
+        slvr.transfer_frequency(frequencies)
+        slvr.set_ref_freq(frequencies[nchan//2])
 
     # Generate the antenna pointing errors
-    point_errors = make_random(slvr.point_errors_shape,
-            slvr.point_errors_dtype)
+    point_errors = (make_random(slvr.point_errors_shape,
+            slvr.point_errors_dtype)-0.5)*1e-5
     slvr.transfer_point_errors(point_errors)
+
+    # Generate antenna scaling coefficients
+    if version in [VERSION_FOUR, VERSION_FIVE]:
+        antenna_scaling = make_random(slvr.antenna_scaling_shape,
+            slvr.antenna_scaling_dtype)
+        slvr.transfer_antenna_scaling(antenna_scaling)
 
     # Generate the noise vector
     weight_vector = make_random(slvr.weight_vector_shape,
@@ -232,10 +281,16 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     slvr.transfer_ant_pairs(slvr.get_default_ant_pairs())
 
-    # Generate random jones scalar values
-    jones_scalar = make_random(slvr.jones_scalar_shape,
-            slvr.jones_scalar_dtype)
-    slvr.transfer_jones_scalar(jones_scalar)
+    if version in [VERSION_TWO, VERSION_THREE]:
+        # Generate random jones scalar values
+        jones_scalar = make_random(slvr.jones_scalar_shape,
+                slvr.jones_scalar_dtype)
+        slvr.transfer_jones_scalar(jones_scalar)
+    elif version in [VERSION_FOUR,VERSION_FIVE]:
+        # Generate random jones scalar values
+        jones = make_random(slvr.jones_shape,
+                slvr.jones_dtype)
+        slvr.transfer_jones(jones)
 
     vis = make_random(slvr.vis_shape, slvr.vis_dtype) + \
             make_random(slvr.vis_shape, slvr.vis_dtype)*1j

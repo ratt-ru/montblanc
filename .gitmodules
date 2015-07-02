@@ -1,0 +1,3 @@
+[submodule "montblanc/src/cub"]
+	path = montblanc/src/cub
+	url = https://github.com/NVlabs/cub

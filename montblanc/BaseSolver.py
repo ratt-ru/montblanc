@@ -473,9 +473,10 @@ class BaseSolver(Solver):
             # Create the transfer method
             def transfer(self, npary):
                 self.check_array(name, npary)
-                if create_cpu_ary: setattr(self,cpu_name,npary)
+                if create_cpu_ary:
+                    setattr(self,cpu_name,npary)
                 if create_gpu_ary:
-                    with self.context as ctx:
+                    with self.context:
                         getattr(self,gpu_name).set(npary)
 
             transfer_method = types.MethodType(transfer,self)
@@ -627,7 +628,9 @@ class BaseSolver(Solver):
             # Types
             'ft' : slvr.ft,
             'ct' : slvr.ct,
-            'int' : int
+            'int' : int,
+            # Constants
+            'LIGHTSPEED': montblanc.constants.C,
         }
 
         for p in self.properties.itervalues():
@@ -648,7 +651,7 @@ class BaseSolver(Solver):
         yield mbu.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
         yield '-'*80
 
-        for a in self.arrays.itervalues():
+        for a in sorted(self.arrays.itervalues(), key=lambda x: x.name.upper()):
             yield mbu.fmt_array_line(a.name,
                 mbu.fmt_bytes(mbu.array_bytes(a.shape, a.dtype)),
                 np.dtype(a.dtype).name,
@@ -664,7 +667,7 @@ class BaseSolver(Solver):
             'Type', 'Value', 'Default Value')
         yield '-'*80
 
-        for p in self.properties.itervalues():
+        for p in sorted(self.properties.itervalues(), key=lambda x: x.name.upper()):
             yield mbu.fmt_property_line(
                 p.name, np.dtype(p.dtype).name,
                 getattr(self, p.name), p.default)
