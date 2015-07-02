@@ -52,9 +52,9 @@ class SolverCPU(object):
             w = slvr.uvw_cpu[:,:,2][ap]
             w = ne.evaluate('ap-aq', {'ap': w[1], 'aq': w[0]})
 
-            el = slvr.gauss_shape_cpu[:,0]
-            em = slvr.gauss_shape_cpu[:,1]
-            R = slvr.gauss_shape_cpu[:,2]
+            el = slvr.gauss_shape_cpu[0]
+            em = slvr.gauss_shape_cpu[1]
+            R = slvr.gauss_shape_cpu[2]
 
             # OK, try obtain the same results with the fwhm factored out!
             # u1 = u*em - v*el
@@ -103,9 +103,9 @@ class SolverCPU(object):
             w = slvr.uvw_cpu[:,:,2][ap]
             w = ne.evaluate('ap-aq', {'ap': w[1], 'aq': w[0]})
 
-            e1 = slvr.sersic_shape_cpu[:,0]
-            e2 = slvr.sersic_shape_cpu[:,1]
-            R = slvr.sersic_shape_cpu[:,2]
+            e1 = slvr.sersic_shape_cpu[0]
+            e2 = slvr.sersic_shape_cpu[1]
+            R = slvr.sersic_shape_cpu[2]
 
             # OK, try obtain the same results with the fwhm factored out!
             # u1 = u*(1+e1) - v*e2

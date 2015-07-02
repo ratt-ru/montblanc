@@ -101,8 +101,8 @@ A = [
     ary_dict('lm', ('nsrc',2), 'ft'),
     ary_dict('stokes', ('nsrc','ntime', 4), 'ft'),
     ary_dict('alpha', ('nsrc','ntime'), 'ft'),
-    ary_dict('gauss_shape', ('ngsrc', 3), 'ft'),
-    ary_dict('sersic_shape', ('nssrc', 3), 'ft'),
+    ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
+    ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
 
     ary_dict('frequency', ('nchan',), 'ft'),
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft'),

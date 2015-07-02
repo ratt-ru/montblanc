@@ -72,16 +72,12 @@ template <>
 class SumCohTraits<float> {
 public:
     typedef float3 UVWType;
-    typedef float3 GaussType;
-    typedef float3 SersicType;
 };
 
 template <>
 class SumCohTraits<double> {
 public:
     typedef double3 UVWType;
-    typedef double3 GaussType;
-    typedef double3 SersicType;
 };
 
 
@@ -93,8 +89,8 @@ template <
 __device__
 void rime_sum_coherencies_impl(
     typename SumCohTraits<T>::UVWType * uvw,
-    typename SumCohTraits<T>::GaussType * gauss_shape,
-    typename SumCohTraits<T>::SersicType * sersic_shape,
+    typename Tr::ft * gauss_shape,
+    typename Tr::ft * sersic_shape,
     typename Tr::ft * frequency,
     int * ant_pairs,
     typename Tr::ct * jones,
@@ -113,12 +109,23 @@ void rime_sum_coherencies_impl(
 
     __shared__ struct {
         typename SumCohTraits<T>::UVWType uvw[BLOCKDIMZ][BLOCKDIMY];
-        typename SumCohTraits<T>::GaussType gauss_shape;
-        typename SumCohTraits<T>::SersicType sersic_shape;
+
+        T el;
+        T em;
+        T eR;
+
+        T e1;
+        T e2;
+        T sersic_scale;
 
         T freq[BLOCKDIMX];
 
     } shared;
+
+    T & U = shared.uvw[threadIdx.z][threadIdx.y].x; 
+    T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
+    T & W = shared.uvw[threadIdx.z][threadIdx.y].z; 
+
 
     int i;
 
@@ -135,9 +142,9 @@ void rime_sum_coherencies_impl(
 
         i = TIME*NA + ANT2;
         typename SumCohTraits<T>::UVWType ant2_uvw = uvw[i];
-        shared.uvw[threadIdx.z][threadIdx.y].x -= ant2_uvw.x;
-        shared.uvw[threadIdx.z][threadIdx.y].y -= ant2_uvw.y;
-        shared.uvw[threadIdx.z][threadIdx.y].z -= ant2_uvw.z;
+        U -= ant2_uvw.x;
+        V -= ant2_uvw.y;
+        W -= ant2_uvw.z;
     }
 
     // Wavelength varies by channel, but not baseline and time
@@ -146,11 +153,7 @@ void rime_sum_coherencies_impl(
     if(threadIdx.y == 0 && threadIdx.z == 0)
         { shared.freq[threadIdx.x] = frequency[POLCHAN >> 2]; }
 
-    const T & U = shared.uvw[threadIdx.z][threadIdx.y].x; 
-    const T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
-    const T & W = shared.uvw[threadIdx.z][threadIdx.y].z; 
-
-      // Complex Number containing the sum
+    // Complex Number containing the sum
     // for this polarisation
     typename Tr::ct polsum = Po::make_ct(0.0, 0.0);
 
@@ -178,20 +181,22 @@ void rime_sum_coherencies_impl(
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC-NPSRC;
-            shared.gauss_shape = gauss_shape[i];
+            i = SRC-NPSRC;  shared.el = gauss_shape[i];
+            i += NGSRC;     shared.em = gauss_shape[i];
+            i += NGSRC;     shared.eR = gauss_shape[i];
         }
 
         __syncthreads();
 
-        const T & el = shared.gauss_shape.x;
-        const T & em = shared.gauss_shape.y;
-        const T & eR = shared.gauss_shape.z;
+        // Create references to a
+        // complicated part of shared memory
+        const T & U = shared.uvw[threadIdx.z][threadIdx.y].x; 
+        const T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
 
-        T u1 = U*em - V*el;
+        T u1 = U*shared.em - V*shared.el;
         u1 *= T(GAUSS_SCALE)*shared.freq[threadIdx.x];
-        u1 *= eR;
-        T v1 = U*el + V*em;
+        u1 *= shared.eR;
+        T v1 = U*shared.el + V*shared.em;
         v1 *= T(GAUSS_SCALE)*shared.freq[threadIdx.x];
         T exp = Po::exp(-(u1*u1 +v1*v1));
 
@@ -221,24 +226,26 @@ void rime_sum_coherencies_impl(
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC-NPSRC-NGSRC;
-            shared.sersic_shape = sersic_shape[i];
+            i = SRC-NPSRC-NGSRC;  shared.e1 = sersic_shape[i];
+            i += NSSRC;           shared.e2 = sersic_shape[i];
+            i += NSSRC;           shared.sersic_scale = sersic_shape[i];
         }
 
         __syncthreads();
 
-        const T & e1 = shared.sersic_shape.x;
-        const T & e2 = shared.sersic_shape.y;
-        const T & sersic_scale = shared.sersic_shape.z;
+        // Create references to a
+        // complicated part of shared memory
+        const T & U = shared.uvw[threadIdx.z][threadIdx.y].x; 
+        const T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
 
         // sersic source in  the Fourier domain
-        T u1 = U*(T(1.0) + e1) + V*e2;
+        T u1 = U*(T(1.0)+shared.e1) + V*shared.e2;
         u1 *= T(TWO_PI_OVER_C)*shared.freq[threadIdx.x];
-        u1 *= sersic_scale/(T(1.0)- e1*e1 - e2*e2);
-        T v1 = U*e2 + V*(T(1.0) - e1);
+        u1 *= shared.sersic_scale/(T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2);
+        T v1 = U*shared.e2 + V*(T(1.0)-shared.e1);
         v1 *= T(TWO_PI_OVER_C)*shared.freq[threadIdx.x];
-        v1 *= sersic_scale/(T(1.0) - e1*e1 - e2*e2);
-        T sersic_factor = T(1.0) + u1*u1 + v1*v1;
+        v1 *= shared.sersic_scale/(T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2);
+        T sersic_factor = T(1.0) + u1*u1+v1*v1;
         sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));
 
         // Get the complex scalars for antenna two and multiply
@@ -319,12 +326,12 @@ extern "C" {
 // - apply_weights: boolean indicating whether we're weighting our visibilities
 // - symbol: u or w depending on whether we're handling unweighted/weighted visibilities.
 
-#define stamp_sum_coherencies_fn(ft, ct, uvw_t, gauss_t, sersic_t, apply_weights, symbol) \
+#define stamp_sum_coherencies_fn(ft, ct, uvwt, apply_weights, symbol) \
 __global__ void \
 rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
-    uvw_t * uvw, \
-    gauss_t * gauss_shape, \
-    sersic_t * sersic_shape, \
+    uvwt * uvw, \
+    ft * gauss_shape, \
+    ft * sersic_shape, \
     ft * frequency, \
     int * ant_pairs, \
     ct * jones, \
@@ -340,10 +347,10 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
         visibilities, chi_sqrd_result); \
 }
 
-stamp_sum_coherencies_fn(float, float2, float3, float3, float3, false, u)
-stamp_sum_coherencies_fn(float, float2, float3, float3, float3, true, w)
-stamp_sum_coherencies_fn(double, double2, double3, double3, double3, false, u)
-stamp_sum_coherencies_fn(double, double2, double3, double3, double3, true, w)
+stamp_sum_coherencies_fn(float, float2, float3, false, u)
+stamp_sum_coherencies_fn(float, float2, float3, true, w)
+stamp_sum_coherencies_fn(double, double2, double3, false, u)
+stamp_sum_coherencies_fn(double, double2, double3, true, w)
 
 } // extern "C" {
 """)
