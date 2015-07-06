@@ -172,6 +172,12 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(np.all(ary[0] == fl))
         self.assertTrue(np.all(ary[1] == fm))
 
+    def test_slvr_cfg(self):
+        """ Test solver configuration """
+        from montblanc.slvr_config import default_slvr_cfg
+
+        slvr_cfg = default_slvr_cfg()
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestUtils)
     unittest.TextTestRunner(verbosity=2).run(suite)
