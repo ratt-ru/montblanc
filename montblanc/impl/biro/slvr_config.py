@@ -88,10 +88,10 @@ class BiroSolverConfiguration(SolverConfiguration):
         super(BiroSolverConfiguration,self).set_defaults(src_cfg)
 
         # Should we use the weight vector in our calculations?
-        self.setdefault(WEIGHT_VECTOR, DEFAULT_WEIGHT_VECTOR)
+        self[WEIGHT_VECTOR] = DEFAULT_WEIGHT_VECTOR
 
         # Weight Initialisation scheme
-        self.setdefault(INIT_WEIGHT, DEFAULT_INIT_WEIGHT)
+        self[INIT_WEIGHT] = DEFAULT_INIT_WEIGHT
 
         # Version
-        self.setdefault(VERSION, DEFAULT_VERSION)
+        self[VERSION] =  DEFAULT_VERSION

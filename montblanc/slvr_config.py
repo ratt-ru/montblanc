@@ -148,22 +148,22 @@ class SolverConfiguration(dict):
         else:
             self.setdefault(SRC_CFG, src_cfg)
 
-        # Configure visibility problem sizeuse the 
-        self.setdefault(NTIME, DEFAULT_NTIME)
-        self.setdefault(NA, DEFAULT_NA)
-        self.setdefault(NCHAN, DEFAULT_NCHAN)
-
         # Configure the source sizes
-        self.setdefault(SRC_CFG, src_cfg)
+        self[SRC_CFG] = src_cfg
+
+        # Configure visibility problem sizeuse the 
+        self[NTIME] = DEFAULT_NTIME
+        self[NA] = DEFAULT_NA
+        self[NCHAN] = DEFAULT_NCHAN
 
         # Set the data source
-        self.setdefault(DATA_SOURCE, DEFAULT_DATA_SOURCE) 
+        self[DATA_SOURCE] = DEFAULT_DATA_SOURCE 
 
         # Set the data source
-        self.setdefault(DATA_ORDER, DEFAULT_DATA_ORDER) 
+        self[DATA_ORDER] = DEFAULT_DATA_ORDER 
 
         # Set the data type
-        self.setdefault(DTYPE, DEFAULT_DTYPE)
+        self[DTYPE] = DEFAULT_DTYPE
 
         # Should we store CPU arrays?
-        self.setdefault(STORE_CPU, DEFAULT_STORE_CPU)
+        self[STORE_CPU] = DEFAULT_STORE_CPU
