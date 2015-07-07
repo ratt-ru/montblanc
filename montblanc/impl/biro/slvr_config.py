@@ -19,38 +19,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 from montblanc.slvr_config import SolverConfiguration
-
-# 
-WEIGHT_VECTOR = 'weight_vector'
-DEFAULT_WEIGHT_VECTOR = False
-VALID_WEIGHT_VECTOR = [True, False]
-WEIGHT_VECTOR_DESCRIPTION = (
-    'Governs whether chi-squared terms is weighted with vectorised, '
-    'or single scalar sigma value.')
-
-# weight vector initialisation keyword and valid values
-# This options determines whether
-INIT_WEIGHT = 'init_weight'
-INIT_WEIGHT_NONE = None
-INIT_WEIGHT_SIGMA = 'sigma'
-INIT_WEIGHT_WEIGHT = 'weight'
-DEFAULT_INIT_WEIGHT = INIT_WEIGHT_NONE 
-VALID_INIT_WEIGHTS = [INIT_WEIGHT_NONE, INIT_WEIGHT_SIGMA, INIT_WEIGHT_WEIGHT]
-INIT_WEIGHT_DESCRIPTION = (
-    'Governs how the weight vector is initialised from a Measurement Set. '
-    'If None, uninitialised. '
-    'If ''%s'', initialised from the SIGMA column. '
-    'If ''%s'', initialised from the WEIGHT column.')
-
-#
-VERSION = 'version'
-VERSION_V1 = 'v1'
-VERSION_V2 = 'v2'
-VERSION_V3 = 'v3'
-VERSION_V4 = 'v4'
-DEFAULT_VERSION = VERSION_V4
-VALID_VERSIONS = [VERSION_V1, VERSION_V2, VERSION_V3, VERSION_V4]
-VERSION_DESCRIPTION = 'BIRO Version'
+import montblanc.impl.biro.slvr_config_options as BiroOptions
 
 class BiroSolverConfiguration(SolverConfiguration):
     """
@@ -71,27 +40,27 @@ class BiroSolverConfiguration(SolverConfiguration):
         # Do base class checks
         super(BiroSolverConfiguration,self).verify()
 
-        self.check_key_values(WEIGHT_VECTOR,
-            WEIGHT_VECTOR_DESCRIPTION,
-            VALID_WEIGHT_VECTOR)
+        self.check_key_values(BiroOptions.WEIGHT_VECTOR,
+            BiroOptions.WEIGHT_VECTOR_DESCRIPTION,
+            BiroOptions.VALID_WEIGHT_VECTOR)
 
-        self.check_key_values(INIT_WEIGHT,
-            INIT_WEIGHT_DESCRIPTION,
-            VALID_INIT_WEIGHTS)
+        self.check_key_values(BiroOptions.INIT_WEIGHT,
+            BiroOptions.INIT_WEIGHT_DESCRIPTION,
+            BiroOptions.VALID_INIT_WEIGHTS)
 
-        self.check_key_values(VERSION,
-            VERSION_DESCRIPTION,
-            VALID_VERSIONS)
+        self.check_key_values(BiroOptions.VERSION,
+            BiroOptions.VERSION_DESCRIPTION,
+            BiroOptions.VALID_VERSIONS)
 
     def set_defaults(self, src_cfg=None):
         # Do base class sets
         super(BiroSolverConfiguration,self).set_defaults(src_cfg)
 
         # Should we use the weight vector in our calculations?
-        self[WEIGHT_VECTOR] = DEFAULT_WEIGHT_VECTOR
+        self[BiroOptions.WEIGHT_VECTOR] = BiroOptions.DEFAULT_WEIGHT_VECTOR
 
         # Weight Initialisation scheme
-        self[INIT_WEIGHT] = DEFAULT_INIT_WEIGHT
+        self[BiroOptions.INIT_WEIGHT] = BiroOptions.DEFAULT_INIT_WEIGHT
 
         # Version
-        self[VERSION] =  DEFAULT_VERSION
+        self[BiroOptions.VERSION] = BiroOptions.DEFAULT_VERSION
