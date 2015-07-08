@@ -18,8 +18,41 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from montblanc.slvr_config import SolverConfiguration
-import montblanc.impl.biro.slvr_config_options as BiroOptions
+from montblanc.slvr_config import SolverConfiguration, SolverConfigurationOptions
+
+class BiroSolverConfigurationOptions(SolverConfigurationOptions):
+    # 
+    WEIGHT_VECTOR = 'weight_vector'
+    DEFAULT_WEIGHT_VECTOR = False
+    VALID_WEIGHT_VECTOR = [True, False]
+    WEIGHT_VECTOR_DESCRIPTION = (
+    'Governs whether chi-squared terms is weighted with vectorised, '
+    'or single scalar sigma value.')
+
+    # weight vector initialisation keyword and valid values
+    # This options determines whether
+    INIT_WEIGHT = 'init_weight'
+    INIT_WEIGHT_NONE = None
+    INIT_WEIGHT_SIGMA = 'sigma'
+    INIT_WEIGHT_WEIGHT = 'weight'
+    DEFAULT_INIT_WEIGHT = INIT_WEIGHT_NONE 
+    VALID_INIT_WEIGHTS = [INIT_WEIGHT_NONE, INIT_WEIGHT_SIGMA, INIT_WEIGHT_WEIGHT]
+    INIT_WEIGHT_DESCRIPTION = (
+    'Governs how the weight vector is initialised from a Measurement Set. '
+    'If None, uninitialised. '
+    'If ''%s'', initialised from the SIGMA column. '
+    'If ''%s'', initialised from the WEIGHT column.')
+
+    #
+    VERSION = 'version'
+    VERSION_ONE = 'v1'
+    VERSION_TWO = 'v2'
+    VERSION_THREE = 'v3'
+    VERSION_FOUR = 'v4'
+    VERSION_FIVE = 'v5'
+    DEFAULT_VERSION = VERSION_FOUR
+    VALID_VERSIONS = [VERSION_ONE, VERSION_TWO, VERSION_THREE, VERSION_FOUR]
+    VERSION_DESCRIPTION = 'BIRO Version'
 
 class BiroSolverConfiguration(SolverConfiguration):
     """
@@ -27,9 +60,17 @@ class BiroSolverConfiguration(SolverConfiguration):
     with options pertinent to BIRO
     """
 
-    def __init__(self, src_cfg=None):
-        super(BiroSolverConfiguration, self).__init__(src_cfg)
-        #self.setdefault(src_cfg)
+    def __init__(self, **kwargs):
+        super(BiroSolverConfiguration, self).__init__(**kwargs)
+
+    """
+    def __init__(self, mapping, **kwargs):
+        super(BiroSolverConfiguration,self).__init__(mapping, **kwargs)
+
+    def __init__(self, iterable, **kwargs):
+        super(BiroSolverConfiguration,self).__init__(iterable, **kwargs)
+    """
+
 
     def verify(self):
         """
@@ -40,27 +81,31 @@ class BiroSolverConfiguration(SolverConfiguration):
         # Do base class checks
         super(BiroSolverConfiguration,self).verify()
 
-        self.check_key_values(BiroOptions.WEIGHT_VECTOR,
-            BiroOptions.WEIGHT_VECTOR_DESCRIPTION,
-            BiroOptions.VALID_WEIGHT_VECTOR)
+        Options = BiroSolverConfigurationOptions
 
-        self.check_key_values(BiroOptions.INIT_WEIGHT,
-            BiroOptions.INIT_WEIGHT_DESCRIPTION,
-            BiroOptions.VALID_INIT_WEIGHTS)
+        self.check_key_values(Options.WEIGHT_VECTOR,
+            Options.WEIGHT_VECTOR_DESCRIPTION,
+            Options.VALID_WEIGHT_VECTOR)
 
-        self.check_key_values(BiroOptions.VERSION,
-            BiroOptions.VERSION_DESCRIPTION,
-            BiroOptions.VALID_VERSIONS)
+        self.check_key_values(Options.INIT_WEIGHT,
+            Options.INIT_WEIGHT_DESCRIPTION,
+            Options.VALID_INIT_WEIGHTS)
 
-    def set_defaults(self, src_cfg=None):
+        self.check_key_values(Options.VERSION,
+            Options.VERSION_DESCRIPTION,
+            Options.VALID_VERSIONS)
+
+    def set_defaults(self):
         # Do base class sets
-        super(BiroSolverConfiguration,self).set_defaults(src_cfg)
+        super(BiroSolverConfiguration,self).set_defaults()
+
+        Options = BiroSolverConfigurationOptions
 
         # Should we use the weight vector in our calculations?
-        self[BiroOptions.WEIGHT_VECTOR] = BiroOptions.DEFAULT_WEIGHT_VECTOR
+        self[Options.WEIGHT_VECTOR] = Options.DEFAULT_WEIGHT_VECTOR
 
         # Weight Initialisation scheme
-        self[BiroOptions.INIT_WEIGHT] = BiroOptions.DEFAULT_INIT_WEIGHT
+        self[Options.INIT_WEIGHT] = Options.DEFAULT_INIT_WEIGHT
 
         # Version
-        self[BiroOptions.VERSION] = BiroOptions.DEFAULT_VERSION
+        self[Options.VERSION] = Options.DEFAULT_VERSION
