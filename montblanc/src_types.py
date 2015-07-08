@@ -21,11 +21,12 @@
 import numpy as np
 
 POINT_TYPE = 'point'
-GAUSSIAN_TYPE = 'gaussian'
-SERSIC_TYPE = 'sersic'
-
 POINT_NR_VAR = 'npsrc'
+
+GAUSSIAN_TYPE = 'gaussian'
 GAUSSIAN_NR_VAR = 'ngsrc'
+
+SERSIC_TYPE = 'sersic'
 SERSIC_NR_VAR = 'nssrc'
 
 SOURCE_VAR_TYPES = {
