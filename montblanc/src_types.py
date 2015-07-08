@@ -20,6 +20,8 @@
 
 import numpy as np
 
+# List of source types and the variable names
+# referring to the number of sources for that type
 POINT_TYPE = 'point'
 POINT_NR_VAR = 'npsrc'
 
@@ -29,6 +31,7 @@ GAUSSIAN_NR_VAR = 'ngsrc'
 SERSIC_TYPE = 'sersic'
 SERSIC_NR_VAR = 'nssrc'
 
+# Type to numbering variable mapping
 SOURCE_VAR_TYPES = {
     POINT_TYPE : POINT_NR_VAR,
     GAUSSIAN_TYPE : GAUSSIAN_NR_VAR,
