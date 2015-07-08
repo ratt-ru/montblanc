@@ -169,24 +169,24 @@ class SolverConfiguration(dict):
         Options = SolverConfigurationOptions
 
         # Configure Sources
-        self[Options.SOURCES] = mbu.default_sources()
+        self.setdefault(Options.SOURCES, mbu.default_sources())
 
         # Configure visibility problem sizeuse the 
-        self[Options.NTIME] = Options.DEFAULT_NTIME
-        self[Options.NA] = Options.DEFAULT_NA
-        self[Options.NCHAN] = Options.DEFAULT_NCHAN
+        self.setdefault(Options.NTIME, Options.DEFAULT_NTIME)
+        self.setdefault(Options.NA, Options.DEFAULT_NA)
+        self.setdefault(Options.NCHAN, Options.DEFAULT_NCHAN)
 
         # Should
-        self[Options.AUTO_CORRELATIONS] = Options.DEFAULT_AUTO_CORRELATIONS
+        self.setdefault(Options.AUTO_CORRELATIONS, Options.DEFAULT_AUTO_CORRELATIONS)
 
         # Set the data source
-        self[Options.DATA_SOURCE] = Options.DEFAULT_DATA_SOURCE 
+        self.setdefault(Options.DATA_SOURCE, Options.DEFAULT_DATA_SOURCE)
 
         # Set the data source
-        self[Options.DATA_ORDER] = Options.DEFAULT_DATA_ORDER 
+        self.setdefault(Options.DATA_ORDER, Options.DEFAULT_DATA_ORDER)
 
         # Set the data type
-        self[Options.DTYPE] = Options.DEFAULT_DTYPE
+        self.setdefault(Options.DTYPE, Options.DEFAULT_DTYPE)
 
         # Should we store CPU arrays?
-        self[Options.STORE_CPU] = Options.DEFAULT_STORE_CPU
+        self.setdefault(Options.STORE_CPU, Options.DEFAULT_STORE_CPU)
