@@ -373,6 +373,73 @@ def array_convert_function(sshape_one, sshape_two, variables):
 
     return f
 
+from montblanc.src_types import SOURCE_VAR_TYPES, POINT_TYPE
+
+def default_sources(**kwargs):
+    """
+    Returns a dictionary mapping source types
+    to number of sources. If the number of sources
+    for the source type is supplied in the kwargs
+    these will be placed in the dictionary.
+
+    e.g. if we have 'point', 'gaussian' and 'sersic'
+    source types, then
+
+    default_sources(point=10, gaussian=20)
+
+    will return a dict {'point': 10, 'gaussian': 20, 'sersic': 0}
+    """
+    S = {}
+    total = 0
+
+    # Zero all source types
+    for k, v in SOURCE_VAR_TYPES.iteritems():
+        # Try get the number of sources for this source
+        # from the kwargs
+        value = kwargs.get(k, 0)
+
+        try:
+            value = int(value)
+        except ValueError:
+            raise TypeError(('Supplied value %s '
+                'for source %s cannot be '
+                'converted to an integer') % \
+                    (value, k))    
+
+        total += value
+        S[k] = value
+
+    # Add a point source if no others exist
+    if total == 0:
+        S[POINT_TYPE] = 1
+
+    return S
+
+def sources_to_nr_vars(sources):
+    """
+    Converts a source type to number of sources mapping into
+    a source numbering variable to number of sources mapping.
+
+    If, for example, we have 'point', 'gaussian' and 'sersic'
+    source types, then passing the following dict as an argument
+    
+    sources_to_nr_vars({'point':10, 'gaussian': 20})
+    
+    will return a new dict
+
+    {'npsrc': 10, 'ngsrc': 20, 'nssrc': 0 }
+    """
+
+    sources = default_sources(**sources)
+
+    try:
+        return { SOURCE_VAR_TYPES[name]: nr for name, nr in sources.iteritems() }
+    except KeyError as e:
+        raise KeyError((
+            'No source type ''%s'' is '
+            'registered. Valid source types '
+            'are %s') % (e, SOURCE_VAR_TYPES.keys()))
+
 import pycuda.driver as cuda
 
 class ContextWrapper(object):
