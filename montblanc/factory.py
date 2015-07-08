@@ -25,51 +25,9 @@ import pycuda.driver as cuda
 import montblanc
 import montblanc.util as mbu
 
+from montblanc.config import (BiroSolverConfigurationOptions as Options)
+
 from montblanc.pipeline import Pipeline
-
-VERSION_ONE = 'v1'
-VERSION_TWO = 'v2'
-VERSION_THREE = 'v3'
-VERSION_FOUR = 'v4'
-VERSION_FIVE = 'v5'
-DEFAULT_VERSION = VERSION_TWO
-
-MS_SD_TYPE = 'ms'
-TEST_SD_TYPE = 'test'
-BIRO_SD_TYPE = 'biro'
-
-deprecated_biro_versions = [VERSION_ONE]
-valid_biro_versions = [VERSION_TWO, VERSION_THREE,
-    VERSION_FOUR, VERSION_FIVE]
-valid_biro_solver_types = [MS_SD_TYPE, TEST_SD_TYPE, BIRO_SD_TYPE]
-
-def check_msfile(msfile):
-    """ Check that the supplied msfile argument is a valid string """
-    if msfile is None or not isinstance(msfile, str):
-        raise TypeError, 'Invalid type %s specified for msfile' % type(msfile)
-
-def check_solver_type(sd_type):
-    """ Check that we have been supplied a valid solver type string """
-    if sd_type not in valid_biro_solver_types:
-        raise ValueError, ('Invalid BIRO solver type specified (%s).',
-                'Should be one of %s') % (sd_type,valid_biro_solver_types)
-
-def check_biro_version(version):
-    """ Throws an exception if the supplied version is invalid """
-    if version not in valid_biro_versions:
-        if version in deprecated_biro_versions:
-            raise ValueError('Version %s is deprecated. ' %
-                version)
-        else:
-            raise ValueError, 'Supplied version %s is not valid. ' \
-                'Should be one of %s', (version, valid_biro_versions)
-
-def check_biro_solver_type(sd_type):
-    """ Throws an exception if the supplied solver type is invalid """
-
-    if sd_type not in valid_biro_solver_types:
-        raise ValueError, 'Supplied solver type %s is not valid. ' \
-                'Should be one of %s', (sd_type, valid_biro_solver_types)
 
 # PyCUDA device and context variables
 __devices = None
@@ -121,26 +79,26 @@ def get_default_context():
 
     return contexts[0]
 
-def get_empty_pipeline(**kwargs):
+def get_empty_pipeline(slvr_cfg):
     """ Get an empty pipeline object """
     return Pipeline([])
 
-def get_base_solver(**kwargs):
+def get_base_solver(slvr_cfg):
     """ Get a basic solver object """
-    pipeline = get_empty_pipeline(**kwargs)
+    pipeline = get_empty_pipeline(slvr_cfg)
 
     # Get the default cuda context if none is provided
-    if kwargs.get('context', None) is None:
-        kwargs['context']=get_default_context()
+    if slvr_cfg.get('context', None) is None:
+        slvr_cfg['context']=get_default_context()
 
     from montblanc.BaseSolver import BaseSolver
 
     return BaseSolver(**kwargs)
 
-def create_biro_solver_from_ms(slvr_class_type, **kwargs):
+def create_biro_solver_from_ms(slvr_class_type, slvr_cfg):
     """ Initialise the supplied solver with measurement set data """
-    check_msfile(kwargs.get('msfile',None))
-    version = kwargs.get('version')
+    check_msfile(slvr_cfg.get('msfile',None))
+    version = slvr_cfg.get('version')
 
     if version in [VERSION_TWO, VERSION_THREE]:
         from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
@@ -149,18 +107,18 @@ def create_biro_solver_from_ms(slvr_class_type, **kwargs):
     else:
         raise Exception, 'Incorrect version %s' % version
 
-    with MeasurementSetLoader(kwargs.get('msfile')) as loader:
+    with MeasurementSetLoader(slvr_cfg.get('msfile')) as loader:
         ntime,na,nchan = loader.get_dims()
-        slvr = slvr_class_type(na=na,ntime=ntime,nchan=nchan,**kwargs)
-        loader.load(slvr, **kwargs)
+        slvr = slvr_class_type(slvr_cfg)
+        loader.load(slvr, slvr_cfg)
         return slvr
 
-def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
+def create_biro_solver_from_test_data(slvr_class_type, slvr_cfg):
     """ Initialise the supplied solver with test data """
-    version = kwargs.get('version')
+    version = slvr_cfg.get(Options.VERSION)
 
-    kwargs['store_cpu'] = True
-    slvr = slvr_class_type(**kwargs)
+    slvr_cfg[Options.STORE_CPU] = True
+    slvr = slvr_class_type(slvr_cfg)
 
     na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime
     npsrc, ngsrc, nssrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nssrc, slvr.nsrc
@@ -180,9 +138,9 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     uvw = mbu.shape_list([30.*r, 25.*r, 20.*r],
             shape=slvr.uvw_shape, dtype=slvr.uvw_dtype)
     # Normalise Antenna 0
-    if version in [VERSION_TWO, VERSION_THREE]:
+    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
         uvw[:,:,0] = 0
-    elif version in [VERSION_FOUR, VERSION_FIVE]:
+    elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
         uvw[:,0,:] = 0
 
     slvr.transfer_uvw(uvw)
@@ -195,11 +153,11 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     slvr.transfer_lm(lm)
 
     # Brightness matrices
-    if version in [VERSION_TWO, VERSION_THREE]:
+    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
         B = np.empty(shape=slvr.brightness_shape, dtype=slvr.brightness_dtype)
         I, Q, U, V = B[0,:,:], B[1,:,:], B[2,:,:], B[3,:,:]
         alpha = B[4,:,:]
-    elif version in [VERSION_FOUR,VERSION_FIVE]:
+    elif version in [Options.VERSION_FOUR,Options.VERSION_FIVE]:
         # Stokes parameters
         # Need a positive semi-definite brightness
         # matrix for v4 and v5
@@ -219,20 +177,20 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     alpha[:] = np.random.random(size=I.shape)*0.1
 
-    if version in [VERSION_TWO, VERSION_THREE]:
+    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
         slvr.transfer_brightness(B)
-    elif version in [VERSION_FOUR,VERSION_FIVE]:
+    elif version in [Options.VERSION_FOUR,Options.VERSION_FIVE]:
         slvr.transfer_stokes(stokes)
         slvr.transfer_alpha(alpha)
 
     # E beam
-    if version in [VERSION_FOUR, VERSION_FIVE]:
+    if version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
         E_beam = make_random(slvr.E_beam_cpu.shape, slvr.E_beam_cpu.dtype) + \
             make_random(slvr.E_beam_cpu.shape, slvr.E_beam_cpu.dtype)*1j
         slvr.transfer_E_beam(E_beam)
 
     # G term
-    if version in [VERSION_FOUR, VERSION_FIVE]:
+    if version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
         G_term = make_random(slvr.G_term_cpu.shape, slvr.G_term_cpu.dtype) + \
             make_random(slvr.G_term_cpu.shape, slvr.G_term_cpu.dtype)*1j
         slvr.transfer_G_term(G_term)
@@ -255,11 +213,11 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     # Generate nchan frequencies/wavelengths
     frequencies = ft(np.linspace(1e6,2e6,nchan))
-    if version in [VERSION_TWO, VERSION_THREE]:
+    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
         wavelength = ft(montblanc.constants.C/frequencies)
         slvr.transfer_wavelength(wavelength)
         slvr.set_ref_wave(wavelength[nchan//2])
-    elif version in [VERSION_FOUR, VERSION_FIVE]:
+    elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
         slvr.transfer_frequency(frequencies)
         slvr.set_ref_freq(frequencies[nchan//2])
 
@@ -269,7 +227,7 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
     slvr.transfer_point_errors(point_errors)
 
     # Generate antenna scaling coefficients
-    if version in [VERSION_FOUR, VERSION_FIVE]:
+    if version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
         antenna_scaling = make_random(slvr.antenna_scaling_shape,
             slvr.antenna_scaling_dtype)
         slvr.transfer_antenna_scaling(antenna_scaling)
@@ -281,12 +239,12 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     slvr.transfer_ant_pairs(slvr.get_default_ant_pairs())
 
-    if version in [VERSION_TWO, VERSION_THREE]:
+    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
         # Generate random jones scalar values
         jones_scalar = make_random(slvr.jones_scalar_shape,
                 slvr.jones_scalar_dtype)
         slvr.transfer_jones_scalar(jones_scalar)
-    elif version in [VERSION_FOUR,VERSION_FIVE]:
+    elif version in [Options.VERSION_FOUR,Options.VERSION_FIVE]:
         # Generate random jones scalar values
         jones = make_random(slvr.jones_shape,
                 slvr.jones_dtype)
@@ -305,47 +263,35 @@ def create_biro_solver_from_test_data(slvr_class_type, **kwargs):
 
     return slvr
 
-def get_biro_solver(sd_type=None, npsrc=1, ngsrc=0, nssrc=0, dtype=np.float32,
-        version=None, **kwargs):
+def get_biro_solver(slvr_cfg):
     """ Factory function that produces a BIRO solver """
 
-    if sd_type is None: sd_type=MS_SD_TYPE
-    if version is None: version=DEFAULT_VERSION
-
-    check_biro_version(version)
-    check_solver_type(sd_type)
-
-    # Pack the supplied arguments into kwargs
-    # so that we don't have to pass them around
-    kwargs['npsrc'] = npsrc
-    kwargs['ngsrc'] = ngsrc
-    kwargs['nssrc'] = nssrc
-    kwargs['dtype'] = dtype
-    kwargs['version'] = version
+    data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
+    version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)
 
     # Get the default cuda context if none is provided
-    if kwargs.get('context', None) is None:
-        kwargs['context'] = get_default_context()
+    if slvr_cfg.get('context', None) is None:
+        slvr_cfg['context'] = get_default_context()
 
     # Figure out which version of BIRO solver we're dealing with.
-    if version == VERSION_TWO:
+    if version == Options.VERSION_TWO:
         from montblanc.impl.biro.v2.BiroSolver import BiroSolver
-    elif version == VERSION_THREE:
+    elif version == Options.VERSION_THREE:
         from montblanc.impl.biro.v3.CompositeBiroSolver \
         import CompositeBiroSolver as BiroSolver
-    elif version == VERSION_FOUR:
+    elif version == Options.VERSION_FOUR:
         from montblanc.impl.biro.v4.BiroSolver import BiroSolver
-    elif version == VERSION_FIVE:
+    elif version == Options.VERSION_FIVE:
         from montblanc.impl.biro.v5.CompositeBiroSolver \
         import CompositeBiroSolver as BiroSolver
     else:
         raise Exception, 'Invalid version %s' % version
 
-    if sd_type == MS_SD_TYPE:
-        return create_biro_solver_from_ms(BiroSolver, **kwargs)
-    elif sd_type == TEST_SD_TYPE:
-        return create_biro_solver_from_test_data(BiroSolver, **kwargs)
-    elif sd_type == BIRO_SD_TYPE:
-        return BiroSolver(**kwargs)
+    if data_source == Options.DATA_SOURCE_MS:
+        return create_biro_solver_from_ms(BiroSolver, slvr_cfg)
+    elif data_source == Options.DATA_SOURCE_TEST:
+        return create_biro_solver_from_test_data(BiroSolver, slvr_cfg)
+    elif data_source == Options.DATA_SOURCE_BIRO:
+        return BiroSolver(slvr_cfg)
     else:
         raise Exception, 'Invalid type %s' % sd_type

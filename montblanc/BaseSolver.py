@@ -32,6 +32,8 @@ import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
+from montblanc.config import (BiroSolverConfigurationOptions as Options)
+
 class ArrayRecord(object):
     """ Records information about an array """
     def __init__(self, name, sshape, shape, dtype, registrant, has_cpu_ary, has_gpu_ary):
@@ -141,12 +143,8 @@ DEFAULT_NA=3
 DEFAULT_NBL=mbu.nr_of_baselines(DEFAULT_NA)
 DEFAULT_NCHAN=4
 DEFAULT_NTIME=10
-DEFAULT_NPSRC=2
-DEFAULT_NGSRC=1
-DEFAULT_NSSRC=0
-DEFAULT_NSRC=DEFAULT_NPSRC + DEFAULT_NGSRC + DEFAULT_NSSRC
 DEFAULT_NVIS=DEFAULT_NBL*DEFAULT_NCHAN*DEFAULT_NTIME
-DEFAULT_DTYPE=np.float32
+DEFAULT_NSRC=1
 
 class BaseSolver(Solver):
     """ Class that holds the elements for solving the RIME """
@@ -154,48 +152,22 @@ class BaseSolver(Solver):
     nbl = Parameter(DEFAULT_NBL)
     nchan = Parameter(DEFAULT_NCHAN)
     ntime = Parameter(DEFAULT_NTIME)
-    npsrc = Parameter(DEFAULT_NPSRC)
-    ngsrc = Parameter(DEFAULT_NGSRC)
-    nssrc = Parameter(DEFAULT_NSSRC)
     nsrc = Parameter(DEFAULT_NSRC)
     nvis = Parameter(DEFAULT_NVIS)
 
     pipeline = PipelineDescriptor()
 
-    def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC, dtype=DEFAULT_DTYPE,
-        pipeline=None, **kwargs):
+    def __init__(self, slvr_cfg):
         """
         BaseSolver Constructor
 
         Parameters:
-            na : integer
-                Number of antennae.
-            nchan : integer
-                Number of channels.
-            ntime : integer
-                Number of timesteps.
-            npsrc : integer
-                Number of point sources.
-            ngsrc : integer
-                Number of gaussian sources.
-            nssrc: integer
-                Number of sersic (exponential) sources.
-            dtype : np.float32 or np.float64
-                Specify single or double precision arithmetic.
-        Keyword Arguments:
-            context : pycuda.driver.Context
-                CUDA context to operate on.
-            store_cpu: boolean
-                if True, store cpu versions of the kernel arrays.
-            auto_correlations: boolean
-                if True, take auto-correlations into account when
-                calculating the number of baselines.
+            slvr_cfg : SolverConfiguration
         """
 
         super(BaseSolver, self).__init__()
 
-        autocor = kwargs.get('auto_correlations',False)
+        autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
 
         # Configure our problem dimensions. Number of
         # - antenna
@@ -205,35 +177,36 @@ class BaseSolver(Solver):
         # - point sources
         # - gaussian sources
         # - sersic sources
-        self.na = na
-        self.nbl = nbl = mbu.nr_of_baselines(na,autocor)
-        self.nchan = nchan
-        self.ntime = ntime
-        self.npsrc = npsrc
-        self.ngsrc = ngsrc
-        self.nssrc = nssrc
-        self.nsrc = nsrc = npsrc + ngsrc + nssrc
-        self.nvis = nbl*nchan*ntime
+        self.na = slvr_cfg[Options.NA]
+        self.nbl = nbl = mbu.nr_of_baselines(self.na,autocor)
+        self.nchan = slvr_cfg[Options.NCHAN]
+        self.ntime = slvr_cfg[Options.NTIME]
+        self.nvis = self.nbl*self.nchan*self.ntime
 
-        if nsrc == 0:
+        src_nr_vars = mbu.sources_to_nr_vars(slvr_cfg[Options.SOURCES])
+        self.nsrc = sum(src_nr_vars.itervalues())
+
+        for nr_var, nr_of_src in src_nr_vars.iteritems():
+            setattr(self, nr_var, nr_of_src)
+
+        if self.nsrc == 0:
             raise ValueError('The number of sources, or, ',
-                            'the sum of npsrc (%d), ngsrc (%d) and nssrc (%d), '
+                            'the sum of %s, '
                             'must be greater than zero') % \
-                            (npsrc, ngsrc, nssrc)
+                            (src_nr_vars)
 
         # Configure our floating point and complex types
-        if dtype == np.float32:
+        if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
+            self.ft = np.float32
             self.ct = np.complex64
-        elif dtype == np.float64:
+        elif slvr_cfg[Options.DTYPE] == Options.DTYPE_DOUBLE:
+            self.ft = np.float64
             self.ct = np.complex128
         else:
-            raise TypeError, ('Must specify either np.float32 ',
-                'or np.float64 for dtype')
-
-        self.ft = dtype
+            raise TypeError, ('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
 
         # Store the context, choosing the default if not specified
-        ctx = kwargs.get('context')
+        ctx = slvr_cfg.get('context', None)
 
         if ctx is None:
             raise Exception, 'No context was supplied to the BaseSolver'
@@ -253,9 +226,11 @@ class BaseSolver(Solver):
         self.properties = {}
 
         # Should we store CPU versions of the GPU arrays
-        self.store_cpu = kwargs.get('store_cpu', False)
+        self.store_cpu = slvr_cfg.get('store_cpu', False)
 
         # Configure our solver pipeline
+        pipeline = slvr_cfg.get('pipeline', None)
+
         if pipeline is None:
             pipeline = montblanc.factory.get_empty_pipeline()
         self.pipeline = pipeline

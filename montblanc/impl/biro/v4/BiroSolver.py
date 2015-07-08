@@ -23,13 +23,7 @@ import numpy as np
 import montblanc
 
 from montblanc.BaseSolver import BaseSolver
-from montblanc.BaseSolver import DEFAULT_NA
-from montblanc.BaseSolver import DEFAULT_NCHAN
-from montblanc.BaseSolver import DEFAULT_NTIME
-from montblanc.BaseSolver import DEFAULT_NPSRC
-from montblanc.BaseSolver import DEFAULT_NGSRC
-from montblanc.BaseSolver import DEFAULT_NSSRC
-from montblanc.BaseSolver import DEFAULT_DTYPE
+from montblanc.config import BiroSolverConfigurationOptions as Options
 
 from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
@@ -38,8 +32,8 @@ from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
 
 from montblanc.pipeline import Pipeline
 
-def get_pipeline(**kwargs):
-    wv = kwargs.get('weight_vector', False)
+def get_pipeline(slvr_cfg):
+    wv = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
     return Pipeline([RimeBSqrt(),
         RimeEBeam(),
         RimeEKBSqrt(),
@@ -123,45 +117,19 @@ A = [
 
 class BiroSolver(BaseSolver):
     """ Shared Data implementation for BIRO """
-    def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC,
-        dtype=DEFAULT_DTYPE, pipeline=None, **kwargs):
+    def __init__(self, slvr_cfg):
         """
         BiroSolver Constructor
 
         Parameters:
-            na : integer
-                Number of antennae.
-            nchan : integer
-                Number of channels.
-            ntime : integer
-                Number of timesteps.
-            npsrc : integer
-                Number of point sources.
-            ngsrc : integer
-                Number of gaussian sources.
-            nssrc : integer
-                Number of sersic (exponential) sources.
-            dtype : np.float32 or np.float64
-                Specify single or double precision arithmetic.
-            pipeline : list of nodes
-                nodes defining the GPU kernels used to solve this RIME
-        Keyword Arguments:
-            context : pycuda.context.Context
-                CUDA context to operate on.
-            store_cpu: boolean
-                if True, store cpu versions of the kernel arrays
-                within the GPUSolver object.
+            slvr_cfg : SolverConfiguration
+                Solver Configuration variables
         """
 
-        # Turn off auto_correlations
-        kwargs['auto_correlations'] = False
         # Set up a default pipeline if None is supplied
-        pipeline = get_pipeline(**kwargs) if pipeline is None else pipeline
+        slvr_cfg.setdefault('pipeline', get_pipeline(slvr_cfg))
 
-        super(BiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype,
-            pipeline=pipeline, **kwargs)
+        super(BiroSolver, self).__init__(slvr_cfg)
 
         self.register_properties(P)
         self.register_arrays(A)

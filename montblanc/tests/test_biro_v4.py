@@ -26,6 +26,7 @@ import random
 import time
 
 import montblanc.factory
+import montblanc.util as mbu
 
 from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
@@ -35,35 +36,41 @@ from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
 from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
 from montblanc.pipeline import Pipeline
+from montblanc.config import (BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
 
-def src_perms(defaults, permute_weights=False):
+def src_perms(slvr_cfg, permute_weights=False):
     """
-    Permute the source types and return a dictionary suitable
-    for use as keyword arguments for the solver function/factory.
+    Permute the source types and return a SolverConfiguration suitable
+    for use as input to the solver function/factory.
 
     Parameters:
-        default : dictionary
-            dictionary containing other sensible defaults to include
+        slvr_cfg : BiroSolverConfiguration
+            Configuration containing other sensible defaults to include
             in the returned permutation.
             e.g. {'na': 14, 'ntime': 20, 'nchan': 48}
 
-    { 'npsrc': 0, 'ngsrc': 00, 'nssrc': 20}
-    { 'npsrc': 0, 'ngsrc': 20, 'nssrc': 0}
-    { 'npsrc': 20, 'ngsrc': 0, 'nssrc': 0}
-    { 'npsrc': 0, 'ngsrc': 20, 'nssrc': 20}
-    { 'npsrc': 20, 'ngsrc': 20, 'nssrc': 0}
-    { 'npsrc': 20, 'ngsrc': 0, 'nssrc': 20}
-    { 'npsrc': 20, 'ngsrc': 20, 'nssrc': 20}
+    { 'point': 0,  'gaussian': 00, 'sersic': 20 }
+    { 'point': 0,  'gaussian': 20, 'sersic': 0  }
+    { 'point': 20, 'gaussian': 0,  'sersic': 0  }
+    { 'point': 0,  'gaussian': 20, 'sersic': 20 }
+    { 'point': 20, 'gaussian': 20, 'sersic': 0  }
+    { 'point': 20, 'gaussian': 0,  'sersic': 20 }
+    { 'point': 20, 'gaussian': 20, 'sersic': 20 }
 
-    >>> for p in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, True)
-    >>>     with solver(dtype=np.float32, **p) as slvr:
+    >>> slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=48)
+    >>> for p_slvr_cfg in src_perms(slvr_cfg, True)
+    >>>     with solver(p_slvr_cfg) as slvr:
     >>>         slvr.solve()
     """
 
-    if defaults is None:
-        defaults = {}
+    if slvr_cfg is None:
+        slvr_cfg = BiroSolverConfiguration()
 
-    src_types = ['npsrc', 'ngsrc', 'nssrc']
+    from montblanc.src_types import SOURCE_VAR_TYPES
+
+    src_types = SOURCE_VAR_TYPES.keys()
+
     count = 0
 
     weight_vector = [True, False] if permute_weights is True else [False]
@@ -76,16 +83,19 @@ def src_perms(defaults, permute_weights=False):
             if count == 1:
                 continue
 
-            params = defaults.copy()
-            params['weight_vector'] = wv
-            for i, s in enumerate(src_types):
-                params[s] = p[i]
+            params = slvr_cfg.copy()
+            params[Options.WEIGHT_VECTOR] = wv
+            src_dict = {s: i for i,s in enumerate(src_types)}
+            params[Options.SOURCES] = montblanc.src_cfg(**src_dict)
 
             yield params
 
+def solver(slvr_cfg, **kwargs):
+    slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
+    slvr_cfg[Options.VERSION] = Options.VERSION_FOUR
+    slvr_cfg.update(kwargs)
 
-def solver(**kwargs):
-    return montblanc.factory.get_biro_solver('test',version='v4',**kwargs)
+    return montblanc.factory.get_biro_solver(slvr_cfg)
 
 class TestBiroV4(unittest.TestCase):
     """
@@ -162,20 +172,25 @@ class TestBiroV4(unittest.TestCase):
 
     def test_EKBSqrt_float(self):
         """ Single precision EKBSqrt test  """
-        default_params = {
-            'na': 14, 'nchan': 64, 'ntime': 20, 'dtype': np.float32,
-            'pipeline': Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()])}
+        sources = montblanc.src_cfg(point=10, gaussian=10)
 
-        with solver(**default_params) as slvr:
-            self.EKBSqrt_test_impl(slvr, cmp={'rtol': 1e-4})
+        slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=64,
+            sources=sources, dtype=Options.DTYPE_FLOAT,
+            pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]))
+
+        with solver(slvr_cfg) as slvr:
+            self.EKBSqrt_test_impl(slvr, cmp={'rtol': 1e-5})
 
     def test_EKBSqrt_double(self):
         """ Double precision EKBSqrt test """
-        default_params = {
-            'na': 14, 'nchan': 64, 'ntime': 20, 'dtype': np.float64,
-            'pipeline': Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()])}
 
-        with solver(**default_params) as slvr:
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+
+        slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=64,
+            sources=sources, dtype=Options.DTYPE_DOUBLE,
+            pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]))
+
+        with solver(slvr_cfg) as slvr:
             self.EKBSqrt_test_impl(slvr, cmp={'rtol': 1e-5})
 
     def sum_coherencies_test_impl(self, slvr, weight_vector=False, cmp=None):
@@ -226,13 +241,13 @@ class TestBiroV4(unittest.TestCase):
 
     def test_sum_coherencies_float(self):
         """ Test the coherency sum float kernel """
-        default_params = {'na': 14, 'ntime': 20, 'nchan': 48,
-            'dtype': np.float32 }
+        slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=48,
+            dtype=Options.DTYPE_FLOAT)
 
-        for p in src_perms(default_params, permute_weights=True):
-            wv = p['weight_vector']
-            p['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
-            with solver(**p) as slvr:
+        for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
+            wv = p_slvr_cfg[Options.WEIGHT_VECTOR]
+            p_slvr_cfg['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
+            with solver(p_slvr_cfg) as slvr:
 
                 self.sum_coherencies_test_impl(slvr,
                     cmp={'rtol': 1e-4},
@@ -240,13 +255,13 @@ class TestBiroV4(unittest.TestCase):
 
     def test_sum_coherencies_double(self):
         """ Test the coherency sum double kernel """
-        default_params = {'na': 14, 'ntime': 20, 'nchan': 48,
-            'dtype': np.float64 }
+        slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=48,
+            dtype=Options.DTYPE_DOUBLE)
 
-        for p in src_perms(default_params, permute_weights=True):
-            wv = p['weight_vector']
-            p['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
-            with solver(**p) as slvr:
+        for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
+            wv = p_slvr_cfg[Options.WEIGHT_VECTOR]
+            p_slvr_cfg['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
+            with solver(p_slvr_cfg) as slvr:
 
                 self.sum_coherencies_test_impl(slvr,
                     weight_vector=wv)
@@ -296,19 +311,26 @@ class TestBiroV4(unittest.TestCase):
 
     def test_B_sqrt_float(self):
         """ Test the B sqrt float kernel """
+        sources = montblanc.src_cfg(point=10, gaussian=10)
 
-        with solver(na=7, ntime=200, nchan=320,
-            npsrc=10, ngsrc=10, dtype=np.float32,
-            pipeline=Pipeline([RimeBSqrt()])) as slvr:
+        slvr_cfg = BiroSolverConfiguration(na=7, ntime=200, nchan=320,
+            sources=sources, dtype=Options.DTYPE_FLOAT,
+            pipeline=Pipeline([RimeBSqrt()]))
+
+        with solver(slvr_cfg) as slvr:
 
             # This fails more often with an rtol of 1e-4
             self.B_sqrt_test_impl(slvr, cmp={'rtol': 1e-3})
 
     def test_B_sqrt_double(self):
         """ Test the B sqrt double kernel """
-        with solver(na=7, ntime=200, nchan=320,
-            npsrc=10, ngsrc=10, dtype=np.float64,
-            pipeline=Pipeline([RimeBSqrt()])) as slvr:
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+
+        slvr_cfg = BiroSolverConfiguration(na=7, ntime=200, nchan=320,
+            sources=sources, dtype=Options.DTYPE_DOUBLE,
+            pipeline=Pipeline([RimeBSqrt()]))
+
+        with solver(slvr_cfg) as slvr:
 
             self.B_sqrt_test_impl(slvr)
 
@@ -376,17 +398,26 @@ class TestBiroV4(unittest.TestCase):
     def test_E_beam_float(self):
         """ Test the E Beam float kernel """
 
-        with solver(na=32, ntime=50, nchan=64,
-            npsrc=10, ngsrc=10, dtype=np.float32,
-            pipeline=Pipeline([RimeEBeam()])) as slvr:
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+
+        slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
+            sources=sources, dtype=Options.DTYPE_FLOAT,
+            pipeline=Pipeline([RimeEBeam()]))
+
+        with solver(slvr_cfg) as slvr:
 
             self.E_beam_test_impl(slvr)
 
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
-        with solver(na=32, ntime=50, nchan=64,
-            npsrc=10, ngsrc=10, dtype=np.float64,
-            pipeline=Pipeline([RimeEBeam()])) as slvr:
+
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+
+        slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
+            sources=sources, dtype=Options.DTYPE_DOUBLE,
+            pipeline=Pipeline([RimeEBeam()]))
+
+        with solver(slvr_cfg) as slvr:
 
             self.E_beam_test_impl(slvr)
 
@@ -399,9 +430,14 @@ class TestBiroV4(unittest.TestCase):
         brightness matrix into the per baseline
         jones matrices.
          """
-        with solver(na=14, ntime=10, nchan=16,
-            npsrc=10, ngsrc=10, dtype=np.float64,
-            pipeline=Pipeline([])) as slvr:
+
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+
+        slvr_cfg = BiroSolverConfiguration(na=14, ntime=10, nchan=16,
+            sources=sources, dtype=Options.DTYPE_DOUBLE,
+            pipeline=Pipeline([]))
+
+        with solver(slvr_cfg) as slvr:
 
             slvr_cpu = SolverCPU(slvr)
 
@@ -473,9 +509,14 @@ class TestBiroV4(unittest.TestCase):
             self.assertTrue(np.allclose(res_one, res_two))
 
     def test_transpose(self):
-        with solver(na=4, npsrc=6, ntime=2, nchan=10,
-            weight_vector=True,
-            pipeline=Pipeline([MatrixTranspose()])) as slvr:
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+
+        slvr_cfg = BiroSolverConfiguration(na=14, ntime=10, nchan=16,
+            sources=sources, weight_vector=True,
+            pipeline=Pipeline([MatrixTranspose()]))
+
+
+        with solver(slvr_cfg) as slvr:
 
             slvr.register_array(
                 name='matrix_in',

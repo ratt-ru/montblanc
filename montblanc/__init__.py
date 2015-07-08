@@ -40,7 +40,38 @@ def get_montblanc_path():
 def get_source_path():
     return os.path.join(get_montblanc_path(), 'src')
 
-def get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs):
+def src_cfg(**kwargs):
+    return mbu.default_sources(**kwargs)
+
+def biro_solver_cfg(**kwargs):
+    """
+    Returns a BiroSolverConfiguration object, inherited from
+    a simple python dict, and containing the options required
+    to configure the Biro Solver.
+    """
+    from montblanc.src_types import default_sources
+    from montblanc.impl.biro.slvr_config import (BiroSolverConfiguration,
+        BiroSolverConfigurationOptions as Options)
+
+    slvr_cfg = BiroSolverConfiguration(**kwargs)
+
+    # Assume a MeasurementSet data source by default
+    slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_MS
+
+    if slvr_cfg[Options.DATA_SOURCE] == Options.DATA_SOURCE_MS and \
+        Options.MS_FILE not in slvr_cfg:
+
+        raise KeyError(('%s key is set to %s '
+            'in the Solver Configuration, but '
+            'no MeasurementSet file has been '
+            'specified in the %s key') % (
+                Options.DATA_SOURCE,
+                Options.DATA_SOURCE_MS,
+                Options.MS_FILE))  
+
+    return slvr_cfg
+
+def get_biro_solver(slvr_cfg):
     """
     get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs)
 
@@ -91,8 +122,7 @@ def get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs):
 
     import montblanc.factory
 
-    return montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
+    return montblanc.factory.get_biro_solver(slvr_cfg)
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """
