@@ -61,10 +61,9 @@ class TestBiroV3(unittest.TestCase):
         """ Basic Test """
         cmp = { 'rtol' : 1e-4}
 
-        sources = montblanc.src_cfg(point=50, gaussian=50)
-
         slvr_cfg = BiroSolverConfiguration(na=28, ntime=27, nchan=32,
-            sources=sources, dtype=Options.DTYPE_DOUBLE)
+            sources=montblanc.sources(point=50, gaussian=50),
+            dtype=Options.DTYPE_DOUBLE)
 
         for wv in [True, False]:
             slvr_cfg[Options.WEIGHT_VECTOR] = wv
@@ -85,11 +84,10 @@ class TestBiroV3(unittest.TestCase):
         cmp = { 'rtol' : 1e-4}
         wv = True
 
-        sources = montblanc.src_cfg(point=50, gaussian=50)
-
         for t in [17, 27, 53]:
             slvr_cfg = BiroSolverConfiguration(na=28, ntime=t, nchan=32,
-                sources=sources, dtype=Options.DTYPE_FLOAT,
+                sources=montblanc.sources(point=50, gaussian=50),
+                dtype=Options.DTYPE_FLOAT,
                 weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3)
 
             with solver(slvr_cfg) as slvr:
@@ -114,11 +112,11 @@ class TestBiroV3(unittest.TestCase):
         """ Test for timing purposes """
 
         wv = True
-        sources = montblanc.src_cfg(point=50, gaussian=50)
 
         slvr_cfg = BiroSolverConfiguration(na=64, ntime=200, nchan=64,
             data_source='biro', version='v3',
-            sources=sources, dtype=Options.DTYPE_FLOAT,
+            sources=montblanc.sources(point=50, gaussian=50),
+            dtype=Options.DTYPE_FLOAT,
             weight_vector=wv)
 
         with montblanc.factory.get_biro_solver(slvr_cfg) as slvr:

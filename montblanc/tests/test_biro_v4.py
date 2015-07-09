@@ -86,7 +86,7 @@ def src_perms(slvr_cfg, permute_weights=False):
             params = slvr_cfg.copy()
             params[Options.WEIGHT_VECTOR] = wv
             src_dict = {s: i for i,s in enumerate(src_types)}
-            params[Options.SOURCES] = montblanc.src_cfg(**src_dict)
+            params[Options.SOURCES] = montblanc.sources(**src_dict)
 
             yield params
 
@@ -172,10 +172,10 @@ class TestBiroV4(unittest.TestCase):
 
     def test_EKBSqrt_float(self):
         """ Single precision EKBSqrt test  """
-        sources = montblanc.src_cfg(point=10, gaussian=10)
 
         slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=64,
-            sources=sources, dtype=Options.DTYPE_FLOAT,
+            sources=montblanc.sources(point=10, gaussian=10),
+            dtype=Options.DTYPE_FLOAT,
             pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]))
 
         with solver(slvr_cfg) as slvr:
@@ -184,10 +184,9 @@ class TestBiroV4(unittest.TestCase):
     def test_EKBSqrt_double(self):
         """ Double precision EKBSqrt test """
 
-        sources = montblanc.src_cfg(point=10, gaussian=10)
-
         slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=64,
-            sources=sources, dtype=Options.DTYPE_DOUBLE,
+            sources=montblanc.sources(point=10, gaussian=10),
+            dtype=Options.DTYPE_DOUBLE,
             pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]))
 
         with solver(slvr_cfg) as slvr:
@@ -311,10 +310,10 @@ class TestBiroV4(unittest.TestCase):
 
     def test_B_sqrt_float(self):
         """ Test the B sqrt float kernel """
-        sources = montblanc.src_cfg(point=10, gaussian=10)
 
         slvr_cfg = BiroSolverConfiguration(na=7, ntime=200, nchan=320,
-            sources=sources, dtype=Options.DTYPE_FLOAT,
+            sources=montblanc.sources(point=10, gaussian=10),
+            dtype=Options.DTYPE_FLOAT,
             pipeline=Pipeline([RimeBSqrt()]))
 
         with solver(slvr_cfg) as slvr:
@@ -324,10 +323,10 @@ class TestBiroV4(unittest.TestCase):
 
     def test_B_sqrt_double(self):
         """ Test the B sqrt double kernel """
-        sources = montblanc.src_cfg(point=10, gaussian=10)
 
         slvr_cfg = BiroSolverConfiguration(na=7, ntime=200, nchan=320,
-            sources=sources, dtype=Options.DTYPE_DOUBLE,
+            sources=montblanc.sources(point=10, gaussian=10),
+            dtype=Options.DTYPE_DOUBLE,
             pipeline=Pipeline([RimeBSqrt()]))
 
         with solver(slvr_cfg) as slvr:
@@ -398,10 +397,9 @@ class TestBiroV4(unittest.TestCase):
     def test_E_beam_float(self):
         """ Test the E Beam float kernel """
 
-        sources = montblanc.src_cfg(point=10, gaussian=10)
-
         slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
-            sources=sources, dtype=Options.DTYPE_FLOAT,
+            sources=montblanc.sources(point=10, gaussian=10),
+            dtype=Options.DTYPE_FLOAT,
             pipeline=Pipeline([RimeEBeam()]))
 
         with solver(slvr_cfg) as slvr:
@@ -411,10 +409,9 @@ class TestBiroV4(unittest.TestCase):
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
 
-        sources = montblanc.src_cfg(point=10, gaussian=10)
-
         slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
-            sources=sources, dtype=Options.DTYPE_DOUBLE,
+            sources=montblanc.sources(point=10, gaussian=10),
+            dtype=Options.DTYPE_DOUBLE,
             pipeline=Pipeline([RimeEBeam()]))
 
         with solver(slvr_cfg) as slvr:
@@ -431,10 +428,9 @@ class TestBiroV4(unittest.TestCase):
         jones matrices.
          """
 
-        sources = montblanc.src_cfg(point=10, gaussian=10)
-
         slvr_cfg = BiroSolverConfiguration(na=14, ntime=10, nchan=16,
-            sources=sources, dtype=Options.DTYPE_DOUBLE,
+            sources=montblanc.sources(point=10, gaussian=10),
+            dtype=Options.DTYPE_DOUBLE,
             pipeline=Pipeline([]))
 
         with solver(slvr_cfg) as slvr:
@@ -509,10 +505,9 @@ class TestBiroV4(unittest.TestCase):
             self.assertTrue(np.allclose(res_one, res_two))
 
     def test_transpose(self):
-        sources = montblanc.src_cfg(point=10, gaussian=10)
-
         slvr_cfg = BiroSolverConfiguration(na=14, ntime=10, nchan=16,
-            sources=sources, weight_vector=True,
+            sources=montblanc.sources(point=10, gaussian=10),
+            weight_vector=True,
             pipeline=Pipeline([MatrixTranspose()]))
 
 

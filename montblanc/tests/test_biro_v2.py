@@ -88,7 +88,7 @@ def src_perms(slvr_cfg, permute_weights=False):
             params = slvr_cfg.copy()
             params[Options.WEIGHT_VECTOR] = wv
             src_dict = {s: i for i,s in enumerate(src_types)}
-            params[Options.SOURCES] = montblanc.src_cfg(**src_dict)
+            params[Options.SOURCES] = montblanc.sources(**src_dict)
 
             yield params
 
@@ -138,22 +138,18 @@ class TestBiroV2(unittest.TestCase):
     def test_EK_float(self):
         """ Single precision EK test  """
 
-        sources = montblanc.src_cfg(point=10, gaussian=10, sersic=10)
-
         slvr_cfg = BiroSolverConfiguration(na=64, ntime=10, nchan=64,
-            sources=sources, dtype=Options.DTYPE_FLOAT,
-            pipeline=Pipeline([RimeEK()]))
+            sources=montblanc.sources(point=10, gaussian=10, sersic=10),
+            dtype=Options.DTYPE_FLOAT, pipeline=Pipeline([RimeEK()]))
 
         with solver(slvr_cfg) as slvr:
             self.EK_test_impl(slvr)
 
     def test_EK_double(self):
         """ Double precision EK test """
-        sources = montblanc.src_cfg(point=10, gaussian=10, sersic=10)
-
         slvr_cfg = BiroSolverConfiguration(na=64, ntime=10, nchan=64,
-            sources=sources, dtype=Options.DTYPE_DOUBLE,
-            pipeline=Pipeline([RimeEK()]))
+            sources=montblanc.sources(point=10, gaussian=10, sersic=10),
+            dtype=Options.DTYPE_DOUBLE, pipeline=Pipeline([RimeEK()]))
 
         with solver(slvr_cfg) as slvr:
             self.EK_test_impl(slvr)

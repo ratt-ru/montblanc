@@ -58,9 +58,8 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_basic(self):
         """ """
-        sources = montblanc.src_cfg(point=10, gaussian=10)
         slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
-            sources=sources)
+            sources=montblanc.sources(point=10, gaussian=10))
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
@@ -97,10 +96,8 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_create_cpu(self):
         """ Test array registration requiring the creation of a CPU array """
-
-        sources = montblanc.src_cfg(point=10, gaussian=10)
         slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
-            sources=sources)
+            sources=montblanc.sources(point=10, gaussian=10))
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
             name='uvw'
@@ -136,9 +133,9 @@ class TestSolver(unittest.TestCase):
     def test_register_array_store_cpu(self):
         """ Test array registration deferring to montblanc.factory.get_base_solver """
 
-        sources = montblanc.src_cfg(point=10, gaussian=10)
         slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
-            sources=sources, store_cpu=True)
+            sources=montblanc.sources(point=10, gaussian=10),
+            store_cpu=True)
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
@@ -174,9 +171,8 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_create_cpu_not_gpu(self):
         """  Test array registration requiring a CPU array, but not a GPU array """
-        sources = montblanc.src_cfg(point=10, gaussian=10)
         slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
-            sources=sources)
+            sources=montblanc.sources(point=10, gaussian=10))
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
@@ -212,9 +208,8 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_create_existing(self):
         """  Test array registration of existing arrays """
-        sources = montblanc.src_cfg(point=10, gaussian=10)
         slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
-            sources=sources)
+            sources=montblanc.sources(point=10, gaussian=10))
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr, \
             slvr.context as ctx:
@@ -321,10 +316,8 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_shape_and_dtype(self):
         """ Test array registration requiring shape and dtype attributes to be created """
-
-        sources = montblanc.src_cfg(point=10, gaussian=10)
         slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
-            sources=sources)
+            sources=montblanc.sources(point=10, gaussian=10))
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
@@ -380,9 +373,8 @@ class TestSolver(unittest.TestCase):
                 'dtype_member':False, 'shape_member':False }
         ]
 
-        sources = montblanc.src_cfg(point=10, gaussian=10)
         slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
-            sources=sources)
+            sources=montblanc.sources(point=10, gaussian=10))
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
@@ -426,7 +418,7 @@ class TestSolver(unittest.TestCase):
                 'default':65, 'registrant':'test_base_solver', 'setter':True },
         ]
 
-        sources = montblanc.src_cfg(point=10, gaussian=10)
+        sources = montblanc.sources(point=10, gaussian=10)
         slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
             sources=sources)
 
@@ -455,7 +447,7 @@ class TestSolver(unittest.TestCase):
         # Should have 105 baselines for 14 antenna with auto-correlations on
         autocor = True
         slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
-            sources=montblanc.src_cfg(point=2, gaussian=2),
+            sources=montblanc.sources(point=2, gaussian=2),
             auto_correlations=autocor)
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
@@ -465,7 +457,7 @@ class TestSolver(unittest.TestCase):
         # Should have 91 baselines for 14 antenna with auto-correlations on
         autocor = False
         slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
-            sources=montblanc.src_cfg(point=2, gaussian=2),
+            sources=montblanc.sources(point=2, gaussian=2),
             auto_correlations=autocor)
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
@@ -480,7 +472,7 @@ class TestSolver(unittest.TestCase):
         """
         ntime, nchan, npsrc, ngsrc = 5, 16, 2, 2
         slvr_cfg = SolverConfiguration(na=14, ntime=ntime, nchan=nchan,
-            sources=montblanc.src_cfg(point=2, gaussian=2))
+            sources=montblanc.sources(point=2, gaussian=2))
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 

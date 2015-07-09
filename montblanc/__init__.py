@@ -40,7 +40,15 @@ def get_montblanc_path():
 def get_source_path():
     return os.path.join(get_montblanc_path(), 'src')
 
-def src_cfg(**kwargs):
+def sources(**kwargs):
+    """
+    Given arguments which are numbers of point types
+
+    e.g. sources(point=10, gaussian=20, fake=30)
+
+    returns a dict defining the number of all valid point types
+        { 'point': 10, 'gaussian': 20, 'sersic': 0 }
+    """
     return mbu.default_sources(**kwargs)
 
 def biro_solver_cfg(**kwargs):
