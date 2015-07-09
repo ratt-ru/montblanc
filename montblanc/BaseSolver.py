@@ -183,10 +183,14 @@ class BaseSolver(Solver):
         self.ntime = slvr_cfg[Options.NTIME]
         self.nvis = self.nbl*self.nchan*self.ntime
 
-        src_nr_vars = mbu.sources_to_nr_vars(slvr_cfg[Options.SOURCES])
-        self.nsrc = sum(src_nr_vars.itervalues())
+        # Convert the source types, and their numbers
+        # to their number variables and numbers
+        # { 'point':10 } => { 'npsrc':10 }
+        self.src_nr_vars = mbu.sources_to_nr_vars(slvr_cfg[Options.SOURCES])
+        # Sum to get the total number of sources
+        self.nsrc = sum(self.src_nr_vars.itervalues())
 
-        for nr_var, nr_of_src in src_nr_vars.iteritems():
+        for nr_var, nr_of_src in self.src_nr_vars.iteritems():
             setattr(self, nr_var, nr_of_src)
 
         if self.nsrc == 0:
@@ -595,9 +599,6 @@ class BaseSolver(Solver):
             'nbl' : slvr.nbl,
             'nchan' : slvr.nchan,
             'ntime' : slvr.ntime,
-            'npsrc' : slvr.npsrc,
-            'ngsrc' : slvr.ngsrc,
-            'nssrc' : slvr.nssrc,
             'nsrc'  : slvr.nsrc,
             'nvis' : slvr.nvis,
             # Types
@@ -607,6 +608,8 @@ class BaseSolver(Solver):
             # Constants
             'LIGHTSPEED': montblanc.constants.C,
         }
+
+        D.update(self.src_nr_vars)
 
         for p in self.properties.itervalues():
             D[p.name] = getattr(self,p.name)
