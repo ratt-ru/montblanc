@@ -22,7 +22,7 @@ class BaseLoader(object):
     def __init__(self):
         pass
 
-    def load(self, solver, **kwargs):
+    def load(self, solver, slvr_cfg):
         raise NotImplementedError
 
     def __enter__(self):

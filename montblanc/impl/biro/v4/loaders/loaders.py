@@ -23,8 +23,10 @@ import numpy as np
 import montblanc
 import montblanc.impl.common.loaders
 
+from montblanc.config import (BiroSolverConfigurationOptions as Options)
+
 class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
-    def load(self, solver, **kwargs):
+    def load(self, solver, slvr_cfg):
         """
         Load the Measurement Set
         """
@@ -83,7 +85,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             solver.transfer_bayes_data(np.ascontiguousarray(vis_data))
 
         # Should we initialise our weights from the MS data?
-        init_weights = kwargs.get('init_weights', None)
+        init_weights = slvr_cfg.get(Options.INIT_WEIGHTS, None)
         valid = [None, 'sigma', 'weight']
 
         if not init_weights in valid:
@@ -148,52 +150,3 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
     def __exit__(solver, type, value, traceback):
         return super(MeasurementSetLoader,solver).__exit__(type,value,traceback)
-
-    def test_uvw_relations(solver, msuvw, ant_pairs):
-        """ Test that the uvw relation holds """
-        ap = ant_pairs.reshape(2,solver.ntime*solver.nbl)
-
-        # Create 1D indices from the flattened antenna pair array.
-        # Multiply it by size constant and add tiling corresponding
-        # to the indexing.
-        ant0 = ap[0] + np.repeat(np.arange(solver.ntime),solver.nbl)*solver.na
-        ant1 = ap[1] + np.repeat(np.arange(solver.ntime),solver.nbl)*solver.na
-
-        uvw_rec = solver.get_array_record('uvw')
-        uvw=np.empty(shape=uvw_rec.shape, dtype=uvw_rec.dtype)
-        uvw[:,:,1:solver.na] = msuvw.reshape(solver.ntime, solver.nbl, 3).transpose(2,0,1) \
-            .astype(solver.ft)[:,:,:solver.na-1]
-        uvw[:,:,0] = solver.ft(0)
-
-        print 'uvw', uvw
-        print 'uvw diff', uvw[:,:,:] - uvw[:,:,:]
-
-        """
-        ap = ant_pairs.reshape(2,solver.ntime*solver.nbl)
-
-        # Create 1D indices from the flattened antenna pair array.
-        # Multiply it by size constant and add tiling corresponding
-        # to the indexing.
-        ant0 = ap[0] + np.repeat(np.arange(solver.ntime),solver.nbl)*solver.na
-        ant1 = ap[1] + np.repeat(np.arange(solver.ntime),solver.nbl)*solver.na
-
-        print uvw.shape
-        print 'ant0 == ant1 %s' % (ant0 == ant1).all()
-
-
-        np.savetxt('file.txt',(uvw[:,:] - (uvw[ant1,:] - uvw[ant0,:])))
-
-        idx = np.empty(shape=(solver.ntime*solver.nbl),dtype=np.int32)
-
-        suvw = uvw.reshape(solver.ntime,solver.nbl,3)
-
-        # TODO. Inefficient indexing. Figure something out based
-        # on SolverCPU.compute_gaussian_shape
-        for t in range(solver.ntime):
-            for bl in range(solver.nbl):
-                #idx[t*solver.nbl + bl] = t*solver.na + ant_pairs[0,t,bl]
-                assert np.allclose(
-                    suvw[t,bl,:],
-                    suvw[t,ant_pairs[1,t,bl],:] - suvw[t,ant_pairs[0,t,bl],:]), \
-                    'UVW Relation does not hold for timestep %d baseline %d!' % (t,bl)
-        """

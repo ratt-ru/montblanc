@@ -33,9 +33,12 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     # Get the solver.
-    with montblanc.get_biro_solver(args.msfile,
-        npsrc=1, ngsrc=0, nssrc=0, dtype=np.float64, version=args.version) as slvr:
 
+    slvr_cfg = montblanc.biro_solver_cfg(msfile=args.msfile,
+        sources=montblanc.sources(point=1, gaussian=0, sersic=0),
+        dtype='double', version=args.version)
+
+    with montblanc.get_biro_solver(slvr_cfg) as slvr:
         # Create point sources at zeros
         l=slvr.ft(np.ones(slvr.nsrc))*0.1
         m=slvr.ft(np.ones(slvr.nsrc))*0.25

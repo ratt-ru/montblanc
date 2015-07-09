@@ -45,10 +45,13 @@ if __name__ == '__main__':
     # Set the logging level
     montblanc.log.setLevel(logging.WARN)
 
-    slvr_cfg = BiroSolverConfiguration(msfile=args.msfile,
-        source=montblanc.sources(point=args.npsrc, gaussian=args.ngsrc, sersic=args.nssrc),
+    slvr_cfg = montblanc.biro_solver_cfg(msfile=args.msfile,
+        sources=montblanc.sources(point=args.npsrc, gaussian=args.ngsrc, sersic=args.nssrc),
         init_weights=None, weight_vector=False, store_cpu=False,
         dtype='double', version=args.version)
+
+    import json
+    print json.dumps(slvr_cfg)
 
     with montblanc.get_biro_solver(slvr_cfg) as slvr:
 

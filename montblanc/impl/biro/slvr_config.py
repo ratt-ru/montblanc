@@ -31,7 +31,7 @@ class BiroSolverConfigurationOptions(SolverConfigurationOptions):
 
     # weight vector initialisation keyword and valid values
     # This options determines whether
-    INIT_WEIGHT = 'init_weight'
+    INIT_WEIGHTS = 'init_weights'
     INIT_WEIGHT_NONE = None
     INIT_WEIGHT_SIGMA = 'sigma'
     INIT_WEIGHT_WEIGHT = 'weight'
@@ -87,7 +87,7 @@ class BiroSolverConfiguration(SolverConfiguration):
             Options.WEIGHT_VECTOR_DESCRIPTION,
             Options.VALID_WEIGHT_VECTOR)
 
-        self.check_key_values(Options.INIT_WEIGHT,
+        self.check_key_values(Options.INIT_WEIGHTS,
             Options.INIT_WEIGHT_DESCRIPTION,
             Options.VALID_INIT_WEIGHTS)
 
@@ -105,7 +105,7 @@ class BiroSolverConfiguration(SolverConfiguration):
         self.setdefault(Options.WEIGHT_VECTOR, Options.DEFAULT_WEIGHT_VECTOR)
 
         # Weight Initialisation scheme
-        self.setdefault(Options.INIT_WEIGHT, Options.DEFAULT_INIT_WEIGHT)
+        self.setdefault(Options.INIT_WEIGHTS, Options.DEFAULT_INIT_WEIGHT)
 
         # Version
         self.setdefault(Options.VERSION, Options.DEFAULT_VERSION)

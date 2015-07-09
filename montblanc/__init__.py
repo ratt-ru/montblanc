@@ -57,7 +57,6 @@ def biro_solver_cfg(**kwargs):
     a simple python dict, and containing the options required
     to configure the Biro Solver.
     """
-    from montblanc.src_types import default_sources
     from montblanc.impl.biro.slvr_config import (BiroSolverConfiguration,
         BiroSolverConfigurationOptions as Options)
 

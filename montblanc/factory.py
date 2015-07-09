@@ -96,18 +96,20 @@ def get_base_solver(slvr_cfg):
 
 def create_biro_solver_from_ms(slvr_class_type, slvr_cfg):
     """ Initialise the supplied solver with measurement set data """
-    check_msfile(slvr_cfg.get('msfile',None))
     version = slvr_cfg.get('version')
 
-    if version in [VERSION_TWO, VERSION_THREE]:
+    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
         from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
-    elif version in [VERSION_FOUR, VERSION_FIVE]:
+    elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
         from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
     else:
         raise Exception, 'Incorrect version %s' % version
 
     with MeasurementSetLoader(slvr_cfg.get('msfile')) as loader:
-        ntime,na,nchan = loader.get_dims()
+        ntime, na, nchan = loader.get_dims()
+        slvr_cfg[Options.NTIME] = ntime 
+        slvr_cfg[Options.NA] = na 
+        slvr_cfg[Options.NCHAN] = nchan 
         slvr = slvr_class_type(slvr_cfg)
         loader.load(slvr, slvr_cfg)
         return slvr

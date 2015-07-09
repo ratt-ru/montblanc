@@ -66,21 +66,15 @@ if __name__ == '__main__':
     # Parse the sky model file
     sky_parse = mbu.parse_sky_model(args.sky_file)
 
-    # Get the BIRO solver.
-    # init_weights : (1) None (2) 'sigma' or (3) 'weight'. Either
-    #   (1) do not initialise the weight vector, or
-    #   (2) initialise from the MS 'SIGMA' tables, or
-    #   (3) initialise from the MS 'WEIGHT' tables.
-    # weight_vector : indicates whether a weight vector should be used to
-    #   compute the chi squared or a single sigma squared value
-    # store_cpu : indicates whether copies of the data passed into the
-    #   solver transfer_* methods should be stored on the solver object
-    with montblanc.get_biro_solver(args.msfile,
-        npsrc=sky_parse.src_counts.get('npsrc', 0),
-        ngsrc=sky_parse.src_counts.get('npsrc', 0),
-        nssrc=sky_parse.src_counts.get('nssrc', 0),
-        init_weights=None, weight_vector=False,
-        store_cpu=False, version=args.version) as slvr:
+    sources = montblanc.sources(point=sky_parse.src_counts.get('npsrc', 0),
+        gaussian=sky_parse.src_counts.get('ngsrc', 0),
+        sersic=sky_parse.src_counts.get('nssrc', 0))
+
+    slvr_cfg = montblanc.biro_solver_cfg(msfile=args.msfile,
+        sources=sources, init_weights=None, weight_vector=False,
+        store_cpu=False, version=args.version)
+
+    with montblanc.get_biro_solver(slvr_cfg) as slvr:
 
         # Get the lm coordinates
         lm = sky_parse.shape_arrays(['l','m'], slvr.lm_shape, slvr.lm_dtype)
