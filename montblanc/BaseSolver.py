@@ -232,7 +232,7 @@ class BaseSolver(Solver):
         pipeline = slvr_cfg.get('pipeline', None)
 
         if pipeline is None:
-            pipeline = montblanc.factory.get_empty_pipeline()
+            pipeline = montblanc.factory.get_empty_pipeline(slvr_cfg)
         self.pipeline = pipeline
 
     def bytes_required(self):

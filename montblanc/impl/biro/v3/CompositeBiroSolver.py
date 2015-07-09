@@ -29,18 +29,15 @@ import montblanc
 import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
-from montblanc.BaseSolver import DEFAULT_NA
-from montblanc.BaseSolver import DEFAULT_NCHAN
-from montblanc.BaseSolver import DEFAULT_NTIME
-from montblanc.BaseSolver import DEFAULT_NPSRC
-from montblanc.BaseSolver import DEFAULT_NGSRC
-from montblanc.BaseSolver import DEFAULT_NSSRC
-from montblanc.BaseSolver import DEFAULT_DTYPE
 
 import montblanc.impl.biro.v2.BiroSolver as BSV2mod
 import montblanc.impl.biro.common
 
 from montblanc.impl.biro.v3.BiroSolver import BiroSolver
+
+from montblanc.config import (BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
+
 
 ONE_KB = 1024
 ONE_MB = ONE_KB**2
@@ -53,47 +50,17 @@ class CompositeBiroSolver(BaseSolver):
     Implements a solver composed of multiple BiroSolvers. The sub-solver
     memory transfers and pipelines are executed asynchronously.
     """
-    def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC, dtype=DEFAULT_DTYPE,
-        pipeline=None, **kwargs):
+    def __init__(self, slvr_cfg):
         """
+
         CompositeBiroSolver Constructor
 
         Parameters:
-            na : integer
-                Number of antennae.
-            nchan : integer
-                Number of channels.
-            ntime : integer
-                Number of timesteps.
-            npsrc : integer
-                Number of point sources.
-            ngsrc : integer
-                Number of gaussian sources.
-            nssrc : integer
-                Number of sersic sources.
-            dtype : np.float32 or np.float64
-                Specify single or double precision arithmetic.
-        Keyword Arguments:
-            context : pycuda.driver.Context
-                CUDA context to operate on.
-            store_cpu: boolean
-                if True, store cpu versions of the kernel arrays
-                within the GPUSolver object.
-            weight_vector: boolean
-                if True, use a weight vector when evaluating the
-                RIME, else use a single sigma squared value.
-            mem_budget: integer
-                Amount of memory in bytes that the solver should
-                take into account when fitting the problem onto the
-                GPU.
-            nsolvers: integer
-                Number of sub-solvers to use when subdividing the
-                problem.
+            slvr_cfg : BiroSolverConfiguration
+                Solver Configuration variables
         """
 
-        super(CompositeBiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
+        super(CompositeBiroSolver, self).__init__(slvr_cfg)
 
         P_main = copy.deepcopy(BSV2mod.P)
         A_main = copy.deepcopy(BSV2mod.A)
@@ -142,7 +109,7 @@ class CompositeBiroSolver(BaseSolver):
 
             # Work with a supplied memory budget, otherwise use
             # free memory less a small amount
-            mem_budget = kwargs.get('mem_budget', free_mem-100*ONE_MB)
+            mem_budget = slvr_cfg.get('mem_budget', free_mem-100*ONE_MB)
 
             # Work out how many timesteps we can fit in our memory budget
             self.vtime = mbu.viable_timesteps(mem_budget,
@@ -155,10 +122,10 @@ class CompositeBiroSolver(BaseSolver):
             #        ntime, self.vtime)
 
             # They may fit in completely
-            if ntime < self.vtime: self.vtime = ntime
+            if self.ntime < self.vtime: self.vtime = self.ntime
 
             # Configure the number of solvers used
-            self.nsolvers = kwargs.get('nsolvers', 4)
+            self.nsolvers = slvr_cfg.get('nsolvers', 4)
             self.time_begin = np.arange(self.nsolvers)*self.vtime//self.nsolvers
             self.time_end = np.arange(1,self.nsolvers+1)*self.vtime//self.nsolvers
             self.time_diff = self.time_end - self.time_begin
@@ -178,12 +145,14 @@ class CompositeBiroSolver(BaseSolver):
             self.pinned_mem_pool = pycuda.tools.PageLockedMemoryPool()
             self.pinned_mem_pool.allocate(shape=(10*ONE_KB,),dtype=np.int8).base.free()
 
+
+        # Create configurations for the sub-solvers
+        sub_slvr_cfg = [slvr_cfg.copy() for i in range(self.nsolvers)]
+        for i, s in enumerate(sub_slvr_cfg):
+            s[Options.NTIME] = self.time_diff[i]
+
         # Create the sub-solvers
-        self.solvers = [BiroSolver(na=na,
-            nchan=nchan, ntime=self.time_diff[i],
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc,
-            dtype=dtype,
-            **kwargs) for i in range(self.nsolvers)]
+        self.solvers = [BiroSolver(sub_slvr_cfg[i]) for i in range(self.nsolvers)]
 
         # Register arrays on the sub-solvers
         A_sub = copy.deepcopy(BSV2mod.A)
@@ -203,7 +172,7 @@ class CompositeBiroSolver(BaseSolver):
             slvr.was_transferred = {}.fromkeys(
                 [v.name for v in self.arrays.itervalues()], True)
 
-        self.use_weight_vector = kwargs.get('weight_vector', False)
+        self.use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
         self.initialised = False
 
         self.fsm = montblanc.impl.biro.common.get_fsm(self)
