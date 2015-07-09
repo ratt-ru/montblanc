@@ -21,6 +21,8 @@
 import numpy as np
 import math
 
+import montblanc
+
 from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 from sky_model_parser import parse_sky_model
 
@@ -391,6 +393,13 @@ def default_sources(**kwargs):
     """
     S = {}
     total = 0
+
+    invalid_types = [t for t in kwargs.keys() if t not in SOURCE_VAR_TYPES]
+
+    for t in invalid_types:
+        montblanc.log.warning('Source type %s is not yet '
+            'implemented in montblanc. '
+            'Valid source types are %s' % (t, SOURCE_VAR_TYPES.keys()))
 
     # Zero all source types
     for k, v in SOURCE_VAR_TYPES.iteritems():
