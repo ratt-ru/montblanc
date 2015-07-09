@@ -31,40 +31,48 @@ from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v2.cpu.SolverCPU import SolverCPU
 from montblanc.pipeline import Pipeline
 
+from montblanc.config import (BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
 
-def solver(**kwargs):
-    """ Shorten the factory call for readability """
-    return montblanc.factory.get_biro_solver('test', version='v2', **kwargs)
+def solver(slvr_cfg, **kwargs):
+    slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
+    slvr_cfg[Options.VERSION] = Options.VERSION_TWO
+    slvr_cfg.update(kwargs)
 
+    return montblanc.factory.get_biro_solver(slvr_cfg)
 
-def src_perms(defaults, permute_weights=False):
+def src_perms(slvr_cfg, permute_weights=False):
     """
-    Permute the source types and return a dictionary suitable
-    for use as keyword arguments for the solver function/factory.
+    Permute the source types and return a SolverConfiguration suitable
+    for use as input to the solver function/factory.
 
     Parameters:
-        default : dictionary
-            dictionary containing other sensible defaults to include
+        slvr_cfg : BiroSolverConfiguration
+            Configuration containing other sensible defaults to include
             in the returned permutation.
             e.g. {'na': 14, 'ntime': 20, 'nchan': 48}
 
-    { 'npsrc': 0, 'ngsrc': 00, 'nssrc': 20}
-    { 'npsrc': 0, 'ngsrc': 20, 'nssrc': 0}
-    { 'npsrc': 20, 'ngsrc': 0, 'nssrc': 0}
-    { 'npsrc': 0, 'ngsrc': 20, 'nssrc': 20}
-    { 'npsrc': 20, 'ngsrc': 20, 'nssrc': 0}
-    { 'npsrc': 20, 'ngsrc': 0, 'nssrc': 20}
-    { 'npsrc': 20, 'ngsrc': 20, 'nssrc': 20}
+    { 'point': 0,  'gaussian': 00, 'sersic': 20 }
+    { 'point': 0,  'gaussian': 20, 'sersic': 0  }
+    { 'point': 20, 'gaussian': 0,  'sersic': 0  }
+    { 'point': 0,  'gaussian': 20, 'sersic': 20 }
+    { 'point': 20, 'gaussian': 20, 'sersic': 0  }
+    { 'point': 20, 'gaussian': 0,  'sersic': 20 }
+    { 'point': 20, 'gaussian': 20, 'sersic': 20 }
 
-    >>> for p in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, True)
-    >>>     with solver(dtype=np.float32, **p) as slvr:
+    >>> slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=48)
+    >>> for p_slvr_cfg in src_perms(slvr_cfg, True)
+    >>>     with solver(p_slvr_cfg) as slvr:
     >>>         slvr.solve()
     """
 
-    if defaults is None:
-        defaults = {}
+    if slvr_cfg is None:
+        slvr_cfg = BiroSolverConfiguration()
 
-    src_types = ['npsrc', 'ngsrc', 'nssrc']
+    from montblanc.src_types import SOURCE_VAR_TYPES
+
+    src_types = SOURCE_VAR_TYPES.keys()
+
     count = 0
 
     weight_vector = [True, False] if permute_weights is True else [False]
@@ -77,10 +85,10 @@ def src_perms(defaults, permute_weights=False):
             if count == 1:
                 continue
 
-            params = defaults.copy()
-            params['weight_vector'] = wv
-            for i, s in enumerate(src_types):
-                params[s] = p[i]
+            params = slvr_cfg.copy()
+            params[Options.WEIGHT_VECTOR] = wv
+            src_dict = {s: i for i,s in enumerate(src_types)}
+            params[Options.SOURCES] = montblanc.src_cfg(**src_dict)
 
             yield params
 
@@ -129,19 +137,26 @@ class TestBiroV2(unittest.TestCase):
 
     def test_EK_float(self):
         """ Single precision EK test  """
-        for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
-            with solver(type=np.float32,
-                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
 
-                self.EK_test_impl(slvr)
+        sources = montblanc.src_cfg(point=10, gaussian=10, sersic=10)
+
+        slvr_cfg = BiroSolverConfiguration(na=64, ntime=10, nchan=64,
+            sources=sources, dtype=Options.DTYPE_FLOAT,
+            pipeline=Pipeline([RimeEK()]))
+
+        with solver(slvr_cfg) as slvr:
+            self.EK_test_impl(slvr)
 
     def test_EK_double(self):
         """ Double precision EK test """
-        for params in src_perms({'na': 64, 'nchan': 64, 'ntime': 10}, True):
-            with solver(type=np.float64,
-                        pipeline=Pipeline([RimeEK()]), **params) as slvr:
+        sources = montblanc.src_cfg(point=10, gaussian=10, sersic=10)
 
-                self.EK_test_impl(slvr)
+        slvr_cfg = BiroSolverConfiguration(na=64, ntime=10, nchan=64,
+            sources=sources, dtype=Options.DTYPE_DOUBLE,
+            pipeline=Pipeline([RimeEK()]))
+
+        with solver(slvr_cfg) as slvr:
+            self.EK_test_impl(slvr)
 
     def B_sum_test_impl(self, slvr, weight_vector=False, cmp=None):
         """ Type independent implementation of the B Sum test """
@@ -171,15 +186,23 @@ class TestBiroV2(unittest.TestCase):
 
     def test_B_sum_float(self):
         """ Test the B sum float kernel """
-        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
-            with solver(dtype=np.float32, **params) as slvr:
-                self.B_sum_test_impl(slvr, params['weight_vector'], {'rtol': 1e-3})
+        slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=48,
+            dtype=Options.DTYPE_FLOAT)
+
+        for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
+            wv = p_slvr_cfg[Options.WEIGHT_VECTOR] 
+            with solver(p_slvr_cfg) as slvr:
+                self.B_sum_test_impl(slvr, wv, {'rtol': 1e-3})
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """
-        for params in src_perms({'na': 14, 'ntime': 20, 'nchan': 48}, permute_weights=True):
-            with solver(dtype=np.float64, **params) as slvr:
-                self.B_sum_test_impl(slvr, params['weight_vector'])
+        slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=48,
+            dtype=Options.DTYPE_DOUBLE)
+
+        for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
+            wv = p_slvr_cfg[Options.WEIGHT_VECTOR] 
+            with solver(p_slvr_cfg) as slvr:
+                self.B_sum_test_impl(slvr, wv)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV2)
