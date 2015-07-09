@@ -32,6 +32,9 @@ import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
+from montblanc.config import (SolverConfiguration,
+    SolverConfigurationOptions as Options)
+
 class TestSolver(unittest.TestCase):
     """
     TestSolver class defining unit tests for
@@ -55,8 +58,11 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_basic(self):
         """ """
-        with montblanc.factory.get_base_solver(na=3,nchan=32,
-            ntime=10,npsrc=10,ngsrc=10) as slvr:
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+            sources=sources)
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
@@ -65,12 +71,14 @@ class TestSolver(unittest.TestCase):
             shape_name = mbu.shape_name(name)
             dtype_name = mbu.dtype_name(name)
 
+            from montblanc.BaseSolver import BaseSolver
+
             # Before registration, descriptors may not have been created
-            # on the montblanc.factory.get_base_solver class. If they have, check that
+            # on the BaseSolver class. If they have, check that
             # attributes associated with the slvr instance are None
-            if hasattr(montblanc.factory.get_base_solver, cpu_name):
+            if hasattr(BaseSolver, cpu_name):
                 self.assertTrue(getattr(slvr, cpu_name) is None)
-            if hasattr(montblanc.factory.get_base_solver, gpu_name):
+            if hasattr(BaseSolver, gpu_name):
                 self.assertTrue(getattr(slvr, gpu_name) is None)
 
             # Register the array
@@ -89,9 +97,12 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_create_cpu(self):
         """ Test array registration requiring the creation of a CPU array """
-        with montblanc.factory.get_base_solver(na=3,nchan=32,
-            ntime=10,npsrc=10,ngsrc=10) as slvr:
 
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+            sources=sources)
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
             gpu_name = mbu.gpu_name(name)
@@ -123,9 +134,13 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(isinstance(getattr(slvr, cpu_name), np.ndarray))
 
     def test_register_array_store_cpu(self):
-        """ Test array registration deferrring to montblanc.factory.get_base_solver store_cpu kwarg """
-        with montblanc.factory.get_base_solver(na=3,nchan=32,
-            ntime=10,npsrc=10,ngsrc=10, store_cpu=True) as slvr:
+        """ Test array registration deferring to montblanc.factory.get_base_solver """
+
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+            sources=sources, store_cpu=True)
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
@@ -159,8 +174,11 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_create_cpu_not_gpu(self):
         """  Test array registration requiring a CPU array, but not a GPU array """
-        with montblanc.factory.get_base_solver(na=3,nchan=32,
-            ntime=10,npsrc=10,ngsrc=10) as slvr:
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+            sources=sources)
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
@@ -194,8 +212,12 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_create_existing(self):
         """  Test array registration of existing arrays """
-        with montblanc.factory.get_base_solver(na=14,nchan=32,
-            ntime=10,npsrc=10,ngsrc=10) as slvr, slvr.context as ctx:
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+        slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
+            sources=sources)
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr, \
+            slvr.context as ctx:
 
             name='uvw'
             shape=(3, slvr.nbl, slvr.ntime)
@@ -299,8 +321,12 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_shape_and_dtype(self):
         """ Test array registration requiring shape and dtype attributes to be created """
-        with montblanc.factory.get_base_solver(na=3,nchan=32,
-            ntime=10,npsrc=10,ngsrc=10) as slvr:
+
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+            sources=sources)
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             name='uvw'
             gpu_name = mbu.gpu_name(name)
@@ -354,8 +380,11 @@ class TestSolver(unittest.TestCase):
                 'dtype_member':False, 'shape_member':False }
         ]
 
-        with montblanc.factory.get_base_solver(na=3,nchan=32,
-            ntime=10,npsrc=10,ngsrc=10) as slvr:
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+            sources=sources)
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             slvr.register_arrays(D)
 
@@ -397,8 +426,11 @@ class TestSolver(unittest.TestCase):
                 'default':65, 'registrant':'test_base_solver', 'setter':True },
         ]
 
-        with montblanc.factory.get_base_solver(na=3,nchan=32,
-            ntime=10,npsrc=10,ngsrc=10) as slvr:
+        sources = montblanc.src_cfg(point=10, gaussian=10)
+        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+            sources=sources)
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             slvr.register_properties(D)
 
@@ -422,16 +454,21 @@ class TestSolver(unittest.TestCase):
 
         # Should have 105 baselines for 14 antenna with auto-correlations on
         autocor = True
-        with montblanc.factory.get_base_solver(na=na,ntime=5,
-            nchan=16,npsrc=2,ngsrc=2,auto_correlations=autocor) as slvr:
+        slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
+            sources=montblanc.src_cfg(point=2, gaussian=2),
+            auto_correlations=autocor)
 
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
             self.assertTrue(slvr.nbl == mbu.nr_of_baselines(na,autocor))
             self.assertTrue(slvr.nbl == 105)
 
         # Should have 91 baselines for 14 antenna with auto-correlations on
         autocor = False
-        with montblanc.factory.get_base_solver(na=na,ntime=5,
-            nchan=16,npsrc=2,ngsrc=2,auto_correlations=autocor) as slvr:
+        slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
+            sources=montblanc.src_cfg(point=2, gaussian=2),
+            auto_correlations=autocor)
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             self.assertTrue(slvr.nbl == mbu.nr_of_baselines(na,autocor))
             self.assertTrue(slvr.nbl == 91)
@@ -442,8 +479,10 @@ class TestSolver(unittest.TestCase):
         number of viable timesteps work
         """
         ntime, nchan, npsrc, ngsrc = 5, 16, 2, 2
-        with montblanc.factory.get_base_solver(na=14,ntime=ntime,
-            nchan=nchan,npsrc=npsrc,ngsrc=ngsrc) as slvr:
+        slvr_cfg = SolverConfiguration(na=14, ntime=ntime, nchan=nchan,
+            sources=montblanc.src_cfg(point=2, gaussian=2))
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             slvr.register_array(name='ary_one',shape=(5,'ntime', 'nchan'), dtype=np.float64,
                 registrant='test_solver', cpu=False, gpu=False)
@@ -459,10 +498,14 @@ class TestSolver(unittest.TestCase):
 
     def test_solver_factory(self):
         """ Test that the solver factory produces the correct types """
-        with montblanc.factory.get_biro_solver(sd_type='biro',version='v2') as slvr:
+        slvr_cfg = SolverConfiguration(data_source='biro', version='v2')
+
+        with montblanc.factory.get_biro_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
 
-        with montblanc.factory.get_biro_solver(sd_type='test',version='v2') as slvr:
+        slvr_cfg = SolverConfiguration(data_source='test', version='v2')
+
+        with montblanc.factory.get_biro_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
 
 if __name__ == '__main__':

@@ -85,7 +85,6 @@ def get_empty_pipeline(slvr_cfg):
 
 def get_base_solver(slvr_cfg):
     """ Get a basic solver object """
-    pipeline = get_empty_pipeline(slvr_cfg)
 
     # Get the default cuda context if none is provided
     if slvr_cfg.get('context', None) is None:
@@ -93,7 +92,7 @@ def get_base_solver(slvr_cfg):
 
     from montblanc.BaseSolver import BaseSolver
 
-    return BaseSolver(**kwargs)
+    return BaseSolver(slvr_cfg)
 
 def create_biro_solver_from_ms(slvr_class_type, slvr_cfg):
     """ Initialise the supplied solver with measurement set data """
