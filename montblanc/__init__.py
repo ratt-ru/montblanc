@@ -40,6 +40,46 @@ def get_montblanc_path():
 def get_source_path():
     return os.path.join(get_montblanc_path(), 'src')
 
+def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
+    """ Setup logging configuration """
+
+    path = os.path.join(get_montblanc_path(), 'log', 'log.json')
+    value = os.getenv(env_key, None)
+
+    if value:
+        path = value
+
+    if os.path.exists(path):
+        with open(path, 'rt') as f:
+            config = json.load(f)
+        logging.config.dictConfig(config)
+    else:
+        logging.basicConfig(level=default_level)
+
+setup_logging()
+log = logging.getLogger('montblanc')
+
+# This solution for constants based on
+# http://stackoverflow.com/a/2688086
+# Create a property that throws when
+# you try and set it
+def constant(f):
+    def fset(self, value):
+        raise SyntaxError, 'Foolish Mortal! You would dare change a universal constant?'
+    def fget(self):
+        return f()
+
+    return property(fget, fset)
+
+class MontblancConstants(object):
+    # The speed of light, in metres
+    @constant
+    def C():
+        return 299792458
+
+# Create a constants object
+constants = MontblancConstants()
+
 def source_types():
     """
     Returns the source types available in montblanc
@@ -125,42 +165,3 @@ def get_biro_solver(slvr_cfg):
 
     return montblanc.factory.get_biro_solver(slvr_cfg)
 
-def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
-    """ Setup logging configuration """
-
-    path = os.path.join(get_montblanc_path(), 'log', 'log.json')
-    value = os.getenv(env_key, None)
-
-    if value:
-        path = value
-
-    if os.path.exists(path):
-        with open(path, 'rt') as f:
-            config = json.load(f)
-        logging.config.dictConfig(config)
-    else:
-        logging.basicConfig(level=default_level)
-
-setup_logging()
-log = logging.getLogger('montblanc')
-
-# This solution for constants based on
-# http://stackoverflow.com/a/2688086
-# Create a property that throws when
-# you try and set it
-def constant(f):
-    def fset(self, value):
-        raise SyntaxError, 'Foolish Mortal! You would dare change a universal constant?'
-    def fget(self):
-        return f()
-
-    return property(fget, fset)
-
-class MontblancConstants(object):
-    # The speed of light, in metres
-    @constant
-    def C():
-        return 299792458
-
-# Create a constants object
-constants = MontblancConstants()
