@@ -40,23 +40,50 @@ def get_montblanc_path():
 def get_source_path():
     return os.path.join(get_montblanc_path(), 'src')
 
+def source_types():
+    """
+    Returns the source types available in montblanc
+
+    >>> montblanc.source_types()
+    %s
+    """
+    return montblanc.src_types.SOURCE_VAR_TYPES.keys()
+
+source_types.__doc__ %= montblanc.src_types.SOURCE_VAR_TYPES.keys()
+
 def sources(**kwargs):
     """
-    Given arguments which are numbers of point types
+    Given keyword arguments defining source type numbers.
 
-    e.g. sources(point=10, gaussian=20, fake=30)
+    returns a dict containing source type numbers for all
+    valid sources (%s).
 
-    returns a dict defining the number of all valid point types
-        { 'point': 10, 'gaussian': 20, 'sersic': 0 }
-    """
+    >>> %s
+    %s
+
+    """    
     return mbu.default_sources(**kwargs)
+
+# Substitute docstring variables
+sources.__doc__ %= (', '.join(source_types()),
+    'montblanc.sources(point=10, gaussian=20, fake=30)',
+    sources(point=10, gaussian=20, fake=30))
 
 def biro_solver_cfg(**kwargs):
     """
     Returns a BiroSolverConfiguration object, inherited from
     a simple python dict, and containing the options required
     to configure the Biro Solver.
+
+    Any keyword arguments are inserted into the
+    returned dict.
+
+    montblanc.biro_solver_cfg(msfile='WSRT.MS',
+        sources=montblanc.source(point=10,gaussian=20))
+
+    Valid configuration options are
     """
+
     from montblanc.impl.biro.slvr_config import (BiroSolverConfiguration,
         BiroSolverConfigurationOptions as Options)
 
@@ -80,47 +107,14 @@ def biro_solver_cfg(**kwargs):
 
 def get_biro_solver(slvr_cfg):
     """
-    get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs)
+    get_biro_solver(slvr_cfg)
 
     Returns a solver suitable for solving the BIRO RIME.
 
     Parameters
     ----------
-    msfile : string
-            Name of the measurement set file.
-    npsrc : number
-            Number of point sources.
-    ngsrc : number
-            Number of gaussian sources.
-    nssrc : number
-            Number of sersic sources.
-    dtype : The floating point data type.
-            Should be np.float32 or np.float64.
-    version : string
-            Should be either 'v1' or 'v2'
-
-    Keyword Arguments
-    -----------------
-    data_order : string
-	    Indicates what is the MeasurementSet data ordering: time x baseline or baseline x time.
-	    None - Assume Montblanc's default ordering (time x baseline)
-	    'casa' - Assume CASA's default ordering. It matches Montblanc's default ordering, so it can be avoided.
-	    'other' - Assume baseline x time ordering
-    
-    init_weights : string
-            Indicates how the weight vector should be initialised from the Measurementset.
-            None - Don't initialise the weight vector.
-            'sigma' - Initialise from 'SIGMA_SPECTRUM' if present, else 'SIGMA'
-            'weight' - Initialise from 'WEIGHT_SPECTRUM' if present, else 'WEIGHT'
-    weight_vector : boolean
-            True if the chi squared should be computed using a weighting for each value.
-            False if it should be computed with a single sigma squared value.
-    store_cpu : boolean
-            True if copies of the numpy arrays should be stored on the shared data object
-            when using the shared data object's transfer_* methods. Otherwise False.
-    context - pycuda.driver.Context.
-            The CUDA context to execute on If left blank, the default context
-            will be selected.
+    slvr_cfg : BiroSolverConfiguration
+            Solver Configuration.
 
     Returns
     -------
