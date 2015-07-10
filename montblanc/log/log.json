@@ -39,13 +39,8 @@
     "loggers": {
         "montblanc": {
             "level": "WARN",
-            "handlers": ["console"],
-            "propagate": "no"
+            "handlers": ["console", "info_file_handler", "error_file_handler"],
+            "propagate": "yes"
         }
-    },
-
-    "root": {
-        "level": "INFO",
-        "handlers": ["console", "info_file_handler", "error_file_handler"]
     }
 }
