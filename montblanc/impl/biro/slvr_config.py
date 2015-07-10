@@ -18,6 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import os
+
 from montblanc.slvr_config import SolverConfiguration, SolverConfigurationOptions
 
 class BiroSolverConfigurationOptions(SolverConfigurationOptions):
@@ -25,9 +27,9 @@ class BiroSolverConfigurationOptions(SolverConfigurationOptions):
     WEIGHT_VECTOR = 'weight_vector'
     DEFAULT_WEIGHT_VECTOR = False
     VALID_WEIGHT_VECTOR = [True, False]
-    WEIGHT_VECTOR_DESCRIPTION = (
-    'Governs whether chi-squared terms is weighted with vectorised, '
-    'or single scalar sigma value.')
+    WEIGHT_VECTOR_DESCRIPTION = os.linesep.join([
+        'If True, chi-squared terms are weighted with a vectorised sigma.',
+        'If False, chi-squared terms are weighted with a single scalar sigma.'])
 
     # weight vector initialisation keyword and valid values
     # This options determines whether
@@ -37,11 +39,11 @@ class BiroSolverConfigurationOptions(SolverConfigurationOptions):
     INIT_WEIGHT_WEIGHT = 'weight'
     DEFAULT_INIT_WEIGHT = INIT_WEIGHT_NONE 
     VALID_INIT_WEIGHTS = [INIT_WEIGHT_NONE, INIT_WEIGHT_SIGMA, INIT_WEIGHT_WEIGHT]
-    INIT_WEIGHT_DESCRIPTION = (
-    'Governs how the weight vector is initialised from a Measurement Set. '
-    'If None, uninitialised. '
-    'If ''%s'', initialised from the SIGMA column. '
-    'If ''%s'', initialised from the WEIGHT column.')
+    INIT_WEIGHT_DESCRIPTION = os.linesep.join([
+        'Governs how the weight vector is initialised from a Measurement Set.',
+        'If None, uninitialised.',
+        'If ''%s'', initialised from the SIGMA column.' % INIT_WEIGHT_SIGMA,
+        'If ''%s'', initialised from the WEIGHT column.'% INIT_WEIGHT_WEIGHT])
 
     #
     VERSION = 'version'

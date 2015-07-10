@@ -76,8 +76,8 @@ class SolverConfigurationOptions(object):
     DEFAULT_DATA_ORDER = DATA_ORDER_CASA
     VALID_DATA_ORDER = [DATA_ORDER_CASA, DATA_ORDER_OTHER]
     DATA_ORDER_DESCRIPTION = os.linesep.join((
-        'MeasurementSet data ordering: time x baseline or baseline x time. ',
-        'casa - Assume CASA''s default ordering of time x baseline. ',
+        'MeasurementSet data ordering:',
+        'casa - Assume CASA''s default ordering of time x baseline.',
         'other - Assume baseline x time ordering') )
 
     # Should we store CPU versions when
