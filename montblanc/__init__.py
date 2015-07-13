@@ -95,10 +95,16 @@ source_types.__doc__ %= montblanc.src_types.SOURCE_VAR_TYPES.keys()
 
 def sources(**kwargs):
     """
-    Given keyword arguments defining source type numbers.
+    Keyword arguments
+    -----------------
+    Keyword argument names should be name of source types
+    registered with montblanc. Their values should be
+    the number of these sources types.
 
-    returns a dict containing source type numbers for all
-    valid sources (%s).
+    Returns
+    -------
+    A dict containing source type numbers for all
+    valid source types (%s).
 
     >>> %s
     %s
@@ -108,17 +114,23 @@ def sources(**kwargs):
 
 # Substitute docstring variables
 sources.__doc__ %= (', '.join(source_types()),
-    'montblanc.sources(point=10, gaussian=20, fake=30)',
-    sources(point=10, gaussian=20, fake=30))
+    'montblanc.sources(point=10, gaussian=20)',
+    sources(point=10, gaussian=20))
 
 def biro_solver_cfg(**kwargs):
     """
-    Returns a BiroSolverConfiguration object, inherited from
+    Produces a BiroSolverConfiguration object, inherited from
     a simple python dict, and containing the options required
     to configure the Biro Solver.
 
+    Keyword arguments
+    -----------------
     Any keyword arguments are inserted into the
     returned dict.
+
+    Returns
+    -------
+    A BiroSolverConfiguration object.
 
     montblanc.biro_solver_cfg(msfile='WSRT.MS',
         sources=montblanc.source(point=10,gaussian=20))
@@ -158,4 +170,3 @@ def get_biro_solver(slvr_cfg):
     import montblanc.factory
 
     return montblanc.factory.get_biro_solver(slvr_cfg)
-
