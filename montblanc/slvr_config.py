@@ -25,20 +25,24 @@ import os
 
 class SolverConfigurationOptions(object):
     SOURCES = 'sources'
+    DEFAULT_SOURCES = mbu.default_sources()
+    SOURCES_DESCRIPTION = (
+        'A dictionary defining the number of source types.',
+        'Keywords are source types. Values are the number of that source type.')
 
     # Number of timesteps
     NTIME = 'ntime'
-    DEFAULT_NTIME = 5
+    DEFAULT_NTIME = 10
     NTIME_DESCRIPTION = 'Number of timesteps'
 
     # Number of antenna
     NA = 'na'
-    DEFAULT_NA = 5
+    DEFAULT_NA = 7
     NA_DESCRIPTION = 'Number of antenna'
 
     # Number of channels
     NCHAN = 'nchan'
-    DEFAULT_NCHAN = 5
+    DEFAULT_NCHAN = 16
     NCHAN_DESCRIPTION = 'Number of channels'
 
     # Are we dealing with floats or doubles?
@@ -47,12 +51,16 @@ class SolverConfigurationOptions(object):
     DTYPE_DOUBLE = 'double'
     DEFAULT_DTYPE = DTYPE_DOUBLE
     VALID_DTYPES = [DTYPE_FLOAT, DTYPE_DOUBLE]
-    DTYPE_DESCRIPTION = 'Data type, either a NumPy float or double'
+    DTYPE_DESCRIPTION = (
+        'Type of floating point precision used to compute the RIME',
+        "If '%s', compute the RIME with single-precision" % DTYPE_FLOAT,
+        "If '%s', compute the RIME with double-precision" % DTYPE_DOUBLE)
 
     # Should we handle auto correlations
     AUTO_CORRELATIONS = 'auto_correlations'
     DEFAULT_AUTO_CORRELATIONS = False
     VALID_AUTO_CORRELATIONS = [True, False]
+    AUTO_CORRELATIONS_DESCRIPTION = 'Should auto-correlations be taken into account'
 
     # Data Source. Nothing/A MeasurementSet/Random Test data
     DATA_SOURCE = 'data_source'
@@ -61,24 +69,25 @@ class SolverConfigurationOptions(object):
     DATA_SOURCE_TEST = 'test'
     DEFAULT_DATA_SOURCE = DATA_SOURCE_BIRO
     VALID_DATA_SOURCES = [DATA_SOURCE_BIRO, DATA_SOURCE_MS, DATA_SOURCE_TEST]
-    DATA_SOURCE_DESCRIPTION = os.linesep.join((
-        'Data source.',
-        'If ''None'', data is initialised with defaults.',
-        'If ''%s'', some data will be read from a MeasurementSet,' % DATA_SOURCE_MS,
-        'or if ''%s'' filled with random test data.' % DATA_SOURCE_TEST))
+    DATA_SOURCE_DESCRIPTION = (
+        "The data source for initialising data arrays.",
+        "If 'None', data is initialised with defaults.",
+        "If '%s', some data will be read from a MeasurementSet." % DATA_SOURCE_MS,
+        "If '%s' filled with random test data." % DATA_SOURCE_TEST)
 
     # MeasurementSet file
     MS_FILE = 'msfile'
+    MS_FILE_DESCRIPTION = 'MeasurementSet file'
 
     DATA_ORDER = 'data_order'
     DATA_ORDER_CASA = 'casa'
     DATA_ORDER_OTHER = 'other'
     DEFAULT_DATA_ORDER = DATA_ORDER_CASA
     VALID_DATA_ORDER = [DATA_ORDER_CASA, DATA_ORDER_OTHER]
-    DATA_ORDER_DESCRIPTION = os.linesep.join((
-        'MeasurementSet data ordering:',
-        'casa - Assume CASA''s default ordering of time x baseline.',
-        'other - Assume baseline x time ordering') )
+    DATA_ORDER_DESCRIPTION = (
+        "MeasurementSet data ordering",
+        "If 'casa' - Assume CASA's default ordering of time x baseline.",
+        "If 'other' - Assume baseline x time ordering")
 
     # Should we store CPU versions when
     # transferring data to the GPU?
@@ -88,6 +97,61 @@ class SolverConfigurationOptions(object):
     STORE_CPU_DESCRIPTION = (
         'Governs whether array transfers to the GPU '
         'will be stored in CPU arrays on the solver.')
+
+    DESCRIPTION = 'description'
+    DEFAULT = 'default'
+    VALID = 'valid'
+
+    descriptions = {
+        SOURCES: {
+            DESCRIPTION: SOURCES_DESCRIPTION,
+            DEFAULT: DEFAULT_SOURCES },
+
+        NTIME: {
+            DESCRIPTION: NTIME_DESCRIPTION,
+            DEFAULT: DEFAULT_NTIME },
+
+        NA: {
+            DESCRIPTION: NA_DESCRIPTION,
+            DEFAULT: DEFAULT_NA },
+
+        NCHAN: {
+            DESCRIPTION: NCHAN_DESCRIPTION,
+            DEFAULT: DEFAULT_NCHAN },
+
+        DTYPE: {
+            DESCRIPTION: DTYPE_DESCRIPTION,
+            DEFAULT: DEFAULT_DTYPE,
+            VALID: VALID_DTYPES },
+
+        AUTO_CORRELATIONS: {
+            DESCRIPTION: AUTO_CORRELATIONS_DESCRIPTION,
+            DEFAULT: DEFAULT_AUTO_CORRELATIONS,
+            VALID: VALID_AUTO_CORRELATIONS
+        },
+
+        DATA_SOURCE: {
+            DESCRIPTION: DATA_SOURCE_DESCRIPTION,
+            DEFAULT: DEFAULT_DATA_SOURCE,
+            VALID: VALID_DATA_SOURCES
+        },
+
+        MS_FILE: {
+            DESCRIPTION:  MS_FILE_DESCRIPTION,
+        },
+
+        DATA_ORDER: {
+            DESCRIPTION: DATA_ORDER_DESCRIPTION,
+            DEFAULT: DEFAULT_DATA_ORDER,
+            VALID: VALID_DATA_ORDER,
+        },
+
+        STORE_CPU: {
+            DESCRIPTION: STORE_CPU_DESCRIPTION,
+            DEFAULT: DEFAULT_STORE_CPU,
+            VALID: VALID_STORE_CPU
+        },
+    }
 
 class SolverConfiguration(dict):
     """
@@ -148,7 +212,7 @@ class SolverConfiguration(dict):
 
         Options = SolverConfigurationOptions
 
-        self.check_key_values(Options.SOURCES, 'Source Configuration Dictionary')
+        self.check_key_values(Options.SOURCES, SOURCES_DESCRIPTION)
         self.check_key_values(Options.NTIME, Options.NTIME_DESCRIPTION)
         self.check_key_values(Options.NA, Options.NA_DESCRIPTION)
         self.check_key_values(Options.NCHAN, Options.NCHAN_DESCRIPTION)

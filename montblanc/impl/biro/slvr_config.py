@@ -20,16 +20,17 @@
 
 import os
 
-from montblanc.slvr_config import SolverConfiguration, SolverConfigurationOptions
+from montblanc.slvr_config import (SolverConfiguration,
+    SolverConfigurationOptions as Options)
 
-class BiroSolverConfigurationOptions(SolverConfigurationOptions):
+class BiroSolverConfigurationOptions(Options):
     # 
     WEIGHT_VECTOR = 'weight_vector'
     DEFAULT_WEIGHT_VECTOR = False
     VALID_WEIGHT_VECTOR = [True, False]
-    WEIGHT_VECTOR_DESCRIPTION = os.linesep.join([
+    WEIGHT_VECTOR_DESCRIPTION = (
         'If True, chi-squared terms are weighted with a vectorised sigma.',
-        'If False, chi-squared terms are weighted with a single scalar sigma.'])
+        'If False, chi-squared terms are weighted with a single scalar sigma.')
 
     # weight vector initialisation keyword and valid values
     # This options determines whether
@@ -39,11 +40,11 @@ class BiroSolverConfigurationOptions(SolverConfigurationOptions):
     INIT_WEIGHT_WEIGHT = 'weight'
     DEFAULT_INIT_WEIGHT = INIT_WEIGHT_NONE 
     VALID_INIT_WEIGHTS = [INIT_WEIGHT_NONE, INIT_WEIGHT_SIGMA, INIT_WEIGHT_WEIGHT]
-    INIT_WEIGHT_DESCRIPTION = os.linesep.join([
+    INIT_WEIGHT_DESCRIPTION = (
         'Governs how the weight vector is initialised from a Measurement Set.',
         'If None, uninitialised.',
         'If ''%s'', initialised from the SIGMA column.' % INIT_WEIGHT_SIGMA,
-        'If ''%s'', initialised from the WEIGHT column.'% INIT_WEIGHT_WEIGHT])
+        'If ''%s'', initialised from the WEIGHT column.'% INIT_WEIGHT_WEIGHT)
 
     #
     VERSION = 'version'
@@ -55,6 +56,27 @@ class BiroSolverConfigurationOptions(SolverConfigurationOptions):
     DEFAULT_VERSION = VERSION_FOUR
     VALID_VERSIONS = [VERSION_ONE, VERSION_TWO, VERSION_THREE, VERSION_FOUR]
     VERSION_DESCRIPTION = 'BIRO Version'
+
+    descriptions = {
+        WEIGHT_VECTOR: {
+            Options.DESCRIPTION: WEIGHT_VECTOR,
+            Options.VALID: VALID_WEIGHT_VECTOR,
+            Options.DEFAULT: DEFAULT_WEIGHT_VECTOR,
+        },
+
+        INIT_WEIGHTS: {
+            Options.DESCRIPTION: INIT_WEIGHT_DESCRIPTION,
+            Options.VALID: VALID_INIT_WEIGHTS,
+            Options.DEFAULT: DEFAULT_INIT_WEIGHT,
+        },
+
+        VERSION: {
+            Options.DESCRIPTION: VERSION_DESCRIPTION,
+            Options.VALID: VALID_VERSIONS,
+            Options.DEFAULT: DEFAULT_VERSION,
+        },
+    }
+
 
 class BiroSolverConfiguration(SolverConfiguration):
     """

@@ -29,7 +29,9 @@ import os
 # Hooray for python
 import montblanc
 import montblanc.util as mbu
+import montblanc.config
 
+from montblanc.config import describe_options
 from montblanc.tests import test
 from montblanc.version import __version__
 
@@ -122,6 +124,7 @@ def biro_solver_cfg(**kwargs):
         sources=montblanc.source(point=10,gaussian=20))
 
     Valid configuration options are
+    %s
     """
 
     from montblanc.impl.biro.slvr_config import (BiroSolverConfiguration,
@@ -144,6 +147,8 @@ def biro_solver_cfg(**kwargs):
                 Options.MS_FILE))  
 
     return slvr_cfg
+
+biro_solver_cfg.__doc__ %= (montblanc.config.describe_options())
 
 def get_biro_solver(slvr_cfg):
     """
