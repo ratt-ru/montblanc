@@ -32,7 +32,7 @@ from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
 def solver(**kwargs):
-    return montblanc.factory.get_biro_solver('test',version='v5',**kwargs)
+    return montblanc.factory.rime_solver('test',version='v5',**kwargs)
 
 class TestBiroV5(unittest.TestCase):
     """
@@ -138,7 +138,7 @@ class TestBiroV5(unittest.TestCase):
         if cmp is None: cmp = {}
 
         for wv in [True]:
-            with montblanc.factory.get_biro_solver('biro',version='v5',
+            with montblanc.factory.rime_solver('biro',version='v5',
                 na=64,npsrc=50,ngsrc=50,ntime=200,nchan=64,weight_vector=wv) as slvr:
 
                 slvr.transfer_lm(slvr.lm_cpu)

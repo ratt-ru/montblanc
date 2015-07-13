@@ -45,7 +45,7 @@ if __name__ == '__main__':
     # Set the logging level
     montblanc.log.setLevel(logging.WARN)
 
-    slvr_cfg = montblanc.biro_solver_cfg(msfile=args.msfile,
+    slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
         sources=montblanc.sources(point=args.npsrc, gaussian=args.ngsrc, sersic=args.nssrc),
         init_weights=None, weight_vector=False, store_cpu=False,
         dtype='double', version=args.version)
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     import json
     print json.dumps(slvr_cfg)
 
-    with montblanc.get_biro_solver(slvr_cfg) as slvr:
+    with montblanc.rime_solver(slvr_cfg) as slvr:
 
         # Random point source coordinates in the l,m,n (brightness image) domain
         lm = (np.random.random(size=slvr.lm_shape) * 0.1) \

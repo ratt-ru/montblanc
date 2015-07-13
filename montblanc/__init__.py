@@ -117,11 +117,11 @@ sources.__doc__ %= (', '.join(source_types()),
     'montblanc.sources(point=10, gaussian=20)',
     sources(point=10, gaussian=20))
 
-def biro_solver_cfg(**kwargs):
+def rime_solver_cfg(**kwargs):
     """
-    Produces a BiroSolverConfiguration object, inherited from
+    Produces a SolverConfiguration object, inherited from
     a simple python dict, and containing the options required
-    to configure the Biro Solver.
+    to configure the RIME Solver.
 
     Keyword arguments
     -----------------
@@ -130,9 +130,9 @@ def biro_solver_cfg(**kwargs):
 
     Returns
     -------
-    A BiroSolverConfiguration object.
+    A SolverConfiguration object.
 
-    montblanc.biro_solver_cfg(msfile='WSRT.MS',
+    montblanc.rime_solver_cfg(msfile='WSRT.MS',
         sources=montblanc.source(point=10,gaussian=20))
 
     Valid configuration options are
@@ -149,13 +149,13 @@ def biro_solver_cfg(**kwargs):
 
     return slvr_cfg
 
-biro_solver_cfg.__doc__ %= (montblanc.config.describe_options())
+rime_solver_cfg.__doc__ %= (montblanc.config.describe_options())
 
-def get_biro_solver(slvr_cfg):
+def rime_solver(slvr_cfg):
     """
-    get_biro_solver(slvr_cfg)
+    rime_solver(slvr_cfg)
 
-    Returns a solver suitable for solving the BIRO RIME.
+    Returns a solver suitable for solving the RIME.
 
     Parameters
     ----------
@@ -169,4 +169,4 @@ def get_biro_solver(slvr_cfg):
 
     import montblanc.factory
 
-    return montblanc.factory.get_biro_solver(slvr_cfg)
+    return montblanc.factory.rime_solver(slvr_cfg)

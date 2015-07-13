@@ -492,12 +492,12 @@ class TestSolver(unittest.TestCase):
         """ Test that the solver factory produces the correct types """
         slvr_cfg = SolverConfiguration(data_source='biro', version='v2')
 
-        with montblanc.factory.get_biro_solver(slvr_cfg) as slvr:
+        with montblanc.factory.rime_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
 
         slvr_cfg = SolverConfiguration(data_source='test', version='v2')
 
-        with montblanc.factory.get_biro_solver(slvr_cfg) as slvr:
+        with montblanc.factory.rime_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
 
 if __name__ == '__main__':

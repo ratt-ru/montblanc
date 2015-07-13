@@ -70,11 +70,11 @@ if __name__ == '__main__':
         gaussian=sky_parse.src_counts.get('ngsrc', 0),
         sersic=sky_parse.src_counts.get('nssrc', 0))
 
-    slvr_cfg = montblanc.biro_solver_cfg(msfile=args.msfile,
+    slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
         sources=sources, init_weights=None, weight_vector=False,
         store_cpu=False, version=args.version)
 
-    with montblanc.get_biro_solver(slvr_cfg) as slvr:
+    with montblanc.rime_solver(slvr_cfg) as slvr:
 
         # Get the lm coordinates
         lm = sky_parse.shape_arrays(['l','m'], slvr.lm_shape, slvr.lm_dtype)

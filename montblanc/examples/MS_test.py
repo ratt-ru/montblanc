@@ -34,11 +34,11 @@ if __name__ == '__main__':
 
     # Get the solver.
 
-    slvr_cfg = montblanc.biro_solver_cfg(msfile=args.msfile,
+    slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
         sources=montblanc.sources(point=1, gaussian=0, sersic=0),
         dtype='double', version=args.version)
 
-    with montblanc.get_biro_solver(slvr_cfg) as slvr:
+    with montblanc.rime_solver(slvr_cfg) as slvr:
         # Create point sources at zeros
         l=slvr.ft(np.ones(slvr.nsrc))*0.1
         m=slvr.ft(np.ones(slvr.nsrc))*0.25

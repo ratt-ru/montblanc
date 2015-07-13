@@ -95,7 +95,7 @@ def solver(slvr_cfg, **kwargs):
     slvr_cfg[Options.VERSION] = Options.VERSION_FOUR
     slvr_cfg.update(kwargs)
 
-    return montblanc.factory.get_biro_solver(slvr_cfg)
+    return montblanc.factory.rime_solver(slvr_cfg)
 
 class TestBiroV4(unittest.TestCase):
     """

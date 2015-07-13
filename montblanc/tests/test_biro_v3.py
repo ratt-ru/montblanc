@@ -35,7 +35,7 @@ def solver(slvr_cfg, **kwargs):
     slvr_cfg[Options.VERSION] = Options.VERSION_THREE
     slvr_cfg.update(kwargs)
 
-    return montblanc.factory.get_biro_solver(slvr_cfg)
+    return montblanc.factory.rime_solver(slvr_cfg)
 
 class TestBiroV3(unittest.TestCase):
     """
@@ -119,7 +119,7 @@ class TestBiroV3(unittest.TestCase):
             dtype=Options.DTYPE_FLOAT,
             weight_vector=wv)
 
-        with montblanc.factory.get_biro_solver(slvr_cfg) as slvr:
+        with montblanc.factory.rime_solver(slvr_cfg) as slvr:
 
             slvr.transfer_lm(slvr.lm_cpu)
             slvr.transfer_brightness(slvr.brightness_cpu)

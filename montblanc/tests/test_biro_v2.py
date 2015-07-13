@@ -39,7 +39,7 @@ def solver(slvr_cfg, **kwargs):
     slvr_cfg[Options.VERSION] = Options.VERSION_TWO
     slvr_cfg.update(kwargs)
 
-    return montblanc.factory.get_biro_solver(slvr_cfg)
+    return montblanc.factory.rime_solver(slvr_cfg)
 
 def src_perms(slvr_cfg, permute_weights=False):
     """

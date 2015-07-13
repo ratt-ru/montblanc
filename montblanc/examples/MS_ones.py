@@ -37,12 +37,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args(sys.argv[1:])
 
-    slvr_cfg = montblanc.biro_solver_cfg(msfile=args.msfile,
+    slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
         sources=montblanc.sources(point=args.npsrc, gaussian=args.ngsrc, sersic=args.nssrc),
         dtype='double', version=Options.VERSION_TWO)
 
     # Get the solver.
-    with montblanc.get_biro_solver(slvr_cfg) as slvr:
+    with montblanc.rime_solver(slvr_cfg) as slvr:
 
         print slvr.nsrc
 

@@ -94,7 +94,7 @@ def get_base_solver(slvr_cfg):
 
     return BaseSolver(slvr_cfg)
 
-def create_biro_solver_from_ms(slvr_class_type, slvr_cfg):
+def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
     """ Initialise the supplied solver with measurement set data """
     version = slvr_cfg.get('version')
 
@@ -124,7 +124,7 @@ def create_biro_solver_from_ms(slvr_class_type, slvr_cfg):
         loader.load(slvr, slvr_cfg)
         return slvr
 
-def create_biro_solver_from_test_data(slvr_class_type, slvr_cfg):
+def create_rime_solver_from_test_data(slvr_class_type, slvr_cfg):
     """ Initialise the supplied solver with test data """
     version = slvr_cfg.get(Options.VERSION)
 
@@ -274,7 +274,7 @@ def create_biro_solver_from_test_data(slvr_class_type, slvr_cfg):
 
     return slvr
 
-def get_biro_solver(slvr_cfg):
+def rime_solver(slvr_cfg):
     """ Factory function that produces a BIRO solver """
 
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
@@ -299,9 +299,9 @@ def get_biro_solver(slvr_cfg):
         raise Exception, 'Invalid version %s' % version
 
     if data_source == Options.DATA_SOURCE_MS:
-        return create_biro_solver_from_ms(BiroSolver, slvr_cfg)
+        return create_rime_solver_from_ms(BiroSolver, slvr_cfg)
     elif data_source == Options.DATA_SOURCE_TEST:
-        return create_biro_solver_from_test_data(BiroSolver, slvr_cfg)
+        return create_rime_solver_from_test_data(BiroSolver, slvr_cfg)
     elif data_source == Options.DATA_SOURCE_BIRO:
         return BiroSolver(slvr_cfg)
     else:
