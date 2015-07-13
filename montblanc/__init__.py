@@ -135,17 +135,6 @@ def biro_solver_cfg(**kwargs):
     # Assume a MeasurementSet data source by default
     slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_MS
 
-    if slvr_cfg[Options.DATA_SOURCE] == Options.DATA_SOURCE_MS and \
-        Options.MS_FILE not in slvr_cfg:
-
-        raise KeyError(('%s key is set to %s '
-            'in the Solver Configuration, but '
-            'no MeasurementSet file has been '
-            'specified in the %s key') % (
-                Options.DATA_SOURCE,
-                Options.DATA_SOURCE_MS,
-                Options.MS_FILE))  
-
     return slvr_cfg
 
 biro_solver_cfg.__doc__ %= (montblanc.config.describe_options())

@@ -98,6 +98,16 @@ def create_biro_solver_from_ms(slvr_class_type, slvr_cfg):
     """ Initialise the supplied solver with measurement set data """
     version = slvr_cfg.get('version')
 
+    # Complain if no MeasurementSet file was specified
+    if Options.MS_FILE not in slvr_cfg:
+        raise KeyError(('%s key is set to %s '
+            'in the Solver Configuration, but '
+            'no MeasurementSet file has been '
+            'specified in the %s key') % (
+                Options.DATA_SOURCE,
+                Options.DATA_SOURCE_MS,
+                Options.MS_FILE))
+
     if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
         from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
     elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
