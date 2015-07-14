@@ -29,8 +29,8 @@ class BiroSolverConfigurationOptions(Options):
     DEFAULT_WEIGHT_VECTOR = False
     VALID_WEIGHT_VECTOR = [True, False]
     WEIGHT_VECTOR_DESCRIPTION = (
-        'If True, chi-squared terms are weighted with a vectorised sigma.',
-        'If False, chi-squared terms are weighted with a single scalar sigma.')
+        "If True, chi-squared terms are weighted with a vectorised sigma.",
+        "If False, chi-squared terms are weighted with a single scalar sigma.")
 
     # weight vector initialisation keyword and valid values
     # This options determines whether
@@ -41,10 +41,10 @@ class BiroSolverConfigurationOptions(Options):
     DEFAULT_INIT_WEIGHT = INIT_WEIGHT_NONE 
     VALID_INIT_WEIGHTS = [INIT_WEIGHT_NONE, INIT_WEIGHT_SIGMA, INIT_WEIGHT_WEIGHT]
     INIT_WEIGHT_DESCRIPTION = (
-        'Governs how the weight vector is initialised from a Measurement Set.',
-        'If None, uninitialised.',
-        'If ''%s'', initialised from the SIGMA column.' % INIT_WEIGHT_SIGMA,
-        'If ''%s'', initialised from the WEIGHT column.'% INIT_WEIGHT_WEIGHT)
+        "Governs how the weight vector is initialised from a Measurement Set.",
+        "If None, uninitialised.",
+        "If ''%s'', initialised from the SIGMA column." % INIT_WEIGHT_SIGMA,
+        "If ''%s'', initialised from the WEIGHT column." % INIT_WEIGHT_WEIGHT)
 
     #
     VERSION = 'version'
