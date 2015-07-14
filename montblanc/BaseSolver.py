@@ -19,6 +19,12 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import copy
+
+try:
+    from inspect import signature
+except ImportError:
+    from funcsigs import signature
+
 import numpy as np
 import types
 
@@ -415,19 +421,69 @@ class BaseSolver(Solver):
         if not BaseSolver.__dict__.has_key(gpu_name):
             setattr(BaseSolver, gpu_name, GPUArrayDescriptor(record_key=name))
 
-        page_locked = kwargs.get('page_locked', False)
+        # If we're creating arrays, then we'll want to initialise
+        # them with default values
+        default_ary = None
+
+        if create_cpu_ary or create_gpu_ary:
+            default_ary = np.zeros(shape=shape, dtype=dtype)
+
+            default = kwargs.get('default', None)
+
+            # No defaults are supplied
+            if default is None:
+                pass
+            # The array is defaulted with some function
+            elif isinstance(default, types.MethodType):
+                try:
+                    signature(default).bind(self, default_ary)
+                except TypeError:
+                    raise TypeError(('The signature of the function supplied '
+                        'for setting the default value on array %s is incorrect. '
+                        'The function signature has the form deffunc(slvr, ary), '
+                        'where deffunc is some function that will set values '
+                        'on the array, slvr is a Solver object which provides ' 
+                        'useful information to the function, '
+                        'and ary is the NumPy array which must be initialised with '
+                        'default values.') % (name))
+
+                default(self, default_ary)
+            elif isinstance(default, types.LambdaType):
+                try:
+                    signature(default).bind(self, default_ary)
+                except TypeError:
+                    raise TypeError(('The signature of the lambda supplied '
+                        'for setting the default value on array %s is incorrect. '
+                        'The function signature has the form lambda slvr, ary:, '
+                        'where deffunc is some function that will set values '
+                        'on the array, slvr is a Solver object which provides ' 
+                        'useful information to the function, '
+                        'and ary is the NumPy array which must be initialised with '
+                        'default values.') % (name))
+
+                default_ary[:] = default(self, default_ary)
+            # Got an ndarray, try set it equal
+            elif isinstance(default, np.ndarray):
+                try:
+                    default_ary[:] = default
+                except BaseException as e:
+                    raise ValueError(('Tried to assign array %s with '
+                        'default NumPy array, but this failed '
+                        'with %s') % (name, repr(e)))
+            # Assume some sort of value has been supplied
+            # Give it to NumPy
+            else:
+                try:
+                    default_ary.fill(default)
+                except BaseException as e:
+                    raise ValueError(('Tried to fill array %s with '
+                        'default value %s, but NumPy\'s fill function '
+                        'failed with %s') % (name, default, repr(e)))
 
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
         if create_cpu_ary:
-            if not page_locked:
-                cpu_ary = np.zeros(shape=shape, dtype=dtype)
-            else:
-                with self.context as ctx:
-                    cpu_ary = pycuda.driver.pagelocked_zeros(
-                        shape=shape, dtype=dtype)
-
-            setattr(self, cpu_name, cpu_ary)
+            setattr(self, cpu_name, default_ary)
 
         # Create an empty gpu array if it doesn't exist
         # and set it on the object instance

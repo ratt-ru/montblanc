@@ -39,8 +39,8 @@ def get_pipeline(slvr_cfg):
         RimeEKBSqrt(),
         RimeSumCoherencies(weight_vector=wv)])
 
-def ary_dict(name,shape,dtype,cpu=True,gpu=True):
-    return {
+def ary_dict(name,shape,dtype,cpu=True,gpu=True, **kwargs):
+    D = {
         'name' : name,
         'shape' : shape,
         'dtype' : dtype,
@@ -50,6 +50,9 @@ def ary_dict(name,shape,dtype,cpu=True,gpu=True):
         'shape_member' : True,
         'dtype_member' : True
     }
+
+    D.update(kwargs)
+    return D
 
 def prop_dict(name,dtype,default):
     return {
@@ -89,22 +92,42 @@ P = [
 # List of arrays
 A = [
     # Input Arrays
-    ary_dict('uvw', ('ntime','na', 3), 'ft'),
-    ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32),
+    ary_dict('uvw', ('ntime','na', 3), 'ft',
+        default=0),
+    ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32,
+        default=lambda slvr, ary: slvr.get_default_ant_pairs()),
 
-    ary_dict('lm', ('nsrc',2), 'ft'),
-    ary_dict('stokes', ('nsrc','ntime', 4), 'ft'),
-    ary_dict('alpha', ('nsrc','ntime'), 'ft'),
-    ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
-    ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
+    # Source Definitions
+    ary_dict('lm', ('nsrc',2), 'ft',
+        default=0),
+    ary_dict('stokes', ('nsrc','ntime', 4), 'ft',
+        default=np.array([1,0,0,0])[np.newaxis,np.newaxis,:]),
+    ary_dict('alpha', ('nsrc','ntime'), 'ft',
+        default=0.8),
+    ary_dict('gauss_shape', (3, 'ngsrc'), 'ft',
+        default=np.array([1,2,3])[:,np.newaxis]),
+    ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
+        default=np.array([1,1,1],np.int32)[:,np.newaxis]),
 
-    ary_dict('frequency', ('nchan',), 'ft'),
-    ary_dict('point_errors', ('ntime','na','nchan',2), 'ft'),
-    ary_dict('antenna_scaling', ('na','nchan',2), 'ft'),
-    ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft'),
-    ary_dict('bayes_data', ('ntime','nbl','nchan',4), 'ct'),
-    ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct'),
-    ary_dict('G_term', ('ntime', 'na', 'nchan', 4), 'ct'),
+    ary_dict('frequency', ('nchan',), 'ft',
+        default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.nchan)),
+
+    # Beam
+    ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',
+        default=0),
+    ary_dict('antenna_scaling', ('na','nchan',2), 'ft',
+        default=1),
+    ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
+        default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:]),
+
+    # Direction-Independent Effects
+    ary_dict('G_term', ('ntime', 'na', 'nchan', 4), 'ct',
+        default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:]),
+
+    ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft',
+        default=1),
+    ary_dict('bayes_data', ('ntime','nbl','nchan',4), 'ct',
+        default=0),
 
     # Result arrays
     ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', cpu=False),
