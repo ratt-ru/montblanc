@@ -173,6 +173,8 @@ class BaseSolver(Solver):
 
         super(BaseSolver, self).__init__()
 
+        self.slvr_cfg = slvr_cfg
+
         autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
 
         # Configure our problem dimensions. Number of
@@ -192,11 +194,11 @@ class BaseSolver(Solver):
         # Convert the source types, and their numbers
         # to their number variables and numbers
         # { 'point':10 } => { 'npsrc':10 }
-        self.src_nr_vars = mbu.sources_to_nr_vars(slvr_cfg[Options.SOURCES])
+        src_nr_vars = mbu.sources_to_nr_vars(slvr_cfg[Options.SOURCES])
         # Sum to get the total number of sources
-        self.nsrc = sum(self.src_nr_vars.itervalues())
+        self.nsrc = sum(src_nr_vars.itervalues())
 
-        for nr_var, nr_of_src in self.src_nr_vars.iteritems():
+        for nr_var, nr_of_src in src_nr_vars.iteritems():
             setattr(self, nr_var, nr_of_src)
 
         if self.nsrc == 0:
@@ -665,8 +667,11 @@ class BaseSolver(Solver):
             'LIGHTSPEED': montblanc.constants.C,
         }
 
-        D.update(self.src_nr_vars)
+        # Update with source counts
+        src_nr_vars = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
+        D.update(src_nr_vars)
 
+        # Add any registered properties to the dictionary
         for p in self.properties.itervalues():
             D[p.name] = getattr(self,p.name)
 
