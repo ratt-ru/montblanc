@@ -202,10 +202,8 @@ class BaseSolver(Solver):
             setattr(self, nr_var, nr_of_src)
 
         if self.nsrc == 0:
-            raise ValueError('The number of sources, or, ',
-                            'the sum of %s, '
-                            'must be greater than zero') % \
-                            (src_nr_vars)
+            raise ValueError(('The number of sources, or, '
+                'the sum of %s, must be greater than zero') % (src_nr_vars))
 
         # Configure our floating point and complex types
         if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
@@ -215,13 +213,13 @@ class BaseSolver(Solver):
             self.ft = np.float64
             self.ct = np.complex128
         else:
-            raise TypeError, ('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
+            raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
 
         # Store the context, choosing the default if not specified
         ctx = slvr_cfg.get('context', None)
 
         if ctx is None:
-            raise Exception, 'No context was supplied to the BaseSolver'
+            raise Exception('No CUDA context was supplied to the BaseSolver')
 
         # Create a context wrapper
         self.context = mbu.ContextWrapper(ctx)
@@ -274,16 +272,16 @@ class BaseSolver(Solver):
         record = self.arrays[record_key]
 
         if record.shape != ary.shape:
-            raise ValueError, \
-                '%s\'s shape %s is different from the shape %s of the supplied argument.' \
-                % (record.name, record.shape, ary.shape)
+            raise ValueError(('%s\'s shape %s is different '
+                'from the shape %s of the supplied argument.') %
+                    (record.name, record.shape, ary.shape))
 
         if record.dtype != ary.dtype:
-            raise TypeError, \
-                '%s\'s type \'%s\' is different from the type \'%s\' of the supplied argument.' % \
+            raise TypeError(('%s\'s type \'%s\' is different '
+                'from the type \'%s\' of the supplied argument.') % 
                     (record.name,
                     np.dtype(record.dtype).name,
-                    np.dtype(ary.dtype).name)
+                    np.dtype(ary.dtype).name))
 
     def handle_existing_array(self, old, new, **kwargs):
         """
@@ -298,20 +296,17 @@ class BaseSolver(Solver):
 
         # Check that the shapes are the same
         if old.shape != new.shape:
-            raise ValueError, ('\'%s\' array is already registered by '
-                '\'%s\' with shape %s different to the supplied %s.') % \
-                (old.name,
-                old.registrant,
-                old.shape,
-                new.shape,)
+            raise ValueError(('\'%s\' array is already registered by '
+                '\'%s\' with shape %s different to the supplied %s.') %
+                (old.name, old.registrant, old.shape, new.shape))
 
         # Check that the types are the same
         if old.dtype != new.dtype:
-            raise ValueError, ('\'%s\' array is already registered by '
+            raise ValueError(('\'%s\' array is already registered by '
                 '\'%s\' with type %s different to the supplied %s.') % \
                     (old.name, old.registrant,
                     np.dtype(old.dtype).name,
-                    np.dtype(new.dtype).name,)
+                    np.dtype(new.dtype).name))
 
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         """
@@ -521,8 +516,8 @@ class BaseSolver(Solver):
         elif isinstance(transfer_method, types.MethodType):
             pass
         else:
-            raise TypeError, ('transfer_method keyword argument set',
-                ' to an invalid type %s' % (type(transfer_method)))
+            raise TypeError(('transfer_method keyword argument set '
+                'to an invalid type %s') % (type(transfer_method)))
 
         # Name the transfer method
         transfer_method_name = mbu.transfer_method_name(name)
