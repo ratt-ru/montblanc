@@ -308,6 +308,58 @@ class BaseSolver(Solver):
                     np.dtype(old.dtype).name,
                     np.dtype(new.dtype).name))
 
+    def fill_array(self, name, ary, value):
+        # No defaults are supplied
+        if value is None:
+            pass
+        # The array is defaulted with some function
+        elif isinstance(value, types.MethodType):
+            try:
+                signature(value).bind(self, ary)
+            except TypeError:
+                raise TypeError(('The signature of the function supplied '
+                    'for setting the value value on array %s is incorrect. '
+                    'The function signature has the form deffunc(slvr, ary), '
+                    'where deffunc is some function that will set values '
+                    'on the array, slvr is a Solver object which provides ' 
+                    'useful information to the function, '
+                    'and ary is the NumPy array which must be initialised with '
+                    'value values.') % (name))
+
+            value(self, ary)
+        elif isinstance(value, types.LambdaType):
+            try:
+                signature(value).bind(self, ary)
+            except TypeError:
+                raise TypeError(('The signature of the lambda supplied '
+                    'for setting the value value on array %s is incorrect. '
+                    'The function signature has the form lambda slvr, ary:, '
+                    'where deffunc is some function that will set values '
+                    'on the array, slvr is a Solver object which provides ' 
+                    'useful information to the function, '
+                    'and ary is the NumPy array which must be initialised with '
+                    'value values.') % (name))
+
+            ary[:] = value(self, ary)
+        # Got an ndarray, try set it equal
+        elif isinstance(value, np.ndarray):
+            try:
+                ary[:] = value
+            except BaseException as e:
+                raise ValueError(('Tried to assign array %s with '
+                    'value NumPy array, but this failed '
+                    'with %s') % (name, repr(e)))
+        # Assume some sort of value has been supplied
+        # Give it to NumPy
+        else:
+            try:
+                ary.fill(value)
+            except BaseException as e:
+                raise ValueError(('Tried to fill array %s with '
+                    'value value %s, but NumPy\'s fill function '
+                    'failed with %s') % (name, value, repr(e)))
+
+
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         """
         Register an array with this Solver object.
@@ -423,59 +475,9 @@ class BaseSolver(Solver):
         default_ary = None
 
         if create_cpu_ary or create_gpu_ary:
-            default_ary = np.zeros(shape=shape, dtype=dtype)
+            default_ary = np.empty(shape=shape, dtype=dtype)
 
-            default = kwargs.get('default', None)
-
-            # No defaults are supplied
-            if default is None:
-                pass
-            # The array is defaulted with some function
-            elif isinstance(default, types.MethodType):
-                try:
-                    signature(default).bind(self, default_ary)
-                except TypeError:
-                    raise TypeError(('The signature of the function supplied '
-                        'for setting the default value on array %s is incorrect. '
-                        'The function signature has the form deffunc(slvr, ary), '
-                        'where deffunc is some function that will set values '
-                        'on the array, slvr is a Solver object which provides ' 
-                        'useful information to the function, '
-                        'and ary is the NumPy array which must be initialised with '
-                        'default values.') % (name))
-
-                default(self, default_ary)
-            elif isinstance(default, types.LambdaType):
-                try:
-                    signature(default).bind(self, default_ary)
-                except TypeError:
-                    raise TypeError(('The signature of the lambda supplied '
-                        'for setting the default value on array %s is incorrect. '
-                        'The function signature has the form lambda slvr, ary:, '
-                        'where deffunc is some function that will set values '
-                        'on the array, slvr is a Solver object which provides ' 
-                        'useful information to the function, '
-                        'and ary is the NumPy array which must be initialised with '
-                        'default values.') % (name))
-
-                default_ary[:] = default(self, default_ary)
-            # Got an ndarray, try set it equal
-            elif isinstance(default, np.ndarray):
-                try:
-                    default_ary[:] = default
-                except BaseException as e:
-                    raise ValueError(('Tried to assign array %s with '
-                        'default NumPy array, but this failed '
-                        'with %s') % (name, repr(e)))
-            # Assume some sort of value has been supplied
-            # Give it to NumPy
-            else:
-                try:
-                    default_ary.fill(default)
-                except BaseException as e:
-                    raise ValueError(('Tried to fill array %s with '
-                        'default value %s, but NumPy\'s fill function '
-                        'failed with %s') % (name, default, repr(e)))
+            self.fill_array(name, default_ary, kwargs.get('default', None))
 
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
