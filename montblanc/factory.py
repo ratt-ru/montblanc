@@ -301,7 +301,8 @@ def rime_solver(slvr_cfg):
     if data_source == Options.DATA_SOURCE_MS:
         return create_rime_solver_from_ms(BiroSolver, slvr_cfg)
     elif data_source == Options.DATA_SOURCE_TEST:
-        return create_rime_solver_from_test_data(BiroSolver, slvr_cfg)
+        slvr_cfg[Options.STORE_CPU] = True
+        return BiroSolver(slvr_cfg)
     elif data_source == Options.DATA_SOURCE_BIRO:
         return BiroSolver(slvr_cfg)
     else:
