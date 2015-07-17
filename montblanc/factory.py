@@ -156,7 +156,7 @@ def rime_solver(slvr_cfg):
     elif data_source == Options.DATA_SOURCE_TEST:
         slvr_cfg[Options.STORE_CPU] = True
         return BiroSolver(slvr_cfg)
-    elif data_source == Options.DATA_SOURCE_BIRO:
+    elif data_source == Options.DATA_SOURCE_DEFAULTS:
         return BiroSolver(slvr_cfg)
     else:
         raise Exception, 'Invalid type %s' % sd_type
