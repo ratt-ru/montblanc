@@ -308,10 +308,10 @@ class BaseSolver(Solver):
                     np.dtype(old.dtype).name,
                     np.dtype(new.dtype).name))
 
-    def fill_array(self, name, ary, value):
+    def init_array(self, name, ary, value):
         # No defaults are supplied
         if value is None:
-            pass
+            ary.fill(0)
         # The array is defaulted with some function
         elif isinstance(value, types.MethodType):
             try:
@@ -474,10 +474,16 @@ class BaseSolver(Solver):
         # them with default values
         default_ary = None
 
+        # If we're creating test data, initialise the array with
+        # data from the test key, otherwise take data from the default key
+        if self.slvr_cfg[Options.DATA_SOURCE] == Options.DATA_SOURCE_TEST:
+            source_key = 'test'
+        else:
+            source_key = 'default'
+
         if create_cpu_ary or create_gpu_ary:
             default_ary = np.empty(shape=shape, dtype=dtype)
-
-            self.fill_array(name, default_ary, kwargs.get('default', None))
+            self.init_array(name, default_ary, kwargs.get(source_key, None))
 
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
@@ -496,7 +502,9 @@ class BaseSolver(Solver):
                 gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
 
                 # Zero the array, if it has non-zero length
-                if np.product(shape) > 0: gpu_ary.fill(dtype(0))
+                if np.product(shape) > 0:
+                    gpu_ary.set(default_ary)
+                
                 setattr(self, gpu_name, gpu_ary)
 
         # Should we create a setter for this property?
