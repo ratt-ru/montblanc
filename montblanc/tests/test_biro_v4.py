@@ -83,7 +83,7 @@ def src_perms(slvr_cfg, permute_weights=False):
             if count == 1:
                 continue
 
-            params = slvr_cfg.copy()
+            params = BiroSolverConfiguration(**slvr_cfg)
             params[Options.WEIGHT_VECTOR] = wv
             src_dict = {s: i for i,s in enumerate(src_types)}
             params[Options.SOURCES] = montblanc.sources(**src_dict)
