@@ -24,7 +24,39 @@ from montblanc.slvr_config import (SolverConfiguration,
     SolverConfigurationOptions as Options)
 
 class BiroSolverConfigurationOptions(Options):
-    # 
+    E_BEAM_WIDTH = 'beam_lw'
+    DEFAULT_E_BEAM_WIDTH = 50
+    E_BEAM_WIDTH_DESCRIPTION = (
+        'Width of the E Beam cube. ',
+        'Governs the level of discretisation of '
+        'the l dimension.')
+
+    E_BEAM_HEIGHT = 'beam_mh'
+    DEFAULT_E_BEAM_HEIGHT = 50
+    E_BEAM_HEIGHT_DESCRIPTION = (
+        'Height of the E Beam cube. ',
+        'Governs the level of discretisation of '
+        'the m dimension.')
+
+    E_BEAM_DEPTH = 'beam_nud'
+    DEFAULT_E_BEAM_DEPTH = 50
+    E_BEAM_DEPTH_DESCRIPTION = (
+        'Depth of the E Beam cube. ',
+        'Governs the level of discretisation of '
+        'the nu (frequency) dimension.')
+
+    E_BEAM_CONFIG = 'E_beam_config'
+    E_BEAM_CONFIG_DESCRIPTION = (
+        'A dictionary used to configure the E Beam. ',
+        'e.g. %s : { \'%s\': %s, \'%s\': %s, \'%s\': %s }' % (
+            E_BEAM_CONFIG,
+            E_BEAM_WIDTH, DEFAULT_E_BEAM_WIDTH,
+            E_BEAM_HEIGHT, DEFAULT_E_BEAM_HEIGHT,
+            E_BEAM_DEPTH, DEFAULT_E_BEAM_DEPTH))
+
+
+    # Should a weight vector (sigma) be used to
+    # when calculating the chi-squared values?
     WEIGHT_VECTOR = 'weight_vector'
     DEFAULT_WEIGHT_VECTOR = False
     VALID_WEIGHT_VECTOR = [True, False]
@@ -133,3 +165,8 @@ class BiroSolverConfiguration(SolverConfiguration):
 
         # Version
         self.setdefault(Options.VERSION, Options.DEFAULT_VERSION)
+
+        # Beam Dimensions
+        self.setdefault(Options.E_BEAM_WIDTH, Options.DEFAULT_E_BEAM_WIDTH)
+        self.setdefault(Options.E_BEAM_HEIGHT, Options.DEFAULT_E_BEAM_HEIGHT)
+        self.setdefault(Options.E_BEAM_DEPTH, Options.DEFAULT_E_BEAM_DEPTH)
