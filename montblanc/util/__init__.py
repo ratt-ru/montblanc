@@ -100,6 +100,14 @@ def array_bytes(shape, dtype):
     """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
     return np.product(shape)*np.dtype(dtype).itemsize
 
+def random_like(ary):
+    """ Returns a random array of the same shape and type as the supplied argument """
+    if not np.iscomplexobj(ary):
+        return np.random.random(size=ary.shape).astype(ary.dtype)
+    else:
+        return (np.random.random(size=ary.shape) + \
+            np.random.random(size=ary.shape)*1j).astype(ary.dtype) 
+
 def rethrow_attribute_exception(e):
     """
     Rethrows an attribute exception with more informative text.

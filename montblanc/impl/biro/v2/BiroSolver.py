@@ -28,6 +28,7 @@ from montblanc.config import BiroSolverConfigurationOptions as Options
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
 from montblanc.pipeline import Pipeline
+from montblanc.util import random_like as rary
 
 def get_pipeline(slvr_cfg):
     wv = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
@@ -74,9 +75,6 @@ P = [
     prop_dict('beam_width', 'ft', 65),
     prop_dict('beam_clip', 'ft', 1.0881),
 ]
-
-def rary(ary):
-    return np.random.random(size=ary.shape).astype(ary.dtype)
 
 def rand_uvw(slvr, ary):
     distance = 10

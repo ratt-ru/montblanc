@@ -31,6 +31,7 @@ from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
 
 from montblanc.pipeline import Pipeline
+from montblanc.util import random_like as rary
 
 def get_pipeline(slvr_cfg):
     wv = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
@@ -88,10 +89,6 @@ P = [
     prop_dict('beam_um', 'ft', 0.5),
     prop_dict('parallactic_angle', 'ft', 0.0),
 ]
-
-
-def rary(ary):
-    return np.random.random(size=ary.shape).astype(ary.dtype)
 
 def rand_uvw(slvr, ary):
     distance = 10
