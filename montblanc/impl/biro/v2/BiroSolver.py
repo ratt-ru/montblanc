@@ -88,7 +88,7 @@ def rand_uvw(slvr, ary):
     ary[2,:,:] = np.random.random(size=(slvr.ntime,slvr.na))*0.1 # W
 
     # All antenna zero coordinate are set to (0,0,0)
-    ary[:,0,:] = 0
+    ary[:,:0] = 0
 
     return ary
 
