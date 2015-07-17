@@ -20,6 +20,8 @@
 
 import numpy as np
 
+import montblanc
+
 from montblanc.BaseSolver import BaseSolver
 from montblanc.config import BiroSolverConfigurationOptions as Options
 
@@ -31,8 +33,8 @@ def get_pipeline(slvr_cfg):
     wv = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
     return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
 
-def ary_dict(name, shape, dtype, cpu=False, gpu=True):
-    return {
+def ary_dict(name, shape, dtype, cpu=False, gpu=True, **kwargs):
+    D = {
         'name' : name,
         'shape' : shape,
         'dtype' : dtype,
@@ -42,6 +44,9 @@ def ary_dict(name, shape, dtype, cpu=False, gpu=True):
         'shape_member' : True,
         'dtype_member' : True
     }
+
+    D.update(kwargs)
+    return D
 
 def prop_dict(name,dtype,default):
     return {
@@ -70,21 +75,81 @@ P = [
     prop_dict('beam_clip', 'ft', 1.0881),
 ]
 
+def rary(ary):
+    return np.random.random(size=ary.shape).astype(ary.dtype)
+
+def rand_uvw(slvr, ary):
+    distance = 10
+    # Distribute the antenna in a circle configuration
+    ant_angles = 2*np.pi*np.arange(slvr.na)/slvr.ft(slvr.na)
+    time_angle = np.arange(slvr.ntime)/slvr.ft(slvr.ntime)
+    time_ant_angles = time_angle[:,np.newaxis]*ant_angles[np.newaxis,:]
+
+    ary[0,:,:] = distance*np.sin(time_ant_angles)                # U
+    ary[1,:,:] = distance*np.sin(time_ant_angles)                # V
+    ary[2,:,:] = np.random.random(size=(slvr.ntime,slvr.na))*0.1 # W
+
+    # All antenna zero coordinate are set to (0,0,0)
+    ary[:,0,:] = 0
+
+    return ary
+
+def rand_gauss_shape(slvr, ary):
+    el, em, eR = ary[0,:], ary[1,:], ary[2,:]
+    el[:] = np.random.random(size=el.shape)
+    em[:] = np.random.random(size=em.shape)
+    eR[:] = np.random.random(size=eR.shape)
+
+    return ary
+
+def rand_sersic_shape(slvr, ary):
+    e1, e2, eS = ary[0,:], ary[1,:], ary[2,:]
+    e1[:] = np.random.random(size=e1.shape)
+    e2[:] = np.random.random(size=e2.shape)
+    eS[:] = np.random.random(size=eS.shape)
+
+    return ary
+
 # Dictionary of arrays
 A = [
     # Input Arrays
-    ary_dict('uvw', (3,'ntime','na'), 'ft'),
-    ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32),
+    ary_dict('uvw', (3,'ntime','na'), 'ft',
+        default=0,
+        test=rand_uvw),
 
-    ary_dict('lm', (2,'nsrc'), 'ft'),
-    ary_dict('brightness', (5,'ntime','nsrc'), 'ft'),
-    ary_dict('gauss_shape', (3, 'ngsrc'), 'ft'),
-    ary_dict('sersic_shape', (3, 'nssrc'), 'ft'),
+    ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32,
+        default=lambda slvr, ary: slvr.get_default_ant_pairs(),
+        test=lambda slvr, ary: slvr.get_default_ant_pairs()),
 
-    ary_dict('wavelength', ('nchan',), 'ft'),
-    ary_dict('point_errors', (2,'ntime','na'), 'ft'),
-    ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft'),
-    ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct'),
+    ary_dict('lm', (2,'nsrc'), 'ft',
+        default=0,
+        test=lambda slvr, ary: (rary(ary)-0.5)*1e-4),
+
+    ary_dict('brightness', (5,'ntime','nsrc'), 'ft',
+        default=np.array([1,0,0,1,0.8])[:,np.newaxis,np.newaxis],
+        test=lambda slvr, ary: (rary(ary))),
+
+    ary_dict('gauss_shape', (3, 'ngsrc'), 'ft',
+        default=0, test=rand_gauss_shape),
+    ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
+        default=0, test=rand_sersic_shape),
+
+    ary_dict('wavelength', ('nchan',), 'ft',
+        default=lambda slvr, ary: montblanc.constants.C / \
+            np.linspace(1e-9, 2e-9, slvr.nchan),
+        test=lambda slvr, ary: montblanc.constants.C / \
+            np.linspace(1e-9, 2e-9, slvr.nchan)),
+
+    ary_dict('point_errors', (2,'ntime','na'), 'ft',
+        default=1,
+        test=lambda slvr, ary: (rary(ary)-0.5)*1e-5),
+
+    ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft',
+        default=1,
+        test=lambda slvr, ary: rary(ary)),
+    ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct',
+        default=0,
+        test=lambda slvr, ary: rary(ary)),
 
     # Result arrays
     ary_dict('jones_scalar', ('ntime','na','nsrc','nchan'), 'ct'),
