@@ -212,7 +212,7 @@ class SolverConfiguration(dict):
 
         Options = SolverConfigurationOptions
 
-        self.check_key_values(Options.SOURCES, SOURCES_DESCRIPTION)
+        self.check_key_values(Options.SOURCES, Options.SOURCES_DESCRIPTION)
         self.check_key_values(Options.NTIME, Options.NTIME_DESCRIPTION)
         self.check_key_values(Options.NA, Options.NA_DESCRIPTION)
         self.check_key_values(Options.NCHAN, Options.NCHAN_DESCRIPTION)
