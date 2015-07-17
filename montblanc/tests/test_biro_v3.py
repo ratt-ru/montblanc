@@ -75,7 +75,11 @@ class TestBiroV3(unittest.TestCase):
                 # Compare CPU and GPU results
                 slvr_cpu = SolverCPU(slvr)
                 chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(weight_vector=wv)
-                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp),
+                    ('CPU (%s) and GPU (%s) '
+                    'chi-squared value differ. '
+                    'Failed for weight_vector=%s') %
+                        (chi_sqrd_result_cpu, slvr.X2, wv))
 
     def test_budget(self):
         """
@@ -105,7 +109,10 @@ class TestBiroV3(unittest.TestCase):
                 # Test that solving the RIME a second time produces
                 # the same solution
                 slvr.solve()
-                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp),
+                    ('CPU (%s) and GPU (%s) '
+                    'chi-squared values differ. ') %
+                        (chi_sqrd_result_cpu, slvr.X2))
 
     #@unittest.skip('Skip timing test')
     def test_time(self):
