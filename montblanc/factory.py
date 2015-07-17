@@ -127,6 +127,9 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
 def rime_solver(slvr_cfg):
     """ Factory function that produces a BIRO solver """
 
+    # Verify the configuration
+    slvr_cfg.verify()
+
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
     version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)
 
