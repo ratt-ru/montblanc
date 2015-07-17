@@ -404,7 +404,7 @@ class TestBiroV4(unittest.TestCase):
 
         with solver(slvr_cfg) as slvr:
 
-            self.E_beam_test_impl(slvr)
+            self.E_beam_test_impl(slvr, cmp={'rtol': 1e-4})
 
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
