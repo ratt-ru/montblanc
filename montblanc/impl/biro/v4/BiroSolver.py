@@ -72,7 +72,7 @@ fwhm2int = 1.0/np.sqrt(np.log(256))
 P = [
     prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi/montblanc.constants.C),
     prop_dict('two_pi_over_c', 'ft', 2*np.pi/montblanc.constants.C),
-    prop_dict('ref_freq', 'ft', 0.0),
+    prop_dict('ref_freq', 'ft', 1.5e9),
     prop_dict('sigma_sqrd', 'ft', 1.0),
     prop_dict('X2', 'ft', 0.0),
 
@@ -89,45 +89,113 @@ P = [
     prop_dict('parallactic_angle', 'ft', 0.0),
 ]
 
+
+def rary(ary):
+    return np.random.random(size=ary.shape).astype(ary.dtype)
+
+def rand_uvw(slvr, ary):
+    distance = 10
+    # Distribute the antenna in a circle configuration
+    ant_angles = 2*np.pi*np.arange(slvr.na)/slvr.ft(slvr.na)
+    time_angle = np.arange(slvr.ntime)/slvr.ft(slvr.ntime)
+    time_ant_angles = time_angle[:,np.newaxis]*ant_angles[np.newaxis,:]
+
+    ary[:,:,0] = distance*np.sin(time_ant_angles)                # U
+    ary[:,:,1] = distance*np.sin(time_ant_angles)                # V
+    ary[:,:,2] = np.random.random(size=(slvr.ntime,slvr.na))*0.1 # W
+
+    # All antenna zero coordinate are set to (0,0,0)
+    ary[:,0,:] = 0
+
+    return ary
+
+def rand_stokes(slvr, ary):
+    I, Q, U, V = ary[:,:,0], ary[:,:,1], ary[:,:,2], ary[:,:,3]
+    noise = np.random.random(size=I.shape)*0.1
+    Q[:] = np.random.random(size=Q.shape) - 0.5
+    U[:] = np.random.random(size=U.shape) - 0.5
+    V[:] = np.random.random(size=V.shape) - 0.5
+    I[:] = np.sqrt(Q**2 + U**2 + V**2 + noise)
+
+    return ary
+
+def rand_gauss_shape(slvr, ary):
+    el, em, eR = ary[0,:], ary[1,:], ary[2,:]
+    el[:] = np.random.random(size=el.shape)
+    em[:] = np.random.random(size=em.shape)
+    eR[:] = np.random.random(size=eR.shape)
+
+    return ary
+
+def rand_sersic_shape(slvr, ary):
+    e1, e2, eS = ary[0,:], ary[1,:], ary[2,:]
+    e1[:] = np.random.random(size=e1.shape)
+    e2[:] = np.random.random(size=e2.shape)
+    eS[:] = np.random.random(size=eS.shape)
+
+    return ary
+
 # List of arrays
 A = [
     # Input Arrays
     ary_dict('uvw', ('ntime','na', 3), 'ft',
-        default=0),
+        default=0,
+        test=rand_uvw),
+
     ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32,
-        default=lambda slvr, ary: slvr.get_default_ant_pairs()),
+        default=lambda slvr, ary: slvr.get_default_ant_pairs(),
+        test=lambda slvr, ary: slvr.get_default_ant_pairs()),
 
     # Source Definitions
     ary_dict('lm', ('nsrc',2), 'ft',
-        default=0),
+        default=0,
+        test=lambda slvr, ary: (rary(ary)-0.5) * 1e-4),
+
     ary_dict('stokes', ('nsrc','ntime', 4), 'ft',
-        default=np.array([1,0,0,0])[np.newaxis,np.newaxis,:]),
+        default=np.array([1,0,0,0])[np.newaxis,np.newaxis,:],
+        test=rand_stokes),
+
     ary_dict('alpha', ('nsrc','ntime'), 'ft',
-        default=0.8),
+        default=0.8,
+        test=lambda slvr, ary: rary(ary)*0.1),
+
     ary_dict('gauss_shape', (3, 'ngsrc'), 'ft',
-        default=np.array([1,2,3])[:,np.newaxis]),
+        default=np.array([1,2,3])[:,np.newaxis],
+        test=rand_gauss_shape),
+    
     ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
-        default=np.array([1,1,1],np.int32)[:,np.newaxis]),
+        default=np.array([1,1,1],np.int32)[:,np.newaxis],
+        test=rand_sersic_shape),
 
     ary_dict('frequency', ('nchan',), 'ft',
-        default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.nchan)),
+        default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.nchan),
+        test=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.nchan)),
 
     # Beam
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',
-        default=0),
+        default=0,
+        test=lambda slvr, ary: (rary(ary) - 0.5)*1e-5),
+
     ary_dict('antenna_scaling', ('na','nchan',2), 'ft',
-        default=1),
+        default=1,
+        test=lambda slvr, ary: rary(ary)),
+
     ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
-        default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:]),
+        default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:],
+        test=lambda slvr, ary: rary(ary)),
 
     # Direction-Independent Effects
     ary_dict('G_term', ('ntime', 'na', 'nchan', 4), 'ct',
-        default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:]),
+        default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:],
+        test=lambda slvr, ary: rary(ary)),
 
+    # Bayesian Data
     ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft',
-        default=1),
+        default=1,
+        test=lambda slvr, ary: rary(ary)),
     ary_dict('bayes_data', ('ntime','nbl','nchan',4), 'ct',
-        default=0),
+        default=0,
+        test=lambda slvr, ary: rary(ary)),
 
     # Result arrays
     ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', cpu=False),
