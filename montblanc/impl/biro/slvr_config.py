@@ -45,16 +45,6 @@ class BiroSolverConfigurationOptions(Options):
         'Governs the level of discretisation of '
         'the nu (frequency) dimension.')
 
-    E_BEAM_CONFIG = 'E_beam_config'
-    E_BEAM_CONFIG_DESCRIPTION = (
-        'A dictionary used to configure the E Beam. ',
-        'e.g. %s : { \'%s\': %s, \'%s\': %s, \'%s\': %s }' % (
-            E_BEAM_CONFIG,
-            E_BEAM_WIDTH, DEFAULT_E_BEAM_WIDTH,
-            E_BEAM_HEIGHT, DEFAULT_E_BEAM_HEIGHT,
-            E_BEAM_DEPTH, DEFAULT_E_BEAM_DEPTH))
-
-
     # Should a weight vector (sigma) be used to
     # when calculating the chi-squared values?
     WEIGHT_VECTOR = 'weight_vector'
