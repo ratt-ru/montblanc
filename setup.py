@@ -116,6 +116,7 @@ setup(name='montblanc',
         'montblanc.tests',
         'montblanc.util'],
     install_requires=[
+        'funcsigs',
         'numpy',
         'numexpr',
         'pycuda>=2015.1',

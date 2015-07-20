@@ -20,6 +20,7 @@
 
 import numpy as np
 import montblanc
+import montblanc.util as mbu
 
 from montblanc.config import (BiroSolverConfiguration,
     BiroSolverConfigurationOptions as Options)
@@ -43,13 +44,11 @@ if __name__ == '__main__':
 
     # Get the solver.
     with montblanc.rime_solver(slvr_cfg) as slvr:
-
-        print slvr.nsrc
-
         # Create point sources at zeros
         l=slvr.ft(np.zeros(slvr.nsrc))
         m=slvr.ft(np.zeros(slvr.nsrc))
-        lm=np.array([l,m], dtype=slvr.ft)
+        lm=mbu.shape_list([l,m],
+            shape=slvr.lm_shape, dtype=slvr.lm_dtype)
 
         # Create 1Jy point sources
         fI=slvr.ft(np.ones(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
@@ -57,7 +56,8 @@ if __name__ == '__main__':
         fU=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
         fV=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
         alpha=slvr.ft(np.zeros(slvr.ntime*slvr.nsrc)).reshape(slvr.ntime,slvr.nsrc)
-        brightness = np.array([fI,fQ,fU,fV,alpha], dtype=slvr.ft)
+        brightness = mbu.shape_list([fI,fQ,fU,fV,alpha],
+            shape=slvr.brightness_shape, dtype=slvr.brightness_dtype)
 
         slvr.transfer_lm(lm)
         slvr.transfer_brightness(brightness)

@@ -125,11 +125,28 @@ class TestUtils(unittest.TestCase):
             self.assertTrue(mbu.nr_of_antenna(nbl, False) == na)
             self.assertTrue(mbu.nr_of_antenna(nbl_auto, True) == na)
 
-        do_check(7, 7*6//2, 7*8//2)                                 # KAT7
-        do_check(14, 14*13//2, 14*15//2)                       # Westerbork
-        do_check(27, 27*26//2, 27*28//2)                       # VLA
-        do_check(64, 64*63//2, 64*65//2)                       # MeerKAT
+        do_check(7, 7*6//2, 7*8//2)                  # KAT7
+        do_check(14, 14*13//2, 14*15//2)             # Westerbork
+        do_check(27, 27*26//2, 27*28//2)             # VLA
+        do_check(64, 64*63//2, 64*65//2)             # MeerKAT
         do_check(3500, 3500*3499//2, 3500*3501//2)   # SKA
+
+    def test_random_like(self):
+        shape = (np.random.randint(1, 50), np.random.randint(1, 50))
+        dtype_list = [np.float32, np.float64, np.complex64, np.complex128]
+        dtype = dtype_list[np.random.randint(0,len(dtype_list))]
+
+        ary = np.empty(shape=shape, dtype=dtype)
+        random_ary = mbu.random_like(ary)
+
+        self.assertTrue(random_ary.shape == ary.shape)
+        self.assertTrue(random_ary.dtype == dtype)
+
+        shape = (np.random.randint(1, 50), np.random.randint(1, 50))
+        random_ary = mbu.random_like(shape=shape, dtype=dtype)
+
+        self.assertTrue(random_ary.shape == shape)
+        self.assertTrue(random_ary.dtype == dtype)
 
     def test_sky_model(self):
         """ Test sky model file loading """

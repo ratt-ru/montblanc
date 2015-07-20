@@ -62,17 +62,18 @@ class SolverConfigurationOptions(object):
     VALID_AUTO_CORRELATIONS = [True, False]
     AUTO_CORRELATIONS_DESCRIPTION = 'Should auto-correlations be taken into account'
 
-    # Data Source. Nothing/A MeasurementSet/Random Test data
+    # Data Source. Defaults/A MeasurementSet/Random Test data
     DATA_SOURCE = 'data_source'
-    DATA_SOURCE_BIRO = 'biro'
+    DATA_SOURCE_DEFAULTS = 'defaults'
     DATA_SOURCE_MS = 'ms'
     DATA_SOURCE_TEST = 'test'
-    DEFAULT_DATA_SOURCE = DATA_SOURCE_BIRO
-    VALID_DATA_SOURCES = [DATA_SOURCE_BIRO, DATA_SOURCE_MS, DATA_SOURCE_TEST]
+    DEFAULT_DATA_SOURCE = DATA_SOURCE_DEFAULTS
+    VALID_DATA_SOURCES = [DATA_SOURCE_DEFAULTS, DATA_SOURCE_MS, DATA_SOURCE_TEST]
     DATA_SOURCE_DESCRIPTION = (
         "The data source for initialising data arrays.",
-        "If 'None', data is initialised with defaults.",
-        "If '%s', some data will be read from a MeasurementSet." % DATA_SOURCE_MS,
+        "If '%s', data is initialised with defaults." % DATA_SOURCE_DEFAULTS,
+        ("If '%s', some data will be read from a MeasurementSet. "
+        "otherwise defaults will be used.") % DATA_SOURCE_MS,
         "If '%s' filled with random test data." % DATA_SOURCE_TEST)
 
     # MeasurementSet file
@@ -212,7 +213,7 @@ class SolverConfiguration(dict):
 
         Options = SolverConfigurationOptions
 
-        self.check_key_values(Options.SOURCES, SOURCES_DESCRIPTION)
+        self.check_key_values(Options.SOURCES, Options.SOURCES_DESCRIPTION)
         self.check_key_values(Options.NTIME, Options.NTIME_DESCRIPTION)
         self.check_key_values(Options.NA, Options.NA_DESCRIPTION)
         self.check_key_values(Options.NCHAN, Options.NCHAN_DESCRIPTION)

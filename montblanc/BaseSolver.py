@@ -19,6 +19,12 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import copy
+
+try:
+    from inspect import signature
+except ImportError:
+    from funcsigs import signature
+
 import numpy as np
 import types
 
@@ -167,6 +173,8 @@ class BaseSolver(Solver):
 
         super(BaseSolver, self).__init__()
 
+        self.slvr_cfg = slvr_cfg
+
         autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
 
         # Configure our problem dimensions. Number of
@@ -186,18 +194,16 @@ class BaseSolver(Solver):
         # Convert the source types, and their numbers
         # to their number variables and numbers
         # { 'point':10 } => { 'npsrc':10 }
-        self.src_nr_vars = mbu.sources_to_nr_vars(slvr_cfg[Options.SOURCES])
+        src_nr_vars = mbu.sources_to_nr_vars(slvr_cfg[Options.SOURCES])
         # Sum to get the total number of sources
-        self.nsrc = sum(self.src_nr_vars.itervalues())
+        self.nsrc = sum(src_nr_vars.itervalues())
 
-        for nr_var, nr_of_src in self.src_nr_vars.iteritems():
+        for nr_var, nr_of_src in src_nr_vars.iteritems():
             setattr(self, nr_var, nr_of_src)
 
         if self.nsrc == 0:
-            raise ValueError('The number of sources, or, ',
-                            'the sum of %s, '
-                            'must be greater than zero') % \
-                            (src_nr_vars)
+            raise ValueError(('The number of sources, or, '
+                'the sum of %s, must be greater than zero') % (src_nr_vars))
 
         # Configure our floating point and complex types
         if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
@@ -207,13 +213,13 @@ class BaseSolver(Solver):
             self.ft = np.float64
             self.ct = np.complex128
         else:
-            raise TypeError, ('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
+            raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
 
         # Store the context, choosing the default if not specified
         ctx = slvr_cfg.get('context', None)
 
         if ctx is None:
-            raise Exception, 'No context was supplied to the BaseSolver'
+            raise Exception('No CUDA context was supplied to the BaseSolver')
 
         # Create a context wrapper
         self.context = mbu.ContextWrapper(ctx)
@@ -266,16 +272,16 @@ class BaseSolver(Solver):
         record = self.arrays[record_key]
 
         if record.shape != ary.shape:
-            raise ValueError, \
-                '%s\'s shape %s is different from the shape %s of the supplied argument.' \
-                % (record.name, record.shape, ary.shape)
+            raise ValueError(('%s\'s shape %s is different '
+                'from the shape %s of the supplied argument.') %
+                    (record.name, record.shape, ary.shape))
 
         if record.dtype != ary.dtype:
-            raise TypeError, \
-                '%s\'s type \'%s\' is different from the type \'%s\' of the supplied argument.' % \
+            raise TypeError(('%s\'s type \'%s\' is different '
+                'from the type \'%s\' of the supplied argument.') % 
                     (record.name,
                     np.dtype(record.dtype).name,
-                    np.dtype(ary.dtype).name)
+                    np.dtype(ary.dtype).name))
 
     def handle_existing_array(self, old, new, **kwargs):
         """
@@ -290,20 +296,69 @@ class BaseSolver(Solver):
 
         # Check that the shapes are the same
         if old.shape != new.shape:
-            raise ValueError, ('\'%s\' array is already registered by '
-                '\'%s\' with shape %s different to the supplied %s.') % \
-                (old.name,
-                old.registrant,
-                old.shape,
-                new.shape,)
+            raise ValueError(('\'%s\' array is already registered by '
+                '\'%s\' with shape %s different to the supplied %s.') %
+                (old.name, old.registrant, old.shape, new.shape))
 
         # Check that the types are the same
         if old.dtype != new.dtype:
-            raise ValueError, ('\'%s\' array is already registered by '
+            raise ValueError(('\'%s\' array is already registered by '
                 '\'%s\' with type %s different to the supplied %s.') % \
                     (old.name, old.registrant,
                     np.dtype(old.dtype).name,
-                    np.dtype(new.dtype).name,)
+                    np.dtype(new.dtype).name))
+
+    def init_array(self, name, ary, value):
+        # No defaults are supplied
+        if value is None:
+            ary.fill(0)
+        # The array is defaulted with some function
+        elif isinstance(value, types.MethodType):
+            try:
+                signature(value).bind(self, ary)
+            except TypeError:
+                raise TypeError(('The signature of the function supplied '
+                    'for setting the value value on array %s is incorrect. '
+                    'The function signature has the form deffunc(slvr, ary), '
+                    'where deffunc is some function that will set values '
+                    'on the array, slvr is a Solver object which provides ' 
+                    'useful information to the function, '
+                    'and ary is the NumPy array which must be initialised with '
+                    'value values.') % (name))
+
+            value(self, ary)
+        elif isinstance(value, types.LambdaType):
+            try:
+                signature(value).bind(self, ary)
+            except TypeError:
+                raise TypeError(('The signature of the lambda supplied '
+                    'for setting the value value on array %s is incorrect. '
+                    'The function signature has the form lambda slvr, ary:, '
+                    'where deffunc is some function that will set values '
+                    'on the array, slvr is a Solver object which provides ' 
+                    'useful information to the function, '
+                    'and ary is the NumPy array which must be initialised with '
+                    'value values.') % (name))
+
+            ary[:] = value(self, ary)
+        # Got an ndarray, try set it equal
+        elif isinstance(value, np.ndarray):
+            try:
+                ary[:] = value
+            except BaseException as e:
+                raise ValueError(('Tried to assign array %s with '
+                    'value NumPy array, but this failed '
+                    'with %s') % (name, repr(e)))
+        # Assume some sort of value has been supplied
+        # Give it to NumPy
+        else:
+            try:
+                ary.fill(value)
+            except BaseException as e:
+                raise ValueError(('Tried to fill array %s with '
+                    'value value %s, but NumPy\'s fill function '
+                    'failed with %s') % (name, value, repr(e)))
+
 
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         """
@@ -415,19 +470,25 @@ class BaseSolver(Solver):
         if not BaseSolver.__dict__.has_key(gpu_name):
             setattr(BaseSolver, gpu_name, GPUArrayDescriptor(record_key=name))
 
-        page_locked = kwargs.get('page_locked', False)
+        # If we're creating arrays, then we'll want to initialise
+        # them with default values
+        default_ary = None
+
+        # If we're creating test data, initialise the array with
+        # data from the test key, otherwise take data from the default key
+        if self.slvr_cfg[Options.DATA_SOURCE] == Options.DATA_SOURCE_TEST:
+            source_key = 'test'
+        else:
+            source_key = 'default'
+
+        if create_cpu_ary or create_gpu_ary:
+            default_ary = np.empty(shape=shape, dtype=dtype)
+            self.init_array(name, default_ary, kwargs.get(source_key, None))
 
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
         if create_cpu_ary:
-            if not page_locked:
-                cpu_ary = np.zeros(shape=shape, dtype=dtype)
-            else:
-                with self.context as ctx:
-                    cpu_ary = pycuda.driver.pagelocked_zeros(
-                        shape=shape, dtype=dtype)
-
-            setattr(self, cpu_name, cpu_ary)
+            setattr(self, cpu_name, default_ary)
 
         # Create an empty gpu array if it doesn't exist
         # and set it on the object instance
@@ -441,7 +502,9 @@ class BaseSolver(Solver):
                 gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
 
                 # Zero the array, if it has non-zero length
-                if np.product(shape) > 0: gpu_ary.fill(dtype(0))
+                if np.product(shape) > 0:
+                    gpu_ary.set(default_ary)
+                
                 setattr(self, gpu_name, gpu_ary)
 
         # Should we create a setter for this property?
@@ -463,8 +526,8 @@ class BaseSolver(Solver):
         elif isinstance(transfer_method, types.MethodType):
             pass
         else:
-            raise TypeError, ('transfer_method keyword argument set',
-                ' to an invalid type %s' % (type(transfer_method)))
+            raise TypeError(('transfer_method keyword argument set '
+                'to an invalid type %s') % (type(transfer_method)))
 
         # Name the transfer method
         transfer_method_name = mbu.transfer_method_name(name)
@@ -609,8 +672,11 @@ class BaseSolver(Solver):
             'LIGHTSPEED': montblanc.constants.C,
         }
 
-        D.update(self.src_nr_vars)
+        # Update with source counts
+        src_nr_vars = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
+        D.update(src_nr_vars)
 
+        # Add any registered properties to the dictionary
         for p in self.properties.itervalues():
             D[p.name] = getattr(self,p.name)
 

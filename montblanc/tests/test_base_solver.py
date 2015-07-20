@@ -33,7 +33,8 @@ import montblanc.factory
 import montblanc.util as mbu
 
 from montblanc.config import (SolverConfiguration,
-    SolverConfigurationOptions as Options)
+    BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
 
 class TestSolver(unittest.TestCase):
     """
@@ -490,12 +491,14 @@ class TestSolver(unittest.TestCase):
 
     def test_solver_factory(self):
         """ Test that the solver factory produces the correct types """
-        slvr_cfg = SolverConfiguration(data_source='biro', version='v2')
+        slvr_cfg = BiroSolverConfiguration(
+            data_source=Options.DATA_SOURCE_DEFAULTS, version=Options.VERSION_TWO)
 
         with montblanc.factory.rime_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
 
-        slvr_cfg = SolverConfiguration(data_source='test', version='v2')
+        slvr_cfg = BiroSolverConfiguration(
+            data_source=Options.DATA_SOURCE_TEST, version=Options.VERSION_TWO)
 
         with montblanc.factory.rime_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)

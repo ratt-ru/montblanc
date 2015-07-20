@@ -124,158 +124,11 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
         loader.load(slvr, slvr_cfg)
         return slvr
 
-def create_rime_solver_from_test_data(slvr_class_type, slvr_cfg):
-    """ Initialise the supplied solver with test data """
-    version = slvr_cfg.get(Options.VERSION)
-
-    slvr_cfg[Options.STORE_CPU] = True
-    slvr = slvr_class_type(slvr_cfg)
-
-    na, nbl, nchan, ntime = slvr.na, slvr.nbl, slvr.nchan, slvr.ntime
-    npsrc, ngsrc, nssrc, nsrc = slvr.npsrc, slvr.ngsrc, slvr.nssrc, slvr.nsrc
-    ft, ct = slvr.ft, slvr.ct
-
-    # Curry the creation of a random array
-    def make_random(shape,dtype):
-        return np.random.random(size=shape).astype(dtype)
-
-    def uvw_values(version):
-        return np.arange(1,ntime*na+1)
-
-        raise Exception, 'Invalid Version %s' % version
-
-    # Baseline coordinates in the u,v,w (frequency) domain
-    r = uvw_values(version)
-    uvw = mbu.shape_list([30.*r, 25.*r, 20.*r],
-            shape=slvr.uvw_shape, dtype=slvr.uvw_dtype)
-    # Normalise Antenna 0
-    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
-        uvw[:,:,0] = 0
-    elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-        uvw[:,0,:] = 0
-
-    slvr.transfer_uvw(uvw)
-
-    # Point source coordinates in the l,m,n (sky image) domain
-    # 1e-4 ~ 20 arcseconds
-    l=ft(np.random.random(nsrc)-0.5)*1e-4
-    m=ft(np.random.random(nsrc)-0.5)*1e-4
-    lm=mbu.shape_list([l,m], slvr.lm_shape, slvr.lm_dtype)
-    slvr.transfer_lm(lm)
-
-    # Brightness matrices
-    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
-        B = np.empty(shape=slvr.brightness_shape, dtype=slvr.brightness_dtype)
-        I, Q, U, V = B[0,:,:], B[1,:,:], B[2,:,:], B[3,:,:]
-        alpha = B[4,:,:]
-    elif version in [Options.VERSION_FOUR,Options.VERSION_FIVE]:
-        # Stokes parameters
-        # Need a positive semi-definite brightness
-        # matrix for v4 and v5
-        stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
-        I, Q, U, V = stokes[:,:,0], stokes[:,:,1], stokes[:,:,2], stokes[:,:,3]
-        alpha=np.empty_like(I)
-
-    Q[:] = np.random.random(size=Q.shape)-0.5
-    U[:] = np.random.random(size=U.shape)-0.5
-    V[:] = np.random.random(size=V.shape)-0.5
-    noise = np.random.random(size=(Q.shape))*0.1
-    # Determinant of a brightness matrix
-    # is I^2 - Q^2 - U^2 - V^2, noise ensures
-    # positive semi-definite matrix
-    I[:] = np.sqrt(Q**2 + U**2 + V**2 + noise)
-    assert np.all(I**2 - Q**2 - U**2 - V**2 > 0.0)
-
-    alpha[:] = np.random.random(size=I.shape)*0.1
-
-    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
-        slvr.transfer_brightness(B)
-    elif version in [Options.VERSION_FOUR,Options.VERSION_FIVE]:
-        slvr.transfer_stokes(stokes)
-        slvr.transfer_alpha(alpha)
-
-    # E beam
-    if version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-        E_beam = make_random(slvr.E_beam_cpu.shape, slvr.E_beam_cpu.dtype) + \
-            make_random(slvr.E_beam_cpu.shape, slvr.E_beam_cpu.dtype)*1j
-        slvr.transfer_E_beam(E_beam)
-
-    # G term
-    if version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-        G_term = make_random(slvr.G_term_cpu.shape, slvr.G_term_cpu.dtype) + \
-            make_random(slvr.G_term_cpu.shape, slvr.G_term_cpu.dtype)*1j
-        slvr.transfer_G_term(G_term)
-
-    # Gaussian shape matrix
-    el = ft(np.random.random(ngsrc)*0.5)
-    em = ft(np.random.random(ngsrc)*0.5)
-    R = ft(np.ones(ngsrc)*100)
-    gauss_shape = mbu.shape_list([el,em,R],
-            slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
-    if ngsrc > 0: slvr.transfer_gauss_shape(gauss_shape)
-
-    # Sersic (exponential) shape matrix
-    e1=ft(np.zeros((nssrc)))
-    e2=ft(np.zeros((nssrc)))
-    scale=ft(np.ones((nssrc)))
-    sersic_shape = mbu.shape_list([e1,e2,scale],
-            slvr.sersic_shape_shape, slvr.sersic_shape_dtype)
-    if nssrc > 0: slvr.transfer_sersic_shape(sersic_shape)
-
-    # Generate nchan frequencies/wavelengths
-    frequencies = ft(np.linspace(1e6,2e6,nchan))
-    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
-        wavelength = ft(montblanc.constants.C/frequencies)
-        slvr.transfer_wavelength(wavelength)
-        slvr.set_ref_wave(wavelength[nchan//2])
-    elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-        slvr.transfer_frequency(frequencies)
-        slvr.set_ref_freq(frequencies[nchan//2])
-
-    # Generate the antenna pointing errors
-    point_errors = (make_random(slvr.point_errors_shape,
-            slvr.point_errors_dtype)-0.5)*1e-5
-    slvr.transfer_point_errors(point_errors)
-
-    # Generate antenna scaling coefficients
-    if version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-        antenna_scaling = make_random(slvr.antenna_scaling_shape,
-            slvr.antenna_scaling_dtype)
-        slvr.transfer_antenna_scaling(antenna_scaling)
-
-    # Generate the noise vector
-    weight_vector = make_random(slvr.weight_vector_shape,
-            slvr.weight_vector_dtype)
-    slvr.transfer_weight_vector(weight_vector)
-
-    slvr.transfer_ant_pairs(slvr.get_default_ant_pairs())
-
-    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
-        # Generate random jones scalar values
-        jones_scalar = make_random(slvr.jones_scalar_shape,
-                slvr.jones_scalar_dtype)
-        slvr.transfer_jones_scalar(jones_scalar)
-    elif version in [Options.VERSION_FOUR,Options.VERSION_FIVE]:
-        # Generate random jones scalar values
-        jones = make_random(slvr.jones_shape,
-                slvr.jones_dtype)
-        slvr.transfer_jones(jones)
-
-    vis = make_random(slvr.vis_shape, slvr.vis_dtype) + \
-            make_random(slvr.vis_shape, slvr.vis_dtype)*1j
-    slvr.transfer_vis(vis)
-
-    # The bayesian model
-    assert slvr.bayes_data_shape == slvr.vis_shape
-    bayes_data = make_random(slvr.bayes_data_shape,slvr.bayes_data_dtype) +\
-            make_random(slvr.bayes_data_shape,slvr.bayes_data_dtype)*1j
-    slvr.transfer_bayes_data(bayes_data)
-    slvr.set_sigma_sqrd((np.random.random(1)**2).astype(ft)[0])
-
-    return slvr
-
 def rime_solver(slvr_cfg):
     """ Factory function that produces a BIRO solver """
+
+    # Verify the configuration
+    slvr_cfg.verify()
 
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
     version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)
@@ -301,8 +154,9 @@ def rime_solver(slvr_cfg):
     if data_source == Options.DATA_SOURCE_MS:
         return create_rime_solver_from_ms(BiroSolver, slvr_cfg)
     elif data_source == Options.DATA_SOURCE_TEST:
-        return create_rime_solver_from_test_data(BiroSolver, slvr_cfg)
-    elif data_source == Options.DATA_SOURCE_BIRO:
+        slvr_cfg[Options.STORE_CPU] = True
+        return BiroSolver(slvr_cfg)
+    elif data_source == Options.DATA_SOURCE_DEFAULTS:
         return BiroSolver(slvr_cfg)
     else:
         raise Exception, 'Invalid type %s' % sd_type
