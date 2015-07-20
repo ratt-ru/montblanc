@@ -24,7 +24,8 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.factory import VERSION_TWO, VERSION_THREE, VERSION_FOUR, VERSION_FIVE
+from montblanc.config import (BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
 
 if __name__ == '__main__':
     import sys
@@ -44,34 +45,26 @@ if __name__ == '__main__':
     # Set the logging level
     montblanc.log.setLevel(logging.WARN)
 
-    # Get the BIRO solver.
-    # npsrc : number of point sources
-    # ngsrc : number of gaussian sources
-    # nssrc : number of sersic sources
-    # init_weights : (1) None (2) 'sigma' or (3) 'weight'. Either
-    #   (1) do not initialise the weight vector, or
-    #   (2) initialise from the MS 'SIGMA' tables, or
-    #   (3) initialise from the MS 'WEIGHT' tables.
-    # weight_vector : indicates whether a weight vector should be used to
-    #   compute the chi squared or a single sigma squared value
-    # store_cpu : indicates whether copies of the data passed into the
-    #   solver transfer_* methods should be stored on the solver object
-    with montblanc.get_biro_solver(args.msfile,
-        npsrc=args.npsrc, ngsrc=args.ngsrc, nssrc=args.nssrc, init_weights=None,
-        weight_vector=False, store_cpu=False,
-        dtype=np.float64, version=args.version) as slvr:
+    slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
+        sources=montblanc.sources(point=args.npsrc, gaussian=args.ngsrc, sersic=args.nssrc),
+        init_weights=None, weight_vector=False, store_cpu=False,
+        dtype='double', version=args.version)
+
+    import json
+    print json.dumps(slvr_cfg)
+
+    with montblanc.rime_solver(slvr_cfg) as slvr:
 
         # Random point source coordinates in the l,m,n (brightness image) domain
-        lm = (np.random.random(
-                size=slvr.lm_shape) * 0.1) \
+        lm = (np.random.random(size=slvr.lm_shape) * 0.1) \
             .astype(slvr.lm_dtype)
 
-        if args.version in [VERSION_TWO, VERSION_THREE]:
+        if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
             # Random brightness matrix for the point sources
             brightness = np.random.random(
                     size=slvr.brightness_shape) \
                 .astype(slvr.brightness_dtype)
-        elif args.version in [VERSION_FOUR, VERSION_FIVE]:
+        elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
             # Need a positive semi-definite brightness
             # matrix for v4 and v5
             stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
@@ -90,6 +83,19 @@ if __name__ == '__main__':
                     size=slvr.alpha_shape) \
                 .astype(slvr.alpha_dtype)
             slvr.transfer_alpha(alpha)
+
+        # E beam
+        if args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+            E_beam = (np.random.random(size=slvr.E_beam_shape) +
+                np.random.random(size=slvr.E_beam_shape)*1j).astype(slvr.E_beam_dtype)
+            slvr.transfer_E_beam(E_beam)
+
+        # G term
+        if args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+            G_term = (np.random.random(size=slvr.G_term_shape) +
+                np.random.random(size=slvr.G_term_shape)*1j).astype(slvr.G_term_dtype)
+            slvr.transfer_G_term(G_term)
+
 
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
@@ -119,9 +125,9 @@ if __name__ == '__main__':
         for i in range(args.count):
             # Set data on the solver object. Uploads to GPU
             slvr.transfer_lm(lm)
-            if args.version in [VERSION_TWO, VERSION_THREE]:
+            if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
                 slvr.transfer_brightness(brightness)
-            elif args.version in [VERSION_FOUR, VERSION_FIVE]:
+            elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
                 slvr.transfer_stokes(stokes)
                 slvr.transfer_alpha(alpha)
             slvr.transfer_point_errors(point_errors)

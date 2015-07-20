@@ -21,6 +21,9 @@
 import numpy as np
 import montblanc
 
+from montblanc.config import (BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
+
 if __name__ == '__main__':
     import sys
     import argparse
@@ -34,9 +37,14 @@ if __name__ == '__main__':
 
     args = parser.parse_args(sys.argv[1:])
 
+    slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
+        sources=montblanc.sources(point=args.npsrc, gaussian=args.ngsrc, sersic=args.nssrc),
+        dtype='double', version=Options.VERSION_TWO)
+
     # Get the solver.
-    with montblanc.get_biro_solver(args.msfile, npsrc=args.npsrc,
-        ngsrc=args.ngsrc, nssrc=args.nssrc, version='v2') as slvr:
+    with montblanc.rime_solver(slvr_cfg) as slvr:
+
+        print slvr.nsrc
 
         # Create point sources at zeros
         l=slvr.ft(np.zeros(slvr.nsrc))

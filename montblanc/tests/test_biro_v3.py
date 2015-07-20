@@ -27,8 +27,15 @@ import montblanc.factory
 
 from montblanc.impl.biro.v2.cpu.SolverCPU import SolverCPU
 
-def solver(**kwargs):
-    return montblanc.factory.get_biro_solver('test',version='v3',**kwargs)
+from montblanc.config import (BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
+
+def solver(slvr_cfg, **kwargs):
+    slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
+    slvr_cfg[Options.VERSION] = Options.VERSION_THREE
+    slvr_cfg.update(kwargs)
+
+    return montblanc.factory.rime_solver(slvr_cfg)
 
 class TestBiroV3(unittest.TestCase):
     """
@@ -54,15 +61,20 @@ class TestBiroV3(unittest.TestCase):
         """ Basic Test """
         cmp = { 'rtol' : 1e-4}
 
+        slvr_cfg = BiroSolverConfiguration(na=28, ntime=27, nchan=32,
+            sources=montblanc.sources(point=50, gaussian=50),
+            dtype=Options.DTYPE_DOUBLE)
+
         for wv in [True, False]:
-            with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
-                weight_vector=wv) as slvr:
+            slvr_cfg[Options.WEIGHT_VECTOR] = wv
+            with solver(slvr_cfg) as slvr:
 
                 # Solve the RIME
                 slvr.solve()
 
                 # Compare CPU and GPU results
-                chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
+                slvr_cpu = SolverCPU(slvr)
+                chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(weight_vector=wv)
                 self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
     def test_budget(self):
@@ -73,14 +85,19 @@ class TestBiroV3(unittest.TestCase):
         wv = True
 
         for t in [17, 27, 53]:
-            with solver(na=28, npsrc=50, ngsrc=50, ntime=t, nchan=32,
-                weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
+            slvr_cfg = BiroSolverConfiguration(na=28, ntime=t, nchan=32,
+                sources=montblanc.sources(point=50, gaussian=50),
+                dtype=Options.DTYPE_FLOAT,
+                weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3)
+
+            with solver(slvr_cfg) as slvr:
 
                 # Solve the RIME
                 slvr.solve()
 
                 # Check that CPU and GPU results agree
-                chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
+                slvr_cpu = SolverCPU(slvr)
+                chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(weight_vector=wv)
                 self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
                 slvr.X2 = 0.0
@@ -90,20 +107,25 @@ class TestBiroV3(unittest.TestCase):
                 slvr.solve()
                 self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
-    @unittest.skip('Skip timing test')
-    def test_time(self, cmp=None):
+    #@unittest.skip('Skip timing test')
+    def test_time(self):
         """ Test for timing purposes """
-        if cmp is None: cmp = {}
 
-        for wv in [True]:
-            with montblanc.factory.get_biro_solver('biro',version='v3',
-                na=64,npsrc=50,ngsrc=50,ntime=200,nchan=64,weight_vector=wv) as slvr:
+        wv = True
 
-                slvr.transfer_lm(slvr.lm_cpu)
-                slvr.transfer_brightness(slvr.brightness_cpu)
-                slvr.transfer_weight_vector(slvr.weight_vector_cpu)
-                slvr.transfer_bayes_data(slvr.bayes_data_cpu)
-                slvr.solve()
+        slvr_cfg = BiroSolverConfiguration(na=64, ntime=200, nchan=64,
+            data_source='biro', version='v3',
+            sources=montblanc.sources(point=50, gaussian=50),
+            dtype=Options.DTYPE_FLOAT,
+            weight_vector=wv)
+
+        with montblanc.factory.rime_solver(slvr_cfg) as slvr:
+
+            slvr.transfer_lm(slvr.lm_cpu)
+            slvr.transfer_brightness(slvr.brightness_cpu)
+            slvr.transfer_weight_vector(slvr.weight_vector_cpu)
+            slvr.transfer_bayes_data(slvr.bayes_data_cpu)
+            slvr.solve()
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV3)

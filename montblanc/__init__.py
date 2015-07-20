@@ -29,7 +29,9 @@ import os
 # Hooray for python
 import montblanc
 import montblanc.util as mbu
+import montblanc.config
 
+from montblanc.config import describe_options
 from montblanc.tests import test
 from montblanc.version import __version__
 
@@ -39,60 +41,6 @@ def get_montblanc_path():
 
 def get_source_path():
     return os.path.join(get_montblanc_path(), 'src')
-
-def get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs):
-    """
-    get_biro_solver(msfile, npsrc, ngsrc, nssrc, dtype=np.float32, **kwargs)
-
-    Returns a solver suitable for solving the BIRO RIME.
-
-    Parameters
-    ----------
-    msfile : string
-            Name of the measurement set file.
-    npsrc : number
-            Number of point sources.
-    ngsrc : number
-            Number of gaussian sources.
-    nssrc : number
-            Number of sersic sources.
-    dtype : The floating point data type.
-            Should be np.float32 or np.float64.
-    version : string
-            Should be either 'v1' or 'v2'
-
-    Keyword Arguments
-    -----------------
-    data_order : string
-	    Indicates what is the MeasurementSet data ordering: time x baseline or baseline x time.
-	    None - Assume Montblanc's default ordering (time x baseline)
-	    'casa' - Assume CASA's default ordering. It matches Montblanc's default ordering, so it can be avoided.
-	    'other' - Assume baseline x time ordering
-    
-    init_weights : string
-            Indicates how the weight vector should be initialised from the Measurementset.
-            None - Don't initialise the weight vector.
-            'sigma' - Initialise from 'SIGMA_SPECTRUM' if present, else 'SIGMA'
-            'weight' - Initialise from 'WEIGHT_SPECTRUM' if present, else 'WEIGHT'
-    weight_vector : boolean
-            True if the chi squared should be computed using a weighting for each value.
-            False if it should be computed with a single sigma squared value.
-    store_cpu : boolean
-            True if copies of the numpy arrays should be stored on the shared data object
-            when using the shared data object's transfer_* methods. Otherwise False.
-    context - pycuda.driver.Context.
-            The CUDA context to execute on If left blank, the default context
-            will be selected.
-
-    Returns
-    -------
-    A solver
-    """
-
-    import montblanc.factory
-
-    return montblanc.factory.get_biro_solver(sd_type='ms', msfile=msfile,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
 
 def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
     """ Setup logging configuration """
@@ -133,3 +81,92 @@ class MontblancConstants(object):
 
 # Create a constants object
 constants = MontblancConstants()
+
+def source_types():
+    """
+    Returns the source types available in montblanc
+
+    >>> montblanc.source_types()
+    %s
+    """
+    return montblanc.src_types.SOURCE_VAR_TYPES.keys()
+
+source_types.__doc__ %= montblanc.src_types.SOURCE_VAR_TYPES.keys()
+
+def sources(**kwargs):
+    """
+    Keyword arguments
+    -----------------
+    Keyword argument names should be name of source types
+    registered with montblanc. Their values should be
+    the number of these sources types.
+
+    Returns
+    -------
+    A dict containing source type numbers for all
+    valid source types (%s).
+
+    >>> %s
+    %s
+
+    """    
+    return mbu.default_sources(**kwargs)
+
+# Substitute docstring variables
+sources.__doc__ %= (', '.join(source_types()),
+    'montblanc.sources(point=10, gaussian=20)',
+    sources(point=10, gaussian=20))
+
+def rime_solver_cfg(**kwargs):
+    """
+    Produces a SolverConfiguration object, inherited from
+    a simple python dict, and containing the options required
+    to configure the RIME Solver.
+
+    Keyword arguments
+    -----------------
+    Any keyword arguments are inserted into the
+    returned dict.
+
+    Returns
+    -------
+    A SolverConfiguration object.
+
+    montblanc.rime_solver_cfg(msfile='WSRT.MS',
+        sources=montblanc.source(point=10,gaussian=20))
+
+    Valid configuration options are
+    %s
+    """
+
+    from montblanc.impl.biro.slvr_config import (BiroSolverConfiguration,
+        BiroSolverConfigurationOptions as Options)
+
+    slvr_cfg = BiroSolverConfiguration(**kwargs)
+
+    # Assume a MeasurementSet data source by default
+    slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_MS
+
+    return slvr_cfg
+
+rime_solver_cfg.__doc__ %= (montblanc.config.describe_options())
+
+def rime_solver(slvr_cfg):
+    """
+    rime_solver(slvr_cfg)
+
+    Returns a solver suitable for solving the RIME.
+
+    Parameters
+    ----------
+    slvr_cfg : BiroSolverConfiguration
+            Solver Configuration.
+
+    Returns
+    -------
+    A solver
+    """
+
+    import montblanc.factory
+
+    return montblanc.factory.rime_solver(slvr_cfg)

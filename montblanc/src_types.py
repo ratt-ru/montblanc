@@ -18,15 +18,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-class BaseLoader(object):
-    def __init__(self):
-        pass
+import numpy as np
 
-    def load(self, solver, slvr_cfg):
-        raise NotImplementedError
+# List of source types and the variable names
+# referring to the number of sources for that type
+POINT_TYPE = 'point'
+POINT_NR_VAR = 'npsrc'
 
-    def __enter__(self):
-        raise NotImplementedError
+GAUSSIAN_TYPE = 'gaussian'
+GAUSSIAN_NR_VAR = 'ngsrc'
 
-    def __exit__(self, type, value, traceback):
-        raise NotImplementedError
+SERSIC_TYPE = 'sersic'
+SERSIC_NR_VAR = 'nssrc'
+
+# Type to numbering variable mapping
+SOURCE_VAR_TYPES = {
+    POINT_TYPE : POINT_NR_VAR,
+    GAUSSIAN_TYPE : GAUSSIAN_NR_VAR,
+    SERSIC_TYPE : SERSIC_NR_VAR
+}

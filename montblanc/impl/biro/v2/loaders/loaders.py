@@ -23,11 +23,10 @@ import numpy as np
 import montblanc
 import montblanc.impl.common.loaders
 
-ORDER_TIME_BL = 'casa'
-ORDER_BL_TIME = 'other'
+from montblanc.config import (BiroSolverConfigurationOptions as Options)
 
 class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
-    def load(self, solver, **kwargs):
+    def load(self, solver, slvr_cfg):
         """
         Load the Measurement Set
         """
@@ -36,18 +35,18 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         tf = self.tables['freq']
 
         na, nbl, ntime, nchan = solver.na, solver.nbl, solver.ntime, solver.nchan
-        data_order = kwargs.get('data_order', ORDER_TIME_BL)
+        data_order = slvr_cfg.get(Options.DATA_ORDER, Options.DATA_ORDER_CASA)
 
         # Define transpose axes to convert file uvw order
         # to montblanc array shape: (ntime, nbl)
-        if data_order == ORDER_BL_TIME:
+        if data_order == Options.DATA_ORDER_OTHER:
             file_uvw_shape = (nbl, ntime, 3)
             uvw_transpose = (2,1,0)
             file_ant_shape = (nbl, ntime)
             ant_transpose = (1,0)
             file_data_shape = (nbl, ntime, nchan,4)
             data_transpose = (3,1,0,2)
-        elif data_order == ORDER_TIME_BL:
+        elif data_order == Options.DATA_ORDER_CASA:
             file_uvw_shape = (ntime, nbl,  3)
             uvw_transpose = (2,0,1)
             file_ant_shape = (ntime, nbl)
@@ -84,7 +83,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Get the baseline antenna pairs and correct the axes
         ant1 = tm.getcol('ANTENNA1').reshape(file_ant_shape)
         ant2 = tm.getcol('ANTENNA2').reshape(file_ant_shape)
-        if data_order == ORDER_BL_TIME:
+        if data_order == Options.DATA_ORDER_OTHER:
             ant1 = ant1.transpose(ant_transpose)
             ant2 = ant2.transpose(ant_transpose)
 
@@ -110,7 +109,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             solver.transfer_bayes_data(np.ascontiguousarray(vis_data))
 
         # Should we initialise our weights from the MS data?
-        init_weights = kwargs.get('init_weights', None)
+        init_weights = slvr_cfg.get(Options.INIT_WEIGHTS, None)
         valid = [None, 'sigma', 'weight']
 
         if not init_weights in valid:
@@ -175,52 +174,3 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
     def __exit__(solver, type, value, traceback):
         return super(MeasurementSetLoader,solver).__exit__(type,value,traceback)
-
-    def test_uvw_relations(solver, msuvw, ant_pairs):
-        """ Test that the uvw relation holds """
-        ap = ant_pairs.reshape(2,solver.ntime*solver.nbl)
-
-        # Create 1D indices from the flattened antenna pair array.
-        # Multiply it by size constant and add tiling corresponding
-        # to the indexing.
-        ant0 = ap[0] + np.repeat(np.arange(solver.ntime),solver.nbl)*solver.na
-        ant1 = ap[1] + np.repeat(np.arange(solver.ntime),solver.nbl)*solver.na
-
-        uvw_rec = solver.get_array_record('uvw')
-        uvw=np.empty(shape=uvw_rec.shape, dtype=uvw_rec.dtype)
-        uvw[:,:,1:solver.na] = msuvw.reshape(solver.ntime, solver.nbl, 3).transpose(2,0,1) \
-            .astype(solver.ft)[:,:,:solver.na-1]
-        uvw[:,:,0] = solver.ft(0)
-
-        print 'uvw', uvw
-        print 'uvw diff', uvw[:,:,:] - uvw[:,:,:]
-
-        """
-        ap = ant_pairs.reshape(2,solver.ntime*solver.nbl)
-
-        # Create 1D indices from the flattened antenna pair array.
-        # Multiply it by size constant and add tiling corresponding
-        # to the indexing.
-        ant0 = ap[0] + np.repeat(np.arange(solver.ntime),solver.nbl)*solver.na
-        ant1 = ap[1] + np.repeat(np.arange(solver.ntime),solver.nbl)*solver.na
-
-        print uvw.shape
-        print 'ant0 == ant1 %s' % (ant0 == ant1).all()
-
-
-        np.savetxt('file.txt',(uvw[:,:] - (uvw[ant1,:] - uvw[ant0,:])))
-
-        idx = np.empty(shape=(solver.ntime*solver.nbl),dtype=np.int32)
-
-        suvw = uvw.reshape(solver.ntime,solver.nbl,3)
-
-        # TODO. Inefficient indexing. Figure something out based
-        # on SolverCPU.compute_gaussian_shape
-        for t in range(solver.ntime):
-            for bl in range(solver.nbl):
-                #idx[t*solver.nbl + bl] = t*solver.na + ant_pairs[0,t,bl]
-                assert np.allclose(
-                    suvw[t,bl,:],
-                    suvw[t,ant_pairs[1,t,bl],:] - suvw[t,ant_pairs[0,t,bl],:]), \
-                    'UVW Relation does not hold for timestep %d baseline %d!' % (t,bl)
-        """
