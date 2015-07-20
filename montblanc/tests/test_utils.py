@@ -132,21 +132,39 @@ class TestUtils(unittest.TestCase):
         do_check(3500, 3500*3499//2, 3500*3501//2)   # SKA
 
     def test_random_like(self):
-        shape = (np.random.randint(1, 50), np.random.randint(1, 50))
-        dtype_list = [np.float32, np.float64, np.complex64, np.complex128]
-        dtype = dtype_list[np.random.randint(0,len(dtype_list))]
+        """
+        Test that the random_like function produces sensible data
+        """
 
-        ary = np.empty(shape=shape, dtype=dtype)
-        random_ary = mbu.random_like(ary)
+        # Try for floats and complex data
+        for dtype in [np.float32, np.float64, np.complex64, np.complex128]:
+            # Test random array creation with same
+            # shape and type as existing array
+            shape = (np.random.randint(1, 50), np.random.randint(1, 50))
+            ary = np.empty(shape=shape, dtype=dtype)    
+            random_ary = mbu.random_like(ary)
 
-        self.assertTrue(random_ary.shape == ary.shape)
-        self.assertTrue(random_ary.dtype == dtype)
+            # Test that that the shape and type is correct
+            self.assertTrue(random_ary.shape == ary.shape)
+            self.assertTrue(random_ary.dtype == dtype)
 
-        shape = (np.random.randint(1, 50), np.random.randint(1, 50))
-        random_ary = mbu.random_like(shape=shape, dtype=dtype)
+            # Test that we're getting complex data out
+            if np.issubdtype(dtype, np.complexfloating):
+                proportion_cplx = np.sum(np.iscomplex(random_ary)) / random_ary.size
+                self.assertTrue(proportion_cplx > 0.9)
 
-        self.assertTrue(random_ary.shape == shape)
-        self.assertTrue(random_ary.dtype == dtype)
+            # Test random array creation with supplied shape and type
+            shape = (np.random.randint(1, 50), np.random.randint(1, 50))
+            random_ary = mbu.random_like(shape=shape, dtype=dtype)
+
+            # Test that that the shape and type is correct
+            self.assertTrue(random_ary.shape == shape)
+            self.assertTrue(random_ary.dtype == dtype)
+
+            # Test that we're getting complex data out
+            if np.issubdtype(dtype, np.complexfloating):
+                proportion_cplx = np.sum(np.iscomplex(random_ary)) / random_ary.size
+                self.assertTrue(proportion_cplx > 0.9)
 
     def test_sky_model(self):
         """ Test sky model file loading """
