@@ -50,20 +50,13 @@ if __name__ == '__main__':
         init_weights=None, weight_vector=False, store_cpu=False,
         dtype='double', version=args.version)
 
-    import json
-    print json.dumps(slvr_cfg)
-
     with montblanc.rime_solver(slvr_cfg) as slvr:
-
         # Random point source coordinates in the l,m,n (brightness image) domain
-        lm = (np.random.random(size=slvr.lm_shape) * 0.1) \
-            .astype(slvr.lm_dtype)
+        lm = mbu.random_like(slvr.lm_gpu)*0.1
 
         if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
             # Random brightness matrix for the point sources
-            brightness = np.random.random(
-                    size=slvr.brightness_shape) \
-                .astype(slvr.brightness_dtype)
+            brightness = mbu.random_like(slvr.brightness_gpu)
         elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
             # Need a positive semi-definite brightness
             # matrix for v4 and v5
@@ -79,46 +72,33 @@ if __name__ == '__main__':
             I[:] = np.sqrt(Q**2 + U**2 + V**2 + noise)
             slvr.transfer_stokes(stokes)
 
-            alpha = np.random.random(
-                    size=slvr.alpha_shape) \
-                .astype(slvr.alpha_dtype)
+            alpha = mbu.random_like(slvr.alpha_gpu)
             slvr.transfer_alpha(alpha)
 
         # E beam
         if args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-            E_beam = (np.random.random(size=slvr.E_beam_shape) +
-                np.random.random(size=slvr.E_beam_shape)*1j).astype(slvr.E_beam_dtype)
+            E_beam = mbu.random_like(slvr.E_beam_gpu)
             slvr.transfer_E_beam(E_beam)
 
         # G term
         if args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-            G_term = (np.random.random(size=slvr.G_term_shape) +
-                np.random.random(size=slvr.G_term_shape)*1j).astype(slvr.G_term_dtype)
+            G_term = mbu.random_like(slvr.G_term_gpu)
             slvr.transfer_G_term(G_term)
-
 
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
         if slvr.ngsrc > 0:
-            gauss_shape = (np.random.random(
-                    size=slvr.gauss_shape_shape) * 0.1) \
-                .astype(slvr.gauss_shape_dtype)
+            gauss_shape = mbu.random_like(slvr.gauss_shape_gpu)*0.1
             slvr.transfer_gauss_shape(gauss_shape)
 
         # Create a bayesian model and upload it to the GPU
-        bayes_data = (np.random.random(size=slvr.bayes_data_shape) +
-                np.random.random(size=slvr.bayes_data_shape)*1j) \
-            .astype(slvr.bayes_data_dtype)
+        bayes_data = mbu.random_like(slvr.bayes_data_gpu)
 
         # Generate random antenna pointing errors
-        point_errors = np.random.random(
-                size=slvr.point_errors_shape) \
-            .astype(slvr.point_errors_dtype)
+        point_errors = mbu.random_like(slvr.point_errors_gpu)
 
         # Generate and transfer a noise vector.
-        weight_vector = np.random.random(
-                size=slvr.weight_vector_shape) \
-            .astype(slvr.ft)
+        weight_vector = mbu.random_like(slvr.weight_vector_gpu)
         slvr.transfer_weight_vector(weight_vector)
 
         # Execute the pipeline
