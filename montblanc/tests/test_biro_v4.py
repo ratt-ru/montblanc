@@ -396,25 +396,43 @@ class TestBiroV4(unittest.TestCase):
 
     def test_E_beam_float(self):
         """ Test the E Beam float kernel """
+        # Randomly configure the beam cube dimensions
+        beam_lw = np.random.randint(50, 60)
+        beam_mh = np.random.randint(50, 60)
+        beam_nud = np.random.randint(50, 60)
 
         slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
             sources=montblanc.sources(point=10, gaussian=10),
+            beam_lw=beam_lw, beam_mh=beam_mh, beam_nud=beam_nud,
             dtype=Options.DTYPE_FLOAT,
             pipeline=Pipeline([RimeEBeam()]))
 
         with solver(slvr_cfg) as slvr:
+            # Check that the beam cube dimensions are
+            # correctly configured
+            self.assertTrue(slvr.E_beam_shape == 
+                (beam_lw, beam_mh, beam_nud, 4))
 
             self.E_beam_test_impl(slvr, cmp={'rtol': 1e-4})
 
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
+        # Randomly configure the beam cube dimensions
+        beam_lw = np.random.randint(50, 60)
+        beam_mh = np.random.randint(50, 60)
+        beam_nud = np.random.randint(50, 60)
 
         slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
             sources=montblanc.sources(point=10, gaussian=10),
+            beam_lw=beam_lw, beam_mh=beam_mh, beam_nud=beam_nud,
             dtype=Options.DTYPE_DOUBLE,
             pipeline=Pipeline([RimeEBeam()]))
 
         with solver(slvr_cfg) as slvr:
+            # Check that the beam cube dimensions are
+            # correctly configured
+            self.assertTrue(slvr.E_beam_shape ==
+                (beam_lw, beam_mh, beam_nud, 4))
 
             self.E_beam_test_impl(slvr)
 
