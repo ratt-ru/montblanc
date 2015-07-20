@@ -78,9 +78,6 @@ P = [
     prop_dict('X2', 'ft', 0.0),
 
     # Width of the beam cube dimension. l, m and lambda
-    prop_dict('beam_lw', 'int', 50),
-    prop_dict('beam_mh', 'int', 50),
-    prop_dict('beam_nud', 'int', 50),
     # Lower l and m coordinates of the beam cube
     prop_dict('beam_ll', 'ft', -0.5),
     prop_dict('beam_lm', 'ft', -0.5),
@@ -219,8 +216,26 @@ class BiroSolver(BaseSolver):
 
         super(BiroSolver, self).__init__(slvr_cfg)
 
+        # Configure the dimensions of the beam cube
+        self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
+        self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
+        self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
+
         self.register_properties(P)
         self.register_arrays(A)
+
+    def get_properties(self):
+        # Obtain base solver property dictionary
+        # and add the beam cube dimensions to it
+        D = super(BiroSolver, self).get_properties()
+
+        D.update({
+            'beam_lw' : self.beam_lw,
+            'beam_mh' : self.beam_mh,
+            'beam_nud' : self.beam_nud
+        })
+
+        return D
 
     def get_default_base_ant_pairs(self):
         """
