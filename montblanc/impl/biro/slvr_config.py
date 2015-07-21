@@ -141,6 +141,14 @@ class BiroSolverConfiguration(SolverConfiguration):
             Options.VERSION_DESCRIPTION,
             Options.VALID_VERSIONS)
 
+        self.check_key_values(Options.E_BEAM_WIDTH,
+            Options.E_BEAM_WIDTH_DESCRIPTION)
+        self.check_key_values(Options.E_BEAM_HEIGHT,
+            Options.E_BEAM_HEIGHT_DESCRIPTION)
+        self.check_key_values(Options.E_BEAM_WIDTH,
+            Options.E_BEAM_DEPTH_DESCRIPTION)
+
+
     def set_defaults(self):
         # Do base class sets
         super(BiroSolverConfiguration,self).set_defaults()
