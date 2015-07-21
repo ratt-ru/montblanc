@@ -65,9 +65,9 @@ which sets up things based on the supplied Measurement Set, with 10 point and 10
 
 ## Citing Montblanc
 
-If you use Montblanc and find it useful, you may wish to consider citing the related paper. It is currently undergoing review, but an [arXiv][montblanc] preprint is available.
+If you use Montblanc and find it useful, please consider citing the related [paper][montblanc-paper-sciencedirect]. A [arXiv][montblanc-paper-arxiv] preprint is available.
 
-More information on BIRO can be found in this [arXiv][biro] preprint.
+The BIRO paper is available at [MNRAS][biro-paper-mnras], and a [arXiv][biro-paper-arxiv] is also available.
 
 ## Caveats
 
@@ -89,5 +89,7 @@ Everything should be considered unstable and subject to change. I will make an e
 [pyrap]:https://github.com/casacore/python-casacore
 [casacore]:https://github.com/casacore/casacore
 [radio-astro-ppa]:https://launchpad.net/~radio-astro/+archive/main
-[biro]:http://arxiv.org/abs/1501.05304
-[montblanc]:http://arxiv.org/abs/1501.07719
+[biro-paper-arxiv]:http://arxiv.org/abs/1501.05304
+[biro-paper-mnras]:http://mnras.oxfordjournals.org/content/450/2/1308.abstract
+[montblanc-paper-arxiv]:http://arxiv.org/abs/1501.07719
+[montblanc-paper-sciencedirect]:http://www.sciencedirect.com/science/article/pii/S2213133715000633
