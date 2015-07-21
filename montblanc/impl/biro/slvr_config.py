@@ -57,7 +57,7 @@ class BiroSolverConfigurationOptions(Options):
     # weight vector initialisation keyword and valid values
     # This options determines whether
     INIT_WEIGHTS = 'init_weights'
-    INIT_WEIGHT_NONE = None
+    INIT_WEIGHT_NONE = 'None'
     INIT_WEIGHT_SIGMA = 'sigma'
     INIT_WEIGHT_WEIGHT = 'weight'
     DEFAULT_INIT_WEIGHT = INIT_WEIGHT_NONE 
@@ -84,18 +84,39 @@ class BiroSolverConfigurationOptions(Options):
             Options.DESCRIPTION: WEIGHT_VECTOR,
             Options.VALID: VALID_WEIGHT_VECTOR,
             Options.DEFAULT: DEFAULT_WEIGHT_VECTOR,
+            Options.REQUIRED: True
         },
 
         INIT_WEIGHTS: {
             Options.DESCRIPTION: INIT_WEIGHT_DESCRIPTION,
             Options.VALID: VALID_INIT_WEIGHTS,
             Options.DEFAULT: DEFAULT_INIT_WEIGHT,
+            Options.REQUIRED: True
         },
 
         VERSION: {
             Options.DESCRIPTION: VERSION_DESCRIPTION,
             Options.VALID: VALID_VERSIONS,
             Options.DEFAULT: DEFAULT_VERSION,
+            Options.REQUIRED: True
+        },
+
+        E_BEAM_WIDTH: {
+            Options.DESCRIPTION: E_BEAM_WIDTH_DESCRIPTION,
+            Options.DEFAULT: DEFAULT_E_BEAM_WIDTH,
+            Options.REQUIRED: True
+        },
+
+        E_BEAM_HEIGHT: {
+            Options.DESCRIPTION: E_BEAM_HEIGHT_DESCRIPTION,
+            Options.DEFAULT: DEFAULT_E_BEAM_HEIGHT,
+            Options.REQUIRED: True
+        },
+
+        E_BEAM_DEPTH: {
+            Options.DESCRIPTION: E_BEAM_DEPTH_DESCRIPTION,
+            Options.DEFAULT: DEFAULT_E_BEAM_DEPTH,
+            Options.REQUIRED: True
         },
     }
 
@@ -106,65 +127,29 @@ class BiroSolverConfiguration(SolverConfiguration):
     with options pertinent to BIRO
     """
 
-    def __init__(self, **kwargs):
-        super(BiroSolverConfiguration, self).__init__(**kwargs)
-
-    """
-    def __init__(self, mapping, **kwargs):
-        super(BiroSolverConfiguration,self).__init__(mapping, **kwargs)
-
-    def __init__(self, iterable, **kwargs):
-        super(BiroSolverConfiguration,self).__init__(iterable, **kwargs)
-    """
-
-
-    def verify(self):
+    def __init__(self, *args, **kwargs):
+        super(BiroSolverConfiguration,self).__init__(*args, **kwargs)
+        
+    def verify(self, descriptions=None):
         """
         Verify that required parts of the solver configuration
         are present.
         """
 
+        if descriptions is None:
+            descriptions = BiroSolverConfigurationOptions.descriptions
+
         # Do base class checks
         super(BiroSolverConfiguration,self).verify()
+        # Now check our class
+        super(BiroSolverConfiguration,self).verify(descriptions)
 
-        Options = BiroSolverConfigurationOptions
+    def set_defaults(self, descriptions=None):
+        if descriptions is None:
+            descriptions = BiroSolverConfigurationOptions.descriptions
 
-        self.check_key_values(Options.WEIGHT_VECTOR,
-            Options.WEIGHT_VECTOR_DESCRIPTION,
-            Options.VALID_WEIGHT_VECTOR)
-
-        self.check_key_values(Options.INIT_WEIGHTS,
-            Options.INIT_WEIGHT_DESCRIPTION,
-            Options.VALID_INIT_WEIGHTS)
-
-        self.check_key_values(Options.VERSION,
-            Options.VERSION_DESCRIPTION,
-            Options.VALID_VERSIONS)
-
-        self.check_key_values(Options.E_BEAM_WIDTH,
-            Options.E_BEAM_WIDTH_DESCRIPTION)
-        self.check_key_values(Options.E_BEAM_HEIGHT,
-            Options.E_BEAM_HEIGHT_DESCRIPTION)
-        self.check_key_values(Options.E_BEAM_WIDTH,
-            Options.E_BEAM_DEPTH_DESCRIPTION)
-
-
-    def set_defaults(self):
         # Do base class sets
         super(BiroSolverConfiguration,self).set_defaults()
+        # Now set our class defaults
+        super(BiroSolverConfiguration,self).set_defaults(descriptions)
 
-        Options = BiroSolverConfigurationOptions
-
-        # Should we use the weight vector in our calculations?
-        self.setdefault(Options.WEIGHT_VECTOR, Options.DEFAULT_WEIGHT_VECTOR)
-
-        # Weight Initialisation scheme
-        self.setdefault(Options.INIT_WEIGHTS, Options.DEFAULT_INIT_WEIGHT)
-
-        # Version
-        self.setdefault(Options.VERSION, Options.DEFAULT_VERSION)
-
-        # Beam Dimensions
-        self.setdefault(Options.E_BEAM_WIDTH, Options.DEFAULT_E_BEAM_WIDTH)
-        self.setdefault(Options.E_BEAM_HEIGHT, Options.DEFAULT_E_BEAM_HEIGHT)
-        self.setdefault(Options.E_BEAM_DEPTH, Options.DEFAULT_E_BEAM_DEPTH)

@@ -102,28 +102,34 @@ class SolverConfigurationOptions(object):
     DESCRIPTION = 'description'
     DEFAULT = 'default'
     VALID = 'valid'
+    REQUIRED = 'required'
 
     descriptions = {
         SOURCES: {
             DESCRIPTION: SOURCES_DESCRIPTION,
-            DEFAULT: DEFAULT_SOURCES },
+            DEFAULT: DEFAULT_SOURCES,
+            REQUIRED: True },
 
         NTIME: {
             DESCRIPTION: NTIME_DESCRIPTION,
-            DEFAULT: DEFAULT_NTIME },
+            DEFAULT: DEFAULT_NTIME,
+            REQUIRED: True },
 
         NA: {
             DESCRIPTION: NA_DESCRIPTION,
-            DEFAULT: DEFAULT_NA },
+            DEFAULT: DEFAULT_NA,
+            REQUIRED: True },
 
         NCHAN: {
             DESCRIPTION: NCHAN_DESCRIPTION,
-            DEFAULT: DEFAULT_NCHAN },
+            DEFAULT: DEFAULT_NCHAN,
+            REQUIRED: True },
 
         DTYPE: {
             DESCRIPTION: DTYPE_DESCRIPTION,
             DEFAULT: DEFAULT_DTYPE,
-            VALID: VALID_DTYPES },
+            VALID: VALID_DTYPES,
+            REQUIRED: True },
 
         AUTO_CORRELATIONS: {
             DESCRIPTION: AUTO_CORRELATIONS_DESCRIPTION,
@@ -134,7 +140,8 @@ class SolverConfigurationOptions(object):
         DATA_SOURCE: {
             DESCRIPTION: DATA_SOURCE_DESCRIPTION,
             DEFAULT: DEFAULT_DATA_SOURCE,
-            VALID: VALID_DATA_SOURCES
+            VALID: VALID_DATA_SOURCES,
+            REQUIRED: True
         },
 
         MS_FILE: {
@@ -145,6 +152,7 @@ class SolverConfigurationOptions(object):
             DESCRIPTION: DATA_ORDER_DESCRIPTION,
             DEFAULT: DEFAULT_DATA_ORDER,
             VALID: VALID_DATA_ORDER,
+            REQUIRED: True
         },
 
         STORE_CPU: {
@@ -174,23 +182,12 @@ class SolverConfiguration(dict):
       - Random data
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         """
         Construct a default solver configuration
         """
-        super(SolverConfiguration,self).__init__(**kwargs)
+        super(SolverConfiguration,self).__init__(*args, **kwargs)
         self.set_defaults()
-
-    """
-    def __init__(self, mapping, **kwargs):
-        super(SolverConfiguration,self).__init__(mapping, **kwargs)
-        self.set_defaults()
-
-    def __init__(self, iterable, **kwargs):
-        super(SolverConfiguration,self).__init__(iterable, **kwargs)
-        self.set_defaults()
-    """
-
 
     def check_key_values(self, key, description=None, valid_values=None):
         if description is None:
@@ -205,7 +202,7 @@ class SolverConfiguration(dict):
                 "key ''%s'' is invalid. "
                 "Valid values are %s.") % (self[key], key, valid_values))
 
-    def verify(self):
+    def verify(self, descriptions=None):
         """
         Verify that required parts of the solver configuration
         are present.
@@ -213,45 +210,31 @@ class SolverConfiguration(dict):
 
         Options = SolverConfigurationOptions
 
-        self.check_key_values(Options.SOURCES, Options.SOURCES_DESCRIPTION)
-        self.check_key_values(Options.NTIME, Options.NTIME_DESCRIPTION)
-        self.check_key_values(Options.NA, Options.NA_DESCRIPTION)
-        self.check_key_values(Options.NCHAN, Options.NCHAN_DESCRIPTION)
+        if descriptions is None:
+            descriptions = Options.descriptions
 
-        self.check_key_values(Options.DTYPE,
-            Options.DTYPE_DESCRIPTION, Options.VALID_DTYPES)
+        for name, info in descriptions.iteritems():
+            required = info.get(Options.REQUIRED, False)
 
-        self.check_key_values(Options.DATA_SOURCE,
-            Options.DATA_SOURCE_DESCRIPTION, Options.VALID_DATA_SOURCES)
+            if required and name not in self:
+                description = info.get(Options.DESCRIPTION, 'None')
 
-        self.check_key_values(Options.DATA_ORDER,
-            Options.DATA_ORDER_DESCRIPTION, Options.VALID_DATA_ORDER)
+                raise KeyError(("Solver configuration is missing "
+                    "key '%s'. Description: %s") % (name, description))
 
-        self.check_key_values(Options.STORE_CPU,
-            Options.STORE_CPU_DESCRIPTION, Options.VALID_STORE_CPU)
+            valid_values = info.get(Options.VALID, None)
 
-    def set_defaults(self):
+            if valid_values is not None and self[name] not in valid_values:
+                raise KeyError(("Value '%s for solver configuration "
+                    "key '%s' is invalid. "
+                    "Valid values are %s.") % (self[name], name, valid_values))
+
+    def set_defaults(self, descriptions=None):
         Options = SolverConfigurationOptions
 
-        # Configure Sources
-        self.setdefault(Options.SOURCES, mbu.default_sources())
+        if descriptions is None:
+            descriptions = Options.descriptions
 
-        # Configure visibility problem sizeuse the 
-        self.setdefault(Options.NTIME, Options.DEFAULT_NTIME)
-        self.setdefault(Options.NA, Options.DEFAULT_NA)
-        self.setdefault(Options.NCHAN, Options.DEFAULT_NCHAN)
-
-        # Should
-        self.setdefault(Options.AUTO_CORRELATIONS, Options.DEFAULT_AUTO_CORRELATIONS)
-
-        # Set the data source
-        self.setdefault(Options.DATA_SOURCE, Options.DEFAULT_DATA_SOURCE)
-
-        # Set the data source
-        self.setdefault(Options.DATA_ORDER, Options.DEFAULT_DATA_ORDER)
-
-        # Set the data type
-        self.setdefault(Options.DTYPE, Options.DEFAULT_DTYPE)
-
-        # Should we store CPU arrays?
-        self.setdefault(Options.STORE_CPU, Options.DEFAULT_STORE_CPU)
+        for name, info in descriptions.iteritems():
+            if Options.DEFAULT in info:
+                self.setdefault(name, info.get(Options.DEFAULT))
