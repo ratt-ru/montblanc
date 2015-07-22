@@ -241,8 +241,9 @@ def viable_dim_config(bytes_available, arrays, props,
         bytes_available = 0
 
     modified_dims = {}
+    P = props.copy()
 
-    bytes_used = dict_array_bytes_required(arrays, props)
+    bytes_used = dict_array_bytes_required(arrays, P)
 
     # While more bytes are used than are available, set
     # dimensions to one in the order specified by the
@@ -283,7 +284,7 @@ def viable_dim_config(bytes_available, arrays, props,
                     ' of size %d to larger value %d. '
                     ' This reduction has been ignored.') % (dim, P[dim], value) )
 
-        bytes_used = dict_array_bytes_required(arrays, props)
+        bytes_used = dict_array_bytes_required(arrays, P)
 
     return True, modified_dims
 
