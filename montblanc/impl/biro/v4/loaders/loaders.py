@@ -85,14 +85,11 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             solver.transfer_bayes_data(np.ascontiguousarray(vis_data))
 
         # Should we initialise our weights from the MS data?
-        init_weights = slvr_cfg.get(Options.INIT_WEIGHTS, None)
-        valid = [None, 'sigma', 'weight']
-
-        if not init_weights in valid:
-            raise ValueError, 'init_weights should be set to None, ''sigma'' or ''weights'''
+        init_weights = slvr_cfg.get(Options.INIT_WEIGHTS)
 
         # Load in flag and weighting data, if it exists
-        if init_weights is not None and tm.colnames().count('FLAG') > 0:
+        if init_weights is not Options.INIT_WEIGHTS_NONE and \
+            tm.colnames().count('FLAG') > 0:
             # Get the flag data. Data flagged as True should be ignored,
             # therefore we flip the values so that when we multiply flag
             # by the weights later, a False value zeroes out the weight
@@ -103,15 +100,15 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             # flag matrix
             flag = np.logical_or(flag, flag_row[:,np.newaxis,np.newaxis])
 
-            if init_weights == 'weight':
+            if init_weights == Options.INIT_WEIGHTS_WEIGHT:
                 # Obtain weighting information from WEIGHT_SPECTRUM
                 # preferably, otherwise WEIGHtm.
                 if tm.colnames().count('WEIGHT_SPECTRUM') > 0:
-                    # Try obtain the weightings from WEIGHT_SPECTRUM firstm.
+                    # Try obtain the weightings from WEIGHT_SPECTRUM first.
                     # It has the same dimensions as 'FLAG'
                     weight_vector = flag*tm.getcol('WEIGHT_SPECTRUM')
                 elif tm.colnames().count('WEIGHT') > 0:
-                    # Otherwise we should try obtain the weightings from WEIGHtm.
+                    # Otherwise we should try obtain the weightings from WEIGHT.
                     # This doesn't have per-channel weighting, so we introduce
                     # this with a broadcast
                     weight_vector = flag * \
@@ -119,15 +116,15 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                 else:
                     # Just use the boolean flags as weighting values
                     weight_vector = flag.astype(solver.ft)
-            elif init_weights == 'sigma':
+            elif init_weights == Options.INIT_WEIGHTS_SIGMA:
                 # Obtain weighting information from SIGMA_SPECTRUM
                 # preferably, otherwise SIGMA.
                 if tm.colnames().count('SIGMA_SPECTRUM') > 0:
-                    # Try obtain the weightings from WEIGHT_SPECTRUM firstm.
+                    # Try obtain the weightings from WEIGHT_SPECTRUM first.
                     # It has the same dimensions as 'FLAG'
                     weight_vector = flag*tm.getcol('SIGMA_SPECTRUM')
                 elif tm.colnames().count('SIGMA') > 0:
-                    # Otherwise we should try obtain the weightings from WEIGHtm.
+                    # Otherwise we should try obtain the weightings from WEIGHt.
                     # This doesn't have per-channel weighting, so we introduce
                     # this with a broadcast
                     weight_vector = flag * \
