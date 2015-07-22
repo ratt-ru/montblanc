@@ -124,24 +124,32 @@ class TestBiroV5(unittest.TestCase):
             A = copy.deepcopy(BSV4mod.A)
             P = slvr.get_properties()
 
-            viable, MP = mbu.viable_dim_config(
-                128*1024*1024, A,  P, ['ntime', 'nbl&na', 'nchan'], 1)
+            viable, MP = mbu.viable_dim_config(128*1024*1024,
+                A, P.copy(), ['ntime', 'nbl&na', 'nchan'], 1)
             self.assertTrue(viable is True and len(MP) == 1 and
                 MP['ntime'] == 1)
 
-            viable, MP = mbu.viable_dim_config(
-                8*1024*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1,)
+            viable, MP = mbu.viable_dim_config(8*1024*1024,
+                A, P.copy(), ['ntime', 'nbl&na', 'nchan'], 1)
             self.assertTrue(viable is True and len(MP) == 3 and
                 MP['ntime'] == 1 and
                 MP['na'] == 1 and
                 MP['nbl'] == 1)
 
-            viable, MP = mbu.viable_dim_config(
-                1*1024*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1)
+            viable, MP = mbu.viable_dim_config(1*1024*1024,
+                A, P.copy(), ['ntime', 'nbl&na', 'nchan'], 1)
             self.assertTrue(viable is True and len(MP) == 4 and
                 MP['ntime'] == 1 and
                 MP['na'] == 1 and
                 MP['nbl'] == 1 and
+                MP['nchan'] == 1)
+
+            viable, MP = mbu.viable_dim_config(512*1024,
+                A, P.copy(), ['ntime', 'nbl=6&na=3', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MP) == 4 and
+                MP['ntime'] == 1 and
+                MP['na'] == 3 and
+                MP['nbl'] == 6 and
                 MP['nchan'] == 1)
 
             viable, MP = mbu.viable_dim_config(

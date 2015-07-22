@@ -257,10 +257,31 @@ def viable_dim_config(bytes_available, arrays, props,
             return False, modified_dims
 
         # Can't fit everything into memory,
-        # Set dimensions to 1 and re-evaluate
+        # Lower dimensions and re-evaluate
         for dim in dims:
-            modified_dims[dim] = 1
-            props[dim] = 1
+            # We may have been supplied a dimension value
+            # to reduce to. Should be specified with an =
+            l = [x.strip() for x in dim.split('=')]
+
+            if len(l) == 1:
+                value = 1
+            elif len(l) == 2:
+                dim, value = l[0], int(l[1])
+                if value <= 0:
+                    raise ValueError(('Dimension %s may not be set '
+                        'to negative value %d') % (dim, value))
+            if len(l) > 2:
+                raise ValueError('Splitting %s on = produces '
+                    '%d strings, not one or two.' % (dim, len(l)))
+
+            # Attempt to reduce the dimension
+            if P[dim] > value:
+                modified_dims[dim] = value
+                P[dim] = value
+            else:
+                montblanc.log.warn(('Tried to reduce dimension %s '
+                    ' of size %d to larger value %d. '
+                    ' This reduction has been ignored.') % (dim, P[dim], value) )
 
         bytes_used = dict_array_bytes_required(arrays, props)
 
