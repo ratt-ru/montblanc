@@ -57,16 +57,16 @@ class BiroSolverConfigurationOptions(Options):
     # weight vector initialisation keyword and valid values
     # This options determines whether
     INIT_WEIGHTS = 'init_weights'
-    INIT_WEIGHT_NONE = 'None'
-    INIT_WEIGHT_SIGMA = 'sigma'
-    INIT_WEIGHT_WEIGHT = 'weight'
-    DEFAULT_INIT_WEIGHT = INIT_WEIGHT_NONE 
-    VALID_INIT_WEIGHTS = [INIT_WEIGHT_NONE, INIT_WEIGHT_SIGMA, INIT_WEIGHT_WEIGHT]
-    INIT_WEIGHT_DESCRIPTION = (
+    INIT_WEIGHTS_NONE = None
+    INIT_WEIGHTS_SIGMA = 'sigma'
+    INIT_WEIGHTS_WEIGHT = 'weight'
+    DEFAULT_INIT_WEIGHTS = INIT_WEIGHTS_NONE 
+    VALID_INIT_WEIGHTS = [INIT_WEIGHTS_NONE, INIT_WEIGHTS_SIGMA, INIT_WEIGHTS_WEIGHT]
+    INIT_WEIGHTS_DESCRIPTION = (
         "Governs how the weight vector is initialised from a Measurement Set.",
         "If None, uninitialised.",
-        "If ''%s'', initialised from the SIGMA column." % INIT_WEIGHT_SIGMA,
-        "If ''%s'', initialised from the WEIGHT column." % INIT_WEIGHT_WEIGHT)
+        "If ''%s'', initialised from the SIGMA column." % INIT_WEIGHTS_SIGMA,
+        "If ''%s'', initialised from the WEIGHT column." % INIT_WEIGHTS_WEIGHT)
 
     #
     VERSION = 'version'
@@ -88,9 +88,9 @@ class BiroSolverConfigurationOptions(Options):
         },
 
         INIT_WEIGHTS: {
-            Options.DESCRIPTION: INIT_WEIGHT_DESCRIPTION,
+            Options.DESCRIPTION: INIT_WEIGHTS_DESCRIPTION,
             Options.VALID: VALID_INIT_WEIGHTS,
-            Options.DEFAULT: DEFAULT_INIT_WEIGHT,
+            Options.DEFAULT: DEFAULT_INIT_WEIGHTS,
             Options.REQUIRED: True
         },
 
