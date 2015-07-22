@@ -53,47 +53,19 @@ class CompositeBiroSolver(BaseSolver):
     Implements a solver composed of multiple BiroSolvers. The sub-solver
     memory transfers and pipelines are executed asynchronously.
     """
-    def __init__(self, na=DEFAULT_NA, nchan=DEFAULT_NCHAN, ntime=DEFAULT_NTIME,
-        npsrc=DEFAULT_NPSRC, ngsrc=DEFAULT_NGSRC, nssrc=DEFAULT_NSSRC, dtype=DEFAULT_DTYPE,
-        pipeline=None, **kwargs):
+    def __init__(self, slvr_cfg):
         """
-        CompositeBiroSolver Constructor
+        BiroSolver Constructor
 
         Parameters:
-            na : integer
-                Number of antennae.
-            nchan : integer
-                Number of channels.
-            ntime : integer
-                Number of timesteps.
-            npsrc : integer
-                Number of point sources.
-            ngsrc : integer
-                Number of gaussian sources.
-            nssrc : integer
-                Number of sersic sources.
-            dtype : np.float32 or np.float64
-                Specify single or double precision arithmetic.
-        Keyword Arguments:
-            context : pycuda.driver.Context
-                CUDA context to operate on.
-            store_cpu: boolean
-                if True, store cpu versions of the kernel arrays
-                within the GPUSolver object.
-            weight_vector: boolean
-                if True, use a weight vector when evaluating the
-                RIME, else use a single sigma squared value.
-            mem_budget: integer
-                Amount of memory in bytes that the solver should
-                take into account when fitting the problem onto the
-                GPU.
-            nsolvers: integer
-                Number of sub-solvers to use when subdividing the
-                problem.
+            slvr_cfg : SolverConfiguration
+                Solver Configuration variables
         """
 
-        super(CompositeBiroSolver, self).__init__(na=na, nchan=nchan, ntime=ntime,
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc, dtype=dtype, **kwargs)
+        # Set up a default pipeline if None is supplied
+        slvr_cfg.setdefault('pipeline', get_pipeline(slvr_cfg))
+
+        super(BiroSolver, self).__init__(slvr_cfg)
 
         A_main = copy.deepcopy(BSV4mod.A)
         P_main = copy.deepcopy(BSV4mod.P)
@@ -114,7 +86,7 @@ class CompositeBiroSolver(BaseSolver):
         # Do not create CPU versions of result arrays
 
         for ary in [a for a in A_main if a['name'] in
-                ['jones_scalar', 'vis', 'chi_sqrd_result']]:
+                ['vis', 'B_sqrt', 'jones', 'chi_sqrd_result']]:
             ary['cpu'] = False
 
         # Create the arrays on the solver
