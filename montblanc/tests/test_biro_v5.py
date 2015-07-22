@@ -159,6 +159,13 @@ class TestBiroV5(unittest.TestCase):
                 MP['na'] == 1 and
                 MP['nbl'] == 1)
 
+            # Try with 3 solvers.
+            viable, MP = mbu.viable_dim_config(128*1024*1024,
+                A, P, ['ntime', 'nbl&na', 'nchan'], 3)
+            self.assertTrue(viable is True and len(MP) == 1 and
+                MP['ntime'] == 1)
+
+
     @unittest.skip('Skip timing test')
     def test_time(self, cmp=None):
         """ Test for timing purposes """

@@ -212,9 +212,6 @@ def viable_dim_config(bytes_available, arrays, props,
         Multple dimensions can be reduced simultaneously using
         the following syntax 'nbl&na'. This is mostly useful for
         the baseline-antenna equivalence.
-
-    Keyword Arguments
-    ----------------------------
     nsolvers : int
         Number of solvers to budget for. Defaults to one.
 
@@ -243,7 +240,7 @@ def viable_dim_config(bytes_available, arrays, props,
     modified_dims = {}
     P = props.copy()
 
-    bytes_used = dict_array_bytes_required(arrays, P)
+    bytes_used = dict_array_bytes_required(arrays, P)*nsolvers
 
     # While more bytes are used than are available, set
     # dimensions to one in the order specified by the
@@ -284,10 +281,9 @@ def viable_dim_config(bytes_available, arrays, props,
                     ' of size %d to larger value %d. '
                     ' This reduction has been ignored.') % (dim, P[dim], value) )
 
-        bytes_used = dict_array_bytes_required(arrays, P)
+        bytes_used = dict_array_bytes_required(arrays, P)*nsolvers
 
     return True, modified_dims
-
 
 def viable_timesteps(bytes_available, arrays, props):
     """
