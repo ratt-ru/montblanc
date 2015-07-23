@@ -216,7 +216,7 @@ class BaseSolver(Solver):
             raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
 
         # Store the context, choosing the default if not specified
-        ctx = slvr_cfg.get('context', None)
+        ctx = slvr_cfg.get(Options.CONTEXT, None)
 
         if ctx is None:
             raise Exception('No CUDA context was supplied to the BaseSolver')

@@ -99,6 +99,13 @@ class SolverConfigurationOptions(object):
         'Governs whether array transfers to the GPU '
         'will be stored in CPU arrays on the solver.')
 
+
+    CONTEXT = 'context'
+    CONTEXT_DESCRIPTION = ('PyCUDA context(s) '
+        'available or this solver to use. '
+        'Should be of type pycuda.driver.Context. '
+        'May be a single context of a list of contexts')
+
     DESCRIPTION = 'description'
     DEFAULT = 'default'
     VALID = 'valid'
@@ -152,6 +159,11 @@ class SolverConfigurationOptions(object):
             DESCRIPTION: DATA_ORDER_DESCRIPTION,
             DEFAULT: DEFAULT_DATA_ORDER,
             VALID: VALID_DATA_ORDER,
+            REQUIRED: True
+        },
+
+        CONTEXT : {
+            DESCRIPTION: CONTEXT_DESCRIPTION,
             REQUIRED: True
         },
 
