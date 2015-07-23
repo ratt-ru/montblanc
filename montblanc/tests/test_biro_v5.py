@@ -36,7 +36,7 @@ import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
 def solver(slvr_cfg, **kwargs):
     slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
-    slvr_cfg[Options.VERSION] = Options.VERSION_FOUR
+    slvr_cfg[Options.VERSION] = Options.VERSION_FIVE
     slvr_cfg.update(kwargs)
 
     return montblanc.factory.rime_solver(slvr_cfg)
