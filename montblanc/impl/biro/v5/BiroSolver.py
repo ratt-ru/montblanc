@@ -18,10 +18,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+from montblanc.BaseSolver import BaseSolver
 from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
-from montblanc.impl.biro.v5.gpu.RimeEK import RimeEK
-from montblanc.impl.biro.v5.gpu.RimeGaussBSum import RimeGaussBSum
 
 class BiroSolver(BaseSolver):
     """ BIRO Solver Implementation """
@@ -35,22 +34,34 @@ class BiroSolver(BaseSolver):
         """
 
         # Set up a default pipeline if None is supplied
-        slvr_cfg.setdefault('pipeline', get_pipeline(slvr_cfg))
 
         super(BiroSolver, self).__init__(slvr_cfg)
 
-        self.rime_ek = RimeEK()
-        self.rime_b_sum = RimeGaussBSum(weight_vector=kwargs.get('weight_vector', False))
+        # Configure the dimensions of the beam cube
+        self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
+        self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
+        self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
+
+    def get_properties(self):
+        # Obtain base solver property dictionary
+        # and add the beam cube dimensions to it
+        D = super(BiroSolver, self).get_properties()
+
+        D.update({
+            'beam_lw' : self.beam_lw,
+            'beam_mh' : self.beam_mh,
+            'beam_nud' : self.beam_nud
+        })
+
+        return D
 
     def initialise(self):
         with self.context:
-            self.rime_ek.initialise(self)
-            self.rime_b_sum.initialise(self)
+            pass
 
     def shutdown(self):
         with self.context:
-            self.rime_ek.shutdown(self)
-            self.rime_b_sum.shutdown(self)
+            pass
 
     # Take these methods from the v2 BiroSolver
     get_default_base_ant_pairs = \

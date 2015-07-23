@@ -29,13 +29,7 @@ import montblanc
 import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
-from montblanc.BaseSolver import DEFAULT_NA
-from montblanc.BaseSolver import DEFAULT_NCHAN
-from montblanc.BaseSolver import DEFAULT_NTIME
-from montblanc.BaseSolver import DEFAULT_NPSRC
-from montblanc.BaseSolver import DEFAULT_NGSRC
-from montblanc.BaseSolver import DEFAULT_NSSRC
-from montblanc.BaseSolver import DEFAULT_DTYPE
+from montblanc.config import (BiroSolverConfigurationOptions as Options)
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
@@ -62,9 +56,13 @@ class CompositeBiroSolver(BaseSolver):
         """
 
         # Set up a default pipeline if None is supplied
-        slvr_cfg.setdefault('pipeline', get_pipeline(slvr_cfg))
 
-        super(BiroSolver, self).__init__(slvr_cfg)
+        super(CompositeBiroSolver, self).__init__(slvr_cfg)
+
+        # Configure the dimensions of the beam cube
+        self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
+        self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
+        self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
 
         A_main = copy.deepcopy(BSV4mod.A)
         P_main = copy.deepcopy(BSV4mod.P)
@@ -172,6 +170,20 @@ class CompositeBiroSolver(BaseSolver):
 
         self.use_weight_vector = kwargs.get('weight_vector', False)
         self.initialised = False
+
+    def get_properties(self):
+        # Obtain base solver property dictionary
+        # and add the beam cube dimensions to it
+        D = super(CompositeBiroSolver, self).get_properties()
+
+        D.update({
+            'beam_lw' : self.beam_lw,
+            'beam_mh' : self.beam_mh,
+            'beam_nud' : self.beam_nud
+        })
+
+        return D
+
 
     def transfer_arrays(self, sub_solver_idx, time_begin, time_end):
         """
