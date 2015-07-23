@@ -159,4 +159,4 @@ def rime_solver(slvr_cfg):
     elif data_source == Options.DATA_SOURCE_DEFAULTS:
         return BiroSolver(slvr_cfg)
     else:
-        raise Exception, 'Invalid type %s' % sd_type
+        raise Exception, 'Invalid type %s' % data_source
