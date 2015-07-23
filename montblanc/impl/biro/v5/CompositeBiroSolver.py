@@ -38,7 +38,6 @@ from montblanc.BaseSolver import DEFAULT_NSSRC
 from montblanc.BaseSolver import DEFAULT_DTYPE
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
-import montblanc.impl.biro.common
 
 from montblanc.impl.biro.v5.BiroSolver import BiroSolver
 
@@ -174,8 +173,6 @@ class CompositeBiroSolver(BaseSolver):
         self.use_weight_vector = kwargs.get('weight_vector', False)
         self.initialised = False
 
-        self.fsm = montblanc.impl.biro.common.get_fsm(self)
-
     def transfer_arrays(self, sub_solver_idx, time_begin, time_end):
         """
         Transfer CPU arrays on the CompositeBiroSolver over to the
@@ -283,13 +280,8 @@ class CompositeBiroSolver(BaseSolver):
         if not self.initialised:
             self.initialise()
 
-        # Execute the finite state machine
         with self.context:
-            # Go to the start condition
-            self.fsm.to_start()
-
-            while not self.fsm.model.is_done():
-                self.fsm.next()
+            pass
 
     def shutdown(self):
         """ Shutdown the solver """
