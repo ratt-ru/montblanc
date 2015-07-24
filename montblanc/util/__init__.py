@@ -20,6 +20,7 @@
 
 import numpy as np
 import math
+import re
 
 import montblanc
 
@@ -188,6 +189,13 @@ def dict_array_bytes_required(arrays, props):
     return np.sum([dict_array_bytes(ary, props)
         for ary in arrays])
 
+__DIM_REDUCTION_RE = re.compile(    # Capture Groups and Subgroups
+    "^\s*(?P<name>[A-Za-z0-9_]*?)"  # 1.   Dimension name
+    "(?:\s*?=\s*?"                  # 2.   White spaces and =  
+        "(?P<value>[0-9]*?)"        # 2.1  A value
+        "(?P<percent>\%?)"          # 2.2  Possibly followed by a percentage
+    ")?\s*?$")                      #      Capture group 2 possibly occurs
+
 def viable_dim_config(bytes_available, arrays, props,
         dim_ord, nsolvers=1):
     """
@@ -228,6 +236,14 @@ def viable_dim_config(bytes_available, arrays, props,
     If this is not possible, it will first set ntime=1, and then try fit an
     1 x nbl x nchan problem into the budget, then a 1 x 1 x nchan
     problem.
+
+    One can specify reductions for specific dimensions.
+    For e.g. ['ntime=20', 'nbl=1&na=2', 'nchan=50%']
+
+    will reduce ntime to 20, but no lower. nbl=1&na=2 sets
+    both nbl and na to 1 and 2 in the same operation respectively.
+    nchan=50\% will continuously halve the nchan dimension
+    until it reaches a value of 1.
     """
 
     if not isinstance(dim_ord, list):
@@ -257,29 +273,39 @@ def viable_dim_config(bytes_available, arrays, props,
         # Can't fit everything into memory,
         # Lower dimensions and re-evaluate
         for dim in dims:
-            # We may have been supplied a dimension value
-            # to reduce to. Should be specified with an =
-            l = [x.strip() for x in dim.split('=')]
+            match = re.match(__DIM_REDUCTION_RE, dim)
 
-            if len(l) == 1:
-                value = 1
-            elif len(l) == 2:
-                dim, value = l[0], int(l[1])
-                if value <= 0:
-                    raise ValueError(('Dimension %s may not be set '
-                        'to negative value %d') % (dim, value))
-            if len(l) > 2:
-                raise ValueError('Splitting %s on = produces '
-                    '%d strings, not one or two.' % (dim, len(l)))
+            if not match:
+                raise ValueError((
+                    "%s is an invalid dimension reduction string "
+                    "Valid strings are for e.g. "
+                    "'ntime', 'ntime=20' or 'ntime=20%'") % dim)
 
-            # Attempt to reduce the dimension
-            if P[dim] > value:
-                modified_dims[dim] = value
-                P[dim] = value
+            dim_name = match.group('name')
+            dim_value = match.group('value')
+            dim_percent = match.group('percent')
+            dim_value = 1 if dim_value is None else int(dim_value)
+
+            # Attempt reduction by a percentage
+            if dim_percent == '%':
+                dim_value = int(P[dim_name] * int(dim_value) / 100.0)
+                if dim_value < 1:
+                    # This can't be reduced any further
+                    dim_value = 1
+                else:
+                    # Allows another attempt at reduction
+                    # by percentage on this dimension
+                    dim_ord.insert(0, dim)
+
+            # Apply the dimension reduction
+            if P[dim_name] > dim_value:
+                modified_dims[dim_name] = dim_value
+                P[dim_name] = dim_value
             else:
                 montblanc.log.warn(('Tried to reduce dimension %s '
                     ' of size %d to larger value %d. '
-                    ' This reduction has been ignored.') % (dim, P[dim], value) )
+                    ' This reduction has been ignored.') % (
+                        dim_name, P[dim_name], dim_value) )
 
         bytes_used = dict_array_bytes_required(arrays, P)*nsolvers
 
