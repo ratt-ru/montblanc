@@ -118,7 +118,7 @@ setup(name='montblanc',
     install_requires=[
         'funcsigs',
         'numpy',
-        'numexpr',
+        'numexpr>=2.4',
         'pycuda>=2015.1',
         'pytools',
         'transitions'
