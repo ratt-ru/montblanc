@@ -46,9 +46,9 @@ Once the libraries have been compiled you should be able to run the
 
     # cd tests
     # python -c 'import montblanc; montblanc.test()'
-    # python -m unittest test_biro_v4.TestBiroV2.test_biro_v4
+    # python -m unittest test_biro_v4.TestBiroV4.test_sum_coherencies_double
 
-which will run the current test suite or only the particular test case specified. The reported times are for the entire test case with numpy code, and not just the CUDA kernels.
+which will run the entire test suite or only the specified test case, respectively. The reported times are for the entire test case with numpy code, and not just the CUDA kernels.
 
 If you're running on an ubuntu laptop with optimus technology, you may have to install bumblebee and run
 
