@@ -221,6 +221,9 @@ class BaseSolver(Solver):
         if ctx is None:
             raise Exception('No CUDA context was supplied to the BaseSolver')
 
+        if isinstance(ctx, list):
+            ctx = ctx[0]
+
         # Create a context wrapper
         self.context = mbu.ContextWrapper(ctx)
 
