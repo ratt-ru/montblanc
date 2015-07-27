@@ -113,7 +113,7 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
     elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
         from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
     else:
-        raise Exception, 'Incorrect version %s' % version
+        raise ValueError('Incorrect version %s' % version)
 
     with MeasurementSetLoader(slvr_cfg.get('msfile')) as loader:
         ntime, na, nchan = loader.get_dims()
@@ -149,7 +149,7 @@ def rime_solver(slvr_cfg):
         from montblanc.impl.biro.v5.CompositeBiroSolver \
         import CompositeBiroSolver as BiroSolver
     else:
-        raise Exception, 'Invalid version %s' % version
+        raise ValueError('Invalid version %s' % version)
 
     if data_source == Options.DATA_SOURCE_MS:
         return create_rime_solver_from_ms(BiroSolver, slvr_cfg)
@@ -159,4 +159,4 @@ def rime_solver(slvr_cfg):
     elif data_source == Options.DATA_SOURCE_DEFAULTS:
         return BiroSolver(slvr_cfg)
     else:
-        raise Exception, 'Invalid type %s' % data_source
+        raise ValueError('Invalid data source %s' % data_source)
