@@ -148,6 +148,7 @@ def rime_solver(slvr_cfg):
     elif version == Options.VERSION_FIVE:
         from montblanc.impl.biro.v5.CompositeBiroSolver \
         import CompositeBiroSolver as BiroSolver
+        slvr_cfg[Options.CONTEXT] = __contexts
     else:
         raise ValueError('Invalid version %s' % version)
 
