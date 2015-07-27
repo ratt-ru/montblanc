@@ -29,7 +29,8 @@ import montblanc
 import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
-from montblanc.config import (BiroSolverConfigurationOptions as Options)
+from montblanc.config import (BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
@@ -38,6 +39,55 @@ from montblanc.impl.biro.v5.BiroSolver import BiroSolver
 ONE_KB = 1024
 ONE_MB = ONE_KB**2
 ONE_GB = ONE_KB**3
+
+def strip_and_create_virtual_source(ary_list, props):
+    """
+    This function strips out arrays associated with
+    the various source types ('npsrc', 'ngsrc' etc.)
+    and replaces them with a single array 'virtual_source'
+    which is as large as the biggest of these sources. 
+    """
+    src_nr_vars = mbu.source_nr_vars()
+    max_ary_bytes_per_src = 0
+    remove_set = set()
+    nsrc = props['nsrc']
+
+    # Iterate over the array list, finding arrays specifically
+    # related to the different source types. Find the most expensive
+    # of these arrays, in terms of bytes per source
+    for i, ary in enumerate(ary_list):
+        # Figure out how many bytes this array uses in terms of
+        # TOTAL sources 'nsrc'. This allows us to rank each
+        # of the source arrays in terms of bytes per source.
+        src_nrs = [nsrc for x in ary['shape'] if x in src_nr_vars]
+        ary = ary.copy()
+        ary['shape'] = tuple(['nsrc' if x in src_nr_vars else x for x in ary['shape']])
+
+        if len(src_nrs) == 0:
+            continue
+
+        ary_bytes = mbu.dict_array_bytes(ary, props)
+        total_src_nr = np.product(src_nrs)
+        ary_bytes_per_src = ary_bytes / total_src_nr
+
+        # Does this use the most bytes per source?
+        if ary_bytes_per_src > max_ary_bytes_per_src:
+            max_ary_bytes_per_src = ary_bytes_per_src
+
+        # Mark this array for removal
+        remove_set.add(i)
+
+    # Create a new array list, removing source arrays
+    # and creating a new virtual source array.
+    new_ary_list = [v for i, v in enumerate(ary_list) if i not in remove_set]
+    new_ary_list.append({
+            'name': 'virtual_source',
+            'dtype': np.int8,
+            'shape' : (max_ary_bytes_per_src, 'nsrc'),
+            'registrant' : 'BiroSolver',
+        })
+
+    return new_ary_list
 
 class CompositeBiroSolver(BaseSolver):
     """
@@ -64,112 +114,123 @@ class CompositeBiroSolver(BaseSolver):
         self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
         self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
 
-        A_main = copy.deepcopy(BSV4mod.A)
-        P_main = copy.deepcopy(BSV4mod.P)
+        # Copy the v4 arrays and properties and
+        # modify them for use on this
+        # Composite Solver
+        A_main, P_main = self.__twiddle_v4_arys_and_props(
+            copy.deepcopy(BSV4mod.A), copy.deepcopy(BSV4mod.P))
 
-        # Add a custom transfer method for transferring
-        # arrays to the sub-solver. Also, in general,
-        # only maintain CPU arrays on the main solver,
-        # but not GPU arrays, which will exist on the sub-solvers
-        for ary in A_main:
-            ary['transfer_method'] = self.get_transfer_method(ary['name'])
-            ary['gpu'] = False
-            ary['cpu'] = True
-
-        # Add custom property setter method
-        for prop in P_main:
-            prop['setter_method'] = self.get_setter_method(ary['name'])
-
-        # Do not create CPU versions of result arrays
-
-        for ary in [a for a in A_main if a['name'] in
-                ['vis', 'B_sqrt', 'jones', 'chi_sqrd_result']]:
-            ary['cpu'] = False
-
-        # Create the arrays on the solver
-        self.register_properties(P_main)
-        self.register_arrays(A_main)
-
-        #print 'Composite Solver Memory CPU %s GPU %s ntime %s' \
-        #    % (mbu.fmt_bytes(self.cpu_bytes_required()),
-        #    mbu.fmt_bytes(self.gpu_bytes_required()),
-        #    ntime)
-
-        # Allocate CUDA constructs using the supplied context
-        with self.context as ctx:
-            (free_mem,total_mem) = cuda.mem_get_info()
-
-            #(free_mem,total_mem) = cuda.mem_get_info()
-            #print 'free %s total %s ntime %s' \
-            #    % (mbu.fmt_bytes(free_mem),
-            #        mbu.fmt_bytes(total_mem),
-            #        ntime)
-
-            # Work with a supplied memory budget, otherwise use
-            # free memory less a small amount
-            mem_budget = kwargs.get('mem_budget', free_mem-100*ONE_MB)
-
-            # Work out how many timesteps we can fit in our memory budget
-            self.vtime = mbu.viable_timesteps(mem_budget,
-                self.arrays, self.get_properties())
-
-            (free_mem,total_mem) = cuda.mem_get_info()
-            #print 'free %s total %s ntime %s vtime %s' \
-            #    % (mbu.fmt_bytes(free_mem),
-            #        mbu.fmt_bytes(total_mem),
-            #        ntime, self.vtime)
-
-            # They may fit in completely
-            if ntime < self.vtime: self.vtime = ntime
-
-            # Configure the number of solvers used
-            self.nsolvers = kwargs.get('nsolvers', 4)
-            self.time_begin = np.arange(self.nsolvers)*self.vtime//self.nsolvers
-            self.time_end = np.arange(1,self.nsolvers+1)*self.vtime//self.nsolvers
-            self.time_diff = self.time_end - self.time_begin
-
-            #print 'time begin %s' % self.time_begin
-            #print 'time end %s' % self.time_end
-            #print 'time diff %s' % self.time_end
-
-            # Create streams and events for the solvers
-            self.stream = [cuda.Stream() for i in range(self.nsolvers)]
-
-            # Create a memory pool for PyCUDA gpuarray.sum reduction results
-            self.dev_mem_pool = pycuda.tools.DeviceMemoryPool()
-            self.dev_mem_pool.allocate(10*ONE_KB).free()
-
-            # Create a pinned memory pool for asynchronous transfer to GPU arrays
-            self.pinned_mem_pool = pycuda.tools.PageLockedMemoryPool()
-            self.pinned_mem_pool.allocate(shape=(10*ONE_KB,),dtype=np.int8).base.free()
-
-        # Create the sub-solvers
-        self.solvers = [BiroSolver(na=na,
-            nchan=nchan, ntime=self.time_diff[i],
-            npsrc=npsrc, ngsrc=ngsrc, nssrc=nssrc,
-            dtype=dtype,
-            **kwargs) for i in range(self.nsolvers)]
-
-        # Register arrays on the sub-solvers
-        A_sub = copy.deepcopy(BSV4mod.A)
+        props = self.get_properties()
+        # Strip out any arrays associated with the different
+        # source types (point, Gaussian, sersic etc.) and
+        # replace with a single virtual source array
+        # which is big enough to hold any of them.
+        A_sub = strip_and_create_virtual_source(A_main, props)
         P_sub = copy.deepcopy(BSV4mod.P)
 
+        self.nsolvers = slvr_cfg.get('nsolvers', 4)
+        self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
+        self.solvers = []
+
+        if not isinstance(self.dev_ctxs, list):
+            self.dev_ctxs = [self.dev_ctxs]
+
+        for ctx in self.dev_ctxs:
+            with mbu.ContextWrapper(ctx):
+                # Query free memory on this context
+                (free_mem,total_mem) = cuda.mem_get_info()
+
+                # Work with a supplied memory budget, otherwise use
+                # free memory less an amount equal to the upper size
+                # of an NVIDIA context
+                mem_budget = slvr_cfg.get('mem_budget', free_mem - 100*ONE_MB)
+
+                # Figure out a viable dimension configuration
+                # given the total problem size 
+                viable, modded_dims = mbu.viable_dim_config(
+                    mem_budget, A_sub, props,
+                    ['nsrc=100', 'ntime', 'nbl=1&na=2','nchan=50%'],
+                    self.nsolvers)                
+
+                # Create property dictionary with update
+                # dimensions.
+                P = props.copy()
+                P.update(modded_dims)
+
+                if not viable:
+                    dim_set_str = ', '.join(['%s=%s' % (k,v)
+                        for k,v in modded_dims.iteritems()])
+
+                    ary_list_str = '\n'.join(['%-*s %-*s %s' % (
+                        15, a['name'],
+                        10, mbu.fmt_bytes(mbu.dict_array_bytes(a, P)),
+                        mbu.shape_from_str_tuple(a['shape'],P))
+                        for a in sorted(A_sub,
+                            reverse=True,
+                            key=lambda a: mbu.dict_array_bytes(a, P))])
+
+                    required_mem = mbu.dict_array_bytes_required(A_sub, P)
+
+                    raise MemoryError("Tried reducing the problem size "
+                        "by setting '%s' on all arrays, "
+                        "but the resultant required memory of %s "
+                        "for each of %d solvers is too big "
+                        "to fit within the memory budget of %s. "
+                        "List of biggests offenders:\n%s "
+                        "\nSplitting the problem along the "
+                        "channel dimension needs to be "
+                        "implemented." %
+                            (dim_set_str,
+                            mbu.fmt_bytes(required_mem),
+                            nsolvers,
+                            mbu.fmt_bytes(mem_budget),
+                            ary_list_str))
+
+                # Create the configuration for the sub solver
+                subslvr_cfg = BiroSolverConfiguration(**slvr_cfg)
+                subslvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_DEFAULTS
+                subslvr_cfg[Options.NA] = P[Options.NA]
+                subslvr_cfg[Options.NTIME] = P[Options.NTIME]
+                subslvr_cfg[Options.NCHAN] = P[Options.NCHAN]
+                subslvr_cfg[Options.CONTEXT] = ctx
+
+                # Extract the dimension differences
+                self.src_diff = P['nsrc']
+                self.time_diff = P[Options.NTIME]
+                self.bl_diff = P['nbl']
+                self.ant_diff = P[Options.NA]
+                self.chan_diff = P[Options.NCHAN]
+
+                # Create the sub-solvers for this context
+                # and append
+                for s in range(self.nsolvers):
+                    subslvr = BiroSolver(subslvr_cfg)
+                    # Our subsolvers don't think in terms
+                    # of point, gaussian or other sources,
+                    # but rather in terms of virtual sources
+                    subslvr.twiddle_src_dims(P['nsrc'])
+                    self.solvers.append(subslvr)
+
+        assert len(self.solvers) == self.nsolvers*len(self.dev_ctxs)
+
+        # Modify the array configuration for the sub-solvers
+        # Don't create CPU arrays since we'll be copying them
+        # from CPU arrays on the Composite Solver.
+        # Do create GPU arrays, used for solving each sub-section
+        # of the RIME.
         for ary in A_sub:
             # Add a transfer method
             ary['transfer_method'] = self.get_sub_transfer_method(ary['name'])
             ary['cpu'] = False
             ary['gpu'] = True
 
-        for i, slvr in enumerate(self.solvers):
-            slvr.register_properties(P_sub)
-            slvr.register_arrays(A_sub)
-            # Indicate that all numpy arrays on the CompositeSolver
-            # have been transferred to the sub-solvers
-            slvr.was_transferred = {}.fromkeys(
-                [v.name for v in self.arrays.itervalues()], True)
+        # Create the arrays on the sub solvers
+        for i, subslvr in enumerate(self.solvers):
+            subslvr.register_properties(P_sub)
+            subslvr.register_arrays(A_sub)
 
-        self.use_weight_vector = kwargs.get('weight_vector', False)
-        self.initialised = False
+        self.use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
+        self.initialised=False
 
     def get_properties(self):
         # Obtain base solver property dictionary
@@ -184,6 +245,26 @@ class CompositeBiroSolver(BaseSolver):
 
         return D
 
+    def __twiddle_v4_arys_and_props(self, arys, props):
+        # Add a custom transfer method for transferring
+        # arrays to the sub-solver. Also, in general,
+        # only maintain CPU arrays on the main solver,
+        # but not GPU arrays, which will exist on the sub-solvers
+        for ary in arys:
+            ary['transfer_method'] = self.get_transfer_method(ary['name'])
+            ary['gpu'] = False
+            ary['cpu'] = True
+
+        # Add custom property setter method
+        for prop in props:
+            prop['setter_method'] = self.get_setter_method(ary['name'])
+
+        # Do not create CPU versions of result arrays
+        for ary in [a for a in arys if a['name'] in
+                ['vis', 'B_sqrt', 'jones', 'chi_sqrd_result']]:
+            ary['cpu'] = False
+
+        return arys, props
 
     def transfer_arrays(self, sub_solver_idx, time_begin, time_end):
         """
@@ -273,6 +354,8 @@ class CompositeBiroSolver(BaseSolver):
 
     def initialise(self):
         """ Initialise the sub-solver """
+
+        return
 
         if not self.initialised:
             with self.context as ctx:

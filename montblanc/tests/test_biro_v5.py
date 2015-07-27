@@ -110,6 +110,19 @@ class TestBiroV5(unittest.TestCase):
                 slvr.solve()
                 self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
+    def test_big_budget(self):
+        wv = True
+
+        slvr_cfg = BiroSolverConfiguration(na=64, ntime=10000, nchan=32768,
+            sources=montblanc.sources(point=10000, gaussian=10000, sersic=10000),
+            beam_lw=1, beam_mh=1, beam_nud=1,
+            weight_vector=wv, nsolvers=3,
+            dtype=Options.DTYPE_DOUBLE)
+
+        with solver(slvr_cfg) as slvr:
+            pass
+
+
     def test_smart_budget(self):
         wv = True
 

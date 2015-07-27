@@ -18,9 +18,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import montblanc.util as mbu
+
 from montblanc.BaseSolver import BaseSolver
 from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
+from montblanc.config import (BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
 
 class BiroSolver(BaseSolver):
     """ BIRO Solver Implementation """
@@ -41,6 +45,15 @@ class BiroSolver(BaseSolver):
         self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
         self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
         self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
+
+    def twiddle_src_dims(self, nsrc):
+        """
+        Sets self.nsrc = nsrc
+        and all other source numbers to 0
+        """
+        self.nsrc = nsrc
+        for nr_var in mbu.source_nr_vars():
+            setattr(self, nr_var, 0)
 
     def get_properties(self):
         # Obtain base solver property dictionary
