@@ -20,6 +20,8 @@
 
 import numpy as np
 
+from collections import OrderedDict
+
 # List of source types and the variable names
 # referring to the number of sources for that type
 POINT_TYPE = 'point'
@@ -31,13 +33,13 @@ GAUSSIAN_NR_VAR = 'ngsrc'
 SERSIC_TYPE = 'sersic'
 SERSIC_NR_VAR = 'nssrc'
 
-# Type to numbering variable mapping
-SOURCE_VAR_TYPES = {
-    POINT_TYPE : POINT_NR_VAR,
-    GAUSSIAN_TYPE : GAUSSIAN_NR_VAR,
-    SERSIC_TYPE : SERSIC_NR_VAR
-}
-
+# Type to numbering variable mapping,
+# with a specific ordering (point first)
+SOURCE_VAR_TYPES = OrderedDict([
+    (POINT_TYPE, POINT_NR_VAR),
+    (GAUSSIAN_TYPE, GAUSSIAN_NR_VAR),
+    (SERSIC_TYPE, SERSIC_NR_VAR)
+])
 
 def source_types():
     """ Returns a list of registered source types """
@@ -59,9 +61,9 @@ def default_sources(**kwargs):
 
     default_sources(point=10, gaussian=20)
 
-    will return a dict {'point': 10, 'gaussian': 20, 'sersic': 0}
+    will return an OrderedDict {'point': 10, 'gaussian': 20, 'sersic': 0}
     """
-    S = {}
+    S = OrderedDict()
     total = 0
 
     invalid_types = [t for t in kwargs.keys() if t not in SOURCE_VAR_TYPES]
@@ -104,7 +106,7 @@ def sources_to_nr_vars(sources):
     
     sources_to_nr_vars({'point':10, 'gaussian': 20})
     
-    will return a new dict
+    will return an OrderedDict
 
     {'npsrc': 10, 'ngsrc': 20, 'nssrc': 0 }
     """
@@ -112,8 +114,8 @@ def sources_to_nr_vars(sources):
     sources = default_sources(**sources)
 
     try:
-        return { SOURCE_VAR_TYPES[name]: nr
-            for name, nr in sources.iteritems() }
+        return OrderedDict((SOURCE_VAR_TYPES[name], nr)
+            for name, nr in sources.iteritems())
     except KeyError as e:
         raise KeyError((
             'No source type ''%s'' is '
