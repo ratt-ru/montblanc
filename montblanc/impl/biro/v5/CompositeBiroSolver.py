@@ -40,6 +40,18 @@ ONE_KB = 1024
 ONE_MB = ONE_KB**2
 ONE_GB = ONE_KB**3
 
+ORDERING_CONSTRAINTS = { nr_var : 1 for nr_var in mbu.source_nr_vars() }
+ORDERING_CONSTRAINTS.update({
+    'nsrc' : 1,
+    'ntime': 2,
+    'nbl': 3,
+    'na': 3,
+    'nchan': 4
+})
+
+ORDERING_RANK = [' or '.join(['nsrc'] + mbu.source_nr_vars()),
+    'ntime', ' or '.join(['nbl', 'na']), 'nchan']
+
 def strip_and_create_virtual_source(ary_list, props):
     """
     This function strips out arrays associated with
@@ -131,6 +143,8 @@ class CompositeBiroSolver(BaseSolver):
         self.nsolvers = slvr_cfg.get('nsolvers', 4)
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
         self.solvers = []
+
+        self.__validate_arrays(A_sub)
 
         if not isinstance(self.dev_ctxs, list):
             self.dev_ctxs = [self.dev_ctxs]
@@ -369,6 +383,21 @@ class CompositeBiroSolver(BaseSolver):
                     stream=self.stream[0])
 
             self.initialised = True
+
+    def __validate_arrays(self, arrays):
+        """
+        Check that the array dimension ordering is correct
+        """
+        for A in arrays:
+            order = [ORDERING_CONSTRAINTS[var]
+                for var in A['shape'] if var in ORDERING_CONSTRAINTS]
+
+            if not all([b >= a for a, b in zip(order, order[1:])]):
+                raise ValueError(('Array %s does not follow '
+                    'ordering constraints. Shape is %s, but '
+                    'this does breaks the expecting ordering of %s ') % (
+                        A['name'], A['shape'],
+                        ORDERING_RANK))
 
     def solve(self):
         """ Solve the RIME """
