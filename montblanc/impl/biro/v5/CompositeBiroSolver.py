@@ -283,12 +283,7 @@ class CompositeBiroSolver(BaseSolver):
     def transfer_arrays(self, sub_solver_idx, time_begin, time_end):
         """
         Transfer CPU arrays on the CompositeBiroSolver over to the
-        BIRO sub-solvers asynchronously. A pinned memory pool is used
-        to store the data temporarily.
-
-        Arrays without a time dimension are transferred as a whole,
-        otherwise the time section of the array appropriate to the
-        sub-solver is transferred.
+        BIRO sub-solvers asynchronously.
         """
         i = sub_solver_idx
         subslvr = self.solvers[i]
@@ -384,6 +379,17 @@ class CompositeBiroSolver(BaseSolver):
 
             self.initialised = True
 
+    def __gen_rime_sections(self):
+        for t in xrange(0, self.ntime, self.time_diff):
+            time_slice = slice(t, t + self.time_diff, 1)
+            for bl in xrange(0, self.nbl, self.bl_diff):
+                bl_slice = slice(bl, bl + self.bl_diff, 1)
+                for ch in xrange(0, self.nchan, self.chan_diff):
+                    chan_slice = slice(ch, ch + self.chan_diff, 1)
+                    for src in xrange(0, self.nsrc, self.src_diff):
+                        src_slice = slice(src, src + self.src_diff, 1)
+                        yield (time_slice, bl_slice, chan_slice, src_slice)
+
     def __validate_arrays(self, arrays):
         """
         Check that the array dimension ordering is correct
@@ -404,8 +410,8 @@ class CompositeBiroSolver(BaseSolver):
         if not self.initialised:
             self.initialise()
 
-        with self.context:
-            pass
+        for t, bl, ch, src in self.__gen_rime_sections():
+            print t, bl, ch, src
 
     def shutdown(self):
         """ Shutdown the solver """

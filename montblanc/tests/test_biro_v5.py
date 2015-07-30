@@ -120,6 +120,7 @@ class TestBiroV5(unittest.TestCase):
             dtype=Options.DTYPE_DOUBLE)
 
         with solver(slvr_cfg) as slvr:
+            slvr.solve()
             pass
 
 
