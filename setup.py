@@ -20,7 +20,7 @@
 
 import os
 import subprocess
-from setuptools import setup
+from setuptools import setup, find_packages
 
 def get_version():
     # Versioning code here, based on
@@ -91,30 +91,7 @@ setup(name='montblanc',
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
     license='GPL2',
-    packages=[
-        'montblanc',
-        'montblanc.api',
-        'montblanc.api.loaders',
-        'montblanc.examples',
-        'montblanc.impl',
-        'montblanc.impl.biro',
-        'montblanc.impl.biro.common',
-        'montblanc.impl.biro.common.fsm',
-        'montblanc.impl.biro.v2',
-        'montblanc.impl.biro.v2.gpu',
-        'montblanc.impl.biro.v2.cpu',
-        'montblanc.impl.biro.v2.loaders',
-        'montblanc.impl.biro.v3',
-        'montblanc.impl.biro.v3.gpu',
-        'montblanc.impl.biro.v4',
-        'montblanc.impl.biro.v4.gpu',
-        'montblanc.impl.biro.v4.cpu',
-        'montblanc.impl.biro.v5',
-        'montblanc.impl.biro.v5.gpu',
-        'montblanc.impl.common',
-        'montblanc.impl.common.loaders',
-        'montblanc.tests',
-        'montblanc.util'],
+    packages=find_packages(),
     install_requires=[
         'funcsigs',
         'numpy',
