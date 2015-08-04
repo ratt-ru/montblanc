@@ -93,6 +93,7 @@ setup(name='montblanc',
     license='GPL2',
     packages=find_packages(),
     install_requires=[
+        'attrdict',
         'funcsigs',
         'numpy',
         'numexpr>=2.4',
