@@ -354,7 +354,10 @@ class BaseSolver(Solver):
                 created, otherwise the supplied function is used instead
             page_locked : boolean
                 True if the 'name_cpu' ndarray should be allocated as
-                a page-locked array
+                a page-locked array.
+            aligned : boolean
+                True if the 'name_cpu' ndarray should be allocated as
+                an page-aligned array.
             replace : boolean
                 True if existing arrays should be replaced.
         """
@@ -418,6 +421,9 @@ class BaseSolver(Solver):
             source_key = 'default'
 
         if create_cpu_ary or create_gpu_ary:
+            page_locked = kwargs.get('page_locked', False)
+            aligned = kwargs.get('aligned', False)
+
             with self.context:
                 # Page locked implies aligned
                 if page_locked:
@@ -426,6 +432,7 @@ class BaseSolver(Solver):
                     default_ary = cuda.aligned_empty(shape=shape, dtype=dtype)
                 else:
                     default_ary = np.empty(shape=shape, dtype=dtype)
+                    
                 self.init_array(name, default_ary, kwargs.get(source_key, None))
 
         # Create an empty cpu array if it doesn't exist
