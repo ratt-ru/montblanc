@@ -143,6 +143,7 @@ class CompositeBiroSolver(BaseSolver):
         self.nsolvers = slvr_cfg.get('nsolvers', 4)
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
         self.solvers = []
+        self.stream = []
 
         self.__validate_arrays(A_sub)
 
@@ -224,6 +225,7 @@ class CompositeBiroSolver(BaseSolver):
                     # but rather in terms of virtual sources
                     subslvr.twiddle_src_dims(P['nsrc'])
                     self.solvers.append(subslvr)
+                    self.stream.append(cuda.Stream())
 
         assert len(self.solvers) == self.nsolvers*len(self.dev_ctxs)
 
