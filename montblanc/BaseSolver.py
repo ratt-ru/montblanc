@@ -485,8 +485,9 @@ class BaseSolver(Solver):
             source_key = 'default'
 
         if create_cpu_ary or create_gpu_ary:
-            default_ary = np.empty(shape=shape, dtype=dtype)
-            self.init_array(name, default_ary, kwargs.get(source_key, None))
+            with self.context:
+                default_ary = cuda.aligned_empty(shape=shape, dtype=dtype)
+                self.init_array(name, default_ary, kwargs.get(source_key, None))
 
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
