@@ -70,7 +70,7 @@ def suite():
         # Test recent code first, as it will be more likely to fail
         #test_suite.addTest(unittest.makeSuite(TestBiroV5))
         test_suite.addTest(unittest.makeSuite(TestBiroV4))
-        test_suite.addTest(unittest.makeSuite(TestBiroV3))
+        #test_suite.addTest(unittest.makeSuite(TestBiroV3))
         test_suite.addTest(unittest.makeSuite(TestBiroV2))
 
     return test_suite
