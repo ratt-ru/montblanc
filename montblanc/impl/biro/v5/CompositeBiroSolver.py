@@ -393,9 +393,14 @@ class CompositeBiroSolver(BaseSolver):
 
     def __validate_arrays(self, arrays):
         """
-        Check that the array dimension ordering is correct
+        Check that arrays are correctly configured
         """
+
+        src_vars = mbu.source_nr_vars()
+        vis_vars = ['ntime', 'nbl', 'na', 'nchan']
+
         for A in arrays:
+            # Ensure they match ordering constraints
             order = [ORDERING_CONSTRAINTS[var]
                 for var in A['shape'] if var in ORDERING_CONSTRAINTS]
 
@@ -405,6 +410,19 @@ class CompositeBiroSolver(BaseSolver):
                     'this does breaks the expecting ordering of %s ') % (
                         A['name'], A['shape'],
                         ORDERING_RANK))
+
+            # Orthogonality of source variables and
+            # time, baseline, antenna and channel
+            nr_src_vars = [v for v in A['shape'] if v in src_vars]
+            nr_vis_vars = [v for v in A['shape'] if v in vis_vars]
+
+            if len(nr_src_vars) > 0 and len(nr_vis_vars) > 0:
+                raise ValueError(('Array %s of shape %s '
+                    'has source variables %s mixed with '
+                    '%s. This solver does not currently '
+                    'support this mix') % (
+                        A['name'], A['shape'],
+                        nr_src_vars, nr_vis_vars))
 
     def solve(self):
         """ Solve the RIME """
