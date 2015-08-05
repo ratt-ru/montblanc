@@ -306,8 +306,7 @@ class SolverCPU(object):
             mbu.rethrow_attribute_exception(e)
 
     def bilinear_interpolate(self, sum, abs_sum,
-            gl, gm, gchan,
-            ld, lm, chd):
+            gl, gm, gchan, weight):
         """
         Given a grid position in the beam cube (gl, gm, gchan),
         and positive unit offsets from this position (ld, lm, chd),
@@ -318,41 +317,23 @@ class SolverCPU(object):
         """
         slvr = self.solver
 
-        l = np.floor(gl) + ld
-        m = np.floor(gm) + lm
-        ch = np.floor(gchan) + chd
-
-        invalid_l = np.logical_or(l < 0.0, l >= slvr.beam_lw)
-        invalid_m = np.logical_or(m < 0.0, m >= slvr.beam_mh)
-        invalid_ch = np.logical_or(ch < 0.0, ch >= slvr.beam_nud)
+        # Does the source lie within the beam cube?
+        invalid_l = np.logical_or(gl < 0.0, gl >= slvr.beam_lw)
+        invalid_m = np.logical_or(gm < 0.0, gm >= slvr.beam_mh)
         invalid_lm = np.logical_or.reduce((invalid_l, invalid_m))
 
         assert invalid_lm.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
-        l[invalid_lm] = 0
-        m[invalid_lm] = 0
-        ch[invalid_ch] = 0
-
-        ldiff, mdiff, chdiff = np.abs(l - gl), np.abs(m - gm), np.abs(ch - gchan)
-        assert ldiff.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
-        assert mdiff.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
-        assert chdiff.shape == (slvr.nchan,)
-
-        # The bilinear weighting is constructed by multiplying
-        # absolute differences. Note that we don't have
-        # to divide by the product of each dimension's grid distance
-        # since they are all 1.0.
-        weight = (ldiff*mdiff) * \
-            chdiff[np.newaxis,np.newaxis,np.newaxis,:]
-        assert weight.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
-
+        # Just set coordinates and weights to zero
+        # if they're outside the cube
+        gl[invalid_lm] = 0
+        gm[invalid_lm] = 0
         weight[invalid_lm] = 0
-        weight[:,:,:,invalid_ch] = 0
-        assert weight.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
 
-        l_idx = l.astype(np.int32)
-        m_idx = m.astype(np.int32)
-        ch_idx = ch.astype(np.int32)[np.newaxis,np.newaxis,np.newaxis,:]
+        # Indices within the cube
+        l_idx = gl.astype(np.int32)
+        m_idx = gm.astype(np.int32)
+        ch_idx = gchan.astype(np.int32)[np.newaxis,np.newaxis,np.newaxis,:]
 
         beam_pols = slvr.E_beam_cpu[l_idx,m_idx,ch_idx]
         assert beam_pols.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
@@ -401,31 +382,83 @@ class SolverCPU(object):
         l *= a[np.newaxis, np.newaxis, :, :]
         m *= b[np.newaxis, np.newaxis, :, :]
 
-        gl = slvr.beam_lw * (l - slvr.beam_ll) / (slvr.beam_ul - slvr.beam_ll)
-        gm = slvr.beam_mh * (m - slvr.beam_lm) / (slvr.beam_um - slvr.beam_lm)
-        gchan = slvr.beam_nud * np.arange(slvr.nchan).astype(slvr.ft) / slvr.ft(slvr.nchan)
+        # Compute grid position and difference from
+        # actual position for the source at each channel
+        l = (slvr.beam_lw-1) * (l-slvr.beam_ll) / (slvr.beam_ul-slvr.beam_ll)
+        assert l.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+        gl = np.floor(l)
+        ld = l - gl
 
-        assert gl.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
-        assert gm.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
-        assert gchan.shape == (slvr.nchan,)
+        m = (slvr.beam_mh-1) * (m-slvr.beam_lm) / (slvr.beam_um-slvr.beam_lm)
+        assert m.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan)
+        gm = np.floor(m)
+        md = m - gm
+
+        chan = (slvr.beam_nud-1) * np.arange(slvr.nchan).astype(slvr.ft) \
+            / slvr.ft(slvr.nchan-1)
+        assert chan.shape == (slvr.nchan, )
+        gchan = np.floor(chan)
+        chd = (chan - gchan)[np.newaxis,np.newaxis,np.newaxis,:]
+
+        # Handle the boundary case where the channel
+        # lies on the last grid point
+        fiddle = (chan == slvr.beam_nud - 1)
+        gchan[fiddle] = slvr.beam_nud - 2
+        chd[:,:,:,fiddle] = 1
 
         # Initialise the sum to zero
         sum = np.zeros_like(slvr.jones_cpu)
         abs_sum = np.zeros(shape=sum.shape, dtype=slvr.ft)
 
+        # A simplified bilinear weighting is used here. Given
+        # point x between points x1 and x2, with function f
+        # provided values f(x1) and f(x2) at these points.
+        #
+        # x1 ------- x ---------- x2
+        #
+        # Then, the value of f can be approximated using the following:
+        # f(x) ~= f(x1)(x2-x)/(x2-x1) + f(x2)(x-x1)/(x2-x1)
+        #
+        # Note how the value f(x1) is weighted with the distance
+        # from the opposite point (x2-x).
+        #
+        # As we are interpolating on a grid, we have the following
+        # 1. (x2 - x1) == 1
+        # 2. (x - x1)  == 1 - 1 + (x - x1)
+        #              == 1 - (x2 - x1) + (x - x1)
+        #              == 1 - (x2 - x)
+        # 2. (x2 - x)  == 1 - 1 + (x2 - x)
+        #              == 1 - (x2 - x1) + (x2 - x)
+        #              == 1 - (x - x1)
+        #
+        # Extending the above to 3D, we have
+        # f(x,y,z) ~= f(x1,y1,z1)(x2-x)(y2-y)(z2-z) + ...
+        #           + f(x2,y2,z2)(x-x1)(y-y1)(z-z1)
+        #
+        # f(x,y,z) ~= f(x1,y1,z1)(1-(x-x1))(1-(y-y1))(1-(z-z1)) + ...
+        #           + f(x2,y2,z2)   (x-x1)    (y-y1)    (z-z1)
+
         # Load in the complex values from the E beam
         # at the supplied coordinate offsets.
         # Save the sum of abs in sum.real
         # and the sum of args in sum.imag
-        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 0, 0, 0)
-        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 1, 0, 0)
-        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 0, 1, 0)
-        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 1, 1, 0)
+        self.bilinear_interpolate(sum, abs_sum,
+            gl + 0, gm + 0, gchan + 0, (1-ld)*(1-md)*(1-chd))
+        self.bilinear_interpolate(sum, abs_sum,
+            gl + 1, gm + 0, gchan + 0, ld*(1-md)*(1-chd))
+        self.bilinear_interpolate(sum, abs_sum,
+            gl + 0, gm + 1, gchan + 0, (1-ld)*md*(1-chd))
+        self.bilinear_interpolate(sum, abs_sum,
+            gl + 1, gm + 1, gchan + 0, ld*md*(1-chd))
 
-        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 0, 0, 1)
-        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 1, 0, 1)
-        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 0, 1, 1)
-        self.bilinear_interpolate(sum, abs_sum, gl, gm, gchan, 1, 1, 1)
+        self.bilinear_interpolate(sum, abs_sum,
+            gl + 0, gm + 0, gchan + 1, (1-ld)*(1-md)*chd)
+        self.bilinear_interpolate(sum, abs_sum,
+            gl + 1, gm + 0, gchan + 1, ld*(1-md)*chd)
+        self.bilinear_interpolate(sum, abs_sum,
+            gl + 0, gm + 1, gchan + 1, (1-ld)*md*chd)
+        self.bilinear_interpolate(sum, abs_sum,
+            gl + 1, gm + 1, gchan + 1, ld*md*chd)
 
         # Determine the angle of the polarisation
         angle = np.angle(sum)
