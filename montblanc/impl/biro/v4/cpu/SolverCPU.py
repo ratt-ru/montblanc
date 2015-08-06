@@ -305,7 +305,7 @@ class SolverCPU(object):
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
 
-    def bilinear_interpolate(self, sum, abs_sum,
+    def trilinear_interpolate(self, sum, abs_sum,
             gl, gm, gchan, weight):
         """
         Given a grid position in the beam cube (gl, gm, gchan),
@@ -442,22 +442,22 @@ class SolverCPU(object):
         # at the supplied coordinate offsets.
         # Save the sum of abs in sum.real
         # and the sum of args in sum.imag
-        self.bilinear_interpolate(sum, abs_sum,
+        self.trilinear_interpolate(sum, abs_sum,
             gl + 0, gm + 0, gchan + 0, (1-ld)*(1-md)*(1-chd))
-        self.bilinear_interpolate(sum, abs_sum,
+        self.trilinear_interpolate(sum, abs_sum,
             gl + 1, gm + 0, gchan + 0, ld*(1-md)*(1-chd))
-        self.bilinear_interpolate(sum, abs_sum,
+        self.trilinear_interpolate(sum, abs_sum,
             gl + 0, gm + 1, gchan + 0, (1-ld)*md*(1-chd))
-        self.bilinear_interpolate(sum, abs_sum,
+        self.trilinear_interpolate(sum, abs_sum,
             gl + 1, gm + 1, gchan + 0, ld*md*(1-chd))
 
-        self.bilinear_interpolate(sum, abs_sum,
+        self.trilinear_interpolate(sum, abs_sum,
             gl + 0, gm + 0, gchan + 1, (1-ld)*(1-md)*chd)
-        self.bilinear_interpolate(sum, abs_sum,
+        self.trilinear_interpolate(sum, abs_sum,
             gl + 1, gm + 0, gchan + 1, ld*(1-md)*chd)
-        self.bilinear_interpolate(sum, abs_sum,
+        self.trilinear_interpolate(sum, abs_sum,
             gl + 0, gm + 1, gchan + 1, (1-ld)*md*chd)
-        self.bilinear_interpolate(sum, abs_sum,
+        self.trilinear_interpolate(sum, abs_sum,
             gl + 1, gm + 1, gchan + 1, ld*md*chd)
 
         # Determine the angle of the polarisation

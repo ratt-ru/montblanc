@@ -66,7 +66,7 @@ template <
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__
-void bilinear_interpolate(
+void trilinear_interpolate(
     typename Tr::ct & sum,
     typename Tr::ft & abs_sum,
     typename Tr::ct * E_beam,
@@ -243,29 +243,29 @@ void rime_jones_E_beam_impl(
         // at the supplied coordinate offsets.
         // Save the sum of abs in sum.real
         // and the sum of args in sum.imag
-        bilinear_interpolate<T>(sum, abs_sum, E_beam,
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
             gl + 0.0f, gm + 0.0f, gchan + 0.0f,
             (1.0f-ld)*(1.0f-md)*(1.0f-chd));
-        bilinear_interpolate<T>(sum, abs_sum, E_beam,
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
             gl + 1.0f, gm + 0.0f, gchan + 0.0f,
             ld*(1.0f-md)*(1.0f-chd));
-        bilinear_interpolate<T>(sum, abs_sum, E_beam,
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
             gl + 0.0f, gm + 1.0f, gchan + 0.0f,
             (1.0f-ld)*md*(1.0f-chd));
-        bilinear_interpolate<T>(sum, abs_sum, E_beam,
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
             gl + 1.0f, gm + 1.0f, gchan + 0.0f,
             ld*md*(1.0f-chd));
 
-        bilinear_interpolate<T>(sum, abs_sum, E_beam,
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
             gl + 0.0f, gm + 0.0f, gchan + 1.0f,
             (1.0f-ld)*(1.0f-md)*chd);
-        bilinear_interpolate<T>(sum, abs_sum, E_beam,
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
             gl + 1.0f, gm + 0.0f, gchan + 1.0f,
             ld*(1.0f-md)*chd);
-        bilinear_interpolate<T>(sum, abs_sum, E_beam,
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
             gl + 0.0f, gm + 1.0f, gchan + 1.0f,
             (1.0f-ld)*md*chd);
-        bilinear_interpolate<T>(sum, abs_sum, E_beam,
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
             gl + 1.0f, gm + 1.0f, gchan + 1.0f,
             ld*md*chd);
 
