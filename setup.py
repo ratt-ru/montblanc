@@ -97,7 +97,7 @@ setup(name='montblanc',
         'funcsigs',
         'numpy',
         'numexpr>=2.4',
-        'pycuda>=2015.1',
+        'pycuda>=2015.1.3',
         'pytools',
         'transitions'
     ],
