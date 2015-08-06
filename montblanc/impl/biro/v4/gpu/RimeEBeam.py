@@ -196,8 +196,13 @@ void rime_jones_E_beam_impl(
         m = T(BEAM_MH-1) * (m - beam_lm) / (beam_um - beam_lm);
         float gm = floorf(m);
         float md = m - gm;
-        
+
+#if NCHAN > 1
         float chan = T(BEAM_NUD-1) * float(POLCHAN>>2)/float(NCHAN-1);
+#else
+        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2);
+#endif
+
         float gchan = floorf(chan);
         float chd = chan - gchan;
 

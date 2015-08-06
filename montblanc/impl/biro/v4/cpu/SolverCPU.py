@@ -394,8 +394,9 @@ class SolverCPU(object):
         gm = np.floor(m)
         md = m - gm
 
-        chan = (slvr.beam_nud-1) * np.arange(slvr.nchan).astype(slvr.ft) \
-            / slvr.ft(slvr.nchan-1)
+        div = slvr.ft(slvr.nchan-1) if slvr.nchan > 1 else 1.0
+        chan_range = np.arange(slvr.nchan).astype(slvr.ft)
+        chan = (slvr.beam_nud-1)*chan_range / div
         assert chan.shape == (slvr.nchan, )
         gchan = np.floor(chan)
         chd = (chan - gchan)[np.newaxis,np.newaxis,np.newaxis,:]
