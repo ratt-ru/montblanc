@@ -66,31 +66,20 @@ template <
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__
-void bilinear_interpolate(
+void trilinear_interpolate(
     typename Tr::ct & sum,
     typename Tr::ft & abs_sum,
     typename Tr::ct * E_beam,
     float gl, float gm, float gchan,
-    const float ld, const float md, const float chd)
+    const T & weight)
 {
     #define POL (threadIdx.x & 0x3)
 
-    float l = floorf(gl) + ld;
-    float m = floorf(gm) + md;
-    float ch = floorf(gchan) + chd;
-
-    // If this coordinate is outside the cube, do nothing
-    if(l < 0 || l >= BEAM_LW ||
-        m < 0 || m >= BEAM_MH ||
-        ch < 0 || ch >= BEAM_NUD)
+    // If this source is outside the cube, do nothing
+    if(gl < 0 || gl >= BEAM_LW || gm < 0 || gm >= BEAM_MH)
         { return; }
 
-    // The bilinear weighting is constructed by multiplying
-    // absolute differences. Note that we don't have
-    // to divide by the product of each dimension's grid distance
-    // since they are all 1.0.
-    T weight = fabsf(l-gl)*fabsf(m-gm)*fabsf(ch-gchan);
-    int i = ((int(l)*BEAM_MH + int(m))*BEAM_NUD + int(ch))*NPOL + POL;
+    int i = ((int(gl)*BEAM_MH + int(gm))*BEAM_NUD + int(gchan))*NPOL + POL;
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
     typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
@@ -118,7 +107,6 @@ public:
     typedef double2 PointErrorType;
     typedef double2 AntennaScaleType;
 };
-
 
 template <
     typename T,
@@ -199,34 +187,92 @@ void rime_jones_E_beam_impl(
         l *= s_ab[threadIdx.y][blockchan].x;
         m *= s_ab[threadIdx.y][blockchan].y;
 
-        float gl = T(BEAM_LW) * (l - beam_ll) / (beam_ul - beam_ll);
-        float gm = T(BEAM_MH) * (m - beam_lm) / (beam_um - beam_lm);
-        float gchan = T(BEAM_NUD) * float((POLCHAN>>2))/float(NCHAN);
+        // Compute grid position and difference from
+        // actual position for the source at each channel
+        l = T(BEAM_LW-1) * (l - beam_ll) / (beam_ul - beam_ll);
+        float gl = floorf(l);
+        float ld = l - gl;
+
+        m = T(BEAM_MH-1) * (m - beam_lm) / (beam_um - beam_lm);
+        float gm = floorf(m);
+        float md = m - gm;
+
+#if NCHAN > 1
+        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2)/float(NCHAN-1);
+#else
+        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2);
+#endif
+
+        float gchan = floorf(chan);
+        float chd = chan - gchan;
+
+        // Handle the boundary case where the
+        // channel lies on the last grid point
+        if(chan == T(BEAM_NUD-1)) {
+            gchan = T(BEAM_NUD-2);
+            chd = 1.0f;
+        }
 
         typename Tr::ct sum = Po::make_ct(0.0, 0.0);
         typename Tr::ft abs_sum = T(0.0);
+
+        // A simplified bilinear weighting is used here. Given
+        // point x between points x1 and x2, with function f
+        // provided values f(x1) and f(x2) at these points.
+        //
+        // x1 ------- x ---------- x2
+        //
+        // Then, the value of f can be approximated using the following:
+        // f(x) ~= f(x1)(x2-x)/(x2-x1) + f(x2)(x-x1)/(x2-x1)
+        //
+        // Note how the value f(x1) is weighted with the distance
+        // from the opposite point (x2-x).
+        //
+        // As we are interpolating on a grid, we have the following
+        // 1. (x2 - x1) == 1
+        // 2. (x - x1)  == 1 - 1 + (x - x1)
+        //              == 1 - (x2 - x1) + (x - x1)
+        //              == 1 - (x2 - x)
+        // 2. (x2 - x)  == 1 - 1 + (x2 - x)
+        //              == 1 - (x2 - x1) + (x2 - x)
+        //              == 1 - (x - x1)
+        //
+        // Extending the above to 3D, we have
+        // f(x,y,z) ~= f(x1,y1,z1)(x2-x)(y2-y)(z2-z) + ...
+        //           + f(x2,y2,z2)(x-x1)(y-y1)(z-z1)
+        //
+        // f(x,y,z) ~= f(x1,y1,z1)(1-(x-x1))(1-(y-y1))(1-(z-z1)) + ...
+        //           + f(x2,y2,z2)   (x-x1)    (y-y1)    (z-z1)
 
         // Load in the complex values from the E beam
         // at the supplied coordinate offsets.
         // Save the sum of abs in sum.real
         // and the sum of args in sum.imag
-        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
-            0.0f, 0.0f, 0.0f);
-        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
-            1.0f, 0.0f, 0.0f);
-        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
-            0.0f, 1.0f, 0.0f);
-        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
-            1.0f, 1.0f, 0.0f);
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
+            gl + 0.0f, gm + 0.0f, gchan + 0.0f,
+            (1.0f-ld)*(1.0f-md)*(1.0f-chd));
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
+            gl + 1.0f, gm + 0.0f, gchan + 0.0f,
+            ld*(1.0f-md)*(1.0f-chd));
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
+            gl + 0.0f, gm + 1.0f, gchan + 0.0f,
+            (1.0f-ld)*md*(1.0f-chd));
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
+            gl + 1.0f, gm + 1.0f, gchan + 0.0f,
+            ld*md*(1.0f-chd));
 
-        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
-            0.0f, 0.0f, 1.0f);
-        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
-            1.0f, 0.0f, 1.0f);
-        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
-            0.0f, 1.0f, 1.0f);
-        bilinear_interpolate<T>(sum, abs_sum, E_beam, gl, gm, gchan,
-            1.0f, 1.0f, 1.0f);
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
+            gl + 0.0f, gm + 0.0f, gchan + 1.0f,
+            (1.0f-ld)*(1.0f-md)*chd);
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
+            gl + 1.0f, gm + 0.0f, gchan + 1.0f,
+            ld*(1.0f-md)*chd);
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
+            gl + 0.0f, gm + 1.0f, gchan + 1.0f,
+            (1.0f-ld)*md*chd);
+        trilinear_interpolate<T>(sum, abs_sum, E_beam,
+            gl + 1.0f, gm + 1.0f, gchan + 1.0f,
+            ld*md*chd);
 
         // Determine the normalised angle
         typename Tr::ft angle = Po::arg(sum);
