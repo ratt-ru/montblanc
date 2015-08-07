@@ -102,7 +102,7 @@ class SolverConfigurationOptions(object):
 
     CONTEXT = 'context'
     CONTEXT_DESCRIPTION = ('PyCUDA context(s) '
-        'available or this solver to use. '
+        'available for this solver to use. '
         'Should be of type pycuda.driver.Context. '
         'May be a single context of a list of contexts')
 
