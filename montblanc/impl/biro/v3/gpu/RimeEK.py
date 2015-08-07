@@ -18,11 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import numpy as np
-
-import pycuda.driver
-import pycuda.tools
-
 import montblanc.impl.biro.v2.gpu.RimeEK
 
 class RimeEK(montblanc.impl.biro.v2.gpu.RimeEK.RimeEK):

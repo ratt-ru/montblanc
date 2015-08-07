@@ -20,9 +20,6 @@
 
 import numpy as np
 
-import pycuda.driver
-import pycuda.tools
-
 import montblanc.impl.biro.v2.gpu.RimeGaussBSum
 
 class RimeGaussBSum(montblanc.impl.biro.v2.gpu.RimeGaussBSum.RimeGaussBSum):
