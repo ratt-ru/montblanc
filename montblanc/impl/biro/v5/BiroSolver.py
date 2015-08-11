@@ -21,6 +21,12 @@
 import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
+
+from montblanc.impl.biro.v5.gpu.RimeEBeam import RimeEBeam
+from montblanc.impl.biro.v5.gpu.RimeBSqrt import RimeBSqrt
+from montblanc.impl.biro.v5.gpu.RimeEKBSqrt import RimeEKBSqrt
+from montblanc.impl.biro.v5.gpu.RimeSumCoherencies import RimeSumCoherencies
+
 from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
 from montblanc.config import (BiroSolverConfiguration,
@@ -37,14 +43,19 @@ class BiroSolver(BaseSolver):
                 Solver Configuration variables
         """
 
-        # Set up a default pipeline if None is supplied
-
         super(BiroSolver, self).__init__(slvr_cfg)
 
         # Configure the dimensions of the beam cube
         self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
         self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
         self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
+
+        wv = slvr_cfg[Options.WEIGHT_VECTOR]
+
+        self.rime_e_beam = RimeEBeam()
+        self.rime_b_sqrt = RimeBSqrt()
+        self.rime_ekb_sqrt = RimeEKBSqrt()
+        self.rime_sum = RimeSumCoherencies(weight_vector=wv)
 
     def twiddle_src_dims(self, nsrc):
         """
@@ -70,11 +81,17 @@ class BiroSolver(BaseSolver):
 
     def initialise(self):
         with self.context:
-            pass
+            self.rime_e_beam.initialise(self)
+            self.rime_b_sqrt.initialise(self)
+            self.rime_ekb_sqrt.initialise(self)
+            self.rime_sum.initialise(self)
 
     def shutdown(self):
         with self.context:
-            pass
+            self.rime_e_beam.shutdown(self)
+            self.rime_b_sqrt.shutdown(self)
+            self.rime_ekb_sqrt.shutdown(self)
+            self.rime_sum.shutdown(self)
 
     # Take these methods from the v2 BiroSolver
     get_default_base_ant_pairs = \
