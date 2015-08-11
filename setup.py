@@ -94,6 +94,7 @@ setup(name='montblanc',
     packages=find_packages(),
     install_requires=[
         'attrdict',
+        'cffi>=1.1.2',
         'funcsigs',
         'numpy',
         'numexpr>=2.4',
