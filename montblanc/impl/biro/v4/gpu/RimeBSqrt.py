@@ -24,6 +24,7 @@ import string
 from pycuda.compiler import SourceModule
 
 import montblanc
+import montblanc.util as mbu
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
@@ -179,9 +180,9 @@ class RimeBSqrt(Node):
         times_per_block = D['BLOCKDIMY']
         srcs_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = self.blocks_required(self.polchans, polchans_per_block)
-        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
-        src_blocks = self.blocks_required(slvr.nsrc, srcs_per_block)
+        polchan_blocks = mbu.blocks_required(self.polchans, polchans_per_block)
+        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
+        src_blocks = mbu.blocks_required(slvr.nsrc, srcs_per_block)
 
         return {
             'block' : (polchans_per_block, times_per_block, srcs_per_block),

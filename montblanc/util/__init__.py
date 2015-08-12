@@ -59,6 +59,13 @@ def nr_of_antenna(nbl, auto_correlations=False):
     t = 1 if auto_correlations is False else -1
     return int(t + math.sqrt(1 + 8*nbl)) // 2
 
+def blocks_required(N, threads_per_block):
+    """
+    Returns the number of blocks required, given
+    N, the total number of threads, and threads_per_block
+    """
+    return (N + threads_per_block - 1) / threads_per_block
+
 def cpu_name(name):
     """ Constructs a name for the CPU version of the array """
     return name + '_cpu'

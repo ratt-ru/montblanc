@@ -24,6 +24,7 @@ import string
 from pycuda.compiler import SourceModule
 
 import montblanc
+import montblanc.util as mbu
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
@@ -146,8 +147,8 @@ class MatrixTranspose(Node):
         x_per_block = D['BLOCKDIMX']
         y_per_block = D['BLOCKDIMY']
 
-        x_blocks = self.blocks_required(nx, TILE_DIM)
-        y_blocks = self.blocks_required(ny, TILE_DIM)
+        x_blocks = mbu.blocks_required(nx, TILE_DIM)
+        y_blocks = mbu.blocks_required(ny, TILE_DIM)
 
         return {
             'block' : (x_per_block, y_per_block,1),

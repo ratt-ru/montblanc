@@ -403,9 +403,9 @@ class RimeSumCoherencies(Node):
         bl_per_block = D['BLOCKDIMY']
         times_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = self.blocks_required(self.polchans, polchans_per_block)
-        bl_blocks = self.blocks_required(slvr.nbl, bl_per_block)
-        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
+        polchan_blocks = mbu.blocks_required(self.polchans, polchans_per_block)
+        bl_blocks = mbu.blocks_required(slvr.nbl, bl_per_block)
+        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
 
         return {
             'block' : (polchans_per_block, bl_per_block, times_per_block),

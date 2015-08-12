@@ -122,9 +122,6 @@ class Node(object):
         """
         raise NotImplementedError, self.__not_implemented_string(type(self).post_execution.__name__)
 
-    def blocks_required(self, N, threads_per_block):
-        return (N + threads_per_block - 1) / threads_per_block
-
     def __not_implemented_string(self, function_name):
         return ' '.join(['method', function_name, 'not implemented in class',type(self).__name__,'derived from abstract class', Node.__name__])
 
