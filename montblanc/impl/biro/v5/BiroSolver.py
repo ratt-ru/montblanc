@@ -93,7 +93,7 @@ class BiroSolver(BaseSolver):
             self.rime_ekb_sqrt.shutdown(self)
             self.rime_sum.shutdown(self)
 
-    # Take these methods from the v2 BiroSolver
+    # Take these methods from the v4 BiroSolver
     get_default_base_ant_pairs = \
         BiroSolverV4.__dict__['get_default_base_ant_pairs']
     get_default_ant_pairs = \
