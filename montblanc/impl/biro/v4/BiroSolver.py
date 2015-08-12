@@ -19,8 +19,12 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
+import pycuda.driver as cuda
+
+from cffi import FFI
 
 import montblanc
+import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
 from montblanc.config import BiroSolverConfigurationOptions as Options
@@ -203,8 +207,14 @@ A = [
     ary_dict('X2', (1, ), 'ft'),
 ]
 
+def _emit_struct_field(type, name):
+    return ' '*4 + type + ' ' + name + ';'
+
 class BiroSolver(BaseSolver):
-    """ Shared Data implementation for BIRO """
+    """ BIRO Solver Implementation """
+
+    CONST_DATA_VAR_LIST = ['ntime', 'nbl', 'na', 'nchan', 'npolchan', 'nsrc']
+
     def __init__(self, slvr_cfg):
         """
         BiroSolver Constructor
@@ -226,6 +236,62 @@ class BiroSolver(BaseSolver):
 
         self.register_properties(P)
         self.register_arrays(A)
+
+        # Define the C structure for holding constant GPU data.
+        self.ffi = FFI()
+        self.ffi.cdef(self.create_rime_const_data_struct())
+
+        # Create a page-locked ndarray to hold constant GPU data
+        with self.context:
+            shape = (self.ffi.sizeof('rime_const_data'), )
+            self.const_data_buffer = cuda.pagelocked_empty(
+                shape=shape, dtype=np.int8)
+
+        # Now create a cdata object wrapping the
+        # page-locked ndarray and cast it to
+        # the rime_const_data c type.
+        self.rime_const_data_cpu = self.ffi.cast(
+            'rime_const_data *',
+            self.ffi.from_buffer(self.const_data_buffer))
+
+        # Initialise it
+        self.init_rime_const_data(self.rime_const_data_cpu)
+
+    def create_rime_const_data_struct(self):
+        """
+        Create the C definition of the
+        RIME constant data structure
+        """
+        __RIME_CONST_DATA_STR_LIST = ['typedef struct {']
+        __RIME_CONST_DATA_STR_LIST.extend([
+            _emit_struct_field('unsigned int', v)
+            for v in self.CONST_DATA_VAR_LIST])
+        __RIME_CONST_DATA_STR_LIST.extend([
+            _emit_struct_field('unsigned int', s)
+            for s in mbu.source_nr_vars()])
+        __RIME_CONST_DATA_STR_LIST.append('} rime_const_data;')
+        return '\n'.join(__RIME_CONST_DATA_STR_LIST)
+
+    def init_rime_const_data(self, rime_const_data):
+        """
+        Initialise the RIME constant data structure
+        """
+        for v in self.CONST_DATA_VAR_LIST:
+            setattr(rime_const_data, v, getattr(self, v))
+
+        for s in mbu.source_nr_vars():
+            setattr(rime_const_data, s, getattr(self, s))
+
+    def cfg_src_dims(self, rime_const_data, source_nr_var_dict):
+        nsrc = 0
+
+        for s in mbu.source_nr_vars():
+            value = source_nr_var_dict.get(s, 0)
+            setattr(rime_const_data, s, value)
+
+            nsrc += value
+
+        setattr(rime_const_data, 'nsrc', nsrc)
 
     def get_properties(self):
         # Obtain base solver property dictionary

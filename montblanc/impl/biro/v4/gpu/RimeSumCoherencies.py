@@ -21,6 +21,7 @@
 import numpy as np
 import string
 
+import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 
@@ -47,17 +48,6 @@ KERNEL_TEMPLATE = string.Template("""
 #include <montblanc/include/abstraction.cuh>
 #include <montblanc/include/jones.cuh>
 
-#define NA ${na}
-#define NBL ${nbl}
-#define NCHAN ${nchan}
-#define NTIME ${ntime}
-#define NPSRC ${npsrc}
-#define NGSRC ${ngsrc}
-#define NSSRC ${nssrc}
-#define NSRC ${nsrc}
-#define NPOL (4)
-#define NPOLCHAN (NPOL*NCHAN)
-
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
 #define BLOCKDIMZ ${BLOCKDIMZ}
@@ -80,6 +70,14 @@ public:
     typedef double3 UVWType;
 };
 
+// Here, the definition of the
+// rime_const_data struct
+// is inserted into the template
+// An area of constant memory
+// containing an instance of this
+// structure is declared. 
+${rime_const_data_struct}
+__constant__ rime_const_data C;
 
 template <
     typename T,
@@ -104,7 +102,7 @@ void rime_sum_coherencies_impl(
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
-    if(TIME >= NTIME || BL >= NBL || POLCHAN >= NPOLCHAN)
+    if(TIME >= C.ntime || BL >= C.nbl || POLCHAN >= C.npolchan)
         return;
 
     __shared__ struct {
@@ -130,17 +128,17 @@ void rime_sum_coherencies_impl(
     int i;
 
     // Figure out the antenna pairs
-    i = TIME*NBL + BL;   int ANT1 = ant_pairs[i];
-    i += NBL*NTIME;      int ANT2 = ant_pairs[i];
+    i = TIME*C.nbl + BL;   int ANT1 = ant_pairs[i];
+    i += C.nbl*C.ntime;    int ANT2 = ant_pairs[i];
 
     // UVW coordinates vary by baseline and time, but not polarised channel
     if(threadIdx.x == 0)
     {
         // UVW, calculated from u_pq = u_p - u_q
-        i = TIME*NA + ANT1;
+        i = TIME*C.na + ANT1;
         shared.uvw[threadIdx.z][threadIdx.y] = uvw[i];
 
-        i = TIME*NA + ANT2;
+        i = TIME*C.na + ANT2;
         typename SumCohTraits<T>::UVWType ant2_uvw = uvw[i];
         U -= ant2_uvw.x;
         V -= ant2_uvw.y;
@@ -158,14 +156,14 @@ void rime_sum_coherencies_impl(
     typename Tr::ct polsum = Po::make_ct(0.0, 0.0);
 
     // Point Sources
-    for(int SRC=0;SRC<NPSRC;++SRC)
+    for(int SRC=0; SRC< C.npsrc; ++SRC)
     {
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
+        i = ((SRC*C.ntime + TIME)*C.na + ANT1)*C.npolchan + POLCHAN;
         typename Tr::ct ant_one = jones[i];
-        i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
+        i = ((SRC*C.ntime + TIME)*C.na + ANT2)*C.npolchan + POLCHAN;
         typename Tr::ct ant_two = jones[i];
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_two, ant_one);
 
@@ -174,16 +172,16 @@ void rime_sum_coherencies_impl(
     }
 
     // Gaussian sources
-    for(int SRC=NPSRC;SRC<NPSRC+NGSRC;++SRC)
+    for(int SRC = C.npsrc; SRC < C.npsrc + C.ngsrc;++SRC)
     {
         // gaussian shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC-NPSRC;  shared.el = gauss_shape[i];
-            i += NGSRC;     shared.em = gauss_shape[i];
-            i += NGSRC;     shared.eR = gauss_shape[i];
+            i = SRC - C.npsrc;  shared.el = gauss_shape[i];
+            i += C.ngsrc;       shared.em = gauss_shape[i];
+            i += C.ngsrc;       shared.eR = gauss_shape[i];
         }
 
         __syncthreads();
@@ -203,12 +201,12 @@ void rime_sum_coherencies_impl(
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
+        i = ((SRC*C.ntime + TIME)*C.na + ANT1)*C.npolchan + POLCHAN;
         typename Tr::ct ant_one = jones[i];
         // Multiple in the gaussian shape
         ant_one.x *= exp;
         ant_one.y *= exp;
-        i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
+        i = ((SRC*C.ntime + TIME)*C.na + ANT2)*C.npolchan + POLCHAN;
         typename Tr::ct ant_two = jones[i];
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_two, ant_one);
 
@@ -219,16 +217,16 @@ void rime_sum_coherencies_impl(
     }
 
     // Sersic Sources
-    for(int SRC=NPSRC+NGSRC;SRC<NPSRC+NGSRC+NSSRC;++SRC)
+    for(int SRC = C.npsrc + C.ngsrc; SRC < C.npsrc + C.ngsrc + C.nssrc; ++SRC)
     {
         // sersic shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC-NPSRC-NGSRC;  shared.e1 = sersic_shape[i];
-            i += NSSRC;           shared.e2 = sersic_shape[i];
-            i += NSSRC;           shared.sersic_scale = sersic_shape[i];
+            i = SRC - C.npsrc - C.ngsrc; shared.e1 = sersic_shape[i];
+            i += C.nssrc;                shared.e2 = sersic_shape[i];
+            i += C.nssrc;                shared.sersic_scale = sersic_shape[i];
         }
 
         __syncthreads();
@@ -251,11 +249,11 @@ void rime_sum_coherencies_impl(
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
+        i = ((SRC*C.ntime + TIME)*C.na + ANT1)*C.npolchan + POLCHAN;
         typename Tr::ct ant_one = jones[i];
         ant_one.x *= sersic_factor;
         ant_one.y *= sersic_factor;
-        i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
+        i = ((SRC*C.ntime + TIME)*C.na + ANT2)*C.npolchan + POLCHAN;
         typename Tr::ct ant_two = jones[i];
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_two, ant_one);
 
@@ -264,17 +262,17 @@ void rime_sum_coherencies_impl(
     }
 
     // Multiply the visibility by antenna 2's g term
-    i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
+    i = (TIME*C.na + ANT2)*C.npolchan + POLCHAN;
     typename Tr::ct ant2_g_term = G_term[i];
     montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant2_g_term, polsum);
 
     // Multiply the visibility by antenna 1's g term
-    i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
+    i = (TIME*C.na + ANT1)*C.npolchan + POLCHAN;
     typename Tr::ct ant1_g_term = G_term[i];
     montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant2_g_term, ant1_g_term);
 
     // Write out the visibilities
-    i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
+    i = (TIME*C.nbl + BL)*C.npolchan + POLCHAN;
     visibilities[i] = ant2_g_term;
 
     // Compute the chi squared sum terms
@@ -311,7 +309,7 @@ void rime_sum_coherencies_impl(
         delta.x += other.x;
         delta.y += other.y;
 
-        i = (TIME*NBL + BL)*NCHAN + (POLCHAN >> 2);
+        i = (TIME*C.nbl + BL)*C.nchan + (POLCHAN >> 2);
         chi_sqrd_result[i] = delta.x + delta.y;
     }
 }
@@ -367,6 +365,7 @@ class RimeSumCoherencies(Node):
 
         D = slvr.get_properties()
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
+        D['rime_const_data_struct'] = slvr.create_rime_const_data_struct()
 
         # Update kernel parameters to cater for radically
         # smaller problem sizes. Caters for a subtle bug
@@ -388,6 +387,7 @@ class RimeSumCoherencies(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
+        self.rime_const_data_gpu = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
         self.launch_params = self.get_launch_params(slvr, D)
 
@@ -414,6 +414,16 @@ class RimeSumCoherencies(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer)
+
         # The gaussian shape array can be empty if
         # no gaussian sources were specified.
         gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
@@ -427,7 +437,7 @@ class RimeSumCoherencies(Node):
             slvr.jones_gpu, slvr.weight_vector_gpu,
             slvr.bayes_data_gpu, slvr.G_term_gpu,
             slvr.vis_gpu, slvr.chi_sqrd_result_gpu,
-            **self.launch_params)
+            stream=stream, **self.launch_params)
 
         # Call the pycuda reduction kernel.
         # Divide by the single sigma squared value if a weight vector
