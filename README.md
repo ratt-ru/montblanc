@@ -77,7 +77,7 @@ In general, I will avoid making changes to BIRO v2 and v3, but everything beyond
 
 ```python
 import montblanc
-montblanc.get_biro_solver(...)
+montblanc.rime_solver(...)
 ```
 
 Everything should be considered unstable and subject to change. I will make an effort to maintain the CHANGELOG.md, to record any breaking API changes.
