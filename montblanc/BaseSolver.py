@@ -170,6 +170,8 @@ class BaseSolver(Solver):
         self.na = slvr_cfg[Options.NA]
         self.nbl = nbl = mbu.nr_of_baselines(self.na,autocor)
         self.nchan = slvr_cfg[Options.NCHAN]
+        self.npol = 4
+        self.npolchan = self.npol*self.nchan
         self.ntime = slvr_cfg[Options.NTIME]
         self.nvis = self.nbl*self.nchan*self.ntime
 
