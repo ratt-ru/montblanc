@@ -123,9 +123,12 @@ def rand_gauss_shape(slvr, ary):
 
 def rand_sersic_shape(slvr, ary):
     e1, e2, eS = ary[0,:], ary[1,:], ary[2,:]
-    e1[:] = np.random.random(size=e1.shape)
-    e2[:] = np.random.random(size=e2.shape)
-    eS[:] = np.random.random(size=eS.shape)
+    # Random values seem to create v. large discrepancies
+    # between the CPU and GPU versions. Go with
+    # non-random data here, as per Marzia's original code
+    e1[:] = np.zeros(shape=e1.shape)
+    e2[:] = np.zeros(shape=e2.shape)
+    eS[:] = np.ones(shape=eS.shape)
 
     return ary
 
