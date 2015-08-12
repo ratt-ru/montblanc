@@ -21,8 +21,6 @@
 import numpy as np
 import pycuda.driver as cuda
 
-from cffi import FFI
-
 import montblanc
 import montblanc.util as mbu
 
@@ -207,13 +205,8 @@ A = [
     ary_dict('X2', (1, ), 'ft'),
 ]
 
-def _emit_struct_field(type, name):
-    return ' '*4 + type + ' ' + name + ';'
-
 class BiroSolver(BaseSolver):
     """ BIRO Solver Implementation """
-
-    CONST_DATA_VAR_LIST = ['ntime', 'nbl', 'na', 'nchan', 'npolchan', 'nsrc']
 
     def __init__(self, slvr_cfg):
         """
@@ -237,40 +230,18 @@ class BiroSolver(BaseSolver):
         self.register_properties(P)
         self.register_arrays(A)
 
-        # Define the C structure for holding constant GPU data.
-        self.ffi = FFI()
-        self.ffi.cdef(self.create_rime_const_data_struct())
-
         # Create a page-locked ndarray to hold constant GPU data
         with self.context:
-            shape = (self.ffi.sizeof('rime_const_data'), )
             self.const_data_buffer = cuda.pagelocked_empty(
-                shape=shape, dtype=np.int8)
+                shape=mbu.rime_const_data_size(), dtype=np.int8)
 
-        # Now create a cdata object wrapping the
-        # page-locked ndarray and cast it to
-        # the rime_const_data c type.
-        self.rime_const_data_cpu = self.ffi.cast(
-            'rime_const_data *',
-            self.ffi.from_buffer(self.const_data_buffer))
+        # Now create a cdata object wrapping the page-locked
+        # ndarray and cast it to the rime_const_data c type.
+        self.rime_const_data_cpu = mbu.wrap_rime_const_data(
+            self.const_data_buffer)
 
         # Initialise it
-        self.init_rime_const_data(self.rime_const_data_cpu)
-
-    def create_rime_const_data_struct(self):
-        """
-        Create the C definition of the
-        RIME constant data structure
-        """
-        __RIME_CONST_DATA_STR_LIST = ['typedef struct {']
-        __RIME_CONST_DATA_STR_LIST.extend([
-            _emit_struct_field('unsigned int', v)
-            for v in self.CONST_DATA_VAR_LIST])
-        __RIME_CONST_DATA_STR_LIST.extend([
-            _emit_struct_field('unsigned int', s)
-            for s in mbu.source_nr_vars()])
-        __RIME_CONST_DATA_STR_LIST.append('} rime_const_data;')
-        return '\n'.join(__RIME_CONST_DATA_STR_LIST)
+        mbu.init_rime_const_data(self, self.rime_const_data_cpu)
 
     def init_rime_const_data(self, rime_const_data):
         """

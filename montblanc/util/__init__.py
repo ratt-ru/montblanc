@@ -26,8 +26,18 @@ import montblanc
 
 from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 from sky_model_parser import parse_sky_model
-from montblanc.src_types import (source_types,
-    source_nr_vars, default_sources, sources_to_nr_vars)
+
+from const_data import (
+    rime_const_data_struct,
+    rime_const_data_size,
+    wrap_rime_const_data,
+    init_rime_const_data)
+
+from montblanc.src_types import (
+    source_types,
+    source_nr_vars,
+    default_sources,
+    sources_to_nr_vars)
 
 def nr_of_baselines(na, auto_correlations=False):
     """

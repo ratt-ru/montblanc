@@ -26,6 +26,7 @@ import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 
 import montblanc
+import montblanc.util as mbu
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
@@ -365,7 +366,7 @@ class RimeSumCoherencies(Node):
 
         D = slvr.get_properties()
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
-        D['rime_const_data_struct'] = slvr.create_rime_const_data_struct()
+        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
 
         # Update kernel parameters to cater for radically
         # smaller problem sizes. Caters for a subtle bug
