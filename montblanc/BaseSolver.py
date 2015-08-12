@@ -551,7 +551,8 @@ class BaseSolver(Solver):
             self.properties[name] = AttrDict(name=name, dtype=dtype,
                 default=default, registrant=registrant)
         else:
-            raise ValueError(('Property %s '))
+            raise ValueError(('Property %s is already registered '
+                'on this solver object.') % name)
 
         #if not hasattr(BaseSolver, name):
         if not BaseSolver.__dict__.has_key(name):
