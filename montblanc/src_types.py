@@ -121,3 +121,48 @@ def sources_to_nr_vars(sources):
             'No source type ''%s'' is '
             'registered. Valid source types '
             'are %s') % (e, SOURCE_VAR_TYPES.keys()))
+
+def source_range(start, end, nr_var_dict):
+    """
+    Given a range of source numbers, as well as a dictionary
+    containing the numbers of each source, returns a dictionary
+    containing the number of variables of each type lying within
+    that range
+    """
+
+    D = OrderedDict((nr_var, 0) for nr_var in SOURCE_VAR_TYPES.itervalues())
+    D.update(nr_var_dict)
+    nr_vars = D.keys()
+    counts = np.array(D.values())
+    sum_counts = np.cumsum(counts)
+    idx = np.arange(len(nr_vars))
+
+    # Find the intervals containing the
+    # start and ending indices
+    start_idx, end_idx = np.searchsorted(
+        sum_counts, [start, end], side='right')
+
+    # Handle edge cases
+    if end >= sum_counts[-1]:
+        end = sum_counts[-1]
+        end_idx = len(sum_counts) - 1
+
+    # Find out which counts are currently valid
+    # and zero the invalid ones
+    valid = np.logical_and(start_idx <= idx, idx <= end_idx)
+    counts[np.logical_not(valid)] = 0
+
+    if start_idx == end_idx:
+        # Special case
+        counts[start_idx] = end - start
+    else:
+        # Modify the counts in which the start and end
+        # positions occur
+        counts[start_idx] = sum_counts[start_idx] - start
+        counts[end_idx] = end - sum_counts[end_idx-1]
+
+    # Set the counts
+    for i, n in enumerate(nr_vars):
+        D[n] = counts[i] 
+    
+    return D
