@@ -287,7 +287,8 @@ class CompositeBiroSolver(BaseSolver):
 
         return arys, props
 
-    def transfer_arrays(self, sub_solver_idx, time_begin, time_end):
+    def transfer_arrays(self, sub_solver_idx, time_slice,
+        bl_slice, chan_slice, src_slice):
         """
         Transfer CPU arrays on the CompositeBiroSolver over to the
         BIRO sub-solvers asynchronously.
@@ -295,63 +296,90 @@ class CompositeBiroSolver(BaseSolver):
         i = sub_solver_idx
         subslvr = self.solvers[i]
         stream = self.stream[i]
+        all_slice = slice(None,None,1)
+        MAX_PIN_MEMORY_SIZE = 100*ONE_MB
 
-        for r in self.arrays.itervalues():
-            # Is there anything to transfer for this array?
-            if not r.has_cpu_ary:
-                continue
-            # Check for a time dimension. If the array has it,
-            # we'll always be transferring a segment
-            has_time = r.sshape.count('ntime') > 0
-            # If this array was transferred and
-            # has no time dimension, skip it
-            if not has_time and subslvr.was_transferred[r.name]:
-                continue
+        slice_map = {
+            'ntime': time_slice,
+            'nbl': bl_slice,
+            'nchan' : chan_slice,
+            'nsrc' : src_slice
+        }
 
-            cpu_name = mbu.cpu_name(r.name)
-            gpu_name = mbu.gpu_name(r.name)
+        with subslvr.context:
+            for r in self.arrays.itervalues():
+                # Is there anything to transfer for this array?
+                if not r.cpu:
+                    print '%s has no CPU array' % r.name
+                    continue
 
-            # Get the CPU array on the composite solver
-            # and the CPU array and the GPU array
-            # on the sub-solver
-            cpu_ary = getattr(self,cpu_name)
-            gpu_ary = getattr(subslvr,gpu_name)
+                cpu_name = mbu.cpu_name(r.name)
+                gpu_name = mbu.gpu_name(r.name)
 
-            # Set up the slicing of the main CPU array. It we're dealing with the
-            # time dimension, slice the appropriate chunk, otherwise take
-            # everything
-            all_slice = slice(None,None,1)
-            time_slice = slice(time_begin, time_end ,1)
-            cpu_idx = tuple([time_slice if s == 'ntime' else all_slice
-                for s in r.sshape])
+                # Get the CPU array on the composite solver
+                # and the CPU array and the GPU array
+                # on the sub-solver
+                cpu_ary = getattr(self,cpu_name)
+                gpu_ary = getattr(subslvr,gpu_name)
 
-            # Similarly, set up the slicing of the pinned CPU array
-            time_diff = time_end - time_begin
-            time_diff_slice = slice(None,time_diff,1)
-            pin_idx = tuple([time_diff_slice if s == 'ntime' else all_slice
-                for s in r.sshape])
+                if gpu_ary is None:
+                    print 'Skipping %s' % r.name
+                    continue
 
-            # Get a pinned array for asynchronous transfers
-            cpu_shape_name = mbu.shape_name(r.name)
-            cpu_dtype_name = mbu.dtype_name(r.name)
+                # Set up the slicing of the main CPU array. Map dimensions in slice_map
+                # to the slice arguments, otherwise, just take everything in the dimension
+                cpu_idx = tuple([slice_map[s] if s in slice_map else all_slice for s in r.sshape])
+                cpu_slice = cpu_ary[cpu_idx]
 
-            pinned_ary = self.pinned_mem_pool.allocate(
-                shape=getattr(subslvr,cpu_shape_name),
-                dtype=getattr(subslvr,cpu_dtype_name))
+                # If the slice is contiguous, pin the slice and copy it
+                if cpu_slice.flags.c_contiguous is True:
+                    pinned_ary = cuda.register_host_memory(cpu_slice)
+                    copy_ary = pinned_ary
+                # Pin the contiguous section containing the slice.
+                # See if PyCUDA will handle the non-contiguous
+                # slice copy internally (_memcpy_discontig)
+                else:
+                    # Figure out the starting and ending indices
+                    start_idx = np.int32([0 if s.start is None else s.start
+                        for s in cpu_idx]) 
+                    end_idx = np.int32([s.stop
+                        if s.stop is not None else cpu_ary.shape[i]
+                        for i, s in enumerate(cpu_idx)]) 
+                    # 1D indices of the slice start and end
+                    # in the flattened array
+                    start = np.ravel_multi_index(start_idx, cpu_ary.shape)
+                    end = np.ravel_multi_index(end_idx-1, cpu_ary.shape)+1
+                    flat_slice = np.ravel(cpu_ary)[start:end]
+                    assert flat_slice.flags.c_contiguous is True
+                    # Pin the flat contiguous region
+                    pinned_ary = cuda.register_host_memory(flat_slice)
+                    # But copy the original slice
+                    copy_ary = cpu_slice
+                """
+                # Original strategy
 
-            # Copy the numpy array into the pinned array
-            # and perform the asynchronous transfer
-            pinned_ary[pin_idx] = cpu_ary[cpu_idx]
+                # Non-contiguous slice. If the entire array is less
+                # than MAX_PIN_MEMORY_SIZE, pin the whole thing
+                # and see if PyCUDA will handle the non-contiguous
+                # slice copy internally (_memcpy_discontig)
+                elif cpu_ary.nbytes < MAX_PIN_MEMORY_SIZE:
+                    # Original, brute force approach
+                    pinned_ary = cuda.register_host_memory(cpu_ary)
+                    copy_ary = cpu_slice
+                # No good strategies for handling this (at present)
+                else:
+                    raise ValueError(('Attempted to asynchronously '
+                        'copy slice of array %s, but the slice '
+                        'is non-contiguous and the array is too large '
+                        'to pin in entirety (%s > %s).') % (
+                            r.name,  mbu.fmt_bytes(cpu_ary.nbytes),
+                            mbu.fmt_bytes(MAX_PIN_MEMORY_SIZE)))
+                """
 
-            with self.context as ctx:
-                gpu_ary.set_async(pinned_ary,stream=stream)
+                print 'Transferring %s with size %s' % (
+                    r.name, mbu.fmt_bytes(copy_ary.nbytes))
 
-            # If we're not dealing with an array with a time dimension
-            # then the transfer happens in one go. Otherwise, we're transferring
-            # chunks of the the array and we're only done when
-            # we transfer the last chunk
-            if r.sshape.count('ntime') == 0 or time_end == self.ntime:
-                subslvr.was_transferred[r.name] = True
+                gpu_ary.set_async(copy_ary, stream=stream)
 
     def __enter__(self):
         """
@@ -371,13 +399,11 @@ class CompositeBiroSolver(BaseSolver):
     def initialise(self):
         """ Initialise the sub-solver """
 
-        return
-
         if not self.initialised:
-            with self.context as ctx:
-                for i, slvr in enumerate(self.solvers):
-                    slvr.initialise()
+            for i, subslvr in enumerate(self.solvers):
+                subslvr.initialise()
 
+            with self.solvers[0].context:
                 # Get the reduction kernel
                 # loaded in and hot
                 pycuda.gpuarray.sum(
@@ -396,6 +422,12 @@ class CompositeBiroSolver(BaseSolver):
                     for src in xrange(0, self.nsrc, self.src_diff):
                         src_slice = slice(src, src + self.src_diff, 1)
                         yield (time_slice, bl_slice, chan_slice, src_slice)
+
+    def __gen_sub_solvers(self):
+        # Loop infinitely over the sub-solvers.
+        while True:
+            for i, subslvr in enumerate(self.solvers):
+                yield (i, subslvr)
 
     def __validate_arrays(self, arrays):
         """
@@ -435,8 +467,20 @@ class CompositeBiroSolver(BaseSolver):
         if not self.initialised:
             self.initialise()
 
+        nr_var_counts = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
+        subslvr_gen = self.__gen_sub_solvers()
+
         for t, bl, ch, src in self.__gen_rime_sections():
-            print t, bl, ch, src
+            i, subslvr = subslvr_gen.next()
+            src_counts = mbu.source_range(src.start, src.stop, nr_var_counts)
+            print src, src_counts
+            with subslvr.context:
+
+                self.transfer_arrays(i, t, bl, ch, src)
+                subslvr.rime_e_beam.execute(subslvr, self.stream[i])
+                subslvr.rime_b_sqrt.execute(subslvr, self.stream[i])
+                subslvr.rime_ekb_sqrt.execute(subslvr, self.stream[i])
+                subslvr.rime_sum.execute(subslvr, self.stream[i])
 
     def shutdown(self):
         """ Shutdown the solver """
