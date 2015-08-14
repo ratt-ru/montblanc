@@ -121,8 +121,20 @@ class TestBiroV5(unittest.TestCase):
 
         with solver(slvr_cfg) as slvr:
             slvr.solve()
-            pass
 
+    def test_medium_budget(self):
+        wv = True
+
+        slvr_cfg = BiroSolverConfiguration(na=27, ntime=100, nchan=64,
+            sources=montblanc.sources(point=100, gaussian=100, sersic=100),
+            beam_lw=1, beam_mh=1, beam_nud=1,
+            weight_vector=wv, nsolvers=3,
+            dtype=Options.DTYPE_DOUBLE)
+
+        with solver(slvr_cfg) as slvr:
+            print slvr
+
+            slvr.solve()
 
     def test_smart_budget(self):
         wv = True
