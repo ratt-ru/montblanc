@@ -18,6 +18,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import numpy as np
+import pycuda.driver as cuda
+
 import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
@@ -56,6 +59,19 @@ class BiroSolver(BaseSolver):
         self.rime_b_sqrt = RimeBSqrt()
         self.rime_ekb_sqrt = RimeEKBSqrt()
         self.rime_sum = RimeSumCoherencies(weight_vector=wv)
+
+        # Create a page-locked ndarray to hold constant GPU data
+        with self.context:
+            self.const_data_buffer = cuda.pagelocked_empty(
+                shape=mbu.rime_const_data_size(), dtype=np.int8)
+
+        # Now create a cdata object wrapping the page-locked
+        # ndarray and cast it to the rime_const_data c type.
+        self.rime_const_data_cpu = mbu.wrap_rime_const_data(
+            self.const_data_buffer)
+
+        # Initialise it
+        mbu.init_rime_const_data(self, self.rime_const_data_cpu)
 
     def twiddle_src_dims(self, nsrc):
         """

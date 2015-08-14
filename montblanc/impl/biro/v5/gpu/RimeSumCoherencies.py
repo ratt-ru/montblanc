@@ -20,6 +20,9 @@
 
 import numpy as np
 
+import pycuda.driver as cuda
+import pycuda.gpuarray as gpuarray
+
 import montblanc.impl.biro.v4.gpu.RimeSumCoherencies
 
 class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCoherencies):
@@ -37,6 +40,16 @@ class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCo
     def execute(self, solver, stream=None):
         slvr = solver
 
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer)
+
         # The gaussian shape array can be empty if
         # no gaussian sources were specified.
         gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
@@ -50,7 +63,7 @@ class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCo
             slvr.jones_gpu, slvr.weight_vector_gpu,
             slvr.bayes_data_gpu, slvr.G_term_gpu,
             slvr.vis_gpu, slvr.chi_sqrd_result_gpu,
-            **self.launch_params)
+            stream=stream, **self.launch_params)
 
         # Call the pycuda reduction kernel.
         # Divide by the single sigma squared value if a weight vector
