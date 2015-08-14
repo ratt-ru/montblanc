@@ -133,6 +133,9 @@ class CompositeBiroSolver(BaseSolver):
         A_main, P_main = self.__twiddle_v4_arys_and_props(
             copy.deepcopy(BSV4mod.A), copy.deepcopy(BSV4mod.P))
 
+        self.register_properties(P_main)
+        self.register_arrays(A_main)
+
         props = self.get_properties()
         # Strip out any arrays associated with the different
         # source types (point, Gaussian, sersic etc.) and
