@@ -57,7 +57,8 @@ def strip_and_create_virtual_source(ary_list, props):
     This function strips out arrays associated with
     the various source types ('npsrc', 'ngsrc' etc.)
     and replaces them with a single array 'virtual_source'
-    which is as large as the biggest of these sources. 
+    which is large enough to contain N of the largest
+    of these sources. 
     """
     src_nr_vars = mbu.source_nr_vars()
     max_ary_bytes_per_src = 0
