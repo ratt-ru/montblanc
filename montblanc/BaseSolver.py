@@ -280,29 +280,35 @@ class BaseSolver(Solver):
                 signature(value).bind(self, ary)
             except TypeError:
                 raise TypeError(('The signature of the function supplied '
-                    'for setting the value value on array %s is incorrect. '
-                    'The function signature has the form deffunc(slvr, ary), '
-                    'where deffunc is some function that will set values '
+                    'for setting the value on array %s is incorrect. '
+                    'The function signature has the form f(slvr, ary), '
+                    'where f is some function that will set values '
                     'on the array, slvr is a Solver object which provides ' 
                     'useful information to the function, '
-                    'and ary is the NumPy array which must be initialised with '
-                    'value values.') % (name))
+                    'and ary is the NumPy array which must be '
+                    'initialised with values.') % (name))
 
-            value(self, ary)
+            returned_ary = value(self, ary)
+
+            if returned_ary is not None:
+                ary[:] = returned_ary
         elif isinstance(value, types.LambdaType):
             try:
                 signature(value).bind(self, ary)
             except TypeError:
                 raise TypeError(('The signature of the lambda supplied '
-                    'for setting the value value on array %s is incorrect. '
+                    'for setting the value on array %s is incorrect. '
                     'The function signature has the form lambda slvr, ary:, '
-                    'where deffunc is some function that will set values '
+                    'where lambda provides functionality for setting values '
                     'on the array, slvr is a Solver object which provides ' 
                     'useful information to the function, '
-                    'and ary is the NumPy array which must be initialised with '
-                    'value values.') % (name))
+                    'and ary is the NumPy array which must be '
+                    'initialised with values.') % (name))
 
-            ary[:] = value(self, ary)
+            returned_ary = value(self, ary)
+
+            if returned_ary is not None:
+                ary[:] = returned_ary
         # Got an ndarray, try set it equal
         elif isinstance(value, np.ndarray):
             try:
