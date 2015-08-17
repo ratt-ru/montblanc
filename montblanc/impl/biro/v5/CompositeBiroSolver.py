@@ -297,7 +297,6 @@ class CompositeBiroSolver(BaseSolver):
         subslvr = self.solvers[i]
         stream = self.stream[i]
         all_slice = slice(None,None,1)
-        MAX_PIN_MEMORY_SIZE = 100*ONE_MB
 
         slice_map = {
             'ntime': time_slice,
@@ -355,26 +354,6 @@ class CompositeBiroSolver(BaseSolver):
                     pinned_ary = cuda.register_host_memory(flat_slice)
                     # But copy the original slice
                     copy_ary = cpu_slice
-                """
-                # Original strategy
-
-                # Non-contiguous slice. If the entire array is less
-                # than MAX_PIN_MEMORY_SIZE, pin the whole thing
-                # and see if PyCUDA will handle the non-contiguous
-                # slice copy internally (_memcpy_discontig)
-                elif cpu_ary.nbytes < MAX_PIN_MEMORY_SIZE:
-                    # Original, brute force approach
-                    pinned_ary = cuda.register_host_memory(cpu_ary)
-                    copy_ary = cpu_slice
-                # No good strategies for handling this (at present)
-                else:
-                    raise ValueError(('Attempted to asynchronously '
-                        'copy slice of array %s, but the slice '
-                        'is non-contiguous and the array is too large '
-                        'to pin in entirety (%s > %s).') % (
-                            r.name,  mbu.fmt_bytes(cpu_ary.nbytes),
-                            mbu.fmt_bytes(MAX_PIN_MEMORY_SIZE)))
-                """
 
                 print 'Transferring %s with size %s' % (
                     r.name, mbu.fmt_bytes(copy_ary.nbytes))
