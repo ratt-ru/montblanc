@@ -287,8 +287,43 @@ class CompositeBiroSolver(BaseSolver):
 
         return arys, props
 
+    def __transfer_slice(self, r, cpu_ary, cpu_idx, gpu_ary, stream):
+        cpu_slice = cpu_ary[cpu_idx].squeeze()
+        gpu_ary = gpu_ary.squeeze()
+
+        # If the slice is contiguous, pin the slice and copy it
+        if cpu_slice.flags.c_contiguous is True:
+            pinned_ary = cuda.register_host_memory(cpu_slice)
+            copy_ary = pinned_ary
+        # Pin the contiguous section containing the slice.
+        # See if PyCUDA will handle the non-contiguous
+        # slice copy internally (_memcpy_discontig)
+        else:
+            # Figure out the starting and ending indices
+            start_idx = np.int32([0 if s.start is None else s.start
+                for s in cpu_idx]) 
+            end_idx = np.int32([s.stop
+                if s.stop is not None else cpu_ary.shape[i]
+                for i, s in enumerate(cpu_idx)]) 
+            # 1D indices of the slice start and end
+            # in the flattened array
+            start = np.ravel_multi_index(start_idx, cpu_ary.shape)
+            end = np.ravel_multi_index(end_idx-1, cpu_ary.shape)+1
+            flat_slice = np.ravel(cpu_ary)[start:end]
+            assert flat_slice.flags.c_contiguous is True
+            # Pin the flat contiguous region
+            pinned_ary = cuda.register_host_memory(flat_slice)
+            # But copy the original slice
+            copy_ary = cpu_slice
+
+        print 'Transferring %s with size %s shapes [%s vs %s]' % (
+            r.name, mbu.fmt_bytes(copy_ary.nbytes), copy_ary.shape, gpu_ary.shape)
+
+        gpu_ary.set_async(copy_ary, stream=stream)
+
+
     def transfer_arrays(self, sub_solver_idx, time_slice,
-        bl_slice, chan_slice, src_slice):
+        bl_slice, ant0_slice, ant1_slice, chan_slice, src_slice):
         """
         Transfer CPU arrays on the CompositeBiroSolver over to the
         BIRO sub-solvers asynchronously.
@@ -298,11 +333,29 @@ class CompositeBiroSolver(BaseSolver):
         stream = self.stream[i]
         all_slice = slice(None,None,1)
 
+        # Sanity check the baseline and antenna slice differences
+        bl_diff = bl_slice.stop - bl_slice.start
+        ant0_diff = ant0_slice.stop - ant0_slice.start
+        ant1_diff = ant1_slice.stop - ant1_slice.start
+
+        if bl_diff == self.nbl:
+            assert ant0_diff == self.na and ant1_diff == self.na, \
+                ('Antenna slice lengths must be equal to the number of antenna, '
+                'given that the baseline slice length is the number of baselines.')
+        elif bl_diff == 1:
+            assert ant0_diff == 1 and ant1_diff == 1, \
+                ('Antenna slice lengths must be equal one, '
+                'given that the baseline slice length is one.')
+        else:
+            raise ValueError('Baseline slice must be either equal '
+                'to the number of baselines, or 1.')
+
         slice_map = {
             'ntime': time_slice,
             'nbl': bl_slice,
-            'nchan' : chan_slice,
-            'nsrc' : src_slice
+            'na': ant0_slice,
+            'nchan': chan_slice,
+            'nsrc': src_slice
         }
 
         with subslvr.context:
@@ -325,40 +378,48 @@ class CompositeBiroSolver(BaseSolver):
                     print 'Skipping %s' % r.name
                     continue
 
+                # Checking if we're handling two antenna here
+                # A precursor to the vile hackery that follows
+                try:
+                    na_idx = r.sshape.index('na')
+                    two_ant_case = (subslvr.na == 2)
+                except ValueError:
+                    na_idx = 0
+                    two_ant_case = False
+
+                # Force using the first antenna slice on each iteration
+                slice_map['na'] = ant0_slice
+
+                # If we've got the two antenna case, slice
+                # the gpu array to point to the first antenna position
+                if two_ant_case is True:
+                    gpu_idx = [0 if i <= na_idx else all_slice
+                        for i in range(len(r.shape))]
+                    gpu_ary = gpu_ary[tuple(gpu_idx)]
+                    assert gpu_ary.flags.c_contiguous is True
+
                 # Set up the slicing of the main CPU array. Map dimensions in slice_map
                 # to the slice arguments, otherwise, just take everything in the dimension
-                cpu_idx = tuple([slice_map[s] if s in slice_map else all_slice for s in r.sshape])
-                cpu_slice = cpu_ary[cpu_idx]
+                cpu_idx = tuple([slice_map[s] if s in slice_map else all_slice
+                    for s in r.sshape])
 
-                # If the slice is contiguous, pin the slice and copy it
-                if cpu_slice.flags.c_contiguous is True:
-                    pinned_ary = cuda.register_host_memory(cpu_slice)
-                    copy_ary = pinned_ary
-                # Pin the contiguous section containing the slice.
-                # See if PyCUDA will handle the non-contiguous
-                # slice copy internally (_memcpy_discontig)
-                else:
-                    # Figure out the starting and ending indices
-                    start_idx = np.int32([0 if s.start is None else s.start
-                        for s in cpu_idx]) 
-                    end_idx = np.int32([s.stop
-                        if s.stop is not None else cpu_ary.shape[i]
-                        for i, s in enumerate(cpu_idx)]) 
-                    # 1D indices of the slice start and end
-                    # in the flattened array
-                    start = np.ravel_multi_index(start_idx, cpu_ary.shape)
-                    end = np.ravel_multi_index(end_idx-1, cpu_ary.shape)+1
-                    flat_slice = np.ravel(cpu_ary)[start:end]
-                    assert flat_slice.flags.c_contiguous is True
-                    # Pin the flat contiguous region
-                    pinned_ary = cuda.register_host_memory(flat_slice)
-                    # But copy the original slice
-                    copy_ary = cpu_slice
+                self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_ary, stream)
 
-                print 'Transferring %s with size %s' % (
-                    r.name, mbu.fmt_bytes(copy_ary.nbytes))
+                # Right, handle transfer of the second antenna's data
+                if two_ant_case is True:
+                    gpu_idx[na_idx] = 1
+                    gpu_ary = getattr(subslvr, gpu_name)[tuple(gpu_idx)]
+                    assert gpu_ary.flags.c_contiguous is True
 
-                gpu_ary.set_async(copy_ary, stream=stream)
+                    slice_map['na'] = ant1_slice
+
+                    # Set up the slicing of the main CPU array.
+                    # Map dimensions in slice_map to the slice arguments,
+                    # otherwise, just take everything in the dimension
+                    cpu_idx = tuple([slice_map[s] if s in slice_map
+                        else all_slice for s in r.sshape])
+
+                    self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_ary, stream)
 
     def __enter__(self):
         """
@@ -452,10 +513,21 @@ class CompositeBiroSolver(BaseSolver):
         for t, bl, ch, src in self.__gen_rime_sections():
             i, subslvr = subslvr_gen.next()
             src_counts = mbu.source_range(src.start, src.stop, nr_var_counts)
-            print src, src_counts
+            print 't %s bl %s ch %s src %s src_counts %s' % (t,bl,ch,src,src_counts)
             with subslvr.context:
+                if self.bl_diff == self.nbl:
+                    ant0 = slice(0, self.na, 1)
+                    ant1 = slice(0, self.na, 1)
+                elif self.bl_diff == 1:
+                    assert subslvr.na == 2, (
+                        'One baseline, but number of antenna '
+                        'is not equal to 2 (%d)') % (subslvr.na)
+                    a0 = self.ant_pairs_cpu[0, t.start, bl.start]
+                    ant0 = slice(a0, a0+1, 1)
+                    a1 = self.ant_pairs_cpu[1, t.start, bl.start]
+                    ant1 = slice(a1, a1+1, 1)
 
-                self.transfer_arrays(i, t, bl, ch, src)
+                self.transfer_arrays(i, t, bl, ant0, ant1, ch, src)
                 subslvr.rime_e_beam.execute(subslvr, self.stream[i])
                 subslvr.rime_b_sqrt.execute(subslvr, self.stream[i])
                 subslvr.rime_ekb_sqrt.execute(subslvr, self.stream[i])
