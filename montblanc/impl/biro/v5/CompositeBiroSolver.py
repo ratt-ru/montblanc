@@ -194,9 +194,9 @@ class CompositeBiroSolver(BaseSolver):
         D = super(CompositeBiroSolver, self).get_properties()
 
         D.update({
-            'beam_lw' : self.beam_lw,
-            'beam_mh' : self.beam_mh,
-            'beam_nud' : self.beam_nud
+            Options.E_BEAM_WIDTH : self.beam_lw,
+            Options.E_BEAM_HEIGHT : self.beam_mh,
+            Options.E_BEAM_DEPTH : self.beam_nud
         })
 
         return D
