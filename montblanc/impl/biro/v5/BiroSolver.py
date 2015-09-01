@@ -73,14 +73,29 @@ class BiroSolver(BaseSolver):
         # Initialise it
         mbu.init_rime_const_data(self, self.rime_const_data_cpu)
 
-    def twiddle_src_dims(self, nsrc):
+    def configure_total_src_dims(self, nsrc):
         """
-        Sets self.nsrc = nsrc
-        and all other source numbers to 0
+        Configure the total number of sources that will
+        be handled by this solver. Used by v5 to allocate
+        solvers handling subsets of the total problem.
+        Passing nsrc=100 means that the solver will handle
+        100 sources in total.
+
+        Additionally, sets the number for each individual
+        source type to 100. So npsrc=100, ngsrc=100,
+        nssrc=100 for instance. This is because if we're
+        handling 100 sources total, we'll need space for
+        at least 100 sources of each type.
+
+        The number of sources actually handled by the
+        solver on each iteration is set in the
+        rime_const_data_cpu structure.
+
         """
         self.nsrc = nsrc
+        
         for nr_var in mbu.source_nr_vars():
-            setattr(self, nr_var, 0)
+            setattr(self, nr_var, nsrc)
 
     def get_properties(self):
         # Obtain base solver property dictionary

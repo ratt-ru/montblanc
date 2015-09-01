@@ -52,56 +52,6 @@ ORDERING_CONSTRAINTS.update({
 ORDERING_RANK = [' or '.join(['nsrc'] + mbu.source_nr_vars()),
     'ntime', ' or '.join(['nbl', 'na']), 'nchan']
 
-def strip_and_create_virtual_source(ary_list, props):
-    """
-    This function strips out arrays associated with
-    the various source types ('npsrc', 'ngsrc' etc.)
-    and replaces them with a single array 'virtual_source'
-    which is large enough to contain N of the largest
-    of these sources. 
-    """
-    src_nr_vars = mbu.source_nr_vars()
-    max_ary_bytes_per_src = 0
-    remove_set = set()
-    nsrc = props['nsrc']
-
-    # Iterate over the array list, finding arrays specifically
-    # related to the different source types. Find the most expensive
-    # of these arrays, in terms of bytes per source
-    for i, ary in enumerate(ary_list):
-        # Figure out how many bytes this array uses in terms of
-        # TOTAL sources 'nsrc'. This allows us to rank each
-        # of the source arrays in terms of bytes per source.
-        src_nrs = [nsrc for x in ary['shape'] if x in src_nr_vars]
-        ary = ary.copy()
-        ary['shape'] = tuple(['nsrc' if x in src_nr_vars else x for x in ary['shape']])
-
-        if len(src_nrs) == 0:
-            continue
-
-        ary_bytes = mbu.dict_array_bytes(ary, props)
-        total_src_nr = np.product(src_nrs)
-        ary_bytes_per_src = ary_bytes / total_src_nr
-
-        # Does this use the most bytes per source?
-        if ary_bytes_per_src > max_ary_bytes_per_src:
-            max_ary_bytes_per_src = ary_bytes_per_src
-
-        # Mark this array for removal
-        remove_set.add(i)
-
-    # Create a new array list, removing source arrays
-    # and creating a new virtual source array.
-    new_ary_list = [v for i, v in enumerate(ary_list) if i not in remove_set]
-    new_ary_list.append({
-            'name': 'virtual_source',
-            'dtype': np.int8,
-            'shape' : (max_ary_bytes_per_src, 'nsrc'),
-            'registrant' : 'BiroSolver',
-        })
-
-    return new_ary_list
-
 class CompositeBiroSolver(BaseSolver):
     """
     Composite solver implementation for BIRO.
@@ -137,11 +87,7 @@ class CompositeBiroSolver(BaseSolver):
         self.register_arrays(A_main)
 
         props = self.get_properties()
-        # Strip out any arrays associated with the different
-        # source types (point, Gaussian, sersic etc.) and
-        # replace with a single virtual source array
-        # which is big enough to hold any of them.
-        A_sub = strip_and_create_virtual_source(A_main, props)
+        A_sub = copy.deepcopy(BSV4mod.A)
         P_sub = copy.deepcopy(BSV4mod.P)
 
         self.nsolvers = slvr_cfg.get('nsolvers', 4)
@@ -224,10 +170,9 @@ class CompositeBiroSolver(BaseSolver):
                 # and append
                 for s in range(self.nsolvers):
                     subslvr = BiroSolver(subslvr_cfg)
-                    # Our subsolvers don't think in terms
-                    # of point, gaussian or other sources,
-                    # but rather in terms of virtual sources
-                    subslvr.twiddle_src_dims(P['nsrc'])
+                    # Configure the total number of sources
+                    # handled by each sub-solver
+                    subslvr.configure_total_src_dims(P['nsrc'])
                     self.solvers.append(subslvr)
                     self.stream.append(cuda.Stream())
 
