@@ -178,16 +178,7 @@ class CompositeBiroSolver(BaseSolver):
 
         assert len(self.solvers) == self.nsolvers*len(self.dev_ctxs)
 
-        # Modify the array configuration for the sub-solvers
-        # Don't create CPU arrays since we'll be copying them
-        # from CPU arrays on the Composite Solver.
-        # Do create GPU arrays, used for solving each sub-section
-        # of the RIME.
-        for ary in A_sub:
-            # Add a transfer method
-            ary['transfer_method'] = self.get_sub_transfer_method(ary['name'])
-            ary['cpu'] = False
-            ary['gpu'] = True
+        A_sub, P_sub = self.__twiddle_v4_subarys_and_props(A_sub, P_sub)
 
         # Create the arrays on the sub solvers
         for i, subslvr in enumerate(self.solvers):
@@ -229,6 +220,20 @@ class CompositeBiroSolver(BaseSolver):
         for ary in [a for a in arys if a['name'] in
                 ['vis', 'B_sqrt', 'jones', 'chi_sqrd_result']]:
             ary['cpu'] = False
+
+        return arys, props
+
+    def __twiddle_v4_subarys_and_props(self, arys, props):
+        # Modify the array configuration for the sub-solvers
+        # Don't create CPU arrays since we'll be copying them
+        # from CPU arrays on the Composite Solver.
+        # Do create GPU arrays, used for solving each sub-section
+        # of the RIME.
+        for ary in arys:
+            # Add a transfer method
+            ary['transfer_method'] = self.get_sub_transfer_method(ary['name'])
+            ary['cpu'] = False
+            ary['gpu'] = True
 
         return arys, props
 
