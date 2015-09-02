@@ -73,7 +73,7 @@ class BiroSolver(BaseSolver):
         # Initialise it
         mbu.init_rime_const_data(self, self.rime_const_data_cpu)
 
-    def configure_total_src_dims(self, nsrc):
+    def cfg_total_src_dims(self, nsrc):
         """
         Configure the total number of sources that will
         be handled by this solver. Used by v5 to allocate

@@ -172,7 +172,7 @@ class CompositeBiroSolver(BaseSolver):
                     subslvr = BiroSolver(subslvr_cfg)
                     # Configure the total number of sources
                     # handled by each sub-solver
-                    subslvr.configure_total_src_dims(P['nsrc'])
+                    subslvr.cfg_total_src_dims(P['nsrc'])
                     self.solvers.append(subslvr)
                     self.stream.append(cuda.Stream())
 
