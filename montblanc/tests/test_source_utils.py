@@ -74,6 +74,43 @@ class TestSourceUtils(unittest.TestCase):
         D = mbs.source_range(15, 70, src_dict)
         self.assertTrue(D['npsrc'] == 0 and D['ngsrc'] == 15 and D['nssrc'] == 40)
 
+    def test_source_range_tuple(self):
+        """
+        Test that, given a source range, the returned dictionary
+        contains the source types within that range
+        """
+        src_dict = mbs.sources_to_nr_vars({'point':10, 'gaussian':20, 'sersic':40})
+
+        D = mbs.source_range_tuple(0, 45, src_dict)
+        self.assertTrue(D['npsrc'] == (0, 10) and
+            D['ngsrc'] == (0, 20) and
+            D['nssrc'] == (0, 15))
+
+        D = mbs.source_range_tuple(3, 45, src_dict)
+        self.assertTrue(D['npsrc'] == (3, 10) and
+            D['ngsrc'] == (0, 20) and
+            D['nssrc'] == (0, 15))
+
+        D = mbs.source_range_tuple(13, 45, src_dict)
+        self.assertTrue(D['npsrc'] == (0, 0) and
+            D['ngsrc'] == (3, 20) and
+            D['nssrc'] == (0, 15))
+
+        D = mbs.source_range_tuple(0, 3, src_dict)
+        self.assertTrue(D['npsrc'] == (0, 3) and
+            D['ngsrc'] == (0, 0) and
+            D['nssrc'] == (0, 0))
+
+        D = mbs.source_range_tuple(15, 18, src_dict)
+        self.assertTrue(D['npsrc'] == (0, 0) and
+            D['ngsrc'] == (5, 8) and
+            D['nssrc'] == (0, 0))
+
+        D = mbs.source_range_tuple(15, 70, src_dict)
+        self.assertTrue(D['npsrc'] == (0, 0) and
+            D['ngsrc'] == (5, 20) and
+            D['nssrc'] == (0, 40))
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSourceUtils)
     unittest.TextTestRunner(verbosity=2).run(suite)

@@ -122,20 +122,19 @@ def sources_to_nr_vars(sources):
             'registered. Valid source types '
             'are %s') % (e, SOURCE_VAR_TYPES.keys()))
 
-def source_range(start, end, nr_var_dict):
+def source_range_tuple(start, end, nr_var_dict):
     """
     Given a range of source numbers, as well as a dictionary
     containing the numbers of each source, returns a dictionary
-    containing the number of variables of each type lying within
-    that range
+    containing tuples of the start and end index
+    for each source variable type.
     """
 
-    D = OrderedDict((nr_var, 0) for nr_var in SOURCE_VAR_TYPES.itervalues())
-    D.update(nr_var_dict)
-    nr_vars = D.keys()
-    counts = np.array(D.values())
-    sum_counts = np.cumsum(counts)
-    idx = np.arange(len(nr_vars))
+    starts = np.array([0 for nr_var in SOURCE_VAR_TYPES.itervalues()])
+    ends = np.array([nr_var_dict[nr_var] if nr_var in nr_var_dict else 0
+        for nr_var in SOURCE_VAR_TYPES.itervalues()])
+    sum_counts = np.cumsum(ends)
+    idx = np.arange(len(starts))
 
     # Find the intervals containing the
     # start and ending indices
@@ -147,22 +146,32 @@ def source_range(start, end, nr_var_dict):
         end = sum_counts[-1]
         end_idx = len(sum_counts) - 1
 
-    # Find out which counts are currently valid
-    # and zero the invalid ones
-    valid = np.logical_and(start_idx <= idx, idx <= end_idx)
-    counts[np.logical_not(valid)] = 0
+    # Find out which variable counts fall within the range
+    # of the supplied indices and zero those outside this range
+    invalid = np.logical_not(np.logical_and(start_idx <= idx, idx <= end_idx))
+    starts[invalid] = ends[invalid] = 0
 
-    if start_idx == end_idx:
-        # Special case
-        counts[start_idx] = end - start
-    else:
-        # Modify the counts in which the start and end
-        # positions occur
-        counts[start_idx] = sum_counts[start_idx] - start
-        counts[end_idx] = end - sum_counts[end_idx-1]
+    # Modify the associated starting and ending positions 
+    starts[start_idx] = start
+    ends[end_idx] = end
 
-    # Set the counts
-    for i, n in enumerate(nr_vars):
-        D[n] = counts[i] 
-    
-    return D
+    if start >= sum_counts[0]:
+        starts[start_idx] -= sum_counts[start_idx-1]
+
+    if end >= sum_counts[0]:
+        ends[end_idx] = end - sum_counts[end_idx-1]
+
+    return OrderedDict((n, (starts[i], ends[i]))
+        for i, n in enumerate(SOURCE_VAR_TYPES.values()))
+
+def source_range(start, end, nr_var_dict):
+    """
+    Given a range of source numbers, as well as a dictionary
+    containing the numbers of each source, returns a dictionary
+    containing tuples of the start and end index
+    for each source variable type.
+    """
+
+    return OrderedDict((k, e-s)
+        for k, (s, e)
+        in source_range_tuple(start, end, nr_var_dict).iteritems())
