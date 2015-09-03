@@ -38,7 +38,9 @@ from montblanc.src_types import (
     source_nr_vars,
     default_sources,
     sources_to_nr_vars,
-    source_range)
+    source_range,
+    source_range_tuple,
+    source_range_slices)
 
 def nr_of_baselines(na, auto_correlations=False):
     """
