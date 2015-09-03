@@ -69,9 +69,9 @@ class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCo
         # Divide by the single sigma squared value if a weight vector
         # is not required. Otherwise the kernel will incorporate the
         # individual sigma squared values into the sum
-        gpu_sum = gpuarray.sum(slvr.chi_sqrd_result_gpu).get()
+        #gpu_sum = gpuarray.sum(slvr.chi_sqrd_result_gpu).get()
 
-        if not self.weight_vector:
-            slvr.set_X2(gpu_sum/slvr.sigma_sqrd)
-        else:
-            slvr.set_X2(gpu_sum)
+        #if not self.weight_vector:
+        #    slvr.set_X2(gpu_sum/slvr.sigma_sqrd)
+        #else:
+        #    slvr.set_X2(gpu_sum)
