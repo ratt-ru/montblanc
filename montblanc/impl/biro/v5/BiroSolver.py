@@ -97,6 +97,20 @@ class BiroSolver(BaseSolver):
         for nr_var in mbu.source_nr_vars():
             setattr(self, nr_var, nsrc)
 
+    def cfg_sub_dims(self, **kwargs):
+        """
+        Configure the dimensions of the subset of the
+        RIME solved by this solvers.
+
+        Sets these dimensions on the rime_const_data_cpu
+        structure, which is passed to the kernels on each
+        run.
+        """
+
+        for key, value in kwargs.iteritems():
+            if hasattr(self.rime_const_data_cpu, key):
+                setattr(self.rime_const_data_cpu, key, value)
+
     def get_properties(self):
         # Obtain base solver property dictionary
         # and add the beam cube dimensions to it
