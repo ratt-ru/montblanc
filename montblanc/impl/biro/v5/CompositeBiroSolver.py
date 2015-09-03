@@ -300,7 +300,7 @@ class CompositeBiroSolver(BaseSolver):
             raise ValueError('Baseline slice must be either equal '
                 'to the number of baselines, or 1.')
 
-        slice_map = {
+        cpu_slice_map = {
             'ntime': time_slice,
             'nbl': bl_slice,
             'na': ant0_slice,
@@ -338,7 +338,7 @@ class CompositeBiroSolver(BaseSolver):
                     two_ant_case = False
 
                 # Force using the first antenna slice on each iteration
-                slice_map['na'] = ant0_slice
+                cpu_slice_map['na'] = ant0_slice
 
                 # If we've got the two antenna case, slice
                 # the gpu array to point to the first antenna position
@@ -348,9 +348,9 @@ class CompositeBiroSolver(BaseSolver):
                     gpu_ary = gpu_ary[tuple(gpu_idx)]
                     assert gpu_ary.flags.c_contiguous is True
 
-                # Set up the slicing of the main CPU array. Map dimensions in slice_map
+                # Set up the slicing of the main CPU array. Map dimensions in cpu_slice_map
                 # to the slice arguments, otherwise, just take everything in the dimension
-                cpu_idx = tuple([slice_map[s] if s in slice_map else all_slice
+                cpu_idx = tuple([cpu_slice_map[s] if s in cpu_slice_map else all_slice
                     for s in r.sshape])
 
                 self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_ary, stream)
@@ -361,12 +361,12 @@ class CompositeBiroSolver(BaseSolver):
                     gpu_ary = getattr(subslvr, gpu_name)[tuple(gpu_idx)]
                     assert gpu_ary.flags.c_contiguous is True
 
-                    slice_map['na'] = ant1_slice
+                    cpu_slice_map['na'] = ant1_slice
 
                     # Set up the slicing of the main CPU array.
-                    # Map dimensions in slice_map to the slice arguments,
+                    # Map dimensions in cpu_slice_map to the slice arguments,
                     # otherwise, just take everything in the dimension
-                    cpu_idx = tuple([slice_map[s] if s in slice_map
+                    cpu_idx = tuple([cpu_slice_map[s] if s in cpu_slice_map
                         else all_slice for s in r.sshape])
 
                     self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_ary, stream)
