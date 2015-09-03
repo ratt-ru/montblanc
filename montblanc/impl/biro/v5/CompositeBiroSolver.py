@@ -266,22 +266,48 @@ class CompositeBiroSolver(BaseSolver):
             # But copy the original slice
             copy_ary = cpu_slice
 
-        print 'Transferring %s with size %s shapes [%s vs %s]' % (
-            r.name, mbu.fmt_bytes(copy_ary.nbytes), copy_ary.shape, gpu_ary.shape)
+        #print 'Transferring %s with size %s shapes [%s vs %s]' % (
+        #    r.name, mbu.fmt_bytes(copy_ary.nbytes), copy_ary.shape, gpu_ary.shape)
 
         gpu_ary.set_async(copy_ary, stream=stream)
 
 
-    def transfer_arrays(self, sub_solver_idx, time_slice,
-        bl_slice, ant0_slice, ant1_slice, chan_slice, src_slice):
+    def transfer_arrays(self, sub_solver_idx,
+        time_slice, bl_slice,
+        ant0_slice, ant1_slice,
+        chan_slice,
+        src_slice, nr_var_slices):
         """
         Transfer CPU arrays on the CompositeBiroSolver over to the
         BIRO sub-solvers asynchronously.
+
+        While it aims for generality, it generally depends on arrays
+        having a ['nsrc', 'ntime', 'nbl'|'na', 'nchan'] ordering
+        (its acceptable to have other dimensions between).
+        Having mentioned this, arrays with 'nsrc' dimensions
+        should generally not contain
+        'ntime', 'nbl', 'na' or 'nchan' dimensions,
+        IF you wish to transfer them from the CPU to the GPU.
+
+        This is because slicing these dimensions may
+        result in non-contiguous memory regions for transfer,
+        and PyCUDA can only handle 2 degrees of
+        of non-contiguity in arrays. If this function falls over
+        due to non-contiguity, you now know why.
+
+        The 'stokes' and 'alpha' arrays in v4 are examples
+        where this principle is broken, but transfer still works
+        with PyCUDA's non-contiguity handling as there is
+        only one degree of it.
+
+        The jones array is an example of a GPU only array that
+        is not affected since it is never transferred.
         """
         i = sub_solver_idx
         subslvr = self.solvers[i]
         stream = self.stream[i]
         all_slice = slice(None,None,1)
+        empty_slice = slice(0,0,1)
 
         # Sanity check the baseline and antenna slice differences
         bl_diff = bl_slice.stop - bl_slice.start
@@ -300,6 +326,7 @@ class CompositeBiroSolver(BaseSolver):
             raise ValueError('Baseline slice must be either equal '
                 'to the number of baselines, or 1.')
 
+        # We're slicing sections of the CPU array
         cpu_slice_map = {
             'ntime': time_slice,
             'nbl': bl_slice,
@@ -308,11 +335,27 @@ class CompositeBiroSolver(BaseSolver):
             'nsrc': src_slice
         }
 
+        # Slice individual source types on the CPU
+        cpu_slice_map.update(nr_var_slices)
+
+        # Which fit completely into the GPU array
+        gpu_slice_map = {
+            'ntime': slice(0, time_slice.stop - time_slice.start, 1),
+            'nbl': slice(0, bl_slice.stop - bl_slice.start, 1),
+            'na': slice(0, ant0_slice.stop - ant0_slice.start, 1),
+            'nchan': slice(0, chan_slice.stop - chan_slice.start, 1),
+            'nsrc': slice(0, src_slice.stop - src_slice.start, 1)
+        }
+
+        # Slice individual source types on the GPU
+        for k, v in nr_var_slices.iteritems():
+            gpu_slice_map[k] = slice(0, v.stop - v.start, 1)
+
         with subslvr.context:
             for r in self.arrays.itervalues():
                 # Is there anything to transfer for this array?
                 if not r.cpu:
-                    print '%s has no CPU array' % r.name
+                    #print '%s has no CPU array' % r.name
                     continue
 
                 cpu_name = mbu.cpu_name(r.name)
@@ -325,7 +368,30 @@ class CompositeBiroSolver(BaseSolver):
                 gpu_ary = getattr(subslvr,gpu_name)
 
                 if gpu_ary is None:
-                    print 'Skipping %s' % r.name
+                    #print 'Skipping %s' % r.name
+                    continue
+                else:
+                    #print 'Handling %s' % r.name
+                    pass
+
+                # Force use of the first antenna slice on each iteration
+                cpu_slice_map['na'] = ant0_slice
+
+                # Set up the slicing of the main CPU array.
+                # Map dimensions in cpu_slice_map
+                # to the slice arguments, otherwise,
+                # just take everything in the dimension
+                cpu_idx = [cpu_slice_map[s]
+                    if s in cpu_slice_map else all_slice
+                    for s in r.sshape]
+
+                gpu_idx = [gpu_slice_map[s]
+                    if s in gpu_slice_map else all_slice
+                    for s in r.sshape]
+
+                # Bail if there's an empty slice in the index
+                if gpu_idx.count(empty_slice) > 0:
+                    #print '%s has an empty slice, skipping' % r.name
                     continue
 
                 # Checking if we're handling two antenna here
@@ -334,42 +400,37 @@ class CompositeBiroSolver(BaseSolver):
                     na_idx = r.sshape.index('na')
                     two_ant_case = (subslvr.na == 2)
                 except ValueError:
-                    na_idx = 0
+                    #na_idx = 0
                     two_ant_case = False
 
-                # Force using the first antenna slice on each iteration
-                cpu_slice_map['na'] = ant0_slice
-
                 # If we've got the two antenna case, slice
-                # the gpu array to point to the first antenna position
+                # the gpu array at the first antenna position
                 if two_ant_case is True:
-                    gpu_idx = [0 if i <= na_idx else all_slice
-                        for i in range(len(r.shape))]
-                    gpu_ary = gpu_ary[tuple(gpu_idx)]
-                    assert gpu_ary.flags.c_contiguous is True
+                    gpu_idx[na_idx] = 0
 
-                # Set up the slicing of the main CPU array. Map dimensions in cpu_slice_map
-                # to the slice arguments, otherwise, just take everything in the dimension
-                cpu_idx = tuple([cpu_slice_map[s] if s in cpu_slice_map else all_slice
-                    for s in r.sshape])
-
-                self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_ary, stream)
+                gpu_slice = gpu_ary[tuple(gpu_idx)].squeeze()
+                assert gpu_slice.flags.c_contiguous is True
+                self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_slice, stream)
 
                 # Right, handle transfer of the second antenna's data
                 if two_ant_case is True:
+                    # Slice the gpu array at the second antenna position
                     gpu_idx[na_idx] = 1
-                    gpu_ary = getattr(subslvr, gpu_name)[tuple(gpu_idx)]
-                    assert gpu_ary.flags.c_contiguous is True
 
+                    # Force use of the second antenna slice
                     cpu_slice_map['na'] = ant1_slice
 
                     # Set up the slicing of the main CPU array.
-                    # Map dimensions in cpu_slice_map to the slice arguments,
-                    # otherwise, just take everything in the dimension
-                    cpu_idx = tuple([cpu_slice_map[s] if s in cpu_slice_map
-                        else all_slice for s in r.sshape])
+                    # Map dimensions in cpu_slice_map
+                    # to the slice arguments, otherwise,
+                    # just take everything in the dimension
+                    cpu_idx = [cpu_slice_map[s]
+                        if s in cpu_slice_map else all_slice
+                        for s in r.sshape]
 
-                    self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_ary, stream)
+                    gpu_slice = gpu_ary[tuple(gpu_idx)].squeeze()
+                    assert gpu_slice.flags.c_contiguous is True
+                    self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_slice, stream)
 
     def __enter__(self):
         """
@@ -462,13 +523,15 @@ class CompositeBiroSolver(BaseSolver):
 
         for t, bl, ch, src in self.__gen_rime_sections():
             i, subslvr = subslvr_gen.next()
-            src_counts = mbu.source_range(src.start, src.stop, nr_var_counts)
-            print 't %s bl %s ch %s src %s src_counts %s' % (t,bl,ch,src,src_counts)
+
+            print 't: %s - %s/%s bl: %s - %s/%s ch: %s - %s/%s src: %s - %s/%s' % (
+                t.start, t.stop, self.ntime,
+                bl.start, bl.stop, self.nbl,
+                ch.start, ch.stop, self.nchan,
+                src.start, src.stop, self.nsrc)
+
             with subslvr.context:
-                if self.bl_diff == self.nbl:
-                    ant0 = slice(0, self.na, 1)
-                    ant1 = slice(0, self.na, 1)
-                elif self.bl_diff == 1:
+                if self.bl_diff == 1:
                     assert subslvr.na == 2, (
                         'One baseline, but number of antenna '
                         'is not equal to 2 (%d)') % (subslvr.na)
@@ -476,8 +539,25 @@ class CompositeBiroSolver(BaseSolver):
                     ant0 = slice(a0, a0+1, 1)
                     a1 = self.ant_pairs_cpu[1, t.start, bl.start]
                     ant1 = slice(a1, a1+1, 1)
+                elif self.bl_diff == self.nbl:
+                    ant0 = slice(0, self.na, 1)
+                    ant1 = slice(0, self.na, 1)
 
-                self.transfer_arrays(i, t, bl, ant0, ant1, ch, src)
+                # Work out ranges for each source type
+                nr_var_slices = mbu.source_range_slices(
+                    src.start, src.stop, nr_var_counts)
+
+                # Work out counts for each source type
+                sub_var_counts = { k: v.stop - v.start
+                    for k, v in nr_var_slices.iteritems() }
+
+                # Configure the sub-solver with these counts
+                subslvr.cfg_sub_dims(**sub_var_counts)
+
+                # Transfer arrays
+                self.transfer_arrays(i, t, bl, ant0, ant1, ch, src, nr_var_slices)
+
+                # Execute the kernels
                 subslvr.rime_e_beam.execute(subslvr, self.stream[i])
                 subslvr.rime_b_sqrt.execute(subslvr, self.stream[i])
                 subslvr.rime_ekb_sqrt.execute(subslvr, self.stream[i])
