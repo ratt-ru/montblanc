@@ -159,7 +159,7 @@ def source_range_tuple(start, end, nr_var_dict):
         starts[start_idx] -= sum_counts[start_idx-1]
 
     if end >= sum_counts[0]:
-        ends[end_idx] = end - sum_counts[end_idx-1]
+        ends[end_idx] -= sum_counts[end_idx-1]
 
     return OrderedDict((n, (starts[i], ends[i]))
         for i, n in enumerate(SOURCE_VAR_TYPES.values()))
