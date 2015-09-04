@@ -276,7 +276,8 @@ class CompositeBiroSolver(BaseSolver):
         time_slice, bl_slice,
         ant0_slice, ant1_slice,
         chan_slice,
-        src_slice, nr_var_slices):
+        src_slice, nr_var_slices,
+        changes):
         """
         Transfer CPU arrays on the CompositeBiroSolver over to the
         BIRO sub-solvers asynchronously.
@@ -358,6 +359,18 @@ class CompositeBiroSolver(BaseSolver):
                     #print '%s has no CPU array' % r.name
                     continue
 
+                # Determine if any dimensions of this array have changed
+                changed = [changes[dim] if dim in changes else False
+                    for dim in r.sshape]
+
+                # If this isn't the first iteration and nothing
+                # has changed, don't transfer this array
+                if not changes['first'] and not np.any(changed):
+                    continue
+                else:
+                    #print '%s %s %s is dirty' % (r.name, r.sshape, changed)
+                    pass
+
                 cpu_name = mbu.cpu_name(r.name)
                 gpu_name = mbu.gpu_name(r.name)
 
@@ -367,7 +380,7 @@ class CompositeBiroSolver(BaseSolver):
                 cpu_ary = getattr(self,cpu_name)
                 gpu_ary = getattr(subslvr,gpu_name)
 
-                if gpu_ary is None:
+                if cpu_ary is None or gpu_ary is None:
                     #print 'Skipping %s' % r.name
                     continue
                 else:
@@ -464,15 +477,40 @@ class CompositeBiroSolver(BaseSolver):
             self.initialised = True
 
     def __gen_rime_sections(self):
+        # Dictionary indicating if the dimension has changed
+        # Source is always changing
+        changes = {
+            'first': True,
+            'ntime': False,
+            'nbl': False,
+            'na': False,
+            'nchan': False,
+            'nsrc': True }
+
         for t in xrange(0, self.ntime, self.time_diff):
             time_slice = slice(t, t + self.time_diff, 1)
+            changes['ntime'] = True
+
             for bl in xrange(0, self.nbl, self.bl_diff):
                 bl_slice = slice(bl, bl + self.bl_diff, 1)
+                changes['nbl'] = True
+                changes['na'] = True
+
                 for ch in xrange(0, self.nchan, self.chan_diff):
                     chan_slice = slice(ch, ch + self.chan_diff, 1)
+                    changes['nchan'] = True
+
                     for src in xrange(0, self.nsrc, self.src_diff):
                         src_slice = slice(src, src + self.src_diff, 1)
-                        yield (time_slice, bl_slice, chan_slice, src_slice)
+                        yield (time_slice, bl_slice, chan_slice, src_slice, changes)
+
+                        changes['ntime'] = False
+                        changes['nbl'] = False
+                        changes['na'] = False
+                        changes['nchan'] = False
+                        changes['first'] = False
+                        # Source, on the inner loop is constantly changing
+                        #changes['nsrc'] = False
 
     def __gen_sub_solvers(self):
         # Loop infinitely over the sub-solvers.
@@ -521,14 +559,14 @@ class CompositeBiroSolver(BaseSolver):
         nr_var_counts = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
         subslvr_gen = self.__gen_sub_solvers()
 
-        for t, bl, ch, src in self.__gen_rime_sections():
+        for t, bl, ch, src, changes in self.__gen_rime_sections():
             i, subslvr = subslvr_gen.next()
 
-            print 't: %s - %s/%s bl: %s - %s/%s ch: %s - %s/%s src: %s - %s/%s' % (
-                t.start, t.stop, self.ntime,
-                bl.start, bl.stop, self.nbl,
-                ch.start, ch.stop, self.nchan,
-                src.start, src.stop, self.nsrc)
+            print '%s: %s - %s/%s %s: %s - %s/%s %s: %s - %s/%s %s: %s - %s/%s' % (
+                'T' if changes['ntime'] else 't', t.start, t.stop, self.ntime,
+                'BL' if changes['nbl'] else 'bl', bl.start, bl.stop, self.nbl,
+                'CH' if changes['nchan'] else 'ch', ch.start, ch.stop, self.nchan,
+                'SRC' if changes['nsrc'] else 'src', src.start, src.stop, self.nsrc)
 
             with subslvr.context:
                 if self.bl_diff == 1:
@@ -555,7 +593,8 @@ class CompositeBiroSolver(BaseSolver):
                 subslvr.cfg_sub_dims(**sub_var_counts)
 
                 # Transfer arrays
-                self.transfer_arrays(i, t, bl, ant0, ant1, ch, src, nr_var_slices)
+                self.transfer_arrays(i, t, bl, ant0, ant1, ch, src,
+                    nr_var_slices, changes)
 
                 # Execute the kernels
                 subslvr.rime_e_beam.execute(subslvr, self.stream[i])
