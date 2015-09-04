@@ -422,7 +422,6 @@ class CompositeBiroSolver(BaseSolver):
                     gpu_idx[na_idx] = 0
 
                 gpu_slice = gpu_ary[tuple(gpu_idx)].squeeze()
-                assert gpu_slice.flags.c_contiguous is True
                 self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_slice, stream)
 
                 # Right, handle transfer of the second antenna's data
@@ -442,7 +441,6 @@ class CompositeBiroSolver(BaseSolver):
                         for s in r.sshape]
 
                     gpu_slice = gpu_ary[tuple(gpu_idx)].squeeze()
-                    assert gpu_slice.flags.c_contiguous is True
                     self.__transfer_slice(r, cpu_ary, cpu_idx, gpu_slice, stream)
 
     def __enter__(self):
