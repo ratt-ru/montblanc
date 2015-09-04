@@ -488,20 +488,24 @@ class CompositeBiroSolver(BaseSolver):
             'nsrc': True }
 
         for t in xrange(0, self.ntime, self.time_diff):
-            time_slice = slice(t, t + self.time_diff, 1)
+            time_end = min(t + self.time_diff, self.ntime)
+            time_slice = slice(t, time_end, 1)
             changes['ntime'] = True
 
             for bl in xrange(0, self.nbl, self.bl_diff):
-                bl_slice = slice(bl, bl + self.bl_diff, 1)
+                bl_end = min(bl + self.bl_diff, self.nbl)
+                bl_slice = slice(bl, bl_end, 1)
                 changes['nbl'] = True
                 changes['na'] = True
 
                 for ch in xrange(0, self.nchan, self.chan_diff):
-                    chan_slice = slice(ch, ch + self.chan_diff, 1)
+                    chan_end = min(ch + self.chan_diff, self.nchan)
+                    chan_slice = slice(ch, chan_end, 1)
                     changes['nchan'] = True
 
                     for src in xrange(0, self.nsrc, self.src_diff):
-                        src_slice = slice(src, src + self.src_diff, 1)
+                        src_end = min(src + self.src_diff, self.nsrc)
+                        src_slice = slice(src, src_end, 1)
                         yield (time_slice, bl_slice, chan_slice, src_slice, changes)
 
                         changes['ntime'] = False
