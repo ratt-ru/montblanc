@@ -100,7 +100,8 @@ setup(name='montblanc',
         'numexpr >= 2.4',
         'pycuda >= 2015.1.3',
         'pytools >= 2015.1.3',
-        'transitions >= 0.2.5'
+        'transitions >= 0.2.5',
+        'trollius >= 2.0'
     ],
     package_data={
         'montblanc': ['log/*.json'],
