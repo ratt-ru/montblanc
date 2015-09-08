@@ -243,27 +243,6 @@ class BiroSolver(BaseSolver):
         # Initialise it
         mbu.init_rime_const_data(self, self.rime_const_data_cpu)
 
-    def init_rime_const_data(self, rime_const_data):
-        """
-        Initialise the RIME constant data structure
-        """
-        for v in self.CONST_DATA_VAR_LIST:
-            setattr(rime_const_data, v, getattr(self, v))
-
-        for s in mbu.source_nr_vars():
-            setattr(rime_const_data, s, getattr(self, s))
-
-    def cfg_src_dims(self, rime_const_data, source_nr_var_dict):
-        nsrc = 0
-
-        for s in mbu.source_nr_vars():
-            value = source_nr_var_dict.get(s, 0)
-            setattr(rime_const_data, s, value)
-
-            nsrc += value
-
-        setattr(rime_const_data, 'nsrc', nsrc)
-
     def get_properties(self):
         # Obtain base solver property dictionary
         # and add the beam cube dimensions to it
