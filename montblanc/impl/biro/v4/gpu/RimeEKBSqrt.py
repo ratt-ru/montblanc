@@ -21,6 +21,7 @@
 import numpy as np
 import string
 
+import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 
 import montblanc
@@ -62,6 +63,15 @@ KERNEL_TEMPLATE = string.Template("""
 
 #define TWO_PI_OVER_C (${two_pi_over_c})
 
+// Here, the definition of the
+// rime_const_data struct
+// is inserted into the template
+// An area of constant memory
+// containing an instance of this
+// structure is declared. 
+${rime_const_data_struct}
+__constant__ rime_const_data C;
+
 template <typename T>
 class EKBTraits {};
 
@@ -96,7 +106,7 @@ void rime_jones_EKBSqrt_impl(
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
     #define POL (threadIdx.x & 0x3)
 
-    if(TIME >= NTIME || ANT >= NA || POLCHAN >= NPOLCHAN)
+    if(TIME >= C.ntime || ANT >= C.na || POLCHAN >= C.npolchan)
         return;
 
     __shared__ typename EKBTraits<T>::UVWType s_uvw[BLOCKDIMZ][BLOCKDIMY];
@@ -112,7 +122,7 @@ void rime_jones_EKBSqrt_impl(
     // UVW coordinates vary by antenna and time, but not channel
     if(threadIdx.x == 0)
     {
-        i = TIME*NA + ANT;
+        i = TIME*C.na + ANT;
         s_uvw[threadIdx.z][threadIdx.y] = uvw[i];
     }
 
@@ -122,7 +132,7 @@ void rime_jones_EKBSqrt_impl(
 
     __syncthreads();
 
-    for(int SRC=0;SRC<NSRC;++SRC)
+    for(int SRC=0; SRC < C.nsrc; ++SRC)
     {
         // LM coordinates vary only by source, not antenna, time or channel
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.x == 0)
@@ -144,18 +154,18 @@ void rime_jones_EKBSqrt_impl(
         typename Tr::ct cplx_phase;
         Po::sincos(phase, &cplx_phase.y, &cplx_phase.x);
 
-        i = (SRC*NTIME + TIME)*NPOLCHAN + POLCHAN;
+        i = (SRC*C.ntime + TIME)*C.npolchan + POLCHAN;
         // Load in the brightness square root
         typename Tr::ct brightness_sqrt = B_sqrt[i];
         montblanc::complex_multiply_in_place<T>(cplx_phase, brightness_sqrt);
 
-        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
+        i = ((SRC*C.ntime + TIME)*C.na + ANT)*C.npolchan + POLCHAN;
         // Load in the E Beam, and multiply it by KB
         typename Tr::ct J = jones[i];
         montblanc::jones_multiply_4x4_in_place<T>(J, cplx_phase);
 
         // Write out the jones matrices
-        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
+        i = ((SRC*C.ntime + TIME)*C.na + ANT)*C.npolchan + POLCHAN;
         jones[i] = J;
         __syncthreads();
     }
@@ -189,18 +199,19 @@ class RimeEKBSqrt(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
-        self.pol_chans = 4*slvr.nchan
+        self.npolchans = 4*slvr.nchan
 
         # Get a property dictionary off the solver
         D = slvr.get_properties()
         # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
+        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
 
         # Update kernel parameters to cater for radically
         # smaller problem sizes. Caters for a subtle bug
         # with Kepler shuffles and warp sizes < 32
-        if self.pol_chans < D['BLOCKDIMX']:
-            D['BLOCKDIMX'] = self.pol_chans
+        if self.npolchans < D['BLOCKDIMX']:
+            D['BLOCKDIMX'] = self.npolchans
         if slvr.na < D['BLOCKDIMY']:
             D['BLOCKDIMY'] = slvr.na
         if slvr.ntime < D['BLOCKDIMZ']:
@@ -219,6 +230,7 @@ class RimeEKBSqrt(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
+        self.rime_const_data_gpu = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
         self.launch_params = self.get_launch_params(slvr, D)
 
@@ -229,21 +241,31 @@ class RimeEKBSqrt(Node):
         pass
 
     def get_launch_params(self, slvr, D):
-        pol_chans_per_block = D['BLOCKDIMX']
+        polchans_per_block = D['BLOCKDIMX']
         ants_per_block = D['BLOCKDIMY']
         times_per_block = D['BLOCKDIMZ']
 
-        pol_chan_blocks = mbu.blocks_required(self.pol_chans, pol_chans_per_block)
+        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
         ant_blocks = mbu.blocks_required(slvr.na, ants_per_block)
         time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
 
         return {
-            'block' : (pol_chans_per_block, ants_per_block, times_per_block),
-            'grid'  : (pol_chan_blocks, ant_blocks, time_blocks),
+            'block' : (polchans_per_block, ants_per_block, times_per_block),
+            'grid'  : (polchan_blocks, ant_blocks, time_blocks),
         }
 
     def execute(self, solver, stream=None):
         slvr = solver
+
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer)
 
         self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.frequency_gpu,
             slvr.B_sqrt_gpu, slvr.jones_gpu,

@@ -18,6 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import pycuda.driver as cuda
+
 import montblanc.impl.biro.v4.gpu.RimeEKBSqrt
 
 class RimeEKBSqrt(montblanc.impl.biro.v4.gpu.RimeEKBSqrt.RimeEKBSqrt):
@@ -34,6 +36,16 @@ class RimeEKBSqrt(montblanc.impl.biro.v4.gpu.RimeEKBSqrt.RimeEKBSqrt):
 
     def execute(self, solver, stream=None):
         slvr = solver
+
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer)
 
         self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.frequency_gpu,
             slvr.B_sqrt_gpu, slvr.jones_gpu,

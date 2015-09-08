@@ -21,6 +21,7 @@
 import numpy as np
 import string
 
+import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 
 import montblanc
@@ -61,6 +62,15 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
+
+// Here, the definition of the
+// rime_const_data struct
+// is inserted into the template
+// An area of constant memory
+// containing an instance of this
+// structure is declared. 
+${rime_const_data_struct}
+__constant__ rime_const_data C;
 
 template <
     typename T,
@@ -130,7 +140,7 @@ void rime_jones_E_beam_impl(
     #define POL (threadIdx.x & 0x3)
     #define BLOCKCHANS (BLOCKDIMX >> 2)
 
-    if(SRC >= NSRC || ANT >= NA || POLCHAN >= NPOLCHAN)
+    if(SRC >= C.nsrc || ANT >= C.na || POLCHAN >= C.npolchan)
         return;
 
     __shared__ typename EBeamTraits<T>::LMType s_lm0[BLOCKDIMZ];
@@ -151,20 +161,20 @@ void rime_jones_E_beam_impl(
     if(threadIdx.z == 0 && (threadIdx.x & 0x3) == 0)
     {
         int blockchan = threadIdx.x >> 2;
-        i = ANT*NCHAN + (POLCHAN >> 2);
+        i = ANT*C.nchan + (POLCHAN >> 2);
         s_ab[threadIdx.y][blockchan] = antenna_scaling[i];
     }
 
     __syncthreads();
 
-    for(int TIME=0; TIME < NTIME; ++TIME)
+    for(int TIME=0; TIME < C.ntime; ++TIME)
     {
         // Pointing errors vary by time, antenna and channel,
         // but not source
         if(threadIdx.z == 0 && (threadIdx.x & 0x3) == 0)
         {
             int blockchan = threadIdx.x >> 2;
-            i = (TIME*NA + ANT)*NCHAN + (POLCHAN >> 2);
+            i = (TIME*C.na + ANT)*C.nchan + (POLCHAN >> 2);
             s_lmd[threadIdx.y][blockchan] = point_errors[i];
         }
 
@@ -198,11 +208,9 @@ void rime_jones_E_beam_impl(
         float gm = floorf(m);
         float md = m - gm;
 
-#if NCHAN > 1
-        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2)/float(NCHAN-1);
-#else
-        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2);
-#endif
+        float chan = float(BEAM_NUD-1) * float(POLCHAN>>2);
+        if(C.nchan > 1)
+            { chan /= float(C.nchan-1); }
 
         float gchan = floorf(chan);
         float chd = chan - gchan;
@@ -285,7 +293,7 @@ void rime_jones_E_beam_impl(
         value.x *= abs_sum;
         value.y *= abs_sum;
 
-        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
+        i = ((SRC*C.ntime + TIME)*C.na + ANT)*C.npolchan + POLCHAN;
         jones[i] = value;
         __syncthreads();
     }
@@ -323,17 +331,18 @@ class RimeEBeam(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
-        self.polchans = 4*slvr.nchan
+        self.npolchans = 4*slvr.nchan
 
         # Get a property dictionary off the solver
         D = slvr.get_properties()
         # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
+        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
 
         # Update kernel parameters to cater for radically
         # smaller problem sizes. Caters for a subtle bug
         # with Kepler shuffles and warp sizes < 32
-        if self.polchans < D['BLOCKDIMX']: D['BLOCKDIMX'] = self.polchans
+        if self.npolchans < D['BLOCKDIMX']: D['BLOCKDIMX'] = self.npolchans
         if slvr.na < D['BLOCKDIMY']: D['BLOCKDIMY'] = slvr.na
         if slvr.nsrc < D['BLOCKDIMZ']: D['BLOCKDIMZ'] = slvr.nsrc
 
@@ -351,6 +360,7 @@ class RimeEBeam(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
+        self.rime_const_data_gpu = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
         self.launch_params = self.get_launch_params(slvr, D)
 
@@ -365,7 +375,7 @@ class RimeEBeam(Node):
         ants_per_block = D['BLOCKDIMY']
         srcs_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = mbu.blocks_required(self.polchans, polchans_per_block)
+        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
         ant_blocks = mbu.blocks_required(slvr.na, ants_per_block)
         src_blocks = mbu.blocks_required(slvr.nsrc, srcs_per_block)
 
@@ -376,6 +386,16 @@ class RimeEBeam(Node):
 
     def execute(self, solver, stream=None):
         slvr = solver
+
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer)
 
         self.kernel(slvr.lm_gpu,
             slvr.point_errors_gpu, slvr.antenna_scaling_gpu,

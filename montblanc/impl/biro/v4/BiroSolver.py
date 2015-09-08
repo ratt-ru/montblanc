@@ -240,7 +240,7 @@ class BiroSolver(BaseSolver):
         self.rime_const_data_cpu = mbu.wrap_rime_const_data(
             self.const_data_buffer)
 
-        # Initialise it
+        # Initialise it with the current solver (self)
         mbu.init_rime_const_data(self, self.rime_const_data_cpu)
 
     def get_properties(self):

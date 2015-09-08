@@ -21,6 +21,7 @@
 import numpy as np
 import pycuda.driver as cuda
 
+import montblanc
 import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
@@ -67,11 +68,11 @@ class BiroSolver(BaseSolver):
 
         # Now create a cdata object wrapping the page-locked
         # ndarray and cast it to the rime_const_data c type.
-        self.rime_const_data_cpu = mbu.wrap_rime_const_data(
+        self.rime_const_data = mbu.wrap_rime_const_data(
             self.const_data_buffer)
 
-        # Initialise it
-        mbu.init_rime_const_data(self, self.rime_const_data_cpu)
+        # Initialise it with the current solver (self)
+        mbu.init_rime_const_data(self, self.rime_const_data)
 
     def cfg_total_src_dims(self, nsrc):
         """
@@ -107,9 +108,23 @@ class BiroSolver(BaseSolver):
         run.
         """
 
+        # Set key-value pairs on rime_const_data
+        # from kwargs
         for key, value in kwargs.iteritems():
-            if hasattr(self.rime_const_data_cpu, key):
-                setattr(self.rime_const_data_cpu, key, value)
+            if hasattr(self.rime_const_data, key):
+                setattr(self.rime_const_data, key, value)
+            else:
+                montblanc.log.warn((
+                    'Attempted to set %s=%s '
+                    'on rime_const_data but key %s '
+                    'is not present') % (key, value, key))
+
+        # Set rime_const_data.nsrc by summing
+        # each source type
+        setattr(self.rime_const_data, 'nsrc',
+            sum([getattr(self.rime_const_data, s)
+                for s in mbu.source_nr_vars()]))
+
 
     def get_properties(self):
         # Obtain base solver property dictionary
