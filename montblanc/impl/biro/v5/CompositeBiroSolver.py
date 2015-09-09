@@ -188,18 +188,84 @@ class CompositeBiroSolver(BaseSolver):
         self.use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
         self.initialised=False
 
-    def get_properties(self):
-        # Obtain base solver property dictionary
-        # and add the beam cube dimensions to it
-        D = super(CompositeBiroSolver, self).get_properties()
+    def __gen_rime_sections(self):
+        # Dictionary indicating if the dimension has changed
+        # Source is always changing
+        changes = {
+            'first': True,
+            'ntime': False,
+            'nbl': False,
+            'na': False,
+            'nchan': False,
+            'nsrc': True }
 
-        D.update({
-            Options.E_BEAM_WIDTH : self.beam_lw,
-            Options.E_BEAM_HEIGHT : self.beam_mh,
-            Options.E_BEAM_DEPTH : self.beam_nud
-        })
+        for t in xrange(0, self.ntime, self.time_diff):
+            time_end = min(t + self.time_diff, self.ntime)
+            time_slice = slice(t, time_end, 1)
+            changes['ntime'] = True
 
-        return D
+            for bl in xrange(0, self.nbl, self.bl_diff):
+                bl_end = min(bl + self.bl_diff, self.nbl)
+                bl_slice = slice(bl, bl_end, 1)
+                changes['nbl'] = True
+                changes['na'] = True
+
+                for ch in xrange(0, self.nchan, self.chan_diff):
+                    chan_end = min(ch + self.chan_diff, self.nchan)
+                    chan_slice = slice(ch, chan_end, 1)
+                    changes['nchan'] = True
+
+                    for src in xrange(0, self.nsrc, self.src_diff):
+                        src_end = min(src + self.src_diff, self.nsrc)
+                        src_slice = slice(src, src_end, 1)
+                        yield (time_slice, bl_slice, chan_slice, src_slice, changes)
+
+                        changes['ntime'] = False
+                        changes['nbl'] = False
+                        changes['na'] = False
+                        changes['nchan'] = False
+                        changes['first'] = False
+                        # Source, on the inner loop is constantly changing
+                        #changes['nsrc'] = False
+
+    def __gen_sub_solvers(self):
+        # Loop infinitely over the sub-solvers.
+        while True:
+            for i, subslvr in enumerate(self.solvers):
+                yield (i, subslvr)
+
+    def __validate_arrays(self, arrays):
+        """
+        Check that arrays are correctly configured
+        """
+
+        src_vars = mbu.source_nr_vars()
+        vis_vars = ['ntime', 'nbl', 'na', 'nchan']
+
+        for A in arrays:
+            # Ensure they match ordering constraints
+            order = [ORDERING_CONSTRAINTS[var]
+                for var in A['shape'] if var in ORDERING_CONSTRAINTS]
+
+            if not all([b >= a for a, b in zip(order, order[1:])]):
+                raise ValueError(('Array %s does not follow '
+                    'ordering constraints. Shape is %s, but '
+                    'this does breaks the expecting ordering of %s ') % (
+                        A['name'], A['shape'],
+                        ORDERING_RANK))
+
+            # Orthogonality of source variables and
+            # time, baseline, antenna and channel
+            nr_src_vars = [v for v in A['shape'] if v in src_vars]
+            nr_vis_vars = [v for v in A['shape'] if v in vis_vars]
+
+            if len(nr_src_vars) > 0 and len(nr_vis_vars) > 0:
+                raise ValueError(('Array %s of shape %s '
+                    'has source variables %s mixed with '
+                    '%s. This solver does not currently '
+                    'support this mix') % (
+                        A['name'], A['shape'],
+                        nr_src_vars, nr_vis_vars))
 
     def __twiddle_v4_arys_and_props(self, arys, props):
         # Add a custom transfer method for transferring
@@ -474,85 +540,6 @@ class CompositeBiroSolver(BaseSolver):
 
             self.initialised = True
 
-    def __gen_rime_sections(self):
-        # Dictionary indicating if the dimension has changed
-        # Source is always changing
-        changes = {
-            'first': True,
-            'ntime': False,
-            'nbl': False,
-            'na': False,
-            'nchan': False,
-            'nsrc': True }
-
-        for t in xrange(0, self.ntime, self.time_diff):
-            time_end = min(t + self.time_diff, self.ntime)
-            time_slice = slice(t, time_end, 1)
-            changes['ntime'] = True
-
-            for bl in xrange(0, self.nbl, self.bl_diff):
-                bl_end = min(bl + self.bl_diff, self.nbl)
-                bl_slice = slice(bl, bl_end, 1)
-                changes['nbl'] = True
-                changes['na'] = True
-
-                for ch in xrange(0, self.nchan, self.chan_diff):
-                    chan_end = min(ch + self.chan_diff, self.nchan)
-                    chan_slice = slice(ch, chan_end, 1)
-                    changes['nchan'] = True
-
-                    for src in xrange(0, self.nsrc, self.src_diff):
-                        src_end = min(src + self.src_diff, self.nsrc)
-                        src_slice = slice(src, src_end, 1)
-                        yield (time_slice, bl_slice, chan_slice, src_slice, changes)
-
-                        changes['ntime'] = False
-                        changes['nbl'] = False
-                        changes['na'] = False
-                        changes['nchan'] = False
-                        changes['first'] = False
-                        # Source, on the inner loop is constantly changing
-                        #changes['nsrc'] = False
-
-    def __gen_sub_solvers(self):
-        # Loop infinitely over the sub-solvers.
-        while True:
-            for i, subslvr in enumerate(self.solvers):
-                yield (i, subslvr)
-
-    def __validate_arrays(self, arrays):
-        """
-        Check that arrays are correctly configured
-        """
-
-        src_vars = mbu.source_nr_vars()
-        vis_vars = ['ntime', 'nbl', 'na', 'nchan']
-
-        for A in arrays:
-            # Ensure they match ordering constraints
-            order = [ORDERING_CONSTRAINTS[var]
-                for var in A['shape'] if var in ORDERING_CONSTRAINTS]
-
-            if not all([b >= a for a, b in zip(order, order[1:])]):
-                raise ValueError(('Array %s does not follow '
-                    'ordering constraints. Shape is %s, but '
-                    'this does breaks the expecting ordering of %s ') % (
-                        A['name'], A['shape'],
-                        ORDERING_RANK))
-
-            # Orthogonality of source variables and
-            # time, baseline, antenna and channel
-            nr_src_vars = [v for v in A['shape'] if v in src_vars]
-            nr_vis_vars = [v for v in A['shape'] if v in vis_vars]
-
-            if len(nr_src_vars) > 0 and len(nr_vis_vars) > 0:
-                raise ValueError(('Array %s of shape %s '
-                    'has source variables %s mixed with '
-                    '%s. This solver does not currently '
-                    'support this mix') % (
-                        A['name'], A['shape'],
-                        nr_src_vars, nr_vis_vars))
-
     def solve(self):
         """ Solve the RIME """
         if not self.initialised:
@@ -609,6 +596,19 @@ class CompositeBiroSolver(BaseSolver):
         with self.context as ctx:
             for slvr in self.solvers:
                 slvr.shutdown()
+
+    def get_properties(self):
+        # Obtain base solver property dictionary
+        # and add the beam cube dimensions to it
+        D = super(CompositeBiroSolver, self).get_properties()
+
+        D.update({
+            Options.E_BEAM_WIDTH : self.beam_lw,
+            Options.E_BEAM_HEIGHT : self.beam_mh,
+            Options.E_BEAM_DEPTH : self.beam_nud
+        })
+
+        return D
 
     def get_setter_method(self,name):
         """
