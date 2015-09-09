@@ -395,6 +395,9 @@ class CompositeBiroSolver(BaseSolver):
         for k, v in nr_var_slices.iteritems():
             gpu_slice_map[k] = slice(0, v.stop - v.start, 1)
 
+        # Configure the sub-solver with these counts
+        subslvr.cfg_sub_dims(**{k: v.stop for k,v in gpu_slice_map.iteritems()})
+
         with subslvr.context:
             for r in self.arrays.itervalues():
                 # Is there anything to transfer for this array?
@@ -538,13 +541,6 @@ class CompositeBiroSolver(BaseSolver):
                 # Work out ranges for each source type
                 nr_var_slices = mbu.source_range_slices(
                     src.start, src.stop, nr_var_counts)
-
-                # Work out counts for each source type
-                sub_var_counts = { k: v.stop - v.start
-                    for k, v in nr_var_slices.iteritems() }
-
-                # Configure the sub-solver with these counts
-                subslvr.cfg_sub_dims(**sub_var_counts)
 
                 # Transfer arrays
                 self.transfer_arrays(i, t, bl, ant0, ant1, ch, src,
