@@ -157,11 +157,11 @@ A = [
         test=lambda slvr, ary: rary(ary)*0.1),
 
     ary_dict('gauss_shape', (3, 'ngsrc'), 'ft',
-        default=np.array([1,2,3])[:,np.newaxis],
+        default=np.array([0,0,1])[:,np.newaxis],
         test=rand_gauss_shape),
     
     ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
-        default=np.array([1,1,1],np.int32)[:,np.newaxis],
+        default=np.array([0,0,0])[:,np.newaxis],
         test=rand_sersic_shape),
 
     ary_dict('frequency', ('nchan',), 'ft',

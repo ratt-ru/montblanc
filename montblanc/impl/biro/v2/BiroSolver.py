@@ -131,9 +131,12 @@ A = [
         test=lambda slvr, ary: (rary(ary))),
 
     ary_dict('gauss_shape', (3, 'ngsrc'), 'ft',
-        default=0, test=rand_gauss_shape),
+        default=np.array([0,0,1])[:,np.newaxis],
+        test=rand_gauss_shape),
+    
     ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
-        default=0, test=rand_sersic_shape),
+        default=np.array([0,0,0])[:,np.newaxis],
+        test=rand_sersic_shape),
 
     ary_dict('wavelength', ('nchan',), 'ft',
         default=lambda slvr, ary: montblanc.constants.C / \
