@@ -372,16 +372,18 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
+        ebk_jones = self.compute_ebk_jones()
 
-        vis = ne.evaluate('sum(ebk,3)',
-            {'ebk': self.compute_ebk_jones()}) \
-            .astype(slvr.ct)
-
-        # Due to this bug
-        # https://github.com/pydata/numexpr/issues/79
-        # numexpr may not reduce a source axis of size 1
-        # Work around this
-        vis = vis.squeeze(3) if slvr.nsrc <= 1 else vis
+        if slvr.nsrc == 1:
+            # Due to this bug
+            # https://github.com/pydata/numexpr/issues/79
+            # numexpr may not reduce a source axis of size 1
+            # Work around this
+            vis = ebk_jones.squeeze(3)
+        else:
+            vis = ne.evaluate('sum(ebk,3)',
+                {'ebk': ebk_jones }) \
+                .astype(slvr.ct)
 
         assert vis.shape == (4, slvr.ntime, slvr.nbl, slvr.nchan)
 

@@ -579,15 +579,16 @@ class SolverCPU(object):
             'Expected shape %s. Got %s instead.' % \
             (want_shape, ekb_jones.shape)
 
-        vis = ne.evaluate('sum(ebk,0)',
-            {'ebk': ekb_jones }) \
-            .astype(slvr.ct)
-
-        # Due to this bug
-        # https://github.com/pydata/numexpr/issues/79
-        # numexpr may not reduce a source axis of size 1
-        # Work around this
-        vis = vis.squeeze(0) if slvr.nsrc <= 1 else vis
+        if slvr.nsrc == 1:
+            # Due to this bug
+            # https://github.com/pydata/numexpr/issues/79
+            # numexpr may not reduce a source axis of size 1
+            # Work around this
+            vis = ekb_jones.squeeze(0)
+        else:
+            vis = ne.evaluate('sum(ebk,0)',
+                {'ebk': ekb_jones }) \
+                .astype(slvr.ct)
 
         assert vis.shape == (slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
