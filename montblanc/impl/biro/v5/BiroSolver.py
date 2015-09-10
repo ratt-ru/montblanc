@@ -98,7 +98,7 @@ class BiroSolver(BaseSolver):
         for nr_var in mbu.source_nr_vars():
             setattr(self, nr_var, nsrc)
 
-    def cfg_sub_dims(self, **kwargs):
+    def cfg_sub_dims(self, counts):
         """
         Configure the dimensions of the subset of the
         RIME solved by this solvers.
@@ -110,7 +110,7 @@ class BiroSolver(BaseSolver):
 
         # Set key-value pairs on rime_const_data
         # from kwargs
-        for key, value in kwargs.iteritems():
+        for key, value in counts.iteritems():
             if hasattr(self.rime_const_data, key):
                 setattr(self.rime_const_data, key, value)
             else:
