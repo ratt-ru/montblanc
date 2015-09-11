@@ -122,7 +122,7 @@ void rime_jones_EKBSqrt_impl(
     // UVW coordinates vary by antenna and time, but not channel
     if(threadIdx.x == 0)
     {
-        i = TIME*C.na + ANT;
+        i = TIME*NA + ANT;
         s_uvw[threadIdx.z][threadIdx.y] = uvw[i];
     }
 
@@ -154,18 +154,18 @@ void rime_jones_EKBSqrt_impl(
         typename Tr::ct cplx_phase;
         Po::sincos(phase, &cplx_phase.y, &cplx_phase.x);
 
-        i = (SRC*C.ntime + TIME)*C.npolchan + POLCHAN;
+        i = (SRC*NTIME + TIME)*NPOLCHAN + POLCHAN;
         // Load in the brightness square root
         typename Tr::ct brightness_sqrt = B_sqrt[i];
         montblanc::complex_multiply_in_place<T>(cplx_phase, brightness_sqrt);
 
-        i = ((SRC*C.ntime + TIME)*C.na + ANT)*C.npolchan + POLCHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
         // Load in the E Beam, and multiply it by KB
         typename Tr::ct J = jones[i];
         montblanc::jones_multiply_4x4_in_place<T>(J, cplx_phase);
 
         // Write out the jones matrices
-        i = ((SRC*C.ntime + TIME)*C.na + ANT)*C.npolchan + POLCHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
         jones[i] = J;
         __syncthreads();
     }

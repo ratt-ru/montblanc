@@ -161,7 +161,7 @@ void rime_jones_E_beam_impl(
     if(threadIdx.z == 0 && (threadIdx.x & 0x3) == 0)
     {
         int blockchan = threadIdx.x >> 2;
-        i = ANT*C.nchan + (POLCHAN >> 2);
+        i = ANT*NCHAN + (POLCHAN >> 2);
         s_ab[threadIdx.y][blockchan] = antenna_scaling[i];
     }
 
@@ -174,7 +174,7 @@ void rime_jones_E_beam_impl(
         if(threadIdx.z == 0 && (threadIdx.x & 0x3) == 0)
         {
             int blockchan = threadIdx.x >> 2;
-            i = (TIME*C.na + ANT)*C.nchan + (POLCHAN >> 2);
+            i = (TIME*NA + ANT)*NCHAN + (POLCHAN >> 2);
             s_lmd[threadIdx.y][blockchan] = point_errors[i];
         }
 
@@ -208,9 +208,11 @@ void rime_jones_E_beam_impl(
         float gm = floorf(m);
         float md = m - gm;
 
-        float chan = float(BEAM_NUD-1) * float(POLCHAN>>2);
-        if(C.nchan > 1)
-            { chan /= float(C.nchan-1); }
+#if NCHAN > 1
+        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2)/float(NCHAN-1);
+#else
+        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2);
+#endif
 
         float gchan = floorf(chan);
         float chd = chan - gchan;
@@ -293,7 +295,7 @@ void rime_jones_E_beam_impl(
         value.x *= abs_sum;
         value.y *= abs_sum;
 
-        i = ((SRC*C.ntime + TIME)*C.na + ANT)*C.npolchan + POLCHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
         jones[i] = value;
         __syncthreads();
     }

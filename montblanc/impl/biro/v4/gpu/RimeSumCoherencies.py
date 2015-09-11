@@ -49,6 +49,17 @@ KERNEL_TEMPLATE = string.Template("""
 #include <montblanc/include/abstraction.cuh>
 #include <montblanc/include/jones.cuh>
 
+#define NA ${na}
+#define NBL ${nbl}
+#define NCHAN ${nchan}
+#define NTIME ${ntime}
+#define NPSRC ${npsrc}
+#define NGSRC ${ngsrc}
+#define NSSRC ${nssrc}
+#define NSRC ${nsrc}
+#define NPOL (4)
+#define NPOLCHAN (NPOL*NCHAN)
+
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
 #define BLOCKDIMZ ${BLOCKDIMZ}
@@ -129,17 +140,17 @@ void rime_sum_coherencies_impl(
     int i;
 
     // Figure out the antenna pairs
-    i = TIME*C.nbl + BL;   int ANT1 = ant_pairs[i];
-    i += C.nbl*C.ntime;    int ANT2 = ant_pairs[i];
+    i = TIME*NBL + BL;   int ANT1 = ant_pairs[i];
+    i += NBL*NTIME;      int ANT2 = ant_pairs[i];
 
     // UVW coordinates vary by baseline and time, but not polarised channel
     if(threadIdx.x == 0)
     {
         // UVW, calculated from u_pq = u_p - u_q
-        i = TIME*C.na + ANT1;
+        i = TIME*NA + ANT1;
         shared.uvw[threadIdx.z][threadIdx.y] = uvw[i];
 
-        i = TIME*C.na + ANT2;
+        i = TIME*NA + ANT2;
         typename SumCohTraits<T>::UVWType ant2_uvw = uvw[i];
         U -= ant2_uvw.x;
         V -= ant2_uvw.y;
@@ -162,9 +173,9 @@ void rime_sum_coherencies_impl(
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*C.ntime + TIME)*C.na + ANT1)*C.npolchan + POLCHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_one = jones[i];
-        i = ((SRC*C.ntime + TIME)*C.na + ANT2)*C.npolchan + POLCHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_two, ant_one);
 
@@ -173,7 +184,7 @@ void rime_sum_coherencies_impl(
     }
 
     // Gaussian sources
-    for(int SRC = C.npsrc; SRC < C.npsrc + C.ngsrc;++SRC)
+    for(int SRC = C.npsrc; SRC < C.npsrc + C.ngsrc; ++SRC)
     {
         // gaussian shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
@@ -202,12 +213,12 @@ void rime_sum_coherencies_impl(
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*C.ntime + TIME)*C.na + ANT1)*C.npolchan + POLCHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_one = jones[i];
         // Multiple in the gaussian shape
         ant_one.x *= exp;
         ant_one.y *= exp;
-        i = ((SRC*C.ntime + TIME)*C.na + ANT2)*C.npolchan + POLCHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_two, ant_one);
 
@@ -250,11 +261,11 @@ void rime_sum_coherencies_impl(
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
-        i = ((SRC*C.ntime + TIME)*C.na + ANT1)*C.npolchan + POLCHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_one = jones[i];
         ant_one.x *= sersic_factor;
         ant_one.y *= sersic_factor;
-        i = ((SRC*C.ntime + TIME)*C.na + ANT2)*C.npolchan + POLCHAN;
+        i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_two, ant_one);
 
@@ -263,17 +274,17 @@ void rime_sum_coherencies_impl(
     }
 
     // Multiply the visibility by antenna 2's g term
-    i = (TIME*C.na + ANT2)*C.npolchan + POLCHAN;
+    i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
     typename Tr::ct ant2_g_term = G_term[i];
     montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant2_g_term, polsum);
 
     // Multiply the visibility by antenna 1's g term
-    i = (TIME*C.na + ANT1)*C.npolchan + POLCHAN;
+    i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
     typename Tr::ct ant1_g_term = G_term[i];
     montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant2_g_term, ant1_g_term);
 
     // Write out the visibilities
-    i = (TIME*C.nbl + BL)*C.npolchan + POLCHAN;
+    i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
     visibilities[i] = ant2_g_term;
 
     // Compute the chi squared sum terms
@@ -294,7 +305,7 @@ void rime_sum_coherencies_impl(
     // into the first polarisation.
     typename Tr::ct other = cub::ShuffleIndex(delta, cub::LaneId() + 2);
 
-    // And polarisations 2 and 3 to 0 and 1
+    // Add polarisations 2 and 3 to 0 and 1
     if((POLCHAN & 0x3) < 2)
     {
         delta.x += other.x;
@@ -303,14 +314,13 @@ void rime_sum_coherencies_impl(
 
     other = cub::ShuffleIndex(delta, cub::LaneId() + 1);
 
-    // And polarisation 1 to 0
+    // If this is the polarisation 0, add polarisation 1
     // and write out this chi squared sum term
-    // if this is the first polarisation
     if((POLCHAN & 0x3) == 0) {
         delta.x += other.x;
         delta.y += other.y;
 
-        i = (TIME*C.nbl + BL)*C.nchan + (POLCHAN >> 2);
+        i = (TIME*NBL + BL)*NCHAN + (POLCHAN >> 2);
         chi_sqrd_result[i] = delta.x + delta.y;
     }
 }

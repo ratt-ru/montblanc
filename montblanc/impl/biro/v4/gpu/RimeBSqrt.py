@@ -103,7 +103,7 @@ void rime_jones_B_sqrt_impl(
     __syncthreads();
 
     // Calculate the power term
-    int i = SRC*C.ntime + TIME;
+    int i = SRC*NTIME + TIME;
     typename Tr::ft freq_ratio = freq[threadIdx.x]/ref_freq;
     typename Tr::ft power = Po::pow(freq_ratio, alpha[i]);
 
@@ -117,7 +117,7 @@ void rime_jones_B_sqrt_impl(
     montblanc::create_brightness_sqrt<T>(B_square_root, pol);
 
     // Write out the square root of the brightness
-    i = (SRC*C.ntime + TIME)*C.npolchan + POLCHAN;
+    i = (SRC*NTIME + TIME)*NPOLCHAN + POLCHAN;
     B_sqrt[i] = B_square_root;
 }
 
