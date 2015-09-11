@@ -30,6 +30,7 @@ from montblanc.impl.biro.v5.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v5.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.biro.v5.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.biro.v5.gpu.RimeSumCoherencies import RimeSumCoherencies
+from montblanc.impl.biro.v5.gpu.RimeReduction import RimeReduction
 
 from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
@@ -60,6 +61,7 @@ class BiroSolver(BaseSolver):
         self.rime_b_sqrt = RimeBSqrt()
         self.rime_ekb_sqrt = RimeEKBSqrt()
         self.rime_sum = RimeSumCoherencies(weight_vector=wv)
+        self.rime_reduce = RimeReduction()
 
         # Create a page-locked ndarray to hold constant GPU data
         with self.context:
@@ -73,6 +75,9 @@ class BiroSolver(BaseSolver):
 
         # Initialise it with the current solver (self)
         mbu.init_rime_const_data(self, self.rime_const_data)
+
+        # Indicate this variable has not been set
+        self.dev_mem_pool = None
 
     def cfg_total_src_dims(self, nsrc):
         """
@@ -139,12 +144,16 @@ class BiroSolver(BaseSolver):
 
         return D
 
+    def set_dev_mem_pool(self, dev_mem_pool):
+        self.dev_mem_pool = dev_mem_pool
+
     def initialise(self):
         with self.context:
             self.rime_e_beam.initialise(self)
             self.rime_b_sqrt.initialise(self)
             self.rime_ekb_sqrt.initialise(self)
             self.rime_sum.initialise(self)
+            self.rime_reduce.initialise(self)
 
     def shutdown(self):
         with self.context:
@@ -152,6 +161,7 @@ class BiroSolver(BaseSolver):
             self.rime_b_sqrt.shutdown(self)
             self.rime_ekb_sqrt.shutdown(self)
             self.rime_sum.shutdown(self)
+            self.rime_reduce.shutdown(self)
 
     # Take these methods from the v4 BiroSolver
     get_default_base_ant_pairs = \

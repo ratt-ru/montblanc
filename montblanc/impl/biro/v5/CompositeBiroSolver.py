@@ -21,7 +21,6 @@
 import copy
 import numpy as np
 import pycuda.driver as cuda
-import pycuda.gpuarray
 import pycuda.tools
 import types
 
@@ -92,9 +91,11 @@ class CompositeBiroSolver(BaseSolver):
 
         self.__validate_arrays(A_sub)
 
+        # Massage the contexts for each device into a list
         if not isinstance(self.dev_ctxs, list):
             self.dev_ctxs = [self.dev_ctxs]
 
+        # For each device context, create solvers
         for ctx in self.dev_ctxs:
             with mbu.ContextWrapper(ctx):
                 # Query free memory on this context
@@ -161,6 +162,14 @@ class CompositeBiroSolver(BaseSolver):
                 self.ant_diff = P[Options.NA]
                 self.chan_diff = P[Options.NCHAN]
 
+                # Pre-allocate a 16KB pinned memory pool
+                # for each device, this is needed to
+                # prevent the PyCUDA reduction functions
+                # allocating memory and stalling the
+                # asynchronous pipeline.
+                dev_mem_pool = pycuda.tools.DeviceMemoryPool()
+                dev_mem_pool.allocate(16*ONE_KB)
+
                 # Create the sub-solvers for this context
                 # and append
                 for s in range(self.nsolvers):
@@ -168,6 +177,7 @@ class CompositeBiroSolver(BaseSolver):
                     # Configure the total number of sources
                     # handled by each sub-solver
                     subslvr.cfg_total_src_dims(P['nsrc'])
+                    subslvr.set_dev_mem_pool(dev_mem_pool)
                     self.solvers.append(subslvr)
                     self.stream.append(cuda.Stream())
 
@@ -505,13 +515,6 @@ class CompositeBiroSolver(BaseSolver):
             for i, subslvr in enumerate(self.solvers):
                 subslvr.initialise()
 
-            with self.solvers[0].context:
-                # Get the reduction kernel
-                # loaded in and hot
-                pycuda.gpuarray.sum(
-                    self.solvers[0].chi_sqrd_result_gpu,
-                    stream=self.stream[0])
-
             self.initialised = True
 
     def solve(self):
@@ -551,6 +554,7 @@ class CompositeBiroSolver(BaseSolver):
                 subslvr.rime_b_sqrt.execute(subslvr, self.stream[i])
                 subslvr.rime_ekb_sqrt.execute(subslvr, self.stream[i])
                 subslvr.rime_sum.execute(subslvr, self.stream[i])
+                subslvr.rime_reduce.execute(subslvr, self.stream[i])
 
     def shutdown(self):
         """ Shutdown the solver """
