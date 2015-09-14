@@ -168,7 +168,14 @@ class CompositeBiroSolver(BaseSolver):
                 # allocating memory and stalling the
                 # asynchronous pipeline.
                 dev_mem_pool = pycuda.tools.DeviceMemoryPool()
-                dev_mem_pool.allocate(16*ONE_KB)
+                dev_mem_pool.allocate(16*ONE_KB).free()
+
+                # Pre-allocate a 16KB pinned memory pool
+                # This is used to hold the results of PyCUDA
+                # reduction kernels.
+                pinned_mem_pool = pycuda.tools.PageLockedMemoryPool()
+                pinned_mem_pool.allocate(shape=(16*ONE_KB,),
+                    dtype=np.int8).base.free()
 
                 # Create the sub-solvers for this context
                 # and append
@@ -178,6 +185,7 @@ class CompositeBiroSolver(BaseSolver):
                     # handled by each sub-solver
                     subslvr.cfg_total_src_dims(P['nsrc'])
                     subslvr.set_dev_mem_pool(dev_mem_pool)
+                    subslvr.set_pinned_mem_pool(pinned_mem_pool)
                     self.solvers.append(subslvr)
                     self.stream.append(cuda.Stream())
 
@@ -355,6 +363,11 @@ class CompositeBiroSolver(BaseSolver):
             ary['transfer_method'] = self.get_sub_transfer_method(ary['name'])
             ary['cpu'] = False
             ary['gpu'] = True
+
+        # We'll use memory pools for the X2 values
+        for ary in [a for a in arys if a['name'] in ['X2']]:
+            ary['cpu'] = False
+            ary['gpu'] = False
 
         return arys, props
 

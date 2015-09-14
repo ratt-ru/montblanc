@@ -76,8 +76,9 @@ class BiroSolver(BaseSolver):
         # Initialise it with the current solver (self)
         mbu.init_rime_const_data(self, self.rime_const_data)
 
-        # Indicate this variable has not been set
+        # Indicate these variables have not been set
         self.dev_mem_pool = None
+        self.pinned_mem_pool = None
 
     def cfg_total_src_dims(self, nsrc):
         """
@@ -146,6 +147,9 @@ class BiroSolver(BaseSolver):
 
     def set_dev_mem_pool(self, dev_mem_pool):
         self.dev_mem_pool = dev_mem_pool
+
+    def set_pinned_mem_pool(self, pinned_mem_pool):
+        self.pinned_mem_pool = pinned_mem_pool
 
     def initialise(self):
         with self.context:
