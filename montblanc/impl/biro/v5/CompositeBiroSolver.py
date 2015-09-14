@@ -162,7 +162,7 @@ class CompositeBiroSolver(BaseSolver):
                 self.ant_diff = P[Options.NA]
                 self.chan_diff = P[Options.NCHAN]
 
-                # Pre-allocate a 16KB pinned memory pool
+                # Pre-allocate a 16KB GPU memory pool
                 # for each device, this is needed to
                 # prevent the PyCUDA reduction functions
                 # allocating memory and stalling the
@@ -337,7 +337,7 @@ class CompositeBiroSolver(BaseSolver):
         for prop in props:
             prop['setter_method'] = self.get_setter_method(ary['name'])
 
-        # Do not create CPU versions of result arrays
+        # Do not create CPU versions of scratch arrays
         for ary in [a for a in arys if a['name'] in
                 ['vis', 'B_sqrt', 'jones', 'chi_sqrd_result']]:
             ary['cpu'] = False
