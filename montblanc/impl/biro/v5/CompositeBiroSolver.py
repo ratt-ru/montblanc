@@ -537,6 +537,7 @@ class CompositeBiroSolver(BaseSolver):
 
         nr_var_counts = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
         subslvr_gen = self.__gen_sub_solvers()
+        prev = [None for i in range(self.nsolvers)]
 
         for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
             i, subslvr = subslvr_gen.next()
@@ -555,6 +556,23 @@ class CompositeBiroSolver(BaseSolver):
             """
 
             with subslvr.context:
+                if prev[i] is not None:
+                    prev_slvr = prev[i]
+                    
+                    # Get an array from the pinned memory pool
+                    X2 = prev_slvr.pinned_mem_pool.allocate(
+                        shape=self.X2_shape, dtype=self.X2_dtype)
+                    
+                    # Copy the X2 value off the GPU onto the CPU
+                    prev_slvr.rime_reduce.X2_gpu_ary.get_async(
+                        ary=X2, stream=self.stream[i])
+
+                    #print 'Async transfer'
+
+                    self.stream[i].synchronize()
+
+                prev[i] = subslvr
+
                 # Configure the number variable counts
                 # on the sub solver
                 subslvr.cfg_sub_dims(gpu_count)
