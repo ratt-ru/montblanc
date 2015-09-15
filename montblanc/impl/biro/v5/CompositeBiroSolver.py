@@ -519,6 +519,7 @@ class CompositeBiroSolver(BaseSolver):
         nr_var_counts = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
         subslvr_gen = self.__gen_sub_solvers()
         prev_iteration = [False for i in range(self.nsolvers)]
+        self.X2 = self.ft(0.0)
 
         for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
             i, subslvr = subslvr_gen.next()
@@ -541,15 +542,17 @@ class CompositeBiroSolver(BaseSolver):
                 # the the previous iteration of this solver?
                 if prev_iteration[i]:
                     # Get an array from the pinned memory pool
-                    X2 = subslvr.pinned_mem_pool.allocate(
+                    sub_X2 = subslvr.pinned_mem_pool.allocate(
                         shape=self.X2_shape, dtype=self.X2_dtype)
                     
                     # Copy the X2 value off the GPU onto the CPU
                     subslvr.rime_reduce.X2_gpu_ary.get_async(
-                        ary=X2, stream=subslvr.stream)
+                        ary=sub_X2, stream=subslvr.stream)
 
                     # Synchronise before extracting the X2 value
                     subslvr.stream.synchronize()
+
+                    self.X2_cpu += sub_X2
 
                 # Configure the number variable counts
                 # on the sub solver
@@ -598,15 +601,17 @@ class CompositeBiroSolver(BaseSolver):
 
             with subslvr.context:
                 # Get an array from the pinned memory pool
-                X2 = subslvr.pinned_mem_pool.allocate(
+                sub_X2 = subslvr.pinned_mem_pool.allocate(
                     shape=self.X2_shape, dtype=self.X2_dtype)
                 
                 # Copy the X2 value off the GPU onto the CPU
                 subslvr.rime_reduce.X2_gpu_ary.get_async(
-                    ary=X2, stream=subslvr.stream)
+                    ary=sub_X2, stream=subslvr.stream)
 
+                # Synchronise before extracting the X2 value
                 subslvr.stream.synchronize()
 
+                self.X2_cpu += sub_X2
 
     def shutdown(self):
         """ Shutdown the solver """
