@@ -541,6 +541,7 @@ class CompositeBiroSolver(BaseSolver):
 
         for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
             i, subslvr = subslvr_gen.next()
+            stream = self.stream[i]
 
             """"
             t = cpu_slice_map['ntime']
@@ -580,12 +581,18 @@ class CompositeBiroSolver(BaseSolver):
                 # Transfer arrays
                 self.transfer_arrays(i, cpu_slice_map, gpu_slice_map)
 
+                # Pre-execution (async copy constant data to the GPU)
+                subslvr.rime_e_beam.pre_execution(subslvr, stream)
+                subslvr.rime_b_sqrt.pre_execution(subslvr, stream)
+                subslvr.rime_ekb_sqrt.pre_execution(subslvr, stream)
+                subslvr.rime_sum.pre_execution(subslvr, stream)
+                subslvr.rime_reduce.pre_execution(subslvr, stream)
                 # Execute the kernels
-                subslvr.rime_e_beam.execute(subslvr, self.stream[i])
-                subslvr.rime_b_sqrt.execute(subslvr, self.stream[i])
-                subslvr.rime_ekb_sqrt.execute(subslvr, self.stream[i])
-                subslvr.rime_sum.execute(subslvr, self.stream[i])
-                subslvr.rime_reduce.execute(subslvr, self.stream[i])
+                subslvr.rime_e_beam.execute(subslvr, stream)
+                subslvr.rime_b_sqrt.execute(subslvr, stream)
+                subslvr.rime_ekb_sqrt.execute(subslvr, stream)
+                subslvr.rime_sum.execute(subslvr, stream)
+                subslvr.rime_reduce.execute(subslvr, stream)
 
     def shutdown(self):
         """ Shutdown the solver """

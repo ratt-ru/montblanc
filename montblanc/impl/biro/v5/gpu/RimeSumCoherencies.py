@@ -34,21 +34,22 @@ class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCo
         super(RimeSumCoherencies, self).shutdown(solver,stream)
     def pre_execution(self, solver, stream=None):
         super(RimeSumCoherencies, self).pre_execution(solver,stream)
+
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                solver.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                solver.const_data_buffer)
+
     def post_execution(self, solver, stream=None):
         super(RimeSumCoherencies, self).pre_execution(solver,stream)
 
     def execute(self, solver, stream=None):
         slvr = solver
-
-        if stream is not None:
-            cuda.memcpy_htod_async(
-                self.rime_const_data_gpu[0],
-                slvr.const_data_buffer,
-                stream=stream)
-        else:
-            cuda.memcpy_htod(
-                self.rime_const_data_gpu[0],
-                slvr.const_data_buffer)
 
         # The gaussian shape array can be empty if
         # no gaussian sources were specified.
