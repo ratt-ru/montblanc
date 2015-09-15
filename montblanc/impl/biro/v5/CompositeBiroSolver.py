@@ -334,14 +334,14 @@ class CompositeBiroSolver(BaseSolver):
         # only maintain CPU arrays on the main solver,
         # but not GPU arrays, which will exist on the sub-solvers
         for ary in arys:
-            ary['transfer_method'] = self.get_transfer_method(ary['name'])
+            ary['transfer_method'] = self.__get_transfer_method(ary['name'])
             ary['gpu'] = False
             ary['cpu'] = True
             ary['aligned'] = True
 
         # Add custom property setter method
         for prop in props:
-            prop['setter_method'] = self.get_setter_method(ary['name'])
+            prop['setter_method'] = self.__get_setter_method(ary['name'])
 
         # Do not create CPU versions of scratch arrays
         for ary in [a for a in arys if a['name'] in
@@ -358,7 +358,7 @@ class CompositeBiroSolver(BaseSolver):
         # of the RIME.
         for ary in arys:
             # Add a transfer method
-            ary['transfer_method'] = self.get_sub_transfer_method(ary['name'])
+            ary['transfer_method'] = self.__get_sub_transfer_method(ary['name'])
             ary['cpu'] = False
             ary['gpu'] = True
 
@@ -386,7 +386,7 @@ class CompositeBiroSolver(BaseSolver):
 
         gpu_ary.set_async(staged_ary, stream=subslvr.stream)
 
-    def transfer_arrays(self, sub_solver_idx,
+    def __transfer_arrays(self, sub_solver_idx,
         cpu_slice_map, gpu_slice_map):
         """
         Transfer CPU arrays on the CompositeBiroSolver over to the
@@ -556,7 +556,7 @@ class CompositeBiroSolver(BaseSolver):
                 subslvr.cfg_sub_dims(gpu_count)
 
                 # Transfer arrays
-                self.transfer_arrays(i, cpu_slice_map, gpu_slice_map)
+                self.__transfer_arrays(i, cpu_slice_map, gpu_slice_map)
 
                 # Pre-execution (async copy constant data to the GPU)
                 subslvr.rime_e_beam.pre_execution(subslvr, subslvr.stream)
@@ -627,7 +627,7 @@ class CompositeBiroSolver(BaseSolver):
 
         return D
 
-    def get_setter_method(self,name):
+    def __get_setter_method(self,name):
         """
         Setter method for CompositeBiroSolver properties. Sets the property
         on sub-solvers.
@@ -642,12 +642,12 @@ class CompositeBiroSolver(BaseSolver):
 
         return types.MethodType(setter,self)
 
-    def get_sub_transfer_method(self,name):
+    def __get_sub_transfer_method(self,name):
         def f(self, npary):
             raise Exception, 'Its illegal to call set methods on the sub-solvers'
         return types.MethodType(f,self)
 
-    def get_transfer_method(self, name):
+    def __get_transfer_method(self, name):
         """
         Transfer method for CompositeBiroSolver arrays. Sets the cpu array
         on the CompositeBiroSolver and indicates that it hasn't been transferred
