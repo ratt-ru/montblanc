@@ -64,9 +64,17 @@ class BiroSolver(BaseSolver):
         self.rime_reduce = RimeReduction()
 
         # Create a page-locked ndarray to hold constant GPU data
+        # as well as
+        # (1) A stream that this solver will asynchronously
+        #     operate on
+        # (2) An event indicating when an iteration of
+        #     the kernels above have finished executing
         with self.context:
             self.const_data_buffer = cuda.pagelocked_empty(
                 shape=mbu.rime_const_data_size(), dtype=np.int8)
+
+            self.stream = cuda.Stream()
+            self.kernels_done = cuda.Event()
 
         # Now create a cdata object wrapping the page-locked
         # ndarray and cast it to the rime_const_data c type.

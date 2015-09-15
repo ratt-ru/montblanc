@@ -87,7 +87,6 @@ class CompositeBiroSolver(BaseSolver):
         self.nsolvers = slvr_cfg.get('nsolvers', 4)
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
         self.solvers = []
-        self.stream = []
 
         self.__validate_arrays(A_sub)
 
@@ -187,7 +186,6 @@ class CompositeBiroSolver(BaseSolver):
                     subslvr.set_dev_mem_pool(dev_mem_pool)
                     subslvr.set_pinned_mem_pool(pinned_mem_pool)
                     self.solvers.append(subslvr)
-                    self.stream.append(cuda.Stream())
 
         assert len(self.solvers) == self.nsolvers*len(self.dev_ctxs)
 
@@ -372,7 +370,7 @@ class CompositeBiroSolver(BaseSolver):
         return arys, props
 
     def __transfer_slice(self, r, subslvr,
-        cpu_ary, cpu_idx, gpu_ary, gpu_idx, stream):
+        cpu_ary, cpu_idx, gpu_ary, gpu_idx):
         cpu_slice = cpu_ary[cpu_idx].squeeze()
         gpu_ary = gpu_ary[gpu_idx].squeeze()
 
@@ -386,7 +384,7 @@ class CompositeBiroSolver(BaseSolver):
         #print 'Transferring %s with size %s shapes [%s vs %s]' % (
         #    r.name, mbu.fmt_bytes(copy_ary.nbytes), copy_ary.shape, gpu_ary.shape)
 
-        gpu_ary.set_async(staged_ary, stream=stream)
+        gpu_ary.set_async(staged_ary, stream=subslvr.stream)
 
     def transfer_arrays(self, sub_solver_idx,
         cpu_slice_map, gpu_slice_map):
@@ -418,7 +416,6 @@ class CompositeBiroSolver(BaseSolver):
         """
         i = sub_solver_idx
         subslvr = self.solvers[i]
-        stream = self.stream[i]
         all_slice = slice(None,None,1)
         empty_slice = slice(0,0,1)
 
@@ -477,7 +474,7 @@ class CompositeBiroSolver(BaseSolver):
 
             self.__transfer_slice(r, subslvr,
                 cpu_ary, cpu_idx,
-                gpu_ary, tuple(gpu_idx), stream)
+                gpu_ary, tuple(gpu_idx))
 
             # Right, handle transfer of the second antenna's data
             if two_ant_case and na_idx > 0:
@@ -488,7 +485,7 @@ class CompositeBiroSolver(BaseSolver):
 
                 self.__transfer_slice(r, subslvr,
                     cpu_ary, cpu_idx,
-                    gpu_ary, tuple(gpu_idx), stream)
+                    gpu_ary, tuple(gpu_idx))
 
     def __enter__(self):
         """
@@ -522,15 +519,9 @@ class CompositeBiroSolver(BaseSolver):
         nr_var_counts = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
         subslvr_gen = self.__gen_sub_solvers()
         prev_iteration = [False for i in range(self.nsolvers)]
-        slvr_events = [None for i in range(self.nsolvers)]
-
-        for i in range(self.nsolvers):
-            with self.solvers[i].context:
-                slvr_events[i] = cuda.Event()
 
         for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
             i, subslvr = subslvr_gen.next()
-            stream = self.stream[i]
 
             """"
             t = cpu_slice_map['ntime']
@@ -555,10 +546,10 @@ class CompositeBiroSolver(BaseSolver):
                     
                     # Copy the X2 value off the GPU onto the CPU
                     subslvr.rime_reduce.X2_gpu_ary.get_async(
-                        ary=X2, stream=stream)
+                        ary=X2, stream=subslvr.stream)
 
                     # Synchronise before extracting the X2 value
-                    stream.synchronize()
+                    subslvr.stream.synchronize()
 
                 # Configure the number variable counts
                 # on the sub solver
@@ -568,11 +559,11 @@ class CompositeBiroSolver(BaseSolver):
                 self.transfer_arrays(i, cpu_slice_map, gpu_slice_map)
 
                 # Pre-execution (async copy constant data to the GPU)
-                subslvr.rime_e_beam.pre_execution(subslvr, stream)
-                subslvr.rime_b_sqrt.pre_execution(subslvr, stream)
-                subslvr.rime_ekb_sqrt.pre_execution(subslvr, stream)
-                subslvr.rime_sum.pre_execution(subslvr, stream)
-                subslvr.rime_reduce.pre_execution(subslvr, stream)
+                subslvr.rime_e_beam.pre_execution(subslvr, subslvr.stream)
+                subslvr.rime_b_sqrt.pre_execution(subslvr, subslvr.stream)
+                subslvr.rime_ekb_sqrt.pre_execution(subslvr, subslvr.stream)
+                subslvr.rime_sum.pre_execution(subslvr, subslvr.stream)
+                subslvr.rime_reduce.pre_execution(subslvr, subslvr.stream)
 
                 prev_i = (i-1) % len(prev_iteration)
 
@@ -580,17 +571,18 @@ class CompositeBiroSolver(BaseSolver):
                 # on the previous solver (stream) before launching new
                 # kernels on the current stream
                 if prev_iteration[prev_i]:
-                    stream.wait_for_event(slvr_events[prev_i])
+                    prev_slvr = self.solvers[prev_i]
+                    subslvr.stream.wait_for_event(prev_slvr.kernels_done)
 
                 # Execute the kernels
-                subslvr.rime_e_beam.execute(subslvr, stream)
-                subslvr.rime_b_sqrt.execute(subslvr, stream)
-                subslvr.rime_ekb_sqrt.execute(subslvr, stream)
-                subslvr.rime_sum.execute(subslvr, stream)
-                subslvr.rime_reduce.execute(subslvr, stream)
+                subslvr.rime_e_beam.execute(subslvr, subslvr.stream)
+                subslvr.rime_b_sqrt.execute(subslvr, subslvr.stream)
+                subslvr.rime_ekb_sqrt.execute(subslvr, subslvr.stream)
+                subslvr.rime_sum.execute(subslvr, subslvr.stream)
+                subslvr.rime_reduce.execute(subslvr, subslvr.stream)
 
                 # Record 
-                slvr_events[i].record(stream)
+                subslvr.kernels_done.record(subslvr.stream)
 
                 # Indicate that this solver has been used
                 prev_iteration[i] = True
@@ -598,10 +590,11 @@ class CompositeBiroSolver(BaseSolver):
         # Retrieve final X2 values
         for j in range(self.nsolvers):
             i = (i+1) % self.nsolvers
-            stream = self.stream[i]
 
             if not prev_iteration[i]:
                 continue
+
+            subslvr = self.solvers[i]
 
             with subslvr.context:
                 # Get an array from the pinned memory pool
@@ -610,9 +603,9 @@ class CompositeBiroSolver(BaseSolver):
                 
                 # Copy the X2 value off the GPU onto the CPU
                 subslvr.rime_reduce.X2_gpu_ary.get_async(
-                    ary=X2, stream=stream)
+                    ary=X2, stream=subslvr.stream)
 
-                stream.synchronize()
+                subslvr.stream.synchronize()
 
 
     def shutdown(self):
