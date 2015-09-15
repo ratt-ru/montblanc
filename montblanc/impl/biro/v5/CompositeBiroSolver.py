@@ -521,7 +521,12 @@ class CompositeBiroSolver(BaseSolver):
 
         nr_var_counts = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
         subslvr_gen = self.__gen_sub_solvers()
-        prev = [None for i in range(self.nsolvers)]
+        prev_iteration = [False for i in range(self.nsolvers)]
+        slvr_events = [None for i in range(self.nsolvers)]
+
+        for i in range(self.nsolvers):
+            with self.solvers[i].context:
+                slvr_events[i] = cuda.Event()
 
         for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
             i, subslvr = subslvr_gen.next()
@@ -541,22 +546,19 @@ class CompositeBiroSolver(BaseSolver):
             """
 
             with subslvr.context:
-                if prev[i] is not None:
-                    prev_slvr = prev[i]
-                    
+                # Should we retrieve an X2 value, calculated on
+                # the the previous iteration of this solver?
+                if prev_iteration[i]:
                     # Get an array from the pinned memory pool
-                    X2 = prev_slvr.pinned_mem_pool.allocate(
+                    X2 = subslvr.pinned_mem_pool.allocate(
                         shape=self.X2_shape, dtype=self.X2_dtype)
                     
                     # Copy the X2 value off the GPU onto the CPU
-                    prev_slvr.rime_reduce.X2_gpu_ary.get_async(
-                        ary=X2, stream=self.stream[i])
+                    subslvr.rime_reduce.X2_gpu_ary.get_async(
+                        ary=X2, stream=stream)
 
-                    #print 'Async transfer'
-
-                    self.stream[i].synchronize()
-
-                prev[i] = subslvr
+                    # Synchronise before extracting the X2 value
+                    stream.synchronize()
 
                 # Configure the number variable counts
                 # on the sub solver
@@ -571,12 +573,47 @@ class CompositeBiroSolver(BaseSolver):
                 subslvr.rime_ekb_sqrt.pre_execution(subslvr, stream)
                 subslvr.rime_sum.pre_execution(subslvr, stream)
                 subslvr.rime_reduce.pre_execution(subslvr, stream)
+
+                prev_i = (i-1) % len(prev_iteration)
+
+                # Wait for previous kernel execution to finish
+                # on the previous solver (stream) before launching new
+                # kernels on the current stream
+                if prev_iteration[prev_i]:
+                    stream.wait_for_event(slvr_events[prev_i])
+
                 # Execute the kernels
                 subslvr.rime_e_beam.execute(subslvr, stream)
                 subslvr.rime_b_sqrt.execute(subslvr, stream)
                 subslvr.rime_ekb_sqrt.execute(subslvr, stream)
                 subslvr.rime_sum.execute(subslvr, stream)
                 subslvr.rime_reduce.execute(subslvr, stream)
+
+                # Record 
+                slvr_events[i].record(stream)
+
+                # Indicate that this solver has been used
+                prev_iteration[i] = True
+
+        # Retrieve final X2 values
+        for j in range(self.nsolvers):
+            i = (i+1) % self.nsolvers
+            stream = self.stream[i]
+
+            if not prev_iteration[i]:
+                continue
+
+            with subslvr.context:
+                # Get an array from the pinned memory pool
+                X2 = subslvr.pinned_mem_pool.allocate(
+                    shape=self.X2_shape, dtype=self.X2_dtype)
+                
+                # Copy the X2 value off the GPU onto the CPU
+                subslvr.rime_reduce.X2_gpu_ary.get_async(
+                    ary=X2, stream=stream)
+
+                stream.synchronize()
+
 
     def shutdown(self):
         """ Shutdown the solver """
