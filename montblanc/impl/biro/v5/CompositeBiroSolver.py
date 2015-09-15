@@ -371,40 +371,22 @@ class CompositeBiroSolver(BaseSolver):
 
         return arys, props
 
-    def __transfer_slice(self, r, cpu_ary, cpu_idx, gpu_ary, gpu_idx, stream):
+    def __transfer_slice(self, r, subslvr,
+        cpu_ary, cpu_idx, gpu_ary, gpu_idx, stream):
         cpu_slice = cpu_ary[cpu_idx].squeeze()
         gpu_ary = gpu_ary[gpu_idx].squeeze()
 
-        # If the slice is contiguous, pin the slice and copy it
-        if cpu_slice.flags.c_contiguous is True:
-            pinned_ary = cuda.register_host_memory(cpu_slice)
-            copy_ary = pinned_ary
-        # Pin the contiguous section containing the slice.
-        # See if PyCUDA will handle the non-contiguous
-        # slice copy internally (_memcpy_discontig)
-        else:
-            # Figure out the starting and ending indices
-            start_idx = np.int32([0 if s.start is None else s.start
-                for s in cpu_idx]) 
-            end_idx = np.int32([s.stop
-                if s.stop is not None else cpu_ary.shape[i]
-                for i, s in enumerate(cpu_idx)]) 
-            # 1D indices of the slice start and end
-            # in the flattened array
-            start = np.ravel_multi_index(start_idx, cpu_ary.shape)
-            end = np.ravel_multi_index(end_idx-1, cpu_ary.shape)+1
-            flat_slice = np.ravel(cpu_ary)[start:end]
-            assert flat_slice.flags.c_contiguous is True
-            # Pin the flat contiguous region
-            pinned_ary = cuda.register_host_memory(flat_slice)
-            # But copy the original slice
-            copy_ary = cpu_slice
+        # Obtain some pinned memory from the memory pool
+        staged_ary = subslvr.pinned_mem_pool.allocate(
+            shape=gpu_ary.shape, dtype=gpu_ary.dtype)
+
+        # Copy data into staging area
+        staged_ary[:] = cpu_slice
 
         #print 'Transferring %s with size %s shapes [%s vs %s]' % (
         #    r.name, mbu.fmt_bytes(copy_ary.nbytes), copy_ary.shape, gpu_ary.shape)
 
-        gpu_ary.set_async(copy_ary, stream=stream)
-
+        gpu_ary.set_async(staged_ary, stream=stream)
 
     def transfer_arrays(self, sub_solver_idx,
         cpu_slice_map, gpu_slice_map):
@@ -493,7 +475,8 @@ class CompositeBiroSolver(BaseSolver):
             if two_ant_case and na_idx > 0:
                 gpu_idx[na_idx] = 0
 
-            self.__transfer_slice(r, cpu_ary, cpu_idx,
+            self.__transfer_slice(r, subslvr,
+                cpu_ary, cpu_idx,
                 gpu_ary, tuple(gpu_idx), stream)
 
             # Right, handle transfer of the second antenna's data
@@ -503,7 +486,8 @@ class CompositeBiroSolver(BaseSolver):
                 gpu_idx[na_idx] = 1
                 cpu_idx[na_idx] = cpu_slice_map['na1']
 
-                self.__transfer_slice(r, cpu_ary, cpu_idx,
+                self.__transfer_slice(r, subslvr,
+                    cpu_ary, cpu_idx,
                     gpu_ary, tuple(gpu_idx), stream)
 
     def __enter__(self):
