@@ -84,7 +84,7 @@ class CompositeBiroSolver(BaseSolver):
         A_sub = copy.deepcopy(BSV4mod.A)
         P_sub = copy.deepcopy(BSV4mod.P)
 
-        self.nsolvers = slvr_cfg.get('nsolvers', 4)
+        nsolvers = slvr_cfg.get('nsolvers', 4)
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
         self.solvers = []
 
@@ -110,7 +110,7 @@ class CompositeBiroSolver(BaseSolver):
                 viable, modded_dims = mbu.viable_dim_config(
                     mem_budget, A_sub, props,
                     ['nsrc=100', 'ntime', 'nbl=1&na=2','nchan=50%'],
-                    self.nsolvers)                
+                    nsolvers)                
 
                 # Create property dictionary with update
                 # dimensions.
@@ -178,7 +178,7 @@ class CompositeBiroSolver(BaseSolver):
 
                 # Create the sub-solvers for this context
                 # and append
-                for s in range(self.nsolvers):
+                for s in range(nsolvers):
                     subslvr = BiroSolver(subslvr_cfg)
                     # Configure the total number of sources
                     # handled by each sub-solver
@@ -187,7 +187,7 @@ class CompositeBiroSolver(BaseSolver):
                     subslvr.set_pinned_mem_pool(pinned_mem_pool)
                     self.solvers.append(subslvr)
 
-        assert len(self.solvers) == self.nsolvers*len(self.dev_ctxs)
+        assert len(self.solvers) == nsolvers*len(self.dev_ctxs)
 
         A_sub, P_sub = self.__twiddle_v4_subarys_and_props(A_sub, P_sub)
 
@@ -518,7 +518,8 @@ class CompositeBiroSolver(BaseSolver):
 
         nr_var_counts = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
         subslvr_gen = self.__gen_sub_solvers()
-        prev_iteration = [False for i in range(self.nsolvers)]
+        nsolvers_total = len(self.solvers)
+        prev_iteration = [False for i in range(nsolvers_total)]
         self.X2 = self.ft(0.0)
 
         for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
@@ -591,13 +592,11 @@ class CompositeBiroSolver(BaseSolver):
                 prev_iteration[i] = True
 
         # Retrieve final X2 values
-        for j in range(self.nsolvers):
-            i = (i+1) % self.nsolvers
+        for j in range(nsolvers_total):
+            i, subslvr = subslvr_gen.next()
 
             if not prev_iteration[i]:
                 continue
-
-            subslvr = self.solvers[i]
 
             with subslvr.context:
                 # Get an array from the pinned memory pool
