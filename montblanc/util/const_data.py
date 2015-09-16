@@ -35,6 +35,10 @@ _STRUCT_PTR_TYPE = _STRUCT_TYPE + ' *'
 # Variables contained within the structure
 _STRUCT_DATA_VAR_LIST = ['ntime', 'nbl', 'na', 'nchan', 'npolchan', 'nsrc']
 
+def rime_const_data_members():
+    """ Returns a list of struct data members """
+    return _STRUCT_DATA_VAR_LIST + source_nr_vars()
+
 def _emit_struct_field_str(type, name):
     return ' '*4 + type + ' ' + name + ';'
 
@@ -46,9 +50,7 @@ def rime_const_data_struct():
     """
     l = ['typedef struct {']
     l.extend([_emit_struct_field_str('unsigned int', v)
-        for v in _STRUCT_DATA_VAR_LIST])
-    l.extend([_emit_struct_field_str('unsigned int', s)
-        for s in source_nr_vars()])
+        for v in rime_const_data_members()])
     l.append('} ' + _STRUCT_TYPE + ';')
     return '\n'.join(l)
 
