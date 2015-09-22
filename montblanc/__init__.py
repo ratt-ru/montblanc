@@ -144,8 +144,8 @@ def rime_solver_cfg(**kwargs):
 
     slvr_cfg = BiroSolverConfiguration(**kwargs)
 
-    # Assume a MeasurementSet data source by default
-    slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_MS
+    # Assume a MeasurementSet data source, if none is supplied
+    slvr_cfg.setdefault(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
 
     return slvr_cfg
 

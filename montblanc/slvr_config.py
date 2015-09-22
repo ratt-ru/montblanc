@@ -67,7 +67,7 @@ class SolverConfigurationOptions(object):
     DATA_SOURCE_DEFAULTS = 'defaults'
     DATA_SOURCE_MS = 'ms'
     DATA_SOURCE_TEST = 'test'
-    DEFAULT_DATA_SOURCE = DATA_SOURCE_DEFAULTS
+    DEFAULT_DATA_SOURCE = DATA_SOURCE_MS
     VALID_DATA_SOURCES = [DATA_SOURCE_DEFAULTS, DATA_SOURCE_MS, DATA_SOURCE_TEST]
     DATA_SOURCE_DESCRIPTION = (
         "The data source for initialising data arrays.",
