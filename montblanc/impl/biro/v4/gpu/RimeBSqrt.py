@@ -149,7 +149,7 @@ class RimeBSqrt(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
-        self.polchans = 4*slvr.nchan
+        self.npolchans = 4*slvr.nchan
 
         # Get a property dictionary off the solver
         D = slvr.get_properties()
@@ -157,12 +157,9 @@ class RimeBSqrt(Node):
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
         D['rime_const_data_struct'] = mbu.rime_const_data_struct()
 
-        # Update kernel parameters to cater for radically
-        # smaller problem sizes. Caters for a subtle bug
-        # with Kepler shuffles and warp sizes < 32
-        if self.polchans < D['BLOCKDIMX']: D['BLOCKDIMX'] = self.polchans
-        if slvr.ntime < D['BLOCKDIMY']: D['BLOCKDIMY'] = slvr.ntime
-        if slvr.nsrc < D['BLOCKDIMZ']: D['BLOCKDIMZ'] = slvr.nsrc
+        D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
+            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+            self.npolchans, slvr.ntime, slvr.nsrc)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -192,7 +189,7 @@ class RimeBSqrt(Node):
         times_per_block = D['BLOCKDIMY']
         srcs_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = mbu.blocks_required(self.polchans, polchans_per_block)
+        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
         time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
         src_blocks = mbu.blocks_required(slvr.nsrc, srcs_per_block)
 

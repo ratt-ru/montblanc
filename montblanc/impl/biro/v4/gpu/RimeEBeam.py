@@ -341,12 +341,9 @@ class RimeEBeam(Node):
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
         D['rime_const_data_struct'] = mbu.rime_const_data_struct()
 
-        # Update kernel parameters to cater for radically
-        # smaller problem sizes. Caters for a subtle bug
-        # with Kepler shuffles and warp sizes < 32
-        if self.npolchans < D['BLOCKDIMX']: D['BLOCKDIMX'] = self.npolchans
-        if slvr.na < D['BLOCKDIMY']: D['BLOCKDIMY'] = slvr.na
-        if slvr.nsrc < D['BLOCKDIMZ']: D['BLOCKDIMZ'] = slvr.nsrc
+        D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
+            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+            self.npolchans, slvr.na, slvr.nsrc)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
