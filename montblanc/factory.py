@@ -18,6 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import os
+
 import numpy as np
 
 import pycuda.driver as cuda
@@ -28,6 +30,8 @@ import montblanc.util as mbu
 from montblanc.config import (BiroSolverConfigurationOptions as Options)
 
 from montblanc.pipeline import Pipeline
+
+__MB_DEVICE_ENV_VAR = 'MONTBLANC_CUDA_DEVICES'
 
 # PyCUDA device and context variables
 __devices = None
@@ -46,12 +50,58 @@ def get_contexts_per_device():
             raise RuntimeError('Montblanc was unable '
                 'to initialise CUDA: %s' % repr(e))
 
+        nr_devices = cuda.Device.count()
+
+        if nr_devices == 0:
+            raise RuntimeError('Montblanc found no CUDA devices!')
+
+        device_str = os.getenv(__MB_DEVICE_ENV_VAR, '')
+        device_str_list = device_str.split()
+
+        # If some valid device string list exists,
+        # iterate through it, marking valid devices
+        if len(device_str_list) > 0:
+            valid_devices = [False for d in range(nr_devices)]
+
+            for i, s in enumerate(device_str_list):
+                try:
+                    device_nr = int(s)
+                    valid_devices[device_nr] = True
+                except (ValueError, IndexError) as e:
+                    montblanc.log.warn(('The environment variable '
+                        '"%s=%s", contains an invalid device number '
+                        '"%s" at position %d.') % (__MB_DEVICE_ENV_VAR,
+                            device_str, s, i))
+
+            # Are there any valid devices?
+            if not np.any(valid_devices):
+                montblanc.log.warn(('The environment variable '
+                    '"%s=%s", contains no valid device number''s. '
+                    'All devices will be selected.') % (
+                        __MB_DEVICE_ENV_VAR, device_str))
+
+                valid_devices = [True for d in range(nr_devices)]
+    
+        # Otherwise, assume every device is valid
+        else:
+            valid_devices = [True for d in range(nr_devices)]
+
+        # Create the valid devices
         try:
-            __devices = [cuda.Device(d) for d in range(cuda.Device.count())]
+            __devices = [cuda.Device(d)
+                for i, d in enumerate(range(nr_devices))
+                if valid_devices[i]]
         except:
             raise RuntimeError('Montblanc was unable '
                 'to create PyCUDA device objects: %s' % repr(e))
 
+        # Log which devices will be used
+        montblanc.log.info('Montblanc will use the following devices:')
+
+        for i, d in enumerate(__devices):
+            montblanc.log.info('Device #%d: %s', i, d.name())
+
+        # Create contexts for each device
         try:
             __contexts = [d.make_context() for d in __devices]
         except:
