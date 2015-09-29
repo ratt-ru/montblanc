@@ -20,9 +20,13 @@
 
 import copy
 import numpy as np
+import types
+
+import concurrent.futures as cf
+import threading
+
 import pycuda.driver as cuda
 import pycuda.tools
-import types
 
 import montblanc
 import montblanc.util as mbu
@@ -66,6 +70,9 @@ class CompositeBiroSolver(BaseSolver):
 
         super(CompositeBiroSolver, self).__init__(slvr_cfg)
 
+        # Create thread local storage
+        self.thread_local = threading.local()
+
         # Configure the dimensions of the beam cube
         self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
         self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
@@ -84,9 +91,8 @@ class CompositeBiroSolver(BaseSolver):
         A_sub = copy.deepcopy(BSV4mod.A)
         P_sub = copy.deepcopy(BSV4mod.P)
 
-        nsolvers = slvr_cfg.get('nsolvers', 4)
+        nsolvers = slvr_cfg.get('nsolvers', 2)
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
-        self.solvers = []
 
         self.__validate_arrays(A_sub)
 
@@ -94,110 +100,67 @@ class CompositeBiroSolver(BaseSolver):
         if not isinstance(self.dev_ctxs, list):
             self.dev_ctxs = [self.dev_ctxs]
 
-        # For each device context, create solvers
-        for ctx in self.dev_ctxs:
-            with mbu.ContextWrapper(ctx):
-                # Query free memory on this context
-                (free_mem,total_mem) = cuda.mem_get_info()
+        montblanc.log.info('Using %d device(s), each with %d solver(s)',
+            len(self.dev_ctxs), nsolvers)
 
-                # Work with a supplied memory budget, otherwise use
-                # free memory less an amount equal to the upper size
-                # of an NVIDIA context
-                mem_budget = slvr_cfg.get('mem_budget', free_mem - 100*ONE_MB)
+        # Shorten the type name
+        C = CompositeBiroSolver
 
-                # Figure out a viable dimension configuration
-                # given the total problem size 
-                viable, modded_dims = mbu.viable_dim_config(
-                    mem_budget, A_sub, props,
-                    ['nsrc=100', 'ntime', 'nbl=1&na=2','nchan=50%'],
-                    nsolvers)                
+        # Create a one thread executor for each device context,
+        # i.e. a thread per device
+        executors = [cf.ThreadPoolExecutor(1) for ctx in self.dev_ctxs]
 
-                # Create property dictionary with update
-                # dimensions.
-                P = props.copy()
-                P.update(modded_dims)
+        for ex, ctx in zip(executors, self.dev_ctxs):
+            ex.submit(C.__thread_init, self, ctx).result()
 
-                if not viable:
-                    dim_set_str = ', '.join(['%s=%s' % (k,v)
-                        for k,v in modded_dims.iteritems()])
+        # Find the budget with the lowest memory usage
+        # Work with the device with the lowest memory
+        budgets = sorted([ex.submit(C.__thread_budget, self,
+                            slvr_cfg, A_sub, props).result()
+                        for ex in executors],
+                    key=lambda T: T[1])
 
-                    ary_list_str = '\n'.join(['%-*s %-*s %s' % (
-                        15, a['name'],
-                        10, mbu.fmt_bytes(mbu.dict_array_bytes(a, P)),
-                        mbu.shape_from_str_tuple(a['shape'],P))
-                        for a in sorted(A_sub,
-                            reverse=True,
-                            key=lambda a: mbu.dict_array_bytes(a, P))])
+        P, M, mem = budgets[0]
 
-                    required_mem = mbu.dict_array_bytes_required(A_sub, P)
+        # Log some information about the memory budget
+        # and dimension reduction
+        changes = ['%s: %s => %s' % (k, props[k], v)
+            for k, v in M.iteritems()]
 
-                    raise MemoryError("Tried reducing the problem size "
-                        "by setting '%s' on all arrays, "
-                        "but the resultant required memory of %s "
-                        "for each of %d solvers is too big "
-                        "to fit within the memory budget of %s. "
-                        "List of biggests offenders:\n%s "
-                        "\nSplitting the problem along the "
-                        "channel dimension needs to be "
-                        "implemented." %
-                            (dim_set_str,
-                            mbu.fmt_bytes(required_mem),
-                            nsolvers,
-                            mbu.fmt_bytes(mem_budget),
-                            ary_list_str))
+        montblanc.log.info(('Choosing a solver budget of %s '
+            'for %d solvers. The following dimension '
+            'reductions have been applied: %s.'),
+                mbu.fmt_bytes(mem), nsolvers, ', '.join(changes))
 
-                # Create the configuration for the sub solver
-                subslvr_cfg = BiroSolverConfiguration(**slvr_cfg)
-                subslvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_DEFAULTS
-                subslvr_cfg[Options.NA] = P[Options.NA]
-                subslvr_cfg[Options.NTIME] = P[Options.NTIME]
-                subslvr_cfg[Options.NCHAN] = P[Options.NCHAN]
-                subslvr_cfg[Options.CONTEXT] = ctx
+        # Create the sub solver configuration
+        subslvr_cfg = BiroSolverConfiguration(**slvr_cfg)
+        subslvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_DEFAULTS
+        subslvr_cfg[Options.NA] = P[Options.NA]
+        subslvr_cfg[Options.NTIME] = P[Options.NTIME]
+        subslvr_cfg[Options.NCHAN] = P[Options.NCHAN]
+        subslvr_cfg[Options.CONTEXT] = ctx
 
-                # Extract the dimension differences
-                self.src_diff = P['nsrc']
-                self.time_diff = P[Options.NTIME]
-                self.bl_diff = P['nbl']
-                self.ant_diff = P[Options.NA]
-                self.chan_diff = P[Options.NCHAN]
+        # Extract the dimension differences
+        self.src_diff = P['nsrc']
+        self.time_diff = P[Options.NTIME]
+        self.bl_diff = P['nbl']
+        self.ant_diff = P[Options.NA]
+        self.chan_diff = P[Options.NCHAN]
 
-                # Pre-allocate a 16KB GPU memory pool
-                # for each device, this is needed to
-                # prevent the PyCUDA reduction functions
-                # allocating memory and stalling the
-                # asynchronous pipeline.
-                dev_mem_pool = pycuda.tools.DeviceMemoryPool()
-                dev_mem_pool.allocate(16*ONE_KB).free()
-
-                # Pre-allocate a 16KB pinned memory pool
-                # This is used to hold the results of PyCUDA
-                # reduction kernels.
-                pinned_mem_pool = pycuda.tools.PageLockedMemoryPool()
-                pinned_mem_pool.allocate(shape=(16*ONE_KB,),
-                    dtype=np.int8).base.free()
-
-                # Create the sub-solvers for this context
-                # and append
-                for s in range(nsolvers):
-                    subslvr = BiroSolver(subslvr_cfg)
-                    # Configure the total number of sources
-                    # handled by each sub-solver
-                    subslvr.cfg_total_src_dims(P['nsrc'])
-                    subslvr.set_dev_mem_pool(dev_mem_pool)
-                    subslvr.set_pinned_mem_pool(pinned_mem_pool)
-                    self.solvers.append(subslvr)
-
-        assert len(self.solvers) == nsolvers*len(self.dev_ctxs)
+        # Now create the solvers on each thread
+        for ex in executors:
+            ex.submit(C.__thread_create_solvers,
+                self, subslvr_cfg, P, nsolvers).result()
 
         A_sub, P_sub = self.__twiddle_v4_subarys_and_props(A_sub, P_sub)
 
-        # Create the arrays on the sub solvers
-        for i, subslvr in enumerate(self.solvers):
-            subslvr.register_properties(P_sub)
-            subslvr.register_arrays(A_sub)
+        # Register arrays and properties on each thread's solvers
+        for ex in executors:
+            ex.submit(C.__thread_reg_sub_arys_and_props,
+                self, A_sub, P_sub).result()
 
-        self.use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
-        self.initialised=False
+        self.executors = executors
+        self.initialised = False
 
     def __gen_rime_slices(self):
         nr_vars = ['ntime', 'nbl', 'na', 'na1', 'nchan', 'nsrc']
@@ -287,13 +250,23 @@ class CompositeBiroSolver(BaseSolver):
                             gpu_slice[s] = slice(0, cpu_var.stop - cpu_var.start, 1)
                             gpu_count[s] = cpu_var.stop - cpu_var.start
 
-                        yield (cpu_slice, gpu_slice, gpu_count)
+                        yield (cpu_slice.copy(), gpu_slice.copy(), gpu_count.copy())
 
-    def __gen_sub_solvers(self):
+    def __thread_gen_sub_solvers(self):
         # Loop infinitely over the sub-solvers.
         while True:
-            for i, subslvr in enumerate(self.solvers):
+            for i, subslvr in enumerate(self.thread_local.solvers):
                 yield (i, subslvr)
+
+    def __gen_executors(self):
+        # Loop indefinitely over executors
+        first = True
+
+        while True:
+            for i, ex in enumerate(self.executors):
+                yield(i, first, ex)
+
+            first = False
 
     def __validate_arrays(self, arrays):
         """
@@ -415,7 +388,7 @@ class CompositeBiroSolver(BaseSolver):
         is not affected since it is never transferred.
         """
         i = sub_solver_idx
-        subslvr = self.solvers[i]
+        subslvr = self.thread_local.solvers[i]
         all_slice = slice(None,None,1)
         empty_slice = slice(0,0,1)
 
@@ -502,12 +475,262 @@ class CompositeBiroSolver(BaseSolver):
         """
         self.shutdown()
 
+    def __thread_init(self, context):
+        """
+        Initialise the current thread, by associating
+        a CUDA context with it, and pushing the context.
+        """
+        montblanc.log.info('Pushing CUDA context in thread %s',
+            threading.current_thread())
+        context.push()
+        self.thread_local.context = context
+
+    def __thread_shutdown(self):
+        """
+        Shutdown the current thread,
+        by popping the associated CUDA context
+        """
+        montblanc.log.info('Popping CUDA context in thread %s',
+            threading.current_thread())
+        self.thread_local.context.pop()
+
+    def __thread_budget(self, slvr_cfg, A_sub, props):
+        """
+        Get memory budget and dimension reduction
+        information from the CUDA device associated
+        with the current thread and context
+        """
+        montblanc.log.info('Budgeting in thread %s', threading.current_thread())
+
+        # Query free memory on this context
+        (free_mem,total_mem) = cuda.mem_get_info()
+
+        # Work with a supplied memory budget, otherwise use
+        # free memory less an amount equal to the upper size
+        # of an NVIDIA context
+        mem_budget = slvr_cfg.get('mem_budget', free_mem - 100*ONE_MB)
+
+        nsolvers = slvr_cfg.get('nsolvers', 2)
+
+        # Figure out a viable dimension configuration
+        # given the total problem size 
+        viable, modded_dims = mbu.viable_dim_config(
+            mem_budget, A_sub, props,
+            ['nsrc=100', 'ntime', 'nbl=1&na=2','nchan=50%'],
+            nsolvers)                
+
+        # Create property dictionary with updated
+        # dimensions.
+        P = props.copy()
+        P.update(modded_dims)
+
+        required_mem = mbu.dict_array_bytes_required(A_sub, P)
+
+        if not viable:
+            dim_set_str = ', '.join(['%s=%s' % (k,v)
+                for k,v in modded_dims.iteritems()])
+
+            ary_list_str = '\n'.join(['%-*s %-*s %s' % (
+                15, a['name'],
+                10, mbu.fmt_bytes(mbu.dict_array_bytes(a, P)),
+                mbu.shape_from_str_tuple(a['shape'],P))
+                for a in sorted(A_sub,
+                    reverse=True,
+                    key=lambda a: mbu.dict_array_bytes(a, P))])
+
+            raise MemoryError("Tried reducing the problem size "
+                "by setting '%s' on all arrays, "
+                "but the resultant required memory of %s "
+                "for each of %d solvers is too big "
+                "to fit within the memory budget of %s. "
+                "List of biggests offenders:\n%s "
+                "\nSplitting the problem along the "
+                "channel dimension needs to be "
+                "implemented." %
+                    (dim_set_str,
+                    mbu.fmt_bytes(required_mem),
+                    nsolvers,
+                    mbu.fmt_bytes(mem_budget),
+                    ary_list_str))
+
+        return P, modded_dims, required_mem
+
+    def __thread_create_solvers(self, subslvr_cfg, P, nsolvers):
+        """
+        Create solvers on the thread local data
+        """
+        montblanc.log.info('Creating solvers in thread %s',
+            threading.current_thread())
+
+        montblanc.log.info('nsolvers = %d', nsolvers)
+
+        # Pre-allocate a 16KB GPU memory pool
+        # for each device, this is needed to
+        # prevent the PyCUDA reduction functions
+        # allocating memory and stalling the
+        # asynchronous pipeline.
+        dev_mem_pool = pycuda.tools.DeviceMemoryPool()
+        dev_mem_pool.allocate(16*ONE_KB).free()
+
+        # Pre-allocate a 16KB pinned memory pool
+        # This is used to hold the results of PyCUDA
+        # reduction kernels.
+        pinned_mem_pool = pycuda.tools.PageLockedMemoryPool()
+        pinned_mem_pool.allocate(shape=(16*ONE_KB,),
+            dtype=np.int8).base.free()
+
+        # Configure thread local storage
+        # Number of solvers in this thread
+        self.thread_local.nsolvers = nsolvers
+        # List of solvers used by this thread
+        self.thread_local.solvers = [False for s in range(nsolvers)]
+        # Has there been a previous iteration on this solver
+        self.thread_local.prev_iteration = [False for s in range(nsolvers)]
+        # Initialise the X2 sum to zero
+        self.thread_local.X2 = self.ft(0.0)
+        # Initialise the subsolver generator
+        self.thread_local.subslvr_gen = self.__thread_gen_sub_solvers()
+
+        # Set the CUDA context in the configuration to
+        # the one associated with this thread
+        subslvr_cfg[Options.CONTEXT] = self.thread_local.context
+
+        # Create solvers for this context
+        for i, s in enumerate(range(nsolvers)):
+            subslvr = BiroSolver(subslvr_cfg)
+            # Configure the total number of sources
+            # handled by each sub-solver
+            subslvr.cfg_total_src_dims(P['nsrc'])
+            subslvr.set_dev_mem_pool(dev_mem_pool)
+            subslvr.set_pinned_mem_pool(pinned_mem_pool)
+            self.thread_local.solvers[i] = subslvr
+
+    def __thread_reg_sub_arys_and_props(self, A_sub, P_sub):
+        """
+        Register arrays and properties on
+        the thread local solvers
+        """
+        montblanc.log.info('Registering arrays and properties in thread %s',
+            threading.current_thread())
+        # Create the arrays on the sub solvers
+        for i, subslvr in enumerate(self.thread_local.solvers):
+            subslvr.register_properties(P_sub)
+            subslvr.register_arrays(A_sub)
+
+    def __thread_solve_sub(self, cpu_slice_map, gpu_slice_map, gpu_count, first=False):
+        """
+        Solve a portion of the RIME, specified by the cpu_slice_map and
+        gpu_slice_map dictionaries.
+        """
+        #montblanc.log.info('Solving in thread %s', threading.current_thread())
+        tl = self.thread_local
+
+        # If this is flagged as the first iteration, reset variables
+        if first is True:
+            # There has been no previous iteration on this solver
+            tl.prev_iteration = [False for s in range(nsolvers)]
+            # Initialise the X2 sum to zero
+            tl.X2 = self.ft(0.0)
+            # Initialise the subsolver generator
+            tl.subslvr_gen = self.__thread_gen_sub_solvers()
+
+        i, subslvr = tl.subslvr_gen.next()
+
+        # If the solver iterated previously, there's
+        # a X2 that needs to be extracted
+        if tl.prev_iteration[i]:
+            # Get an array from the pinned memory pool
+            sub_X2 = subslvr.pinned_mem_pool.allocate(
+                shape=self.X2_shape, dtype=self.X2_dtype)
+            
+            # Copy the X2 value off the GPU onto the CPU
+            subslvr.rime_reduce.X2_gpu_ary.get_async(
+                ary=sub_X2, stream=subslvr.stream)
+
+            # Synchronise before extracting the X2 value
+            subslvr.stream.synchronize()
+
+            # Add to the running total on the local thread
+            tl.X2 += sub_X2
+
+        # Configure the number variable counts
+        # on the sub solver
+        subslvr.cfg_sub_dims(gpu_count)
+
+        # Transfer arrays
+        self.__transfer_arrays(i, cpu_slice_map, gpu_slice_map)
+
+        # Pre-execution (async copy constant data to the GPU)
+        subslvr.rime_e_beam.pre_execution(subslvr, subslvr.stream)
+        subslvr.rime_b_sqrt.pre_execution(subslvr, subslvr.stream)
+        subslvr.rime_ekb_sqrt.pre_execution(subslvr, subslvr.stream)
+        subslvr.rime_sum.pre_execution(subslvr, subslvr.stream)
+        subslvr.rime_reduce.pre_execution(subslvr, subslvr.stream)
+
+        prev_i = (i-1) % len(tl.prev_iteration)
+
+        # Wait for previous kernel execution to finish
+        # on the previous solver (stream) before launching new
+        # kernels on the current stream
+        if tl.prev_iteration[prev_i]:
+            prev_slvr = tl.solvers[prev_i]
+            subslvr.stream.wait_for_event(prev_slvr.kernels_done)
+
+        # Execute the kernels
+        subslvr.rime_e_beam.execute(subslvr, subslvr.stream)
+        subslvr.rime_b_sqrt.execute(subslvr, subslvr.stream)
+        subslvr.rime_ekb_sqrt.execute(subslvr, subslvr.stream)
+        subslvr.rime_sum.execute(subslvr, subslvr.stream)
+        subslvr.rime_reduce.execute(subslvr, subslvr.stream)
+
+        # Record kernel completion
+        subslvr.kernels_done.record(subslvr.stream)
+
+        # Indicate that this solver has executed and
+        # that a X2 is waiting for extraction
+        tl.prev_iteration[i] = True
+
+    def __thread_solve_sub_final(self):
+        """
+        Retrieve any final X2 values from the solvers and
+        return the total X2 sum for this thread.
+        """
+        montblanc.log.info('Retrieve final X2 in thread %s', threading.current_thread())
+        tl = self.thread_local
+
+        # Retrieve final X2 values
+        for j in range(tl.nsolvers):
+            i, subslvr = tl.subslvr_gen.next()
+
+            # If the solver hasn't executed, no X2 is available
+            if not tl.prev_iteration[i]:
+                continue
+
+            # Get an array from the pinned memory pool
+            sub_X2 = subslvr.pinned_mem_pool.allocate(
+                shape=self.X2_shape, dtype=self.X2_dtype)
+            
+            # Copy the X2 value off the GPU onto the CPU
+            subslvr.rime_reduce.X2_gpu_ary.get_async(
+                ary=sub_X2, stream=subslvr.stream)
+
+            # Synchronise before extracting the X2 value
+            subslvr.stream.synchronize()
+
+            tl.X2 += sub_X2
+
+        return tl.X2
+
     def initialise(self):
         """ Initialise the sub-solver """
 
-        if not self.initialised:
-            for i, subslvr in enumerate(self.solvers):
+        def __init_func():
+            for i, subslvr in enumerate(self.thread_local.solvers):
                 subslvr.initialise()
+
+        if not self.initialised:
+            for ex in self.executors:
+                ex.submit(__init_func).result()
 
             self.initialised = True
 
@@ -516,107 +739,37 @@ class CompositeBiroSolver(BaseSolver):
         if not self.initialised:
             self.initialise()
 
-        nr_var_counts = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
-        subslvr_gen = self.__gen_sub_solvers()
-        nsolvers_total = len(self.solvers)
-        prev_iteration = [False for i in range(nsolvers_total)]
-        self.X2 = self.ft(0.0)
+        C = CompositeBiroSolver
+        ex_gen = self.__gen_executors()
 
+        # Iterate over the RIME space, i.e. slices over the CPU and GPU
         for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
-            i, subslvr = subslvr_gen.next()
+            # Get the next executor (thread) to submit work to
+            i, first, ex = ex_gen.next()
 
-            """"
-            t = cpu_slice_map['ntime']
-            bl = cpu_slice_map['nbl']
-            ch = cpu_slice_map['nchan']
-            src = cpu_slice_map['nsrc']
+            # Submit work to the thread, solve this portion of the RIME
+            # Note that we're not interested in any futures produce by
+            # this executor
+            ex.submit(C.__thread_solve_sub, self,
+                cpu_slice_map, gpu_slice_map, gpu_count, first)
 
-            print '%s: %s - %s/%s %s: %s - %s/%s %s: %s - %s/%s %s: %s - %s/%s' % (
-                'T', t.start, t.stop, self.ntime,
-                'BL', bl.start, bl.stop, self.nbl,
-                'CH', ch.start, ch.stop, self.nchan,
-                'SRC', src.start, src.stop, self.nsrc)
-            """
-
-            with subslvr.context:
-                # Should we retrieve an X2 value, calculated on
-                # the the previous iteration of this solver?
-                if prev_iteration[i]:
-                    # Get an array from the pinned memory pool
-                    sub_X2 = subslvr.pinned_mem_pool.allocate(
-                        shape=self.X2_shape, dtype=self.X2_dtype)
-                    
-                    # Copy the X2 value off the GPU onto the CPU
-                    subslvr.rime_reduce.X2_gpu_ary.get_async(
-                        ary=sub_X2, stream=subslvr.stream)
-
-                    # Synchronise before extracting the X2 value
-                    subslvr.stream.synchronize()
-
-                    self.X2_cpu += sub_X2
-
-                # Configure the number variable counts
-                # on the sub solver
-                subslvr.cfg_sub_dims(gpu_count)
-
-                # Transfer arrays
-                self.__transfer_arrays(i, cpu_slice_map, gpu_slice_map)
-
-                # Pre-execution (async copy constant data to the GPU)
-                subslvr.rime_e_beam.pre_execution(subslvr, subslvr.stream)
-                subslvr.rime_b_sqrt.pre_execution(subslvr, subslvr.stream)
-                subslvr.rime_ekb_sqrt.pre_execution(subslvr, subslvr.stream)
-                subslvr.rime_sum.pre_execution(subslvr, subslvr.stream)
-                subslvr.rime_reduce.pre_execution(subslvr, subslvr.stream)
-
-                prev_i = (i-1) % len(prev_iteration)
-
-                # Wait for previous kernel execution to finish
-                # on the previous solver (stream) before launching new
-                # kernels on the current stream
-                if prev_iteration[prev_i]:
-                    prev_slvr = self.solvers[prev_i]
-                    subslvr.stream.wait_for_event(prev_slvr.kernels_done)
-
-                # Execute the kernels
-                subslvr.rime_e_beam.execute(subslvr, subslvr.stream)
-                subslvr.rime_b_sqrt.execute(subslvr, subslvr.stream)
-                subslvr.rime_ekb_sqrt.execute(subslvr, subslvr.stream)
-                subslvr.rime_sum.execute(subslvr, subslvr.stream)
-                subslvr.rime_reduce.execute(subslvr, subslvr.stream)
-
-                # Record 
-                subslvr.kernels_done.record(subslvr.stream)
-
-                # Indicate that this solver has been used
-                prev_iteration[i] = True
-
-        # Retrieve final X2 values
-        for j in range(nsolvers_total):
-            i, subslvr = subslvr_gen.next()
-
-            if not prev_iteration[i]:
-                continue
-
-            with subslvr.context:
-                # Get an array from the pinned memory pool
-                sub_X2 = subslvr.pinned_mem_pool.allocate(
-                    shape=self.X2_shape, dtype=self.X2_dtype)
-                
-                # Copy the X2 value off the GPU onto the CPU
-                subslvr.rime_reduce.X2_gpu_ary.get_async(
-                    ary=sub_X2, stream=subslvr.stream)
-
-                # Synchronise before extracting the X2 value
-                subslvr.stream.synchronize()
-
-                self.X2_cpu += sub_X2
+        # For each executor (thread), request the final X2 result
+        # as a future, sum them together to produce the final X2
+        self.X2_cpu = np.sum([ex.submit(C.__thread_solve_sub_final, self).result() for
+            ex in self.executors]).reshape(self.X2_shape)
 
     def shutdown(self):
         """ Shutdown the solver """
-        with self.context as ctx:
-            for slvr in self.solvers:
-                slvr.shutdown()
+        def __shutdown_func():
+            for i, subslvr in enumerate(self.thread_local.solvers):
+                subslvr.shutdown()
+
+            self.__thread_shutdown()
+
+        for ex in self.executors:
+            ex.submit(__shutdown_func).result()
+
+        self.initialised = False
 
     def get_properties(self):
         # Obtain base solver property dictionary
