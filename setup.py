@@ -96,12 +96,12 @@ setup(name='montblanc',
         'attrdict >= 2.0.0',
         'cffi >= 1.1.2',
         'funcsigs >= 0.4',
+        'futures >= 3.0.3',
         'numpy >= 1.9.2',
         'numexpr >= 2.4',
         'pycuda >= 2015.1.3',
         'pytools >= 2015.1.3',
         'transitions >= 0.2.5',
-        'trollius >= 2.0'
     ],
     package_data={
         'montblanc': ['log/*.json'],
