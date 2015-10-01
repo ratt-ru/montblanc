@@ -19,6 +19,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import copy
+import functools
 import numpy as np
 import types
 
@@ -730,16 +731,26 @@ class CompositeBiroSolver(BaseSolver):
 
             self.initialised = True
 
+    @staticmethod
+    def __rm_future_cb(f, Q):
+        Q.remove(f)
+
     def solve(self):
         """ Solve the RIME """
         if not self.initialised:
             self.initialise()
 
+        # For easier typing
         C = CompositeBiroSolver
+        # Is this the first iteration of this executor?
         first = [True for ex in self.executors]
+        # Queue of futures for each executor
         future_Q = [[] for ex in self.executors]
+        # Callbacks for removing futures from the above Q,
+        # for each executor
         nr_ex = len(self.executors)
-        rm_fut_cb = [lambda f: future_Q[i].remove(f) for i in range(nr_ex)]
+        rm_fut_cb = [functools.partial(C.__rm_future_cb, Q=future_Q[i])
+            for i in range(nr_ex)]
 
         # Iterate over the RIME space, i.e. slices over the CPU and GPU
         for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
@@ -756,12 +767,12 @@ class CompositeBiroSolver(BaseSolver):
                     f = ex.submit(C.__thread_solve_sub, self,
                         cpu_slice_map, gpu_slice_map, gpu_count, first=first[i])
 
-                    # Add a callback removing the future from the queue
-                    # once it completes                    
-                    f.add_done_callback(rm_fut_cb[i])
-
                     # Add the future to the queue
                     future_Q[i].append(f)
+
+                    # Add a callback removing the future from the appropriate queue
+                    # once it completes                    
+                    f.add_done_callback(rm_fut_cb[i])
 
                     # This section of work has been submitted,
                     # break out of the for loop
