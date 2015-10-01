@@ -736,18 +736,44 @@ class CompositeBiroSolver(BaseSolver):
             self.initialise()
 
         C = CompositeBiroSolver
-        ex_gen = self.__gen_executors()
+        first = [True for ex in self.executors]
+        future_Q = [[] for ex in self.executors]
+        nr_ex = len(self.executors)
+        rm_fut_cb = [lambda f: future_Q[i].remove(f) for i in range(nr_ex)]
 
         # Iterate over the RIME space, i.e. slices over the CPU and GPU
         for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
-            # Get the next executor (thread) to submit work to
-            i, first, ex = ex_gen.next()
+            # Attempt to submit work to an executor
+            submitted = False
 
-            # Submit work to the thread, solve this portion of the RIME
-            # Note that we're not interested in any futures produce by
-            # this executor
-            ex.submit(C.__thread_solve_sub, self,
-                cpu_slice_map, gpu_slice_map, gpu_count, first)
+            while not submitted:
+                for i, ex in enumerate(self.executors):
+                    # Try another executor if there's too much work on this queue
+                    if len(future_Q[i]) > 2:
+                        continue
+
+                    # Submit work to the thread, solve this portion of the RIME
+                    f = ex.submit(C.__thread_solve_sub, self,
+                        cpu_slice_map, gpu_slice_map, gpu_count, first=first[i])
+
+                    # Add a callback removing the future from the queue
+                    # once it completes                    
+                    f.add_done_callback(rm_fut_cb[i])
+
+                    # Add the future to the queue
+                    future_Q[i].append(f)
+
+                    # This section of work has been submitted,
+                    # break out of the for loop
+                    submitted = True
+                    first[i] = False
+                    break
+
+                # OK, all our executors are really busy,
+                # wait for one of their oldest tasks to finish
+                if not submitted:
+                    wait_f = [future_Q[i][0] for i in range(len(future_Q))]
+                    cf.wait(wait_f, return_when=cf.FIRST_COMPLETED)
 
         # For each executor (thread), request the final X2 result
         # as a future, sum them together to produce the final X2
