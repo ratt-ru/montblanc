@@ -100,8 +100,7 @@ class CompositeBiroSolver(BaseSolver):
         if not isinstance(self.dev_ctxs, list):
             self.dev_ctxs = [self.dev_ctxs]
 
-        montblanc.log.info('Using %d device(s), each with %d solver(s)',
-            len(self.dev_ctxs), nsolvers)
+        montblanc.log.info('Using %d solver(s) per device', nsolvers)
 
         # Shorten the type name
         C = CompositeBiroSolver
@@ -127,7 +126,7 @@ class CompositeBiroSolver(BaseSolver):
         changes = ['%s: %s => %s' % (k, props[k], v)
             for k, v in M.iteritems()]
 
-        montblanc.log.info(('Choosing a solver budget of %s '
+        montblanc.log.info(('Selecting a solver memory budget of %s '
             'for %d solvers. The following dimension '
             'reductions have been applied: %s.'),
                 mbu.fmt_bytes(mem), nsolvers, ', '.join(changes))
@@ -480,7 +479,7 @@ class CompositeBiroSolver(BaseSolver):
         Initialise the current thread, by associating
         a CUDA context with it, and pushing the context.
         """
-        montblanc.log.info('Pushing CUDA context in thread %s',
+        montblanc.log.debug('Pushing CUDA context in thread %s',
             threading.current_thread())
         context.push()
         self.thread_local.context = context
@@ -490,7 +489,7 @@ class CompositeBiroSolver(BaseSolver):
         Shutdown the current thread,
         by popping the associated CUDA context
         """
-        montblanc.log.info('Popping CUDA context in thread %s',
+        montblanc.log.debug('Popping CUDA context in thread %s',
             threading.current_thread())
         self.thread_local.context.pop()
 
@@ -500,7 +499,7 @@ class CompositeBiroSolver(BaseSolver):
         information from the CUDA device associated
         with the current thread and context
         """
-        montblanc.log.info('Budgeting in thread %s', threading.current_thread())
+        montblanc.log.debug('Budgeting in thread %s', threading.current_thread())
 
         # Query free memory on this context
         (free_mem,total_mem) = cuda.mem_get_info()
@@ -559,10 +558,8 @@ class CompositeBiroSolver(BaseSolver):
         """
         Create solvers on the thread local data
         """
-        montblanc.log.info('Creating solvers in thread %s',
+        montblanc.log.debug('Creating solvers in thread %s',
             threading.current_thread())
-
-        montblanc.log.info('nsolvers = %d', nsolvers)
 
         # Pre-allocate a 16KB GPU memory pool
         # for each device, this is needed to
@@ -610,7 +607,7 @@ class CompositeBiroSolver(BaseSolver):
         Register arrays and properties on
         the thread local solvers
         """
-        montblanc.log.info('Registering arrays and properties in thread %s',
+        montblanc.log.debug('Registering arrays and properties in thread %s',
             threading.current_thread())
         # Create the arrays on the sub solvers
         for i, subslvr in enumerate(self.thread_local.solvers):
@@ -622,7 +619,6 @@ class CompositeBiroSolver(BaseSolver):
         Solve a portion of the RIME, specified by the cpu_slice_map and
         gpu_slice_map dictionaries.
         """
-        #montblanc.log.info('Solving in thread %s', threading.current_thread())
         tl = self.thread_local
 
         # If this is flagged as the first iteration, reset variables
@@ -695,7 +691,7 @@ class CompositeBiroSolver(BaseSolver):
         Retrieve any final X2 values from the solvers and
         return the total X2 sum for this thread.
         """
-        montblanc.log.info('Retrieve final X2 in thread %s', threading.current_thread())
+        montblanc.log.debug('Retrieve final X2 in thread %s', threading.current_thread())
         tl = self.thread_local
 
         # Retrieve final X2 values
