@@ -459,9 +459,15 @@ class BaseSolver(Solver):
             with self.context as ctx:
                 gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
 
-                # Zero the array, if it has non-zero length
+                # If the array length is non-zero initialise it
                 if np.product(shape) > 0:
-                    gpu_ary.set(default_ary)
+                    # If available, use CPU defaults
+                    # to initialise the array
+                    if create_cpu_ary:
+                        gpu_ary.set(default_ary)
+                    # Otherwise just zero it 
+                    else:
+                        gpu_ary.fill(0)
                 
                 setattr(self, gpu_name, gpu_ary)
 
