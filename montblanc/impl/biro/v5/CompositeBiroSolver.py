@@ -793,8 +793,14 @@ class CompositeBiroSolver(BaseSolver):
                 # OK, all our executors are really busy,
                 # wait for one of their oldest tasks to finish
                 if not submitted:
-                    wait_f = [future_Q[i][0] for i in range(len(future_Q))]
-                    cf.wait(wait_f, return_when=cf.FIRST_COMPLETED)
+                    try:
+                        wait_f = [future_Q[i][0] for i in range(len(future_Q))]
+                        cf.wait(wait_f, return_when=cf.FIRST_COMPLETED)
+                    # This case happens when future_Q[i][0] is attempted,
+                    # but the future callback has removed it from the queue
+                    # Have another go at the executors
+                    except IndexError as e:
+                        pass
 
         # For each executor (thread), request the final X2 result
         # as a future, sum them together to produce the final X2
