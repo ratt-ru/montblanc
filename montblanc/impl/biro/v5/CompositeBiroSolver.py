@@ -445,6 +445,13 @@ class CompositeBiroSolver(BaseSolver):
             if two_ant_case and na_idx > 0:
                 gpu_idx[na_idx] = 0
 
+            # For the one baseline, two antenna case,
+            # hard code the antenna indices on the GPU
+            # to 0 and 1
+            if two_ant_case and r.name == 'ant_pairs':
+                cpu_idx = [all_slice for s in r.shape]
+                cpu_ary = np.array([0,1]).reshape(subslvr.ant_pairs_shape)
+
             self.__transfer_slice(r, subslvr,
                 cpu_ary, cpu_idx,
                 gpu_ary, tuple(gpu_idx))
