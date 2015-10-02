@@ -740,6 +740,9 @@ class CompositeBiroSolver(BaseSolver):
 
     @staticmethod
     def __rm_future_cb(f, Q):
+        # There's no actual result, but asking for it
+        # will throw any exceptions from the future execution
+        f.result()
         Q.remove(f)
 
     def solve(self):
