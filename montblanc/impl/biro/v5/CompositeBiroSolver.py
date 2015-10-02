@@ -632,7 +632,7 @@ class CompositeBiroSolver(BaseSolver):
         # If this is flagged as the first iteration, reset variables
         if first is True:
             # There has been no previous iteration on this solver
-            tl.prev_iteration = [False for s in range(nsolvers)]
+            tl.prev_iteration = [False for s in range(tl.nsolvers)]
             # Initialise the X2 sum to zero
             tl.X2 = self.ft(0.0)
             # Initialise the subsolver generator
