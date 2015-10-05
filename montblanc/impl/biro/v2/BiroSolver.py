@@ -74,6 +74,7 @@ P = [
     prop_dict('X2', 'ft', 0.0),
     prop_dict('beam_width', 'ft', 65),
     prop_dict('beam_clip', 'ft', 1.0881),
+    prop_dict('arcs2rad','ft',np.pi/648000), # conversion from arcsec to radiants
 ]
 
 def rand_uvw(slvr, ary):
@@ -107,7 +108,7 @@ def rand_sersic_shape(slvr, ary):
     # non-random data here, as per Marzia's original code
     e1[:] = np.zeros(shape=e1.shape)
     e2[:] = np.zeros(shape=e2.shape)
-    eS[:] = np.ones(shape=eS.shape)
+    eS[:] = np.ones(shape=eS.shape)*arcs2rad   # 1 arcsec
 
     return ary
 
