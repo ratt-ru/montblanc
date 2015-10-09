@@ -24,6 +24,7 @@ import string
 from pycuda.compiler import SourceModule
 
 import montblanc
+import montblanc.util as mbu
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
@@ -230,9 +231,9 @@ class RimeEK(Node):
         ants_per_block = D['BLOCKDIMY'] if slvr.na > D['BLOCKDIMY'] else slvr.na
         times_per_block = D['BLOCKDIMZ'] if slvr.ntime > D['BLOCKDIMZ'] else slvr.ntime
 
-        chan_blocks = self.blocks_required(slvr.nchan, chans_per_block)
-        ant_blocks = self.blocks_required(slvr.na, ants_per_block)
-        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
+        chan_blocks = mbu.blocks_required(slvr.nchan, chans_per_block)
+        ant_blocks = mbu.blocks_required(slvr.na, ants_per_block)
+        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
 
         return {
             'block' : (chans_per_block, ants_per_block, times_per_block),

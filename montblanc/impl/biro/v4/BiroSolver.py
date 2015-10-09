@@ -19,8 +19,10 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
+import pycuda.driver as cuda
 
 import montblanc
+import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
 from montblanc.config import BiroSolverConfigurationOptions as Options
@@ -200,11 +202,12 @@ A = [
     ary_dict('vis', ('ntime','nbl','nchan',4), 'ct', cpu=False),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
 
-    ary_dict('X2', (1, ), 'ft'),
+    ary_dict('X2', (1, ), 'ft', cpu=False, gpu=False),
 ]
 
 class BiroSolver(BaseSolver):
-    """ Shared Data implementation for BIRO """
+    """ BIRO Solver Implementation """
+
     def __init__(self, slvr_cfg):
         """
         BiroSolver Constructor
@@ -227,15 +230,28 @@ class BiroSolver(BaseSolver):
         self.register_properties(P)
         self.register_arrays(A)
 
+        # Create a page-locked ndarray to hold constant GPU data
+        with self.context:
+            self.const_data_buffer = cuda.pagelocked_empty(
+                shape=mbu.rime_const_data_size(), dtype=np.int8)
+
+        # Now create a cdata object wrapping the page-locked
+        # ndarray and cast it to the rime_const_data c type.
+        self.rime_const_data_cpu = mbu.wrap_rime_const_data(
+            self.const_data_buffer)
+
+        # Initialise it with the current solver (self)
+        mbu.init_rime_const_data(self, self.rime_const_data_cpu)
+
     def get_properties(self):
         # Obtain base solver property dictionary
         # and add the beam cube dimensions to it
         D = super(BiroSolver, self).get_properties()
 
         D.update({
-            'beam_lw' : self.beam_lw,
-            'beam_mh' : self.beam_mh,
-            'beam_nud' : self.beam_nud
+            Options.E_BEAM_WIDTH : self.beam_lw,
+            Options.E_BEAM_HEIGHT : self.beam_mh,
+            Options.E_BEAM_DEPTH : self.beam_nud
         })
 
         return D
@@ -258,11 +274,11 @@ class BiroSolver(BaseSolver):
         return np.tile(self.get_default_base_ant_pairs(), self.ntime) \
             .reshape(2, self.ntime, self.nbl)
 
-    def get_ap_idx(self, src=False, chan=False):
+    def get_ap_idx(self, default_ap=None, src=False, chan=False):
         """
         This method produces an index
         which arranges per antenna values into a
-        per baseline configuration, using the default
+        per baseline configuration, using the supplied (default_ap)
         per timestep and baseline antenna pair configuration.
         Thus, indexing an array with shape (na) will produce
         a view of the values in this array with shape (2, nbl).
@@ -286,15 +302,18 @@ class BiroSolver(BaseSolver):
         >>> assert u_bl.shape == (2, ntime, nbl)
         """
 
+        if default_ap is None:
+            default_ap = self.get_default_base_ant_pairs()
+
         slvr = self
 
         newdim = lambda d: [np.newaxis for n in range(d)]
 
-        sed = (1 if src else 0)          # Extra source dimension
-        ced = (1 if chan else 0)       # Extra channel dimension
-        ned = sed + ced                 # Nr of extra dimensions
-        all = slice(None, None, 1)   # all slice
-        idx = []                                # Index we're returning
+        sed = (1 if src else 0)     # Extra source dimension
+        ced = (1 if chan else 0)    # Extra channel dimension
+        ned = sed + ced             # Nr of extra dimensions
+        all = slice(None, None, 1)  # all slice
+        idx = []                    # Index we're returning
 
         # Create the source index, [np.newaxis,:,np.newaxis,np.newaxis] + [...]
         if src is True:
@@ -309,7 +328,7 @@ class BiroSolver(BaseSolver):
         # Create the antenna pair index, [:] + [...]  + [np.newaxis,:] + [...]
         ap_slice = tuple([all] + newdim(sed) +
             [np.newaxis, all] + newdim(ced))
-        idx.append(self.get_default_base_ant_pairs()[ap_slice])
+        idx.append(default_ap[ap_slice])
 
         # Create the channel index,
         # Create the antenna pair index, [np.newaxis] + [...]  + [np.newaxis,np.newaxis] + [:]

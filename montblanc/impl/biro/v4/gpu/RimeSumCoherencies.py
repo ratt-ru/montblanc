@@ -21,10 +21,12 @@
 import numpy as np
 import string
 
+import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 
 import montblanc
+import montblanc.util as mbu
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
@@ -80,6 +82,14 @@ public:
     typedef double3 UVWType;
 };
 
+// Here, the definition of the
+// rime_const_data struct
+// is inserted into the template
+// An area of constant memory
+// containing an instance of this
+// structure is declared. 
+${rime_const_data_struct}
+__constant__ rime_const_data C;
 
 template <
     typename T,
@@ -104,7 +114,7 @@ void rime_sum_coherencies_impl(
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
-    if(TIME >= NTIME || BL >= NBL || POLCHAN >= NPOLCHAN)
+    if(TIME >= C.ntime || BL >= C.nbl || POLCHAN >= C.npolchan)
         return;
 
     __shared__ struct {
@@ -158,7 +168,7 @@ void rime_sum_coherencies_impl(
     typename Tr::ct polsum = Po::make_ct(0.0, 0.0);
 
     // Point Sources
-    for(int SRC=0;SRC<NPSRC;++SRC)
+    for(int SRC=0; SRC< C.npsrc; ++SRC)
     {
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
@@ -174,16 +184,16 @@ void rime_sum_coherencies_impl(
     }
 
     // Gaussian sources
-    for(int SRC=NPSRC;SRC<NPSRC+NGSRC;++SRC)
+    for(int SRC = C.npsrc; SRC < C.npsrc + C.ngsrc; ++SRC)
     {
         // gaussian shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC-NPSRC;  shared.el = gauss_shape[i];
-            i += NGSRC;     shared.em = gauss_shape[i];
-            i += NGSRC;     shared.eR = gauss_shape[i];
+            i = SRC - C.npsrc;  shared.el = gauss_shape[i];
+            i += C.ngsrc;       shared.em = gauss_shape[i];
+            i += C.ngsrc;       shared.eR = gauss_shape[i];
         }
 
         __syncthreads();
@@ -219,16 +229,16 @@ void rime_sum_coherencies_impl(
     }
 
     // Sersic Sources
-    for(int SRC=NPSRC+NGSRC;SRC<NPSRC+NGSRC+NSSRC;++SRC)
+    for(int SRC = C.npsrc + C.ngsrc; SRC < C.npsrc + C.ngsrc + C.nssrc; ++SRC)
     {
         // sersic shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC-NPSRC-NGSRC;  shared.e1 = sersic_shape[i];
-            i += NSSRC;           shared.e2 = sersic_shape[i];
-            i += NSSRC;           shared.sersic_scale = sersic_shape[i];
+            i = SRC - C.npsrc - C.ngsrc; shared.e1 = sersic_shape[i];
+            i += C.nssrc;                shared.e2 = sersic_shape[i];
+            i += C.nssrc;                shared.sersic_scale = sersic_shape[i];
         }
 
         __syncthreads();
@@ -295,7 +305,7 @@ void rime_sum_coherencies_impl(
     // into the first polarisation.
     typename Tr::ct other = cub::ShuffleIndex(delta, cub::LaneId() + 2);
 
-    // And polarisations 2 and 3 to 0 and 1
+    // Add polarisations 2 and 3 to 0 and 1
     if((POLCHAN & 0x3) < 2)
     {
         delta.x += other.x;
@@ -304,9 +314,8 @@ void rime_sum_coherencies_impl(
 
     other = cub::ShuffleIndex(delta, cub::LaneId() + 1);
 
-    // And polarisation 1 to 0
+    // If this is the polarisation 0, add polarisation 1
     // and write out this chi squared sum term
-    // if this is the first polarisation
     if((POLCHAN & 0x3) == 0) {
         delta.x += other.x;
         delta.y += other.y;
@@ -363,17 +372,15 @@ class RimeSumCoherencies(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
-        self.polchans = 4*slvr.nchan
+        self.npolchans = 4*slvr.nchan
 
         D = slvr.get_properties()
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
+        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
 
-        # Update kernel parameters to cater for radically
-        # smaller problem sizes. Caters for a subtle bug
-        # with Kepler shuffles and warp sizes < 32
-        if self.polchans < D['BLOCKDIMX']: D['BLOCKDIMX'] = self.polchans
-        if slvr.nbl < D['BLOCKDIMY']: D['BLOCKDIMY'] = slvr.nbl
-        if slvr.ntime < D['BLOCKDIMZ']: D['BLOCKDIMZ'] = slvr.ntime
+        D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
+            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+            self.npolchans, slvr.nbl, slvr.ntime)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
             if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -388,6 +395,7 @@ class RimeSumCoherencies(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
+        self.rime_const_data_gpu = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
         self.launch_params = self.get_launch_params(slvr, D)
 
@@ -402,9 +410,9 @@ class RimeSumCoherencies(Node):
         bl_per_block = D['BLOCKDIMY']
         times_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = self.blocks_required(self.polchans, polchans_per_block)
-        bl_blocks = self.blocks_required(slvr.nbl, bl_per_block)
-        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
+        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
+        bl_blocks = mbu.blocks_required(slvr.nbl, bl_per_block)
+        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
 
         return {
             'block' : (polchans_per_block, bl_per_block, times_per_block),
@@ -413,6 +421,16 @@ class RimeSumCoherencies(Node):
 
     def execute(self, solver, stream=None):
         slvr = solver
+
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer)
 
         # The gaussian shape array can be empty if
         # no gaussian sources were specified.
@@ -427,7 +445,7 @@ class RimeSumCoherencies(Node):
             slvr.jones_gpu, slvr.weight_vector_gpu,
             slvr.bayes_data_gpu, slvr.G_term_gpu,
             slvr.vis_gpu, slvr.chi_sqrd_result_gpu,
-            **self.launch_params)
+            stream=stream, **self.launch_params)
 
         # Call the pycuda reduction kernel.
         # Divide by the single sigma squared value if a weight vector

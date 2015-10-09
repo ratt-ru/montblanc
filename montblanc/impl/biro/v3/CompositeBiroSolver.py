@@ -193,7 +193,7 @@ class CompositeBiroSolver(BaseSolver):
 
         for r in self.arrays.itervalues():
             # Is there anything to transfer for this array?
-            if not r.has_cpu_ary:
+            if not r.cpu:
                 continue
             # Check for a time dimension. If the array has it,
             # we'll always be transferring a segment

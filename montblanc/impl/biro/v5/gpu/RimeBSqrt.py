@@ -18,24 +18,37 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import montblanc.impl.biro.v2.gpu.RimeEK
+import pycuda.driver as cuda
 
-class RimeEK(montblanc.impl.biro.v2.gpu.RimeEK.RimeEK):
+import montblanc.impl.biro.v4.gpu.RimeBSqrt
+
+class RimeBSqrt(montblanc.impl.biro.v4.gpu.RimeBSqrt.RimeBSqrt):
     def __init__(self):
-        super(RimeEK, self).__init__()
+        super(RimeBSqrt, self).__init__()
     def initialise(self, solver, stream=None):
-        super(RimeEK, self).initialise(solver,stream)
+        super(RimeBSqrt, self).initialise(solver,stream)
     def shutdown(self, solver, stream=None):
-        super(RimeEK, self).shutdown(solver,stream)
+        super(RimeBSqrt, self).shutdown(solver,stream)
     def pre_execution(self, solver, stream=None):
-        super(RimeEK, self).pre_execution(solver,stream)
+        super(RimeBSqrt, self).pre_execution(solver,stream)
+
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                solver.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                solver.const_data_buffer)
+
     def post_execution(self, solver, stream=None):
-        super(RimeEK, self).pre_execution(solver,stream)
+        super(RimeBSqrt, self).pre_execution(solver,stream)
 
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
-            slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_scalar_gpu,
-            slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
-            stream=stream, **self.get_kernel_params(slvr))
+        self.kernel(slvr.stokes_gpu, slvr.alpha_gpu,
+            slvr.frequency_gpu, slvr.B_sqrt_gpu,
+            slvr.ref_freq,
+            stream=stream, **self.launch_params)

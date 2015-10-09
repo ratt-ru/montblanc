@@ -25,6 +25,7 @@ from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 
 import montblanc
+import montblanc.util as mbu
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
@@ -191,7 +192,7 @@ class RimeMultiply(Node):
 
         njones = slvr.nbl*slvr.nchan*slvr.ntime*slvr.nsrc
         jones_per_block = D['BLOCKDIMX'] if njones > D['BLOCKDIMX'] else njones
-        jones_blocks = self.blocks_required(njones,jones_per_block)
+        jones_blocks = mbu.blocks_required(njones,jones_per_block)
 
         return {
             'block'  : (jones_per_block,1,1), \

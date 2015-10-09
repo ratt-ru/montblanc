@@ -18,6 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import os
+
 import numpy as np
 
 import pycuda.driver as cuda
@@ -28,6 +30,8 @@ import montblanc.util as mbu
 from montblanc.config import (BiroSolverConfigurationOptions as Options)
 
 from montblanc.pipeline import Pipeline
+
+__MB_DEVICE_ENV_VAR = 'MONTBLANC_CUDA_DEVICES'
 
 # PyCUDA device and context variables
 __devices = None
@@ -46,12 +50,58 @@ def get_contexts_per_device():
             raise RuntimeError('Montblanc was unable '
                 'to initialise CUDA: %s' % repr(e))
 
+        nr_devices = cuda.Device.count()
+
+        if nr_devices == 0:
+            raise RuntimeError('Montblanc found no CUDA devices!')
+
+        device_str = os.getenv(__MB_DEVICE_ENV_VAR, '')
+        device_str_list = device_str.split()
+
+        # If some valid device string list exists,
+        # iterate through it, marking valid devices
+        if len(device_str_list) > 0:
+            valid_devices = [False for d in range(nr_devices)]
+
+            for i, s in enumerate(device_str_list):
+                try:
+                    device_nr = int(s)
+                    valid_devices[device_nr] = True
+                except (ValueError, IndexError) as e:
+                    montblanc.log.warn(('The environment variable '
+                        '"%s=%s", contains an invalid device number '
+                        '"%s" at position %d.') % (__MB_DEVICE_ENV_VAR,
+                            device_str, s, i))
+
+            # Are there any valid devices?
+            if not np.any(valid_devices):
+                montblanc.log.warn(('The environment variable '
+                    '"%s=%s", contains no valid device number''s. '
+                    'All devices will be selected.') % (
+                        __MB_DEVICE_ENV_VAR, device_str))
+
+                valid_devices = [True for d in range(nr_devices)]
+    
+        # Otherwise, assume every device is valid
+        else:
+            valid_devices = [True for d in range(nr_devices)]
+
+        # Create the valid devices
         try:
-            __devices = [cuda.Device(d) for d in range(cuda.Device.count())]
+            __devices = [cuda.Device(d)
+                for i, d in enumerate(range(nr_devices))
+                if valid_devices[i]]
         except:
             raise RuntimeError('Montblanc was unable '
                 'to create PyCUDA device objects: %s' % repr(e))
 
+        # Log which devices will be used
+        montblanc.log.info('Montblanc will use the following devices:')
+
+        for i, d in enumerate(__devices):
+            montblanc.log.info('Device #%d: %s', i, d.name())
+
+        # Create contexts for each device
         try:
             __contexts = [d.make_context() for d in __devices]
         except:
@@ -87,8 +137,8 @@ def get_base_solver(slvr_cfg):
     """ Get a basic solver object """
 
     # Get the default cuda context if none is provided
-    if slvr_cfg.get('context', None) is None:
-        slvr_cfg['context']=get_default_context()
+    if slvr_cfg.get(Options.CONTEXT, None) is None:
+        slvr_cfg[Options.CONTEXT]=get_default_context()
 
     from montblanc.BaseSolver import BaseSolver
 
@@ -113,7 +163,7 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
     elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
         from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
     else:
-        raise Exception, 'Incorrect version %s' % version
+        raise ValueError('Incorrect version %s' % version)
 
     with MeasurementSetLoader(slvr_cfg.get('msfile')) as loader:
         ntime, na, nchan = loader.get_dims()
@@ -127,15 +177,15 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
 def rime_solver(slvr_cfg):
     """ Factory function that produces a BIRO solver """
 
+    # Set the default cuda context if none is provided
+    if slvr_cfg.get(Options.CONTEXT, None) is None:
+        slvr_cfg[Options.CONTEXT] = get_default_context()
+
     # Verify the configuration
     slvr_cfg.verify()
 
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
     version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)
-
-    # Get the default cuda context if none is provided
-    if slvr_cfg.get('context', None) is None:
-        slvr_cfg['context'] = get_default_context()
 
     # Figure out which version of BIRO solver we're dealing with.
     if version == Options.VERSION_TWO:
@@ -148,8 +198,9 @@ def rime_solver(slvr_cfg):
     elif version == Options.VERSION_FIVE:
         from montblanc.impl.biro.v5.CompositeBiroSolver \
         import CompositeBiroSolver as BiroSolver
+        slvr_cfg[Options.CONTEXT] = __contexts
     else:
-        raise Exception, 'Invalid version %s' % version
+        raise ValueError('Invalid version %s' % version)
 
     if data_source == Options.DATA_SOURCE_MS:
         return create_rime_solver_from_ms(BiroSolver, slvr_cfg)
@@ -159,4 +210,4 @@ def rime_solver(slvr_cfg):
     elif data_source == Options.DATA_SOURCE_DEFAULTS:
         return BiroSolver(slvr_cfg)
     else:
-        raise Exception, 'Invalid type %s' % sd_type
+        raise ValueError('Invalid data source %s' % data_source)

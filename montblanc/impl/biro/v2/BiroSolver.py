@@ -199,11 +199,11 @@ class BiroSolver(BaseSolver):
         return np.tile(self.get_default_base_ant_pairs(), self.ntime) \
             .reshape(2, self.ntime, self.nbl)
 
-    def get_ap_idx(self, src=False, chan=False):
+    def get_ap_idx(self, default_ap=None, src=False, chan=False):
         """
         This method produces an index
         which arranges per antenna values into a
-        per baseline configuration, using the default
+        per baseline configuration, using the supplied (default_ap)
         per timestep and baseline antenna pair configuration.
         Thus, indexing an array with shape (na) will produce
         a view of the values in this array with shape (2, nbl).
@@ -227,15 +227,18 @@ class BiroSolver(BaseSolver):
         >>> assert u_bl.shape == (2, ntime, nbl)
         """
 
+        if default_ap is None:
+            default_ap = self.get_default_base_ant_pairs()
+
         slvr = self
 
         newdim = lambda d: [np.newaxis for n in range(d)]
 
-        sed = (1 if src else 0)          # Extra source dimension
-        ced = (1 if chan else 0)       # Extra channel dimension
-        ned = sed + ced                 # Nr of extra dimensions
+        sed = (1 if src else 0)      # Extra source dimension
+        ced = (1 if chan else 0)     # Extra channel dimension
+        ned = sed + ced              # Nr of extra dimensions
         all = slice(None, None, 1)   # all slice
-        idx = []                                # Index we're returning
+        idx = []                     # Index we're returning
 
         # Create the time index, [np.newaxis,:,np.newaxis] + [...]
         time_slice = tuple([np.newaxis, all, np.newaxis] + newdim(ned))
@@ -243,7 +246,7 @@ class BiroSolver(BaseSolver):
 
         # Create the antenna pair index, [:, np.newaxis, :] + [...]
         ap_slice = tuple([all, np.newaxis, all] + newdim(ned))
-        idx.append(self.get_default_base_ant_pairs()[ap_slice])
+        idx.append(default_ap[ap_slice])
 
         # Create the source index, [np.newaxis,np.newaxis,np.newaxis,:] + [...]
         if src is True:

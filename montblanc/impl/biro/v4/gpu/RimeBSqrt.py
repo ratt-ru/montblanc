@@ -21,9 +21,11 @@
 import numpy as np
 import string
 
+import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 
 import montblanc
+import montblanc.util as mbu
 from montblanc.node import Node
 
 FLOAT_PARAMS = {
@@ -59,6 +61,15 @@ KERNEL_TEMPLATE = string.Template("""
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
 
+// Here, the definition of the
+// rime_const_data struct
+// is inserted into the template
+// An area of constant memory
+// containing an instance of this
+// structure is declared. 
+${rime_const_data_struct}
+__constant__ rime_const_data C;
+
 template <
     typename T,
     typename Tr=montblanc::kernel_traits<T>,
@@ -76,7 +87,7 @@ void rime_jones_B_sqrt_impl(
     int SRC = blockIdx.z*blockDim.z + threadIdx.z;
     #define POL (threadIdx.x & 0x3)
 
-    if(SRC >= NSRC || TIME >= NTIME || POLCHAN >= NPOLCHAN)
+    if(SRC >= C.nsrc || TIME >= C.ntime || POLCHAN >= C.npolchan)
         return;
 
     __shared__ T freq[BLOCKDIMX];
@@ -138,19 +149,17 @@ class RimeBSqrt(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
-        self.polchans = 4*slvr.nchan
+        self.npolchans = 4*slvr.nchan
 
         # Get a property dictionary off the solver
         D = slvr.get_properties()
         # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
+        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
 
-        # Update kernel parameters to cater for radically
-        # smaller problem sizes. Caters for a subtle bug
-        # with Kepler shuffles and warp sizes < 32
-        if self.polchans < D['BLOCKDIMX']: D['BLOCKDIMX'] = self.polchans
-        if slvr.ntime < D['BLOCKDIMY']: D['BLOCKDIMY'] = slvr.ntime
-        if slvr.nsrc < D['BLOCKDIMZ']: D['BLOCKDIMZ'] = slvr.nsrc
+        D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
+            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+            self.npolchans, slvr.ntime, slvr.nsrc)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -165,6 +174,7 @@ class RimeBSqrt(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
+        self.rime_const_data_gpu = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
         self.launch_params = self.get_launch_params(slvr, D)
 
@@ -179,9 +189,9 @@ class RimeBSqrt(Node):
         times_per_block = D['BLOCKDIMY']
         srcs_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = self.blocks_required(self.polchans, polchans_per_block)
-        time_blocks = self.blocks_required(slvr.ntime, times_per_block)
-        src_blocks = self.blocks_required(slvr.nsrc, srcs_per_block)
+        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
+        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
+        src_blocks = mbu.blocks_required(slvr.nsrc, srcs_per_block)
 
         return {
             'block' : (polchans_per_block, times_per_block, srcs_per_block),
@@ -190,6 +200,16 @@ class RimeBSqrt(Node):
 
     def execute(self, solver, stream=None):
         slvr = solver
+
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                slvr.const_data_buffer)
 
         self.kernel(slvr.stokes_gpu, slvr.alpha_gpu,
             slvr.frequency_gpu, slvr.B_sqrt_gpu,

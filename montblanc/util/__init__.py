@@ -20,11 +20,28 @@
 
 import numpy as np
 import math
+import re
 
 import montblanc
 
 from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 from sky_model_parser import parse_sky_model
+
+from const_data import (
+    rime_const_data_members,
+    rime_const_data_struct,
+    rime_const_data_size,
+    wrap_rime_const_data,
+    init_rime_const_data)
+
+from montblanc.src_types import (
+    source_types,
+    source_nr_vars,
+    default_sources,
+    sources_to_nr_vars,
+    source_range,
+    source_range_tuple,
+    source_range_slices)
 
 def nr_of_baselines(na, auto_correlations=False):
     """
@@ -45,6 +62,13 @@ def nr_of_antenna(nbl, auto_correlations=False):
     """
     t = 1 if auto_correlations is False else -1
     return int(t + math.sqrt(1 + 8*nbl)) // 2
+
+def blocks_required(N, threads_per_block):
+    """
+    Returns the number of blocks required, given
+    N, the total number of threads, and threads_per_block
+    """
+    return (N + threads_per_block - 1) / threads_per_block
 
 def cpu_name(name):
     """ Constructs a name for the CPU version of the array """
@@ -188,6 +212,13 @@ def dict_array_bytes_required(arrays, props):
     return np.sum([dict_array_bytes(ary, props)
         for ary in arrays])
 
+__DIM_REDUCTION_RE = re.compile(    # Capture Groups and Subgroups
+    "^\s*(?P<name>[A-Za-z0-9_]*?)"  # 1.   Dimension name
+    "(?:\s*?=\s*?"                  # 2.   White spaces and =  
+        "(?P<value>[0-9]*?)"        # 2.1  A value
+        "(?P<percent>\%?)"          # 2.2  Possibly followed by a percentage
+    ")?\s*?$")                      #      Capture group 2 possibly occurs
+
 def viable_dim_config(bytes_available, arrays, props,
         dim_ord, nsolvers=1):
     """
@@ -212,9 +243,6 @@ def viable_dim_config(bytes_available, arrays, props,
         Multple dimensions can be reduced simultaneously using
         the following syntax 'nbl&na'. This is mostly useful for
         the baseline-antenna equivalence.
-
-    Keyword Arguments
-    ----------------------------
     nsolvers : int
         Number of solvers to budget for. Defaults to one.
 
@@ -231,6 +259,14 @@ def viable_dim_config(bytes_available, arrays, props,
     If this is not possible, it will first set ntime=1, and then try fit an
     1 x nbl x nchan problem into the budget, then a 1 x 1 x nchan
     problem.
+
+    One can specify reductions for specific dimensions.
+    For e.g. ['ntime=20', 'nbl=1&na=2', 'nchan=50%']
+
+    will reduce ntime to 20, but no lower. nbl=1&na=2 sets
+    both nbl and na to 1 and 2 in the same operation respectively.
+    nchan=50\% will continuously halve the nchan dimension
+    until it reaches a value of 1.
     """
 
     if not isinstance(dim_ord, list):
@@ -241,8 +277,9 @@ def viable_dim_config(bytes_available, arrays, props,
         bytes_available = 0
 
     modified_dims = {}
+    P = props.copy()
 
-    bytes_used = dict_array_bytes_required(arrays, props)
+    bytes_used = dict_array_bytes_required(arrays, P)*nsolvers
 
     # While more bytes are used than are available, set
     # dimensions to one in the order specified by the
@@ -257,15 +294,45 @@ def viable_dim_config(bytes_available, arrays, props,
             return False, modified_dims
 
         # Can't fit everything into memory,
-        # Set dimensions to 1 and re-evaluate
+        # Lower dimensions and re-evaluate
         for dim in dims:
-            modified_dims[dim] = 1
-            props[dim] = 1
+            match = re.match(__DIM_REDUCTION_RE, dim)
 
-        bytes_used = dict_array_bytes_required(arrays, props)
+            if not match:
+                raise ValueError((
+                    "%s is an invalid dimension reduction string "
+                    "Valid strings are for e.g. "
+                    "'ntime', 'ntime=20' or 'ntime=20%'") % dim)
+
+            dim_name = match.group('name')
+            dim_value = match.group('value')
+            dim_percent = match.group('percent')
+            dim_value = 1 if dim_value is None else int(dim_value)
+
+            # Attempt reduction by a percentage
+            if dim_percent == '%':
+                dim_value = int(P[dim_name] * int(dim_value) / 100.0)
+                if dim_value < 1:
+                    # This can't be reduced any further
+                    dim_value = 1
+                else:
+                    # Allows another attempt at reduction
+                    # by percentage on this dimension
+                    dim_ord.insert(0, dim)
+
+            # Apply the dimension reduction
+            if P[dim_name] > dim_value:
+                modified_dims[dim_name] = dim_value
+                P[dim_name] = dim_value
+            else:
+                montblanc.log.warn(('Tried to reduce dimension %s '
+                    ' of size %d to larger value %d. '
+                    ' This reduction has been ignored.') % (
+                        dim_name, P[dim_name], dim_value) )
+
+        bytes_used = dict_array_bytes_required(arrays, P)*nsolvers
 
     return True, modified_dims
-
 
 def viable_timesteps(bytes_available, arrays, props):
     """
@@ -394,79 +461,46 @@ def array_convert_function(sshape_one, sshape_two, variables):
 
     return f
 
-from montblanc.src_types import SOURCE_VAR_TYPES, POINT_TYPE
-
-def default_sources(**kwargs):
+def redistribute_threads(blockdimx, blockdimy, blockdimz,
+    dimx, dimy, dimz):
     """
-    Returns a dictionary mapping source types
-    to number of sources. If the number of sources
-    for the source type is supplied in the kwargs
-    these will be placed in the dictionary.
-
-    e.g. if we have 'point', 'gaussian' and 'sersic'
-    source types, then
-
-    default_sources(point=10, gaussian=20)
-
-    will return a dict {'point': 10, 'gaussian': 20, 'sersic': 0}
+    Redistribute threads from the Z dimension towards the X dimension.
+    Also clamp number of threads to the problem dimension size,
+    if necessary
     """
-    S = {}
-    total = 0
-
-    invalid_types = [t for t in kwargs.keys() if t not in SOURCE_VAR_TYPES]
-
-    for t in invalid_types:
-        montblanc.log.warning('Source type %s is not yet '
-            'implemented in montblanc. '
-            'Valid source types are %s' % (t, SOURCE_VAR_TYPES.keys()))
-
-    # Zero all source types
-    for k, v in SOURCE_VAR_TYPES.iteritems():
-        # Try get the number of sources for this source
-        # from the kwargs
-        value = kwargs.get(k, 0)
-
-        try:
-            value = int(value)
-        except ValueError:
-            raise TypeError(('Supplied value %s '
-                'for source %s cannot be '
-                'converted to an integer') % \
-                    (value, k))    
-
-        total += value
-        S[k] = value
-
-    # Add a point source if no others exist
-    if total == 0:
-        S[POINT_TYPE] = 1
-
-    return S
-
-def sources_to_nr_vars(sources):
-    """
-    Converts a source type to number of sources mapping into
-    a source numbering variable to number of sources mapping.
-
-    If, for example, we have 'point', 'gaussian' and 'sersic'
-    source types, then passing the following dict as an argument
     
-    sources_to_nr_vars({'point':10, 'gaussian': 20})
-    
-    will return a new dict
+    # Shift threads from the z dimension
+    # into the y dimension
+    while blockdimz > dimz:
+        tmp = blockdimz // 2
+        if tmp < dimz:
+            break
 
-    {'npsrc': 10, 'ngsrc': 20, 'nssrc': 0 }
-    """
+        blockdimy *= 2
+        blockdimz = tmp
 
-    sources = default_sources(**sources)
+    # Shift threads from the y dimension
+    # into the x dimension
+    while blockdimy > dimy:
+        tmp = blockdimy // 2
+        if tmp < dimy:
+            break
 
-    try:
-        return { SOURCE_VAR_TYPES[name]: nr for name, nr in sources.iteritems() }
-    except KeyError as e:
-        raise KeyError((
-            'No source type ''%s'' is '
-            'registered. Valid source types '
-            'are %s') % (e, SOURCE_VAR_TYPES.keys()))
+        blockdimx *= 2
+        blockdimy = tmp
+
+    # Clamp the block dimensions
+    # if necessary
+    if dimx < blockdimx:
+        blockdimx = dimx
+
+    if dimy < blockdimy:
+        blockdimy = dimy
+
+    if dimz < blockdimz:
+        blockdimz = dimz
+
+    return blockdimx, blockdimy, blockdimz
 
 import pycuda.driver as cuda
 

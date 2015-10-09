@@ -29,6 +29,7 @@ import numpy as np
 import types
 
 from weakref import WeakKeyDictionary
+from attrdict import AttrDict
 
 import pycuda
 import pycuda.driver as cuda
@@ -39,25 +40,6 @@ import montblanc.factory
 import montblanc.util as mbu
 
 from montblanc.config import (BiroSolverConfigurationOptions as Options)
-
-class ArrayRecord(object):
-    """ Records information about an array """
-    def __init__(self, name, sshape, shape, dtype, registrant, has_cpu_ary, has_gpu_ary):
-        self.name = name
-        self.sshape = sshape
-        self.shape = shape
-        self.dtype = dtype
-        self.registrant = registrant
-        self.has_cpu_ary = has_cpu_ary
-        self.has_gpu_ary = has_gpu_ary
-
-class PropertyRecord(object):
-    """ Records information about a property """
-    def __init__(self, name, dtype, default, registrant):
-        self.name = name
-        self.dtype = dtype
-        self.default = default
-        self.registrant = registrant
 
 class PipelineDescriptor(object):
     """ Descriptor class for pipelines """
@@ -186,8 +168,11 @@ class BaseSolver(Solver):
         # - gaussian sources
         # - sersic sources
         self.na = slvr_cfg[Options.NA]
-        self.nbl = nbl = mbu.nr_of_baselines(self.na,autocor)
+        self.nbl = nbl = slvr_cfg.get(Options.NBL,
+            mbu.nr_of_baselines(self.na,autocor))
         self.nchan = slvr_cfg[Options.NCHAN]
+        self.npol = 4
+        self.npolchan = self.npol*self.nchan
         self.ntime = slvr_cfg[Options.NTIME]
         self.nvis = self.nbl*self.nchan*self.ntime
 
@@ -216,10 +201,13 @@ class BaseSolver(Solver):
             raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
 
         # Store the context, choosing the default if not specified
-        ctx = slvr_cfg.get('context', None)
+        ctx = slvr_cfg.get(Options.CONTEXT, None)
 
         if ctx is None:
             raise Exception('No CUDA context was supplied to the BaseSolver')
+
+        if isinstance(ctx, list):
+            ctx = ctx[0]
 
         # Create a context wrapper
         self.context = mbu.ContextWrapper(ctx)
@@ -253,12 +241,12 @@ class BaseSolver(Solver):
     def cpu_bytes_required(self):
         """ returns the memory required by all CPU arrays in bytes. """
         return np.sum([mbu.array_bytes(a.shape,a.dtype)
-            for a in self.arrays.itervalues() if a.has_cpu_ary])
+            for a in self.arrays.itervalues() if a.cpu])
 
     def gpu_bytes_required(self):
         """ returns the memory required by all GPU arrays in bytes. """
         return np.sum([mbu.array_bytes(a.shape,a.dtype)
-            for a in self.arrays.itervalues() if a.has_gpu_ary])
+            for a in self.arrays.itervalues() if a.gpu])
 
     def mem_required(self):
         """ Return a string representation of the total memory required """
@@ -283,31 +271,6 @@ class BaseSolver(Solver):
                     np.dtype(record.dtype).name,
                     np.dtype(ary.dtype).name))
 
-    def handle_existing_array(self, old, new, **kwargs):
-        """
-        Compares old array record against new. Complains
-        if there's a mismatch in shape or type.
-        """
-        should_replace = kwargs.get('replace',False)
-
-        # There's no existing record, or we've been told to replace it
-        if old is None or should_replace is True:
-            return
-
-        # Check that the shapes are the same
-        if old.shape != new.shape:
-            raise ValueError(('\'%s\' array is already registered by '
-                '\'%s\' with shape %s different to the supplied %s.') %
-                (old.name, old.registrant, old.shape, new.shape))
-
-        # Check that the types are the same
-        if old.dtype != new.dtype:
-            raise ValueError(('\'%s\' array is already registered by '
-                '\'%s\' with type %s different to the supplied %s.') % \
-                    (old.name, old.registrant,
-                    np.dtype(old.dtype).name,
-                    np.dtype(new.dtype).name))
-
     def init_array(self, name, ary, value):
         # No defaults are supplied
         if value is None:
@@ -318,29 +281,35 @@ class BaseSolver(Solver):
                 signature(value).bind(self, ary)
             except TypeError:
                 raise TypeError(('The signature of the function supplied '
-                    'for setting the value value on array %s is incorrect. '
-                    'The function signature has the form deffunc(slvr, ary), '
-                    'where deffunc is some function that will set values '
+                    'for setting the value on array %s is incorrect. '
+                    'The function signature has the form f(slvr, ary), '
+                    'where f is some function that will set values '
                     'on the array, slvr is a Solver object which provides ' 
                     'useful information to the function, '
-                    'and ary is the NumPy array which must be initialised with '
-                    'value values.') % (name))
+                    'and ary is the NumPy array which must be '
+                    'initialised with values.') % (name))
 
-            value(self, ary)
+            returned_ary = value(self, ary)
+
+            if returned_ary is not None:
+                ary[:] = returned_ary
         elif isinstance(value, types.LambdaType):
             try:
                 signature(value).bind(self, ary)
             except TypeError:
                 raise TypeError(('The signature of the lambda supplied '
-                    'for setting the value value on array %s is incorrect. '
+                    'for setting the value on array %s is incorrect. '
                     'The function signature has the form lambda slvr, ary:, '
-                    'where deffunc is some function that will set values '
+                    'where lambda provides functionality for setting values '
                     'on the array, slvr is a Solver object which provides ' 
                     'useful information to the function, '
-                    'and ary is the NumPy array which must be initialised with '
-                    'value values.') % (name))
+                    'and ary is the NumPy array which must be '
+                    'initialised with values.') % (name))
 
-            ary[:] = value(self, ary)
+            returned_ary = value(self, ary)
+
+            if returned_ary is not None:
+                ary[:] = returned_ary
         # Got an ndarray, try set it equal
         elif isinstance(value, np.ndarray):
             try:
@@ -394,30 +363,17 @@ class BaseSolver(Solver):
                 created, otherwise the supplied function is used instead
             page_locked : boolean
                 True if the 'name_cpu' ndarray should be allocated as
-                a page-locked array
+                a page-locked array.
+            aligned : boolean
+                True if the 'name_cpu' ndarray should be allocated as
+                an page-aligned array.
             replace : boolean
                 True if existing arrays should be replaced.
         """
-        # Try and find an existing version of this array
-        old = self.arrays.get(name, None)
-
         # Should we create arrays? By default we don't create CPU arrays
         # but we do create GPU arrays by default.
-        want_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
-        want_gpu_ary = kwargs.get('gpu', True)
-
-        # Have we already created arrays?
-        cpu_ary_exists = True if old is not None and old.has_cpu_ary else False
-        gpu_ary_exists = True if old is not None and old.has_gpu_ary else False
-
-        # Determine whether the new record we're creating will have
-        # CPU or GPU arrays
-        has_cpu_ary = cpu_ary_exists or want_cpu_ary
-        has_gpu_ary = gpu_ary_exists or want_gpu_ary
-
-        # Determine whether we need to create cpu/gpu arrays
-        create_cpu_ary = not cpu_ary_exists and want_cpu_ary
-        create_gpu_ary = not gpu_ary_exists and want_gpu_ary
+        create_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
+        create_gpu_ary = kwargs.get('gpu', True)
 
         # Get a property dictionary to perform string replacements
         P = self.get_properties()
@@ -430,22 +386,14 @@ class BaseSolver(Solver):
         # appropriate data type
         dtype = mbu.dtype_from_str(dtype, P)
 
-        # Create a new record
-        new = ArrayRecord(
-            name=name,
-            sshape=sshape,
-            shape=shape,
-            dtype=dtype,
-            registrant=registrant,
-            has_cpu_ary=has_cpu_ary,
-            has_gpu_ary=has_gpu_ary)
-
-        # Check if the array has been registered previously
-        # and if we're allowed to replace it
-        self.handle_existing_array(old, new, **kwargs)
-
-        # OK, create/replace a record for this array
-        self.arrays[name] = new
+        # OK, create a record for this array
+        if name not in self.arrays:
+            self.arrays[name] = AttrDict(name=name, dtype=dtype,
+                shape=shape, sshape=sshape,
+                registrant=registrant, **kwargs)
+        else:
+            raise ValueError(('Array %s is already registered '
+                'on this solver object.') % name)
 
         # Attribute names
         cpu_name = mbu.cpu_name(name)
@@ -482,8 +430,19 @@ class BaseSolver(Solver):
             source_key = 'default'
 
         if create_cpu_ary or create_gpu_ary:
-            default_ary = np.empty(shape=shape, dtype=dtype)
-            self.init_array(name, default_ary, kwargs.get(source_key, None))
+            page_locked = kwargs.get('page_locked', False)
+            aligned = kwargs.get('aligned', False)
+
+            with self.context:
+                # Page locked implies aligned
+                if page_locked:
+                    default_ary = cuda.pagelocked_empty(shape=shape, dtype=dtype)
+                elif aligned:
+                    default_ary = cuda.aligned_empty(shape=shape, dtype=dtype)
+                else:
+                    default_ary = np.empty(shape=shape, dtype=dtype)
+                    
+                self.init_array(name, default_ary, kwargs.get(source_key, None))
 
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
@@ -501,9 +460,15 @@ class BaseSolver(Solver):
             with self.context as ctx:
                 gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
 
-                # Zero the array, if it has non-zero length
+                # If the array length is non-zero initialise it
                 if np.product(shape) > 0:
-                    gpu_ary.set(default_ary)
+                    # If available, use CPU defaults
+                    # to initialise the array
+                    if create_cpu_ary:
+                        gpu_ary.set(default_ary)
+                    # Otherwise just zero it 
+                    else:
+                        gpu_ary.fill(0)
                 
                 setattr(self, gpu_name, gpu_ary)
 
@@ -595,8 +560,12 @@ class BaseSolver(Solver):
         # appropriate data type
         dtype = mbu.dtype_from_str(dtype, P)
 
-        self.properties[name]  = PropertyRecord(
-            name, dtype, default, registrant)
+        if name not in self.properties:
+            self.properties[name] = AttrDict(name=name, dtype=dtype,
+                default=default, registrant=registrant)
+        else:
+            raise ValueError(('Property %s is already registered '
+                'on this solver object.') % name)
 
         #if not hasattr(BaseSolver, name):
         if not BaseSolver.__dict__.has_key(name):
@@ -699,8 +668,8 @@ class BaseSolver(Solver):
             yield mbu.fmt_array_line(a.name,
                 mbu.fmt_bytes(mbu.array_bytes(a.shape, a.dtype)),
                 np.dtype(a.dtype).name,
-                'Y' if a.has_cpu_ary else 'N',
-                'Y' if a.has_gpu_ary else 'N',
+                'Y' if a.cpu else 'N',
+                'Y' if a.gpu else 'N',
                 a.sshape)
 
     def gen_property_descriptions(self):

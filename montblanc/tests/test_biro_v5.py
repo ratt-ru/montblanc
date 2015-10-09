@@ -29,10 +29,17 @@ import montblanc.util as mbu
 
 from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
 
+from montblanc.config import (BiroSolverConfiguration,
+    BiroSolverConfigurationOptions as Options)
+
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
-def solver(**kwargs):
-    return montblanc.factory.rime_solver('test',version='v5',**kwargs)
+def solver(slvr_cfg, **kwargs):
+    slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
+    slvr_cfg[Options.VERSION] = Options.VERSION_FIVE
+    slvr_cfg.update(kwargs)
+
+    return montblanc.factory.rime_solver(slvr_cfg)
 
 class TestBiroV5(unittest.TestCase):
     """
@@ -58,16 +65,25 @@ class TestBiroV5(unittest.TestCase):
         """ Basic Test """
         cmp = { 'rtol' : 1e-4}
 
+        slvr_cfg = BiroSolverConfiguration(na=14, ntime=27, nchan=32,
+            sources=montblanc.sources(point=50, gaussian=50),
+            dtype=Options.DTYPE_DOUBLE)
+
         for wv in [True, False]:
-            with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
-                weight_vector=wv) as slvr:
+            slvr_cfg[Options.WEIGHT_VECTOR] = wv
+            with solver(slvr_cfg) as slvr:
 
                 # Solve the RIME
                 slvr.solve()
 
                 # Compare CPU and GPU results
-                chi_sqrd_result_cpu = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
-                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+                slvr_cpu = SolverCPU(slvr)
+                chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(weight_vector=wv)
+                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp),
+                    ('CPU (%s) and GPU (%s) '
+                    'chi-squared value differ. '
+                    'Failed for weight_vector=%s') %
+                        (chi_sqrd_result_cpu, slvr.X2, wv))
 
     def test_budget(self):
         """
@@ -94,34 +110,72 @@ class TestBiroV5(unittest.TestCase):
                 slvr.solve()
                 self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
 
+    def test_big_budget(self):
+        wv = True
+
+        slvr_cfg = BiroSolverConfiguration(na=64, ntime=10000, nchan=32768,
+            sources=montblanc.sources(point=10000, gaussian=10000, sersic=10000),
+            beam_lw=1, beam_mh=1, beam_nud=1,
+            weight_vector=wv, nsolvers=3,
+            dtype=Options.DTYPE_DOUBLE)
+
+        with solver(slvr_cfg) as slvr:
+            slvr.solve()
+
+    def test_medium_budget(self):
+        wv = True
+
+        slvr_cfg = BiroSolverConfiguration(na=27, ntime=100, nchan=64,
+            sources=montblanc.sources(point=100, gaussian=100, sersic=100),
+            beam_lw=1, beam_mh=1, beam_nud=1,
+            weight_vector=wv, nsolvers=3,
+            dtype=Options.DTYPE_DOUBLE)
+
+        with solver(slvr_cfg) as slvr:
+            print slvr
+
+            slvr.solve()
+
     def test_smart_budget(self):
         wv = True
 
-        with solver(na=28, npsrc=50, ngsrc=50, ntime=27, nchan=32,
-            weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
+        slvr_cfg = BiroSolverConfiguration(na=28, ntime=27, nchan=128,
+            sources=montblanc.sources(point=50, gaussian=50),
+            beam_lw=1, beam_mh=1, beam_nud=1,
+            weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3,
+            dtype=Options.DTYPE_DOUBLE)
+
+        with solver(slvr_cfg) as slvr:
 
             A = copy.deepcopy(BSV4mod.A)
             P = slvr.get_properties()
 
-            viable, MP = mbu.viable_dim_config(
-                10*1024*1024, A,  P, ['ntime', 'nbl&na', 'nchan'], 1)
+            viable, MP = mbu.viable_dim_config(128*1024*1024,
+                A, P, ['ntime', 'nbl&na', 'nchan'], 1)
             self.assertTrue(viable is True and len(MP) == 1 and
                 MP['ntime'] == 1)
-            #print viable, MP
 
-            viable, MP = mbu.viable_dim_config(
-                1*1024*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1,)
+            viable, MP = mbu.viable_dim_config(8*1024*1024,
+                A, P, ['ntime', 'nbl&na', 'nchan'], 1)
             self.assertTrue(viable is True and len(MP) == 3 and
                 MP['ntime'] == 1 and
                 MP['na'] == 1 and
                 MP['nbl'] == 1)
 
-            viable, MP = mbu.viable_dim_config(
-                10*1024, A, P, ['ntime', 'nbl&na', 'nchan'], 1)
+            viable, MP = mbu.viable_dim_config(1*1024*1024,
+                A, P, ['ntime', 'nbl&na', 'nchan'], 1)
             self.assertTrue(viable is True and len(MP) == 4 and
                 MP['ntime'] == 1 and
                 MP['na'] == 1 and
                 MP['nbl'] == 1 and
+                MP['nchan'] == 1)
+
+            viable, MP = mbu.viable_dim_config(512*1024,
+                A, P, ['ntime', 'nbl=6&na=3', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MP) == 4 and
+                MP['ntime'] == 1 and
+                MP['na'] == 3 and
+                MP['nbl'] == 6 and
                 MP['nchan'] == 1)
 
             viable, MP = mbu.viable_dim_config(
@@ -130,7 +184,13 @@ class TestBiroV5(unittest.TestCase):
                 MP['ntime'] == 1 and
                 MP['na'] == 1 and
                 MP['nbl'] == 1)
-            #print viable, P
+
+            # Try with 3 solvers.
+            viable, MP = mbu.viable_dim_config(128*1024*1024,
+                A, P, ['ntime', 'nbl&na', 'nchan'], 3)
+            self.assertTrue(viable is True and len(MP) == 1 and
+                MP['ntime'] == 1)
+
 
     @unittest.skip('Skip timing test')
     def test_time(self, cmp=None):

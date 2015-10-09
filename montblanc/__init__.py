@@ -25,18 +25,14 @@ import logging.config
 import numpy as np
 import os
 
-# Import ourself. How is this... I don't even...
-# Hooray for python
-import montblanc
-import montblanc.util as mbu
 import montblanc.config
 
-from montblanc.config import describe_options
 from montblanc.tests import test
 from montblanc.version import __version__
 
 def get_montblanc_path():
     """ Return the current path in which montblanc is installed """
+    import montblanc
     return os.path.dirname(inspect.getfile(montblanc))
 
 def get_source_path():
@@ -110,7 +106,7 @@ def sources(**kwargs):
     %s
 
     """    
-    return mbu.default_sources(**kwargs)
+    return montblanc.src_types.default_sources(**kwargs)
 
 # Substitute docstring variables
 sources.__doc__ %= (', '.join(source_types()),

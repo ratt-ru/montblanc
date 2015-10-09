@@ -20,22 +20,33 @@
 
 import numpy as np
 
-import pycuda.driver
-import pycuda.tools
+import pycuda.driver as cuda
+import pycuda.gpuarray as gpuarray
 
-import montblanc.impl.biro.v4.gpu.RimeGaussBSum
+import montblanc.impl.biro.v4.gpu.RimeSumCoherencies
 
-class RimeGaussBSum(montblanc.impl.biro.v4.gpu.RimeGaussBSum.RimeGaussBSum):
+class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCoherencies):
     def __init__(self, weight_vector=False):
-        super(RimeGaussBSum, self).__init__(weight_vector)
+        super(RimeSumCoherencies, self).__init__(weight_vector=weight_vector)
     def initialise(self, solver, stream=None):
-        super(RimeGaussBSum, self).initialise(solver,stream)
+        super(RimeSumCoherencies, self).initialise(solver,stream)
     def shutdown(self, solver, stream=None):
-        super(RimeGaussBSum, self).shutdown(solver,stream)
+        super(RimeSumCoherencies, self).shutdown(solver,stream)
     def pre_execution(self, solver, stream=None):
-        super(RimeGaussBSum, self).pre_execution(solver,stream)
+        super(RimeSumCoherencies, self).pre_execution(solver,stream)
+
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                solver.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                solver.const_data_buffer)
+
     def post_execution(self, solver, stream=None):
-        super(RimeGaussBSum, self).pre_execution(solver,stream)
+        super(RimeSumCoherencies, self).pre_execution(solver,stream)
 
     def execute(self, solver, stream=None):
         slvr = solver
@@ -44,11 +55,13 @@ class RimeGaussBSum(montblanc.impl.biro.v4.gpu.RimeGaussBSum.RimeGaussBSum):
         # no gaussian sources were specified.
         gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
             else slvr.gauss_shape_gpu
+
         sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
             else slvr.sersic_shape_gpu
 
-        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic,
-            slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
-            slvr.weight_vector_gpu, slvr.vis_gpu, slvr.bayes_data_gpu,
-            slvr.chi_sqrd_result_gpu,
-            stream=stream, **self.get_kernel_params(slvr))
+        self.kernel(slvr.uvw_gpu, gauss, sersic,
+            slvr.frequency_gpu, slvr.ant_pairs_gpu,
+            slvr.jones_gpu, slvr.weight_vector_gpu,
+            slvr.bayes_data_gpu, slvr.G_term_gpu,
+            slvr.vis_gpu, slvr.chi_sqrd_result_gpu,
+            stream=stream, **self.launch_params)

@@ -18,29 +18,40 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import numpy as np
+import pycuda.driver as cuda
 
-import pycuda.driver
-import pycuda.tools
+import montblanc.impl.biro.v4.gpu.RimeEBeam
 
-import montblanc.impl.biro.v4.gpu.RimeEK
-
-class RimeEK(montblanc.impl.biro.v4.gpu.RimeEK.RimeEK):
+class RimeEBeam(montblanc.impl.biro.v4.gpu.RimeEBeam.RimeEBeam):
     def __init__(self):
-        super(RimeEK, self).__init__()
+        super(RimeEBeam, self).__init__()
     def initialise(self, solver, stream=None):
-        super(RimeEK, self).initialise(solver,stream)
+        super(RimeEBeam, self).initialise(solver,stream)
     def shutdown(self, solver, stream=None):
-        super(RimeEK, self).shutdown(solver,stream)
+        super(RimeEBeam, self).shutdown(solver,stream)
     def pre_execution(self, solver, stream=None):
-        super(RimeEK, self).pre_execution(solver,stream)
+        super(RimeEBeam, self).pre_execution(solver,stream)
+
+        if stream is not None:
+            cuda.memcpy_htod_async(
+                self.rime_const_data_gpu[0],
+                solver.const_data_buffer,
+                stream=stream)
+        else:
+            cuda.memcpy_htod(
+                self.rime_const_data_gpu[0],
+                solver.const_data_buffer)
+
     def post_execution(self, solver, stream=None):
-        super(RimeEK, self).pre_execution(solver,stream)
+        super(RimeEBeam, self).pre_execution(solver,stream)
 
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
-            slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_scalar_gpu,
-            slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
-            stream=stream, **self.get_kernel_params(slvr))
+        self.kernel(slvr.lm_gpu,
+            slvr.point_errors_gpu, slvr.antenna_scaling_gpu,
+            slvr.E_beam_gpu, slvr.jones_gpu,
+            slvr.parallactic_angle,
+            slvr.beam_ll, slvr.beam_lm,
+            slvr.beam_ul, slvr.beam_um,
+            stream=stream, **self.launch_params)

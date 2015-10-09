@@ -53,24 +53,27 @@ def print_versions():
     print('-=' * 38)
 
 def suite():
+    from test_base_solver import TestSolver
+    from test_utils import TestUtils
+    from test_source_utils import TestSourceUtils
+
     from test_biro_v2 import TestBiroV2
     from test_biro_v3 import TestBiroV3
     from test_biro_v4 import TestBiroV4
     from test_biro_v5 import TestBiroV5
-    from test_base_solver import TestSolver
-    from test_utils import TestUtils
 
     test_suite = unittest.TestSuite()
     niter = 1
 
     for n in range(niter):
-        # The following two cases run really fast
+        # The following three cases run really fast
         test_suite.addTest(unittest.makeSuite(TestSolver))
         test_suite.addTest(unittest.makeSuite(TestUtils))
+        test_suite.addTest(unittest.makeSuite(TestSourceUtils))
         # Test recent code first, as it will be more likely to fail
         #test_suite.addTest(unittest.makeSuite(TestBiroV5))
         test_suite.addTest(unittest.makeSuite(TestBiroV4))
-        test_suite.addTest(unittest.makeSuite(TestBiroV3))
+        #test_suite.addTest(unittest.makeSuite(TestBiroV3))
         test_suite.addTest(unittest.makeSuite(TestBiroV2))
 
     return test_suite
