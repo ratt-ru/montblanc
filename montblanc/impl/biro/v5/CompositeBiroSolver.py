@@ -334,6 +334,10 @@ class CompositeBiroSolver(BaseSolver):
             ary['transfer_method'] = self.__get_sub_transfer_method(ary['name'])
             ary['cpu'] = False
             ary['gpu'] = True
+            # Don't initialise arrays on the sub-solvers,
+            # it'll all get copied on anyway
+            ary['default'] = None
+            ary['test'] = None
 
         # We'll use memory pools for the X2 values
         for ary in [a for a in arys if a['name'] in ['X2']]:
