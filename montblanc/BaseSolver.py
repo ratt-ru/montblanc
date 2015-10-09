@@ -168,7 +168,8 @@ class BaseSolver(Solver):
         # - gaussian sources
         # - sersic sources
         self.na = slvr_cfg[Options.NA]
-        self.nbl = nbl = mbu.nr_of_baselines(self.na,autocor)
+        self.nbl = nbl = slvr_cfg.get(Options.NBL,
+            mbu.nr_of_baselines(self.na,autocor))
         self.nchan = slvr_cfg[Options.NCHAN]
         self.npol = 4
         self.npolchan = self.npol*self.nchan

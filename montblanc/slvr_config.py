@@ -40,6 +40,10 @@ class SolverConfigurationOptions(object):
     DEFAULT_NA = 7
     NA_DESCRIPTION = 'Number of antenna'
 
+    # Number of baselines
+    NBL = 'nbl'
+    NBL_DESCRIPTION = 'Number of baselines'
+
     # Number of channels
     NCHAN = 'nchan'
     DEFAULT_NCHAN = 16
@@ -126,6 +130,10 @@ class SolverConfigurationOptions(object):
             DESCRIPTION: NA_DESCRIPTION,
             DEFAULT: DEFAULT_NA,
             REQUIRED: True },
+
+        NBL: {
+            DESCRIPTION: NBL_DESCRIPTION,
+            REQUIRED: False },
 
         NCHAN: {
             DESCRIPTION: NCHAN_DESCRIPTION,

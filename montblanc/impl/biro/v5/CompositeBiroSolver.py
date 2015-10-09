@@ -135,16 +135,17 @@ class CompositeBiroSolver(BaseSolver):
         # Create the sub solver configuration
         subslvr_cfg = BiroSolverConfiguration(**slvr_cfg)
         subslvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_DEFAULTS
-        subslvr_cfg[Options.NA] = P[Options.NA]
         subslvr_cfg[Options.NTIME] = P[Options.NTIME]
+        subslvr_cfg[Options.NA] = P[Options.NA]
+        subslvr_cfg[Options.NBL] = P[Options.NBL]
         subslvr_cfg[Options.NCHAN] = P[Options.NCHAN]
         subslvr_cfg[Options.CONTEXT] = ctx
 
         # Extract the dimension differences
         self.src_diff = P['nsrc']
         self.time_diff = P[Options.NTIME]
-        self.bl_diff = P['nbl']
         self.ant_diff = P[Options.NA]
+        self.bl_diff = P[Options.NBL]
         self.chan_diff = P[Options.NCHAN]
 
         # Now create the solvers on each thread
@@ -212,17 +213,12 @@ class CompositeBiroSolver(BaseSolver):
                     gpu_count['na'] = 2
                 # Otherwise just take all antenna pairs
                 # 'na1' will be ignored in this case
-                elif bl_diff == self.nbl:
+                else:
                     cpu_slice['na'] = slice(0, self.na, 1)
                     cpu_slice['na1'] = slice(0, self.na, 1)
                     gpu_slice['na'] = slice(0, self.na, 1)
                     gpu_slice['na1'] = slice(0, self.na, 1)
                     gpu_count['na'] = self.na
-                else:
-                    raise ValueError, ('Baseline difference (%s) '
-                        'must be either 1 or the '
-                        'total number of baselines (%s)') % \
-                            (bl_diff, self.nbl)
 
                 # Set up channel slicing
                 for ch in xrange(0, self.nchan, self.chan_diff):
@@ -522,12 +518,20 @@ class CompositeBiroSolver(BaseSolver):
         mem_budget = slvr_cfg.get('mem_budget', free_mem - 100*ONE_MB)
 
         nsolvers = slvr_cfg.get('nsolvers', 2)
+        na = slvr_cfg.get(Options.NA)
+        nsrc = 400
+        src_str_list = ['nsrc'] + mbu.source_nr_vars()
+        src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
+            for nr_var in src_str_list])
 
         # Figure out a viable dimension configuration
         # given the total problem size 
         viable, modded_dims = mbu.viable_dim_config(
             mem_budget, A_sub, props,
-            ['nsrc=100', 'ntime', 'nbl=1&na=2','nchan=50%'],
+                [src_reduction_str, 'ntime',
+                'nbl=%s&na=%s' % (na, na)
+                ,'nbl=1&na=2',
+                'nchan=50%'],
             nsolvers)                
 
         # Create property dictionary with updated
