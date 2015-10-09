@@ -354,8 +354,8 @@ class CompositeBiroSolver(BaseSolver):
         # Copy data into staging area
         staged_ary[:] = cpu_slice
 
-        #print 'Transferring %s with size %s shapes [%s vs %s]' % (
-        #    r.name, mbu.fmt_bytes(copy_ary.nbytes), copy_ary.shape, gpu_ary.shape)
+        #montblanc.log.info('Transferring %s with size %s shapes [%s vs %s]',
+        #    r.name, mbu.fmt_bytes(staged_ary.nbytes), staged_ary.shape, gpu_ary.shape)
 
         gpu_ary.set_async(staged_ary, stream=subslvr.stream)
 
