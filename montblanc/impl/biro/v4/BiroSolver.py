@@ -128,9 +128,9 @@ def rand_sersic_shape(slvr, ary):
     # Random values seem to create v. large discrepancies
     # between the CPU and GPU versions. Go with
     # non-random data here, as per Marzia's original code
-    e1[:] = np.zeros(shape=e1.shape)
-    e2[:] = np.zeros(shape=e2.shape)
-    eS[:] = np.ones(shape=eS.shape)
+    e1[:] = 0
+    e2[:] = 0
+    eS[:] = np.pi/648000   # 1 arcsec
 
     return ary
 
