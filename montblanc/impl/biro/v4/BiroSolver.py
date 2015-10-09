@@ -129,7 +129,7 @@ def rand_sersic_shape(slvr, ary):
     # non-random data here, as per Marzia's original code
     e1[:] = np.zeros(shape=e1.shape)
     e2[:] = np.zeros(shape=e2.shape)
-    eS[:] = np.ones(shape=eS.shape)*arcs2rad  # 1 arcsec
+    eS[:] = np.ones(shape=eS.shape)*slvr.arcs2rad  # 1 arcsec
 
     return ary
 
