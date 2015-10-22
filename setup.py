@@ -222,6 +222,9 @@ setup(name='montblanc',
         'pytools >= 2015.1.3',
         'transitions >= 0.2.5',
     ],
+    extras_require={
+        'distributed' : ['ipyparallel >= 4.0.2']
+    },
     package_data={
         'montblanc': ['log/*.json'],
         'montblanc': src_pkg_dirs()},
