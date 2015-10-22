@@ -51,3 +51,17 @@ class DistributedBiroSolver(BaseSolver):
         # over the connected engines
         self.client = Client(profile=profile)
         self.view = self.client[:]
+
+    def __enter__(self):
+        """
+        When entering a run-time context related to this solver,
+        initialise and return it.
+        """
+        return self
+
+    def __exit__(self, type, value, traceback):
+        """
+        Perform shutdown when exiting a run-time context
+        for this solver,
+        """
+        pass
