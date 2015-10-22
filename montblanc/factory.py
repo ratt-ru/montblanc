@@ -162,6 +162,14 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
         from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
     elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
         from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
+    elif version in [Options.VERSION_SIX]:
+        # Warn and set up a dummy solver for now
+        montblanc.log.warn('%s file loading is currently disabled.', version)
+        slvr_cfg[Options.NTIME] = 1 
+        slvr_cfg[Options.NA] = 3 
+        slvr_cfg[Options.NCHAN] = 8 
+        slvr = slvr_class_type(slvr_cfg)
+        return slvr
     else:
         raise ValueError('Incorrect version %s' % version)
 
