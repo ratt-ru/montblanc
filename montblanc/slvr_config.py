@@ -172,7 +172,6 @@ class SolverConfigurationOptions(object):
 
         CONTEXT : {
             DESCRIPTION: CONTEXT_DESCRIPTION,
-            REQUIRED: True
         },
 
         STORE_CPU: {

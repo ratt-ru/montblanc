@@ -203,21 +203,19 @@ class BaseSolver(Solver):
         # Store the context, choosing the default if not specified
         ctx = slvr_cfg.get(Options.CONTEXT, None)
 
-        if ctx is None:
-            raise Exception('No CUDA context was supplied to the BaseSolver')
+        if ctx is not None:
+            if isinstance(ctx, list):
+                ctx = ctx[0]
 
-        if isinstance(ctx, list):
-            ctx = ctx[0]
+            # Create a context wrapper
+            self.context = mbu.ContextWrapper(ctx)
 
-        # Create a context wrapper
-        self.context = mbu.ContextWrapper(ctx)
-
-        # Figure out the integer compute cability of the device
-        # associated with the context
-        with self.context as ctx:
-            cc_tuple = cuda.Context.get_device().compute_capability()
-        # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
-        self.cc = np.int32(np.dot(cc_tuple, (100,10)))
+            # Figure out the integer compute cability of the device
+            # associated with the context
+            with self.context as ctx:
+                cc_tuple = cuda.Context.get_device().compute_capability()
+            # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
+            self.cc = np.int32(np.dot(cc_tuple, (100,10)))
 
         # Dictionaries to store records about our arrays and properties
         self.arrays = {}

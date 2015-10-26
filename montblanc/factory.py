@@ -185,15 +185,17 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
 def rime_solver(slvr_cfg):
     """ Factory function that produces a BIRO solver """
 
-    # Set the default cuda context if none is provided
-    if slvr_cfg.get(Options.CONTEXT, None) is None:
-        slvr_cfg[Options.CONTEXT] = get_default_context()
-
     # Verify the configuration
     slvr_cfg.verify()
 
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
     version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)
+
+    # Set the default cuda context if none is provided
+    if version not in [Options.VERSION_SIX] and \
+        slvr_cfg.get(Options.CONTEXT, None) is None:
+
+        slvr_cfg[Options.CONTEXT] = get_default_context()
 
     # Figure out which version of BIRO solver we're dealing with.
     if version == Options.VERSION_TWO:
