@@ -190,15 +190,7 @@ class BaseSolver(Solver):
             raise ValueError(('The number of sources, or, '
                 'the sum of %s, must be greater than zero') % (src_nr_vars))
 
-        # Configure our floating point and complex types
-        if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
-            self.ft = np.float32
-            self.ct = np.complex64
-        elif slvr_cfg[Options.DTYPE] == Options.DTYPE_DOUBLE:
-            self.ft = np.float64
-            self.ct = np.complex128
-        else:
-            raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
+        self.ft, self.ct = mbu.float_dtypes_from_str(slvr_cfg[Options.DTYPE])
 
         # Store the context, choosing the default if not specified
         ctx = slvr_cfg.get(Options.CONTEXT, None)

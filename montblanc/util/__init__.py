@@ -70,6 +70,23 @@ def blocks_required(N, threads_per_block):
     """
     return (N + threads_per_block - 1) / threads_per_block
 
+def float_dtypes_from_str(float_str):
+    """
+    Given 'float' or 'double' in float_str returns a tuple of
+    (np.float32, np.complex64) or (np.float64, np.complex128)
+    respectively
+    """
+
+    from montblanc.config import SolverConfigurationOptions as Options
+
+    # Configure our floating point and complex types
+    if float_str == Options.DTYPE_FLOAT:
+        return (np.float32, np.complex64)
+    elif float_str == Options.DTYPE_DOUBLE:
+        return (np.float64, np.complex128)
+    else:
+        raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
+
 def cpu_name(name):
     """ Constructs a name for the CPU version of the array """
     return name + '_cpu'
