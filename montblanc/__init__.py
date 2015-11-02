@@ -18,7 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import inspect
 import json
 import logging
 import logging.config
@@ -33,7 +32,7 @@ from montblanc.version import __version__
 def get_montblanc_path():
     """ Return the current path in which montblanc is installed """
     import montblanc
-    return os.path.dirname(inspect.getfile(montblanc))
+    return os.path.dirname(os.path.abspath(__file__))
 
 def get_source_path():
     return os.path.join(get_montblanc_path(), 'src')
