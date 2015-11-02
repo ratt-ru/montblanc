@@ -18,10 +18,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import copy
+
 import montblanc
 
+import montblanc.impl.biro.v4.BiroSolver as BSV4mod
+
+from proxy_array import ProxyArray
+
 try:
-    from ipyparallel import Client
+    from ipyparallel import Client, CompositeError
 except ImportError as e:
     montblanc.log.error('ipyparallel package is not installed.')
     raise
@@ -44,13 +50,44 @@ class DistributedBiroSolver(BaseSolver):
 
         super(DistributedBiroSolver, self).__init__(slvr_cfg)
 
+        # Copy the v4 arrays and properties and
+        # modify them for use on this Solver
+        A_main, P_main = \
+            copy.deepcopy(BSV4mod.A), copy.deepcopy(BSV4mod.P)
+
         # Import the profile
-        profile = slvr_cfg.get('profile', None)
+        profile = slvr_cfg.get('profile', 'mpi')
 
         # Create an ipyparallel client and view
         # over the connected engines
         self.client = Client(profile=profile)
         self.view = self.client[:]
+
+        from remote_handler import EngineHandler
+        from montblanc.config import (BiroSolverConfiguration,
+            BiroSolverConfigurationOptions as Options)
+
+        slvr_cfg = BiroSolverConfiguration(**slvr_cfg)
+        slvr_cfg[Options.VERSION] = Options.VERSION_FIVE
+        slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_DEFAULTS
+        slvr_cfg[Options.NBL] = self.nbl
+
+        if hasattr(slvr_cfg, Options.MS_FILE):
+            del slvr_cfg[Options.MS_FILE]
+
+        try:
+            eh = EngineHandler(self.client, self.view)
+            eh.create_remote_solvers(slvr_cfg)
+        except CompositeError as e:
+            e.print_traceback();
+
+        import time as time
+        time.sleep(10)
+
+        #import numpy as np
+
+        #ary = np.random.random(128*128)
+        #proxy_array = ProxyArray(ary, self.view)
 
     def __enter__(self):
         """
