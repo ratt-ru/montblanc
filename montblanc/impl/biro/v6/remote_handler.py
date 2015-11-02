@@ -178,7 +178,7 @@ class EngineHandler(object):
         self.valid_engines = valid_engines = self.get_valid_engines()
         self.dview.targets = valid_engines
 
-        print('Valid egines %s' % valid_engines)
+        print('Valid engines %s' % valid_engines)
 
         # Get array and property dictionaries,
         # determine memory requirements
@@ -215,9 +215,9 @@ class EngineHandler(object):
             sub_slvr_cfg.update(modded_dims)
 
             self.dview.targets = engine_id
+            print('Created remote solver on engine %s' % engine_id)
             res = self.dview.apply_sync(_remote_create_solver, sub_slvr_cfg)
 
-            print('Created remote solver on engine %s' % engine_id)
             print(res)
         """
         for (viable, modded_dims), engine_id in zip(res, valid_engines):
