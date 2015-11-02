@@ -37,8 +37,9 @@ if __name__ == '__main__':
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')
     parser.add_argument('-ns','--nssrc',dest='nssrc', type=int, default=0, help='Number of Sersic Sources')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v2','v3','v4','v5'],
-        help='BIRO Pipeline Version.')
+    parser.add_argument('-v','--version',dest='version', type=str,
+        default=Options.VERSION_TWO, choices=Options.VALID_VERSIONS,
+        help='BIRO Solver Version.')
 
     args = parser.parse_args(sys.argv[1:])
 
