@@ -51,16 +51,35 @@ def _remote_get_uuid():
     import uuid
     return uuid.getnode()
 
-def _remote_create_solver(slvr_cfg):
+def _remote_create_solver(slvr_cfg, remote_id):
     """
     Create a solver on the remote, using the
     supplied Solver Configuration
     """
     global slvr
     import montblanc.factory
-    slvr = montblanc.factory.rime_solver(slvr_cfg)
-    slvr.initialise()
-    return str(slvr)
+
+    ns = globals()
+    D = ns.setdefault(remote_id, {})
+    assert globals().has_key(remote_id) is True, \
+        'globals does not have %s' % remote_id
+    D['slvr'] = montblanc.factory.rime_solver(slvr_cfg)
+    D['slvr'].initialise()
+    return str(D['slvr'])
+
+def _shutdown_remote_solver(remote_id):
+    """ Shutdown the solver on the remote. """
+
+    ns = globals()
+    D = ns.get(remote_id, None)
+
+    slvr = D.get('slvr', None)
+
+    if slvr is not None:
+        slvr.shutdown()
+        del D['slvr']
+
+    del ns[remote_id]
 
 class EngineHandler(object):
     def __init__(self, client, dview):
@@ -70,10 +89,9 @@ class EngineHandler(object):
 
         with self.dview.sync_imports():
             #import numpy as np
-            import montblanc
-            import montblanc.factory
-
-        #self.dview['slvr'] = {}
+            #import montblanc
+            #import montblanc.factory
+            pass
 
     @staticmethod
     def get_arys_and_props(slvr_cfg, cpu_ary_only=True):
@@ -216,18 +234,13 @@ class EngineHandler(object):
 
             self.dview.targets = engine_id
             print('Created remote solver on engine %s' % engine_id)
-            res = self.dview.apply_sync(_remote_create_solver, sub_slvr_cfg)
+            res = self.dview.apply_sync(_remote_create_solver,
+                sub_slvr_cfg, self.remote_id)
 
             print(res)
-        """
-        for (viable, modded_dims), engine_id in zip(res, valid_engines):
-            sub_slvr_cfg = BiroSolverConfiguration(**slvr_cfg)
-            sub_slvr_cfg.update(modded_dims)
 
-            print('Creating remote solvers')
-            self.dview.targets = engine_id
-            res = self.dview.apply_sync(_remote_create_solver, sub_slvr_cfg)
-            print(res[0])
-        """
+        self.dview.targets = self.valid_engines
 
-        self.dview.targets = self.client.ids
+    def shutdown_remote_solvers(self):
+        self.dview.targets = self.valid_engines
+        self.dview.apply_sync(_shutdown_remote_solver, self.remote_id)

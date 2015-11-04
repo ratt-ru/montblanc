@@ -81,6 +81,13 @@ class DistributedBiroSolver(BaseSolver):
         except CompositeError as e:
             e.print_traceback();
 
+
+        try:
+            eh.shutdown_remote_solvers()
+        except CompositeError as e:
+            e.print_traceback();
+
+
         import time as time
         time.sleep(10)
 
