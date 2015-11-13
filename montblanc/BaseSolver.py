@@ -31,10 +31,6 @@ import types
 from weakref import WeakKeyDictionary
 from attrdict import AttrDict
 
-import pycuda
-import pycuda.driver as cuda
-import pycuda.gpuarray as gpuarray
-
 import montblanc
 import montblanc.factory
 import montblanc.util as mbu
@@ -196,6 +192,8 @@ class BaseSolver(Solver):
         ctx = slvr_cfg.get(Options.CONTEXT, None)
 
         if ctx is not None:
+            import pycuda.driver as cuda
+
             if isinstance(ctx, list):
                 ctx = ctx[0]
 
@@ -420,14 +418,17 @@ class BaseSolver(Solver):
             source_key = 'default'
 
         if create_cpu_ary or create_gpu_ary:
+            
             page_locked = kwargs.get('page_locked', False)
             aligned = kwargs.get('aligned', False)
 
             with self.context:
                 # Page locked implies aligned
                 if page_locked:
+                    import pycuda.driver as cuda
                     default_ary = cuda.pagelocked_empty(shape=shape, dtype=dtype)
                 elif aligned:
+                    import pycuda.driver as cuda
                     default_ary = cuda.aligned_empty(shape=shape, dtype=dtype)
                 else:
                     default_ary = np.empty(shape=shape, dtype=dtype)
@@ -448,6 +449,7 @@ class BaseSolver(Solver):
             # the gpuarray returned by gpuarray.empty() doesn't
             # have GPU memory allocated to it.
             with self.context as ctx:
+                import pycuda.gpuarray as gpuarray
                 gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
 
                 # If the array length is non-zero initialise it
