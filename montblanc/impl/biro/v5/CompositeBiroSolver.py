@@ -306,7 +306,6 @@ class CompositeBiroSolver(BaseSolver):
             ary['transfer_method'] = self.__get_transfer_method(ary['name'])
             ary['gpu'] = False
             ary['cpu'] = True
-            ary['aligned'] = True
 
         # Add custom property setter method
         for prop in props:
