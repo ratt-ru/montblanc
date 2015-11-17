@@ -217,14 +217,15 @@ setup(name='montblanc',
         'funcsigs >= 0.4',
         'futures >= 3.0.3',
         'numpy >= 1.9.2',
-        'numexpr >= 2.4',
+        'numexpr >= 2.4.4',
         'psutil >= 3.2.2',
         'pycuda >= 2015.1.3',
         'pytools >= 2015.1.3',
         'transitions >= 0.2.5',
     ],
     extras_require={
-        'distributed' : ['ipyparallel >= 4.0.2']
+        'distributed' : [
+            'distarray >= 0.6.0']
     },
     package_data={
         'montblanc': ['log/*.json'],
