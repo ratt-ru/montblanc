@@ -22,8 +22,6 @@ import os
 
 import numpy as np
 
-import pycuda.driver as cuda
-
 import montblanc
 import montblanc.util as mbu
 
@@ -39,6 +37,9 @@ __contexts = None
 
 def get_contexts_per_device():
     """ Returns a list of CUDA contexts associated with each CUDA device """
+
+    import pycuda.driver as cuda
+
     global __devices
     global __contexts
 
