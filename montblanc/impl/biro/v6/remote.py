@@ -50,6 +50,8 @@ def create_remote_solver(slvr_cfg):
     try:
         import montblanc.factory
 
+        global slvr
+
         slvr = montblanc.factory.rime_solver(slvr_cfg)
         slvr.initialise()
         return str(slvr)
@@ -60,10 +62,10 @@ def shutdown_remote_solver():
     import traceback
 
     try:
-        G = globals()
-        slvr = getattr(G, 'slvr')
-
+        global slvr
         slvr.shutdown()
+        del slvr
+
         return "Shutdown succeeded"
     except Exception as e:
         return str(traceback.format_exc())
