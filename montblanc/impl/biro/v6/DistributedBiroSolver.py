@@ -49,10 +49,6 @@ from remote import (query_remote_memory,
     create_remote_solver,
     shutdown_remote_solver)
 
-def query_test():
-    import random
-    return random.randint(1, 10)
-
 class DistributedBiroSolver(BaseSolver):
     """
     Distributed Solver Implementation for BIRO
