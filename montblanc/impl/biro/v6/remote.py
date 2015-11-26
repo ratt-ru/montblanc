@@ -59,6 +59,9 @@ def create_remote_solver(slvr_cfg):
         return str(traceback.format_exc())
 
 def shutdown_remote_solver():
+    """
+    Shutdown the solver on the remote.
+    """
     import traceback
 
     try:
@@ -70,5 +73,22 @@ def shutdown_remote_solver():
     except Exception as e:
         return str(traceback.format_exc())
 
+def stitch_local_arys(comm, ddpr, A):
+    """
+    Create distributed arrays by wrapping solver arrays
+    on the remote
+    """
 
+    import traceback
 
+    try:
+        from distarray.localapi import LocalArray
+        from distarray.localapi.maps import Distribution
+
+        dim_data = () if len(ddpr) == 0 else ddpr[comm.Get_rank()]
+
+        ldist = Distribution(comm=comm, dim_data=dim_data)
+
+        global slvr
+    except Exception as e:
+        return str(traceback.format_exc())
