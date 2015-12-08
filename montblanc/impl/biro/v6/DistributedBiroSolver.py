@@ -42,12 +42,12 @@ from montblanc.BaseSolver import BaseSolver
 from montblanc.config import (BiroSolverConfiguration,
     BiroSolverConfigurationOptions as Options)
 
-
 from remote import (query_remote_memory,
     query_remote_uuid,
     query_remote_hostname,
     create_remote_solver,
-    shutdown_remote_solver)
+    shutdown_remote_solver,
+    create_local_ary)
 
 class DistributedBiroSolver(BaseSolver):
     """
@@ -82,7 +82,7 @@ class DistributedBiroSolver(BaseSolver):
         # on an ipyparallel client
         self.distarray_ctx = ctx = Context(client=client)
         self.valid_engines = self.get_valid_engines(self.distarray_ctx)
-        print('Valid engines %s' % self.valid_engines)
+        print('Valid engines {ve}'.format(ve=self.valid_engines))
 
         # Create the slvr variable on the remote
         ctx.view['slvr'] = None
@@ -100,15 +100,18 @@ class DistributedBiroSolver(BaseSolver):
         print('Checking remote memory')
         ctx.targets = self.valid_engines
         mem_per_engine = ctx.apply(query_remote_memory)
-        remote_mem_str = ['    engine %s: %s on %s' % (
-            eid, mbu.fmt_bytes(m.available), hostname)
+        remote_mem_str = ['    engine {e}: {b} on {h}'.format(
+            e=eid, b=mbu.fmt_bytes(m.available), h=hostname)
             for m, hostname, eid 
             in zip(mem_per_engine, remote_hosts, self.valid_engines)]
         total_remote_mem = sum([m.available for m in mem_per_engine])
 
-        print('Memory required %s' % mbu.fmt_bytes(total_mem_required))
-        print('Available memory per remote \n%s' % '\n'.join(remote_mem_str))
-        print('Total available remote memory %s' %  mbu.fmt_bytes(total_remote_mem))
+        print('Memory required {m}'.format(
+            m=mbu.fmt_bytes(total_mem_required)))
+        print('Available memory per remote \n{m}'.format(
+            m='\n'.join(remote_mem_str)))
+        print('Total available remote memory {m}'.format(
+            m=mbu.fmt_bytes(total_remote_mem)))
 
         if total_mem_required > total_remote_mem:
             raise ValueError(('Solving this problem requires %s '
@@ -119,7 +122,6 @@ class DistributedBiroSolver(BaseSolver):
                     mbu.fmt_bytes(total_remote_mem),
                     '\n'.join(remote_mem_str)))
 
-
         D = DistributedBiroSolver.get_subdivided_dims(slvr_cfg,
             total_remote_mem, mem_per_engine, self.valid_engines)
 
@@ -127,35 +129,59 @@ class DistributedBiroSolver(BaseSolver):
 
         print('Subdivided dimensions {d}'.format(d=D))
 
-        dists = self.get_per_ary_distributions(A, P, D,
-            self._distarray_context())        
+        for dim, dim_steps in D.iteritems():
+            dim_sizes = np.diff(dim_steps)
+            assert len(dim_sizes) == len(self.valid_engines)
 
-        # This isn't really a for loop, there's only 1 element in D
-        for dim_name, subdivision in D.iteritems():
-            print('{n}: {v}'.format(n=dim_name, v=subdivision))
-
-            S = np.diff(subdivision)
-
-            assert len(S) == len(self.valid_engines)
-
-            # Start the solver
-            for dim_size, engine_id in zip(S, self.valid_engines):
-                print('Setting {n} to {v} on engine {e}'.format(
-                    n=dim_name, v=dim_size, e=engine_id))
+            # Create a solver on each of the remote engines,
+            # modifying the appropriate dimension in each
+            # solver
+            for dim_size, e in zip(dim_sizes, self.valid_engines):
+                ctx.targets = e
                 sub_slvr_cfg = BiroSolverConfiguration(**slvr_cfg)
-                sub_slvr_cfg[dim_name] = dim_size
+                sub_slvr_cfg[dim] = dim_size
+                res = ctx.apply(create_remote_solver, args=(sub_slvr_cfg,))
 
-                ctx.targets = engine_id
-                res = self.distarray_ctx.apply(create_remote_solver,
-                    args=(sub_slvr_cfg,))
-                print(res)
+                print('Solver creation result on engine {e}: {r}'.format(
+                    e=e, r=res))
 
+        # Get the distribution dictionary, containing array names as keys
+        # and distarray distributions as values
+        dists_dict = self.get_per_ary_distributions(A, P, D)        
+
+        # Get the ddpr dictionary, containing array names as keys and
+        # distarray dim data per rank as values
+        dist_ddpr_dict = DistributedBiroSolver.get_per_ary_ddpr(dists_dict)
+
+        # Get the comm dictionary, containing array names as keys and
+        # distarray MPI comms as values
+        dist_comm_dict = DistributedBiroSolver.get_per_ary_comm(dists_dict)
+
+        ctx.targets = self.valid_engines
+
+        for ary in  A:
+            name = ary['name']
+            ddpr = dist_ddpr_dict[name]
+            distribution = dists_dict[name]
+            dtype = mbu.dtype_from_str(ary['dtype'], P)
+
+            assert len(ctx.targets) == len(distribution.localshapes())
+
+            # Scatter the local array shape
+            # to the relevant engines
+            for e, s in zip(ctx.targets, distribution.localshapes()):
+                ctx.view.client[e]['local_ary_shape'] = s
+                ctx.view.client[e]['local_ary_dtype'] = dtype
+
+            res = self.distarray_ctx.apply(create_local_ary,
+                args=(distribution.comm, dist_ddpr_dict[name], name))
+
+            print('Post {n} array creation {r}'.format(n=name, r=res))
 
         # And shut them down!
-        for engine_id in self.valid_engines:
-            ctx.targets = engine_id
-            res = self.distarray_ctx.apply(shutdown_remote_solver)
-            print(res)
+        ctx.targets = self.valid_engines
+        res = self.distarray_ctx.apply(shutdown_remote_solver)
+        print('Shutdown Results {r}'.format(r=res))
 
         import time as time
         time.sleep(2)
@@ -303,8 +329,7 @@ class DistributedBiroSolver(BaseSolver):
         raise ValueError('Subdivision of the problem by '
             'time (ntime) or baseline (nbl) is not possible')
 
-    @staticmethod
-    def get_per_ary_distributions(A, P, dim_distributions, distarray_ctx):
+    def get_per_ary_distributions(self, A, P, dim_distributions):
         """
         Create distarray distributions for each array in the list A.
 
@@ -312,6 +337,8 @@ class DistributedBiroSolver(BaseSolver):
         """
 
         distributions = {}
+        distarray_ctx = self._distarray_context()        
+        distarray_ctx.targets = self.valid_engines
 
         for ary in A:
             global_dim_data = []
@@ -335,6 +362,23 @@ class DistributedBiroSolver(BaseSolver):
                 distarray_ctx, global_dim_data)
 
         return distributions
+
+    @staticmethod
+    def get_per_ary_ddpr(distribution_dict):
+        """
+        Get dim data per rank per distribution
+        """
+
+        return { n: d.get_dim_data_per_rank()
+            for n, d in distribution_dict.iteritems() }
+
+    @staticmethod
+    def get_per_ary_comm(distribution_dict):
+        """
+        Get dim data per rank per distribution
+        """
+
+        return { n: d.comm for n, d in distribution_dict.iteritems() }
 
     @staticmethod
     def subdivide_visibilities(ntime, nbl, nchan, multiplier):

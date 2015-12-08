@@ -56,7 +56,67 @@ def create_remote_solver(slvr_cfg):
         slvr.initialise()
         return str(slvr)
     except Exception as e:
-        return str(traceback.format_exc())
+        raise Exception(str(traceback.format_exc()))
+
+def create_local_ary(comm, ddpr, name):
+    """
+    Create distributed array by wrapping solver arrays
+    on the remote.
+
+    Requires that local_ary_shape and local_ary_dtype
+    are scattered to this engine.
+
+    # Scatter the local array shape
+    # to the relevant engines
+    >>> for e, s in zip(ctx.targets, distribution.localshapes()):
+    >>>    ctx.view.client[e]['local_ary_shape'] = s
+    >>>    ctx.view.client[e]['local_ary_dtype'] = dtype
+    """
+
+    import traceback
+
+    try:
+        import numpy as np
+        from distarray.localapi import LocalArray
+        from distarray.localapi.maps import Distribution
+        import montblanc.util as mbu
+
+        global slvr
+
+        if slvr is None:
+            raise ValueError('Solver does not exist!')
+
+        # Attempt to find the appropriate array on
+        # this remote solver
+        cpu_name = mbu.cpu_name(name)
+        cpu_ary = getattr(slvr, cpu_name, None)
+
+        if cpu_ary is None:
+            raise AttributeError((
+                'slvr.{n} was not present '
+                'when creating a LocalArray as part of '
+                'a DistributedArray.').format(
+                    n=cpu_name))
+
+        if cpu_ary.shape != local_ary_shape:
+            raise ValueError((
+                'The shape, {ashape}, of slvr.{n} does not '
+                'match the supplied shape {sshape} '
+                'when creating a LocalArray as part of '
+                'a DistributedArray.').format(
+                    n=cpu_name,
+                    ashape=cpu_ary.shape,
+                    sshape=local_ary_shape))
+
+        # Create the LocalArray on this remote, and return
+        # a proxy to it. Used for creating
+        dim_data = () if len(ddpr) == 0 else ddpr[comm.Get_rank()]
+        ldist = Distribution(comm=comm, dim_data=dim_data)
+        res = LocalArray(ldist, buf=cpu_ary)
+        return proxyize(res)
+
+    except Exception as e:
+        raise Exception(str(traceback.format_exc()))
 
 def shutdown_remote_solver():
     """
@@ -66,29 +126,13 @@ def shutdown_remote_solver():
 
     try:
         global slvr
+        
+        if slvr is None:
+            raise ValueError('slvr is None!')
+
         slvr.shutdown()
         del slvr
 
         return "Shutdown succeeded"
     except Exception as e:
-        return str(traceback.format_exc())
-
-def stitch_local_arys(comm, ddpr, A):
-    """
-    Create distributed arrays by wrapping solver arrays
-    on the remote
-    """
-
-    import traceback
-
-    try:
-        from distarray.localapi import LocalArray
-        from distarray.localapi.maps import Distribution
-
-        dim_data = () if len(ddpr) == 0 else ddpr[comm.Get_rank()]
-
-        ldist = Distribution(comm=comm, dim_data=dim_data)
-
-        global slvr
-    except Exception as e:
-        return str(traceback.format_exc())
+        raise Exception(str(traceback.format_exc()))
