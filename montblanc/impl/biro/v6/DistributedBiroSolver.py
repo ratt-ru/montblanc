@@ -97,7 +97,6 @@ class DistributedBiroSolver(BaseSolver):
         remote_hosts = ctx.apply(query_remote_hostname)
 
         # Get remote memory setups
-        print('Checking remote memory')
         ctx.targets = self.valid_engines
         mem_per_engine = ctx.apply(query_remote_memory)
         remote_mem_str = ['    engine {e}: {b} on {h}'.format(
@@ -343,19 +342,31 @@ class DistributedBiroSolver(BaseSolver):
         for ary in A:
             global_dim_data = []
             # Determine the integral shape of this array
-            ishape = mbu.shape_from_str_tuple(ary['shape'], P)
+            sshape = ary['shape']
+            ishape = mbu.shape_from_str_tuple(sshape, P)
 
             # Iterate over both the integral and string shapes
             # If we have a pre-configured distribution for
             # this dimension, use it, otherwise just
             # take the entire dimension.
-            for isize, ssize in zip(ishape, ary['shape']):
+            was_distributed = False
+
+            for isize, ssize in zip(ishape, sshape):
                 if ssize in dim_distributions:
                     D = { 'dist_type' : 'b', 'bounds' : dim_distributions[ssize] }
+                    was_distributed = True
                 else:
                     D = { 'dist_type' : 'b', 'bounds' : [0, isize] }
 
                 global_dim_data.append(D)
+
+            if not was_distributed:
+                global_dim_data[0] = {
+                    'dist_type' : 'o',
+                    'size' : ishape[0],
+                    'proc_grid_size' : len(self.valid_engines)
+                }
+
 
             # Create a distribution for this array
             distributions[ary['name']] = Distribution.from_global_dim_data(
