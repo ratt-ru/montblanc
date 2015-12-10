@@ -164,7 +164,7 @@ class SolverCPU(object):
 
             # e^(2*pi*sqrt(u*l+v*m+w*n)*frequency/C).
             # Dim. ntime x na x nchan x nsrcs
-            cplx_phase = ne.evaluate('exp(2*pi*1j*p*f/C)', {
+            cplx_phase = ne.evaluate('exp(-2*pi*1j*p*f/C)', {
                 'p': phase[:, :, :, np.newaxis],
                 'f': freq[np.newaxis, np.newaxis, np.newaxis, :],
                 'C': montblanc.constants.C,
