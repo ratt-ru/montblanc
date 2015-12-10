@@ -496,7 +496,7 @@ class TestBiroV4(unittest.TestCase):
             # Tile the brightness square root term over
             # the antenna dimension and transpose so that
             # polarisations are last
-            JBsqrt = np.tile(B[:,:,:,np.newaxis,:],
+            JBsqrt = np.tile(B_sqrt[:,:,:,np.newaxis,:],
                 (1,1,1,slvr.na,1)).transpose(1,2,3,4,0)
 
             assert JBsqrt.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)

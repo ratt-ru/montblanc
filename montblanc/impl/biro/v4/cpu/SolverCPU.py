@@ -267,7 +267,7 @@ class SolverCPU(object):
             # Note that this code handles a special case of the above
             # where we assume that both the trace and determinant
             # are real and positive.
-            B = self.compute_b_jones() if b_jones is None else b_jones
+            B = self.compute_b_jones() if b_jones is None else b_jones.copy()
 
             # trace = I+Q + I-Q = 2*I
             # det = (I+Q)*(I-Q) - (U+iV)*(U-iV) = I**2-Q**2-U**2-V**2
