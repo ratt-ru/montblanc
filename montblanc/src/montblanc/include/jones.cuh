@@ -72,7 +72,7 @@ void jones_multiply_4x4_in_place(
 }
 
 // | J0   J1 |     | K0   K1 |^H      | J0.K0^H + J1.K1^H   J0.K2^H + J1.K3^H |
-// |         |  *  |         |    =   |                             |
+// |         |  *  |         |    =   |                                       |
 // | J2   J3 |     | K2   K3 |        | J2.K0^H + J3.K1^H   J2.K2^H + J3.K3^H |
 template <
     typename T,
@@ -89,7 +89,7 @@ void jones_multiply_4x4_hermitian_transpose_in_place(
     // Load in the value to multiply.
     typename Tr::ct shfl_K = cub::ShuffleIndex(K, shfl_idx);
 
-    // (a+bi)*conj(c+di) = (ac+bd) + (-ad+bc)i
+    // (a+bi)*conj(c+di) = (a+bi)*(c-di) = (ac+bd) + (-ad+bc)i
     // a = J.x, b=J.y, c=shfl_K.x, d = shfl_K.y
     typename Tr::ct sum;
     sum.x =  J.x*shfl_K.x + J.y*shfl_K.y;
@@ -107,6 +107,7 @@ void jones_multiply_4x4_hermitian_transpose_in_place(
 
     // Load in the polarisation to multiply.
     shfl_K = cub::ShuffleIndex(K, shfl_idx);
+    // (a+bi)*conj(c+di) = (a+bi)*(c-di) = (ac+bd) + (-ad+bc)i
     sum.x +=  J.x*shfl_K.x + J.y*shfl_K.y;
     sum.y += -J.x*shfl_K.y + J.y*shfl_K.x;
 

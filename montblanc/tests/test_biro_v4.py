@@ -522,6 +522,32 @@ class TestBiroV4(unittest.TestCase):
             # Results from two different methods should be the same
             self.assertTrue(np.allclose(res_one, res_two))
 
+    def test_jones_multiply(self):
+        """ Verify jones matrix multiplication code against NumPy """
+
+        # Generate random matrices
+        def rmat(shape):
+            return np.random.random(size=shape) + \
+                np.random.random(size=shape)*1j
+
+        N = 100
+        shape = (100, 2,2)
+
+        A, B = rmat(shape), rmat(shape)
+
+        AM = [np.matrix(A[i,:,:]) for i in range(N)]
+        BM = [np.matrix(B[i,:,:]) for i in range(N)]
+
+        C = SolverCPU.jones_multiply(A, B, N)
+
+        for Am, Bm, Cm in zip(AM, BM, C):
+            assert np.allclose(Am*Bm, Cm)
+
+        C = SolverCPU.jones_multiply_hermitian_transpose(A, B, N)
+
+        for Am, Bm, Cm in zip(AM, BM, C):
+            assert np.allclose(Am*Bm.H, Cm)
+
     def test_transpose(self):
         slvr_cfg = BiroSolverConfiguration(na=14, ntime=10, nchan=16,
             sources=montblanc.sources(point=10, gaussian=10),

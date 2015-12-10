@@ -270,7 +270,7 @@ class SolverCPU(object):
             B = self.compute_b_jones() if b_jones is None else b_jones
 
             # trace = I+Q + I-Q = 2*I
-            # det = (I+Q)*(I-Q)+(U+iV)*(U-iV) = I**2-Q**2-U**2-V**2
+            # det = (I+Q)*(I-Q) - (U+iV)*(U-iV) = I**2-Q**2-U**2-V**2
             trace = (B[0]+B[3]).real
             det = (B[0]*B[3] - B[1]*B[2]).real
 
