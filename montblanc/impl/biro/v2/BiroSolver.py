@@ -124,7 +124,7 @@ A = [
 
     ary_dict('lm', (2,'nsrc'), 'ft',
         default=0,
-        test=lambda slvr, ary: (rary(ary)-0.5)*1e-4),
+        test=lambda slvr, ary: (rary(ary)-0.5)*1e-1),
 
     ary_dict('brightness', (5,'ntime','nsrc'), 'ft',
         default=np.array([1,0,0,1,0.8])[:,np.newaxis,np.newaxis],
@@ -146,7 +146,7 @@ A = [
 
     ary_dict('point_errors', (2,'ntime','na'), 'ft',
         default=1,
-        test=lambda slvr, ary: (rary(ary)-0.5)*1e-5),
+        test=lambda slvr, ary: (rary(ary)-0.5)*1e-2),
 
     ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft',
         default=1,
