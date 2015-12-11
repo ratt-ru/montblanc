@@ -69,7 +69,7 @@ P = [
     # on frequency, while we're dealing with wavelengths.
     prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi),
     prop_dict('two_pi', 'ft', 2*np.pi),
-    prop_dict('ref_wave', 'ft', 0.0),
+    prop_dict('ref_wave', 'ft', 1.5e9),
     prop_dict('sigma_sqrd', 'ft', 1.0),
     prop_dict('X2', 'ft', 0.0),
     prop_dict('beam_width', 'ft', 65),
@@ -140,9 +140,9 @@ A = [
 
     ary_dict('wavelength', ('nchan',), 'ft',
         default=lambda slvr, ary: montblanc.constants.C / \
-            np.linspace(1e-9, 2e-9, slvr.nchan),
+            np.linspace(1e9, 2e9, slvr.nchan),
         test=lambda slvr, ary: montblanc.constants.C / \
-            np.linspace(1e-9, 2e-9, slvr.nchan)),
+            np.linspace(1e9, 2e9, slvr.nchan)),
 
     ary_dict('point_errors', (2,'ntime','na'), 'ft',
         default=1,
