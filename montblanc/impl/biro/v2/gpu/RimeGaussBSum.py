@@ -160,25 +160,27 @@ void rime_gauss_B_sum_impl(
         typename Tr::ct ant_two = jones_EK_scalar[i];
         // Get the complex scalar for antenna one and conjugate it
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
+        typename Tr::ct ant_one = jones_EK_scalar[i];
+        ant_one.y = -ant_one.y;
 
-        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        // a = ant_two.x b=ant_two.y c=ant_one.x d = ant_one.y
-        typename Tr::ct value = Po::make_ct(
-            ant_two.x*ant_one.x - ant_two.y*ant_one.y,
-            ant_two.x*ant_one.y + ant_two.y*ant_one.x);
+        montblanc::complex_multiply_in_place<T>(ant_two, ant_one);
+        typename Tr::ct pol;
 
-        Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
-        Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
+        pol.x = I[threadIdx.z]+Q[threadIdx.z]; pol.y = 0;
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Isum.x += pol.x; Isum.y += pol.y;
 
-        Qsum.x += (I[threadIdx.z]-Q[threadIdx.z])*value.x - 0.0*value.y;
-        Qsum.y += (I[threadIdx.z]-Q[threadIdx.z])*value.y - 0.0*value.x;
+        pol.x = I[threadIdx.z]-Q[threadIdx.z]; pol.y = 0;
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Qsum.x += pol.x; Qsum.y += pol.y;
 
-        Usum.x += U[threadIdx.z]*value.x - -V[threadIdx.z]*value.y;
-        Usum.y += U[threadIdx.z]*value.y + -V[threadIdx.z]*value.x;
+        pol.x = U[threadIdx.z]; pol.y = -V[threadIdx.z];
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Usum.x += pol.x; Usum.y += pol.y;
 
-        Vsum.x += U[threadIdx.z]*value.x - V[threadIdx.z]*value.y;
-        Vsum.y += U[threadIdx.z]*value.y + V[threadIdx.z]*value.x;
+        pol.x = U[threadIdx.z]; pol.y = V[threadIdx.z];
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Vsum.x += pol.x; Vsum.y += pol.y;
 
         __syncthreads();
     }
@@ -222,25 +224,27 @@ void rime_gauss_B_sum_impl(
         ant_two.x *= exp; ant_two.y *= exp;
         // Get the complex scalar for antenna one and conjugate it
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
+        typename Tr::ct ant_one = jones_EK_scalar[i];
+        ant_one.y = -ant_one.y;
 
-        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        // a = ant_two.x b=ant_two.y c=ant_one.x d = ant_one.y
-        typename Tr::ct value = Po::make_ct(
-            ant_two.x*ant_one.x - ant_two.y*ant_one.y,
-            ant_two.x*ant_one.y + ant_two.y*ant_one.x);
+        montblanc::complex_multiply_in_place<T>(ant_two, ant_one);
+        typename Tr::ct pol;
 
-        Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
-        Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
+        pol.x = I[threadIdx.z]+Q[threadIdx.z]; pol.y = 0;
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Isum.x += pol.x; Isum.y += pol.y;
 
-        Qsum.x += (I[threadIdx.z]-Q[threadIdx.z])*value.x - 0.0*value.y;
-        Qsum.y += (I[threadIdx.z]-Q[threadIdx.z])*value.y - 0.0*value.x;
+        pol.x = I[threadIdx.z]-Q[threadIdx.z]; pol.y = 0;
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Qsum.x += pol.x; Qsum.y += pol.y;
 
-        Usum.x += U[threadIdx.z]*value.x - -V[threadIdx.z]*value.y;
-        Usum.y += U[threadIdx.z]*value.y + -V[threadIdx.z]*value.x;
+        pol.x = U[threadIdx.z]; pol.y = -V[threadIdx.z];
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Usum.x += pol.x; Usum.y += pol.y;
 
-        Vsum.x += U[threadIdx.z]*value.x - V[threadIdx.z]*value.y;
-        Vsum.y += U[threadIdx.z]*value.y + V[threadIdx.z]*value.x;
+        pol.x = U[threadIdx.z]; pol.y = V[threadIdx.z];
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Vsum.x += pol.x; Vsum.y += pol.y;
 
         __syncthreads();
     }
@@ -287,25 +291,27 @@ void rime_gauss_B_sum_impl(
         ant_two.x *= sersic_factor; ant_two.y *= sersic_factor;
         // Get the complex scalar for antenna one and conjugate it
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i]; ant_one.y = -ant_one.y;
+        typename Tr::ct ant_one = jones_EK_scalar[i];
+        ant_one.y = -ant_one.y;
 
-        // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        // a = ant_two.x b=ant_two.y c=ant_one.x d = ant_one.y
-        typename Tr::ct value = Po::make_ct(
-            ant_two.x*ant_one.x - ant_two.y*ant_one.y,
-            ant_two.x*ant_one.y + ant_two.y*ant_one.x);
+        montblanc::complex_multiply_in_place<T>(ant_two, ant_one);
+        typename Tr::ct pol;
 
-        Isum.x += (I[threadIdx.z]+Q[threadIdx.z])*value.x + 0.0*value.y;
-        Isum.y += (I[threadIdx.z]+Q[threadIdx.z])*value.y + 0.0*value.x;
+        pol.x = I[threadIdx.z]+Q[threadIdx.z]; pol.y = 0;
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Isum.x += pol.x; Isum.y += pol.y;
 
-        Qsum.x += (I[threadIdx.z]-Q[threadIdx.z])*value.x - 0.0*value.y;
-        Qsum.y += (I[threadIdx.z]-Q[threadIdx.z])*value.y - 0.0*value.x;
+        pol.x = I[threadIdx.z]-Q[threadIdx.z]; pol.y = 0;
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Qsum.x += pol.x; Qsum.y += pol.y;
 
-        Usum.x += U[threadIdx.z]*value.x - -V[threadIdx.z]*value.y;
-        Usum.y += U[threadIdx.z]*value.y + -V[threadIdx.z]*value.x;
+        pol.x = U[threadIdx.z]; pol.y = -V[threadIdx.z];
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Usum.x += pol.x; Usum.y += pol.y;
 
-        Vsum.x += U[threadIdx.z]*value.x - V[threadIdx.z]*value.y;
-        Vsum.y += U[threadIdx.z]*value.y + V[threadIdx.z]*value.x;
+        pol.x = U[threadIdx.z]; pol.y = V[threadIdx.z];
+        montblanc::complex_multiply_in_place<T>(pol, ant_two);
+        Vsum.x += pol.x; Vsum.y += pol.y;
 
         __syncthreads();
     }
