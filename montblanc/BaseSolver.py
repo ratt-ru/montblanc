@@ -36,6 +36,7 @@ import montblanc.factory
 import montblanc.util as mbu
 
 from montblanc.config import (BiroSolverConfigurationOptions as Options)
+from montblanc.cpu_ary import cpu_array_factory
 
 class PipelineDescriptor(object):
     """ Descriptor class for pipelines """
@@ -259,63 +260,46 @@ class BaseSolver(Solver):
                     np.dtype(record.dtype).name,
                     np.dtype(ary.dtype).name))
 
-    def init_array(self, name, ary, value):
-        # No defaults are supplied
-        if value is None:
-            ary.fill(0)
-        # The array is defaulted with some function
-        elif isinstance(value, types.MethodType):
+    def _curry_init_functions(self, name, value):
+        """
+        if value is a lambda, class method or function, this
+        class method curries them into a lambda with one argument,
+        the array to initialise, binding self in the process.
+
+        Otherwise, value is returned as is.
+        """
+        if isinstance(value, types.FunctionType) or isinstance(value, types.MethodType):
             try:
-                signature(value).bind(self, ary)
+                signature(value).bind(self, 1)
             except TypeError:
-                raise TypeError(('The signature of the function supplied '
-                    'for setting the value on array %s is incorrect. '
-                    'The function signature has the form f(slvr, ary), '
-                    'where f is some function that will set values '
-                    'on the array, slvr is a Solver object which provides ' 
-                    'useful information to the function, '
-                    'and ary is the NumPy array which must be '
-                    'initialised with values.') % (name))
+                raise TypeError(("The signature of the function supplied "
+                    "for setting the value on array '{n}' is incorrect. "
+                    "The function signature has the form f(slvr, ary), "
+                    "where f is some function that will set values "
+                    "on the array, slvr is a Solver object which provides "
+                    "useful information to the function, "
+                    "and ary is the NumPy array which must be "
+                    "initialised with values.").format(n=name))
 
-            returned_ary = value(self, ary)
+            return lambda a: value(self, a)
 
-            if returned_ary is not None:
-                ary[:] = returned_ary
         elif isinstance(value, types.LambdaType):
             try:
-                signature(value).bind(self, ary)
+                signature(value).bind(self, 1)
             except TypeError:
-                raise TypeError(('The signature of the lambda supplied '
-                    'for setting the value on array %s is incorrect. '
-                    'The function signature has the form lambda slvr, ary:, '
-                    'where lambda provides functionality for setting values '
-                    'on the array, slvr is a Solver object which provides ' 
-                    'useful information to the function, '
-                    'and ary is the NumPy array which must be '
-                    'initialised with values.') % (name))
+                raise TypeError(("The signature of the lambda supplied "
+                    "for setting the value on array '{n}' is incorrect. "
+                    "The function signature has the form lambda slvr, ary:, "
+                    "where lambda provides functionality for setting values "
+                    "on the array, slvr is a Solver object which provides "
+                    "useful information to the function, "
+                    "and ary is the NumPy array which must be "
+                    "initialised with values.").format(n=name))
 
-            returned_ary = value(self, ary)
+            print('Currying {t} value for array {n}'.format(t=type(value), n=name))
+            return lambda a: value(self, a)
 
-            if returned_ary is not None:
-                ary[:] = returned_ary
-        # Got an ndarray, try set it equal
-        elif isinstance(value, np.ndarray):
-            try:
-                ary[:] = value
-            except BaseException as e:
-                raise ValueError(('Tried to assign array %s with '
-                    'value NumPy array, but this failed '
-                    'with %s') % (name, repr(e)))
-        # Assume some sort of value has been supplied
-        # Give it to NumPy
-        else:
-            try:
-                ary.fill(value)
-            except BaseException as e:
-                raise ValueError(('Tried to fill array %s with '
-                    'value value %s, but NumPy\'s fill function '
-                    'failed with %s') % (name, value, repr(e)))
-
+        return value
 
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         """
@@ -360,6 +344,12 @@ class BaseSolver(Solver):
         """
         # Should we create arrays? By default we don't create CPU arrays
         # but we do create GPU arrays by default.
+
+        create_cpu_ary = kwargs.get('cpu', None)
+
+        if not create_cpu_ary and self.store_cpu:
+            create_cpu_ary = 'numpy'
+
         create_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
         create_gpu_ary = kwargs.get('gpu', True)
 
@@ -417,28 +407,20 @@ class BaseSolver(Solver):
         else:
             source_key = 'default'
 
-        if create_cpu_ary or create_gpu_ary:
-            
-            page_locked = kwargs.get('page_locked', False)
-            aligned = kwargs.get('aligned', False)
-
-            with self.context:
-                # Page locked implies aligned
-                if page_locked:
-                    import pycuda.driver as cuda
-                    default_ary = cuda.pagelocked_empty(shape=shape, dtype=dtype)
-                elif aligned:
-                    import pycuda.driver as cuda
-                    default_ary = cuda.aligned_empty(shape=shape, dtype=dtype)
-                else:
-                    default_ary = np.empty(shape=shape, dtype=dtype)
-                    
-                self.init_array(name, default_ary, kwargs.get(source_key, None))
-
         # Create an empty cpu array if it doesn't exist
         # and set it on the object instance
         if create_cpu_ary:
-            setattr(self, cpu_name, default_ary)
+            # Get the default value for this array from the source key
+            # and curry them into a lambda if its a function
+            default_value = kwargs.get(source_key, None)
+            default_value = self._curry_init_functions(name, default_value)
+
+            # Get the array from the factory
+            cpu_ary = cpu_array_factory(shape=shape, dtype=dtype,
+                ary_type=create_cpu_ary, context=self.context,
+                init=default_value)
+
+            setattr(self, cpu_name, cpu_ary)
 
         # Create an empty gpu array if it doesn't exist
         # and set it on the object instance
@@ -452,12 +434,12 @@ class BaseSolver(Solver):
                 import pycuda.gpuarray as gpuarray
                 gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
 
-                # If the array length is non-zero initialise it
+                # Initialise if the array length is non-zero
                 if np.product(shape) > 0:
                     # If available, use CPU defaults
                     # to initialise the array
                     if create_cpu_ary:
-                        gpu_ary.set(default_ary)
+                        gpu_ary.set(cpu_ary)
                     # Otherwise just zero it 
                     else:
                         gpu_ary.fill(0)
