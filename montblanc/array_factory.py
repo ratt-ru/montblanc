@@ -68,24 +68,26 @@ WARNING_MESSAGE = ("A default array in key '{key}'' "
     "of time and memory, "
     "but is otherwise harmless.")
 
-_INIT_KWARG = 'init : string, ndarray, function'
+_INIT_KWARG = 'init'
+_INIT_KWARG_TYPE = 'string, ndarray, function'
 _INIT_KWARG_DESCRIPTION = '{p}Default array value'
 
-_CONTEXT_KWARG = 'context : Montblanc ContextWrapper for PyCUDA'
+_CONTEXT_KWARG = 'context'
+_CONTEXT_KWARG_TYPE = 'Montblanc ContextWrapper for PyCUDA'
 _CONTEXT_KWARG_DESCRIPTION = (
     "{p}ContextWrapper wrapping a PyCUDA context.\n"
     "{p}Required for '{pl}' and '{al}' arrays.").format(
         p='{p}', pl=CPU_ARY_PAGELOCKED, al=CPU_ARY_ALIGNED)
 
 _KWARG_MAP = {
-    _INIT_KWARG : _INIT_KWARG_DESCRIPTION,
-    _CONTEXT_KWARG : _CONTEXT_KWARG_DESCRIPTION
+    _INIT_KWARG : (_INIT_KWARG_TYPE, _INIT_KWARG_DESCRIPTION),
+    _CONTEXT_KWARG : (_CONTEXT_KWARG_TYPE, _CONTEXT_KWARG_DESCRIPTION)
 }
 
 # Create a formatted description of the _KWARG_MAP
-_KWARG_DESCRIPTION ='\n'.join(["{p}'{n}'\n{d}".format(
-        p=' '*4, n=name, d=desc.format(p=' '*8))
-    for name, desc in _KWARG_MAP.iteritems()])
+_KWARG_DESCRIPTION ='\n'.join(["{p}{n} : {t}\n{d}".format(
+        p=' '*4, n=name, t=stype, d=desc.format(p=' '*8))
+    for name, (stype, desc) in _KWARG_MAP.iteritems()])
 
 def init_array(ary, value):
     """ Initialise ary using value """
