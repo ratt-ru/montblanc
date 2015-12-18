@@ -72,6 +72,13 @@ _INIT_KWARG = 'init'
 _INIT_KWARG_TYPE = 'string, ndarray, function'
 _INIT_KWARG_DESCRIPTION = '{p}Default array value'
 
+_DISTARRAY_CONSTRUCTOR_KWARG = 'distarray_constructor'
+_DISTARRAY_CONSTRUCTOR_KWARG_TYPE = 'lambda or function'
+_DISTARRAY_CONSTRUCTOR_KWARG_DESCRIPTION = (
+    "{p}A lambda or function that takes zero arguments\n"
+    "{p} and returns a distarray object.")
+
+
 _CONTEXT_KWARG = 'context'
 _CONTEXT_KWARG_TYPE = 'Montblanc ContextWrapper for PyCUDA'
 _CONTEXT_KWARG_DESCRIPTION = (
@@ -80,8 +87,15 @@ _CONTEXT_KWARG_DESCRIPTION = (
         p='{p}', pl=CPU_ARY_PAGELOCKED, al=CPU_ARY_ALIGNED)
 
 _KWARG_MAP = {
-    _INIT_KWARG : (_INIT_KWARG_TYPE, _INIT_KWARG_DESCRIPTION),
-    _CONTEXT_KWARG : (_CONTEXT_KWARG_TYPE, _CONTEXT_KWARG_DESCRIPTION)
+    _INIT_KWARG : (
+        _INIT_KWARG_TYPE,
+        _INIT_KWARG_DESCRIPTION),
+    _CONTEXT_KWARG : (
+        _CONTEXT_KWARG_TYPE,
+        _CONTEXT_KWARG_DESCRIPTION),
+    _DISTARRAY_CONSTRUCTOR_KWARG : (
+        _DISTARRAY_CONSTRUCTOR_KWARG_TYPE,
+        _DISTARRAY_CONSTRUCTOR_KWARG_DESCRIPTION),
 }
 
 # Create a formatted description of the _KWARG_MAP
