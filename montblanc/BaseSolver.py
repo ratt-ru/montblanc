@@ -36,7 +36,8 @@ import montblanc.factory
 import montblanc.util as mbu
 
 from montblanc.config import (BiroSolverConfigurationOptions as Options)
-from montblanc.cpu_ary import cpu_array_factory
+from montblanc.array_factory import (cpu_array_factory,
+    CONTEXT_KWARG, DISTARRAY_CONSTRUCTOR_KWARG)
 
 class PipelineDescriptor(object):
     """ Descriptor class for pipelines """
@@ -350,7 +351,6 @@ class BaseSolver(Solver):
         if not create_cpu_ary and self.store_cpu:
             create_cpu_ary = 'numpy'
 
-        create_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
         create_gpu_ary = kwargs.get('gpu', True)
 
         # Get a property dictionary to perform string replacements
@@ -396,10 +396,6 @@ class BaseSolver(Solver):
         if not BaseSolver.__dict__.has_key(gpu_name):
             setattr(BaseSolver, gpu_name, GPUArrayDescriptor(record_key=name))
 
-        # If we're creating arrays, then we'll want to initialise
-        # them with default values
-        default_ary = None
-
         # If we're creating test data, initialise the array with
         # data from the test key, otherwise take data from the default key
         if self.slvr_cfg[Options.DATA_SOURCE] == Options.DATA_SOURCE_TEST:
@@ -415,10 +411,16 @@ class BaseSolver(Solver):
             default_value = kwargs.get(source_key, None)
             default_value = self._curry_init_functions(name, default_value)
 
+            gpu_context = None if not hasattr(self, CONTEXT_KWARG) \
+                else self.context
+            
+            distarray_constructor = kwargs.get(DISTARRAY_CONSTRUCTOR_KWARG, None)
+
             # Get the array from the factory
             cpu_ary = cpu_array_factory(shape=shape, dtype=dtype,
-                ary_type=create_cpu_ary, context=self.context,
-                init=default_value)
+                ary_type=create_cpu_ary, init=default_value,
+                context=gpu_context, distarray_constructor=distarray_constructor)
+
 
             setattr(self, cpu_name, cpu_ary)
 

@@ -18,8 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import traceback
 import types
 
+from distarray.globalapi.distarray import DistArray
 import numpy as np
 
 import montblanc
@@ -68,18 +70,18 @@ WARNING_MESSAGE = ("A default array in key '{key}'' "
     "of time and memory, "
     "but is otherwise harmless.")
 
-_INIT_KWARG = 'init'
+INIT_KWARG = 'init'
 _INIT_KWARG_TYPE = 'string, ndarray, function'
 _INIT_KWARG_DESCRIPTION = '{p}Default array value'
 
-_DISTARRAY_CONSTRUCTOR_KWARG = 'distarray_constructor'
+DISTARRAY_CONSTRUCTOR_KWARG = 'distarray_constructor'
 _DISTARRAY_CONSTRUCTOR_KWARG_TYPE = 'lambda or function'
 _DISTARRAY_CONSTRUCTOR_KWARG_DESCRIPTION = (
     "{p}A lambda or function that takes zero arguments\n"
     "{p} and returns a distarray object.")
 
 
-_CONTEXT_KWARG = 'context'
+CONTEXT_KWARG = 'context'
 _CONTEXT_KWARG_TYPE = 'Montblanc ContextWrapper for PyCUDA'
 _CONTEXT_KWARG_DESCRIPTION = (
     "{p}ContextWrapper wrapping a PyCUDA context.\n"
@@ -87,13 +89,13 @@ _CONTEXT_KWARG_DESCRIPTION = (
         p='{p}', pl=CPU_ARY_PAGELOCKED, al=CPU_ARY_ALIGNED)
 
 _KWARG_MAP = {
-    _INIT_KWARG : (
+    INIT_KWARG : (
         _INIT_KWARG_TYPE,
         _INIT_KWARG_DESCRIPTION),
-    _CONTEXT_KWARG : (
+    CONTEXT_KWARG : (
         _CONTEXT_KWARG_TYPE,
         _CONTEXT_KWARG_DESCRIPTION),
-    _DISTARRAY_CONSTRUCTOR_KWARG : (
+    DISTARRAY_CONSTRUCTOR_KWARG : (
         _DISTARRAY_CONSTRUCTOR_KWARG_TYPE,
         _DISTARRAY_CONSTRUCTOR_KWARG_DESCRIPTION),
 }
@@ -126,25 +128,53 @@ def init_array(ary, value):
         ary.fill(0)
 
     # Got an ndarray, try set it equal
-    elif isinstance(value, np.ndarray):
+    elif isinstance(ary, np.ndarray) and isinstance(value, np.ndarray):
         try:
             ary[:] = value
         except BaseException as e:
-            raise ValueError(("Tried to assign array '{n}' with "
+            raise ValueError(("Tried to assign array with "
                 "value NumPy array, but this failed "
-                "with {e}").format(n=name, e=repr(e)))
+                "with {e}").format(e=traceback.format_exc()))
+    elif isinstance(ary, DistArray) and isinstance(value, np.ndarray):
+        # Just assign if array shapes match
+        if ary.shape == value.shape:
+            try:
+                ary[:] = value
+            except BaseException as e:
+                raise ValueError(("Tried to assign array with "
+                    "value NumPy array, but this failed "
+                    "with {e}").format(e=traceback.format_exc()))
+        # Assume an array broadcast. As distarray does not yet
+        # handle this, try the broadcast on the remote's local array
+        elif np.product(ary.shape) > np.product(value.shape):
+            def assign_on_remote_local(local_ary, value):
+                local_ary.ndarray[:] = value
+
+            ary.context.apply(assign_on_remote_local,
+                args=(ary.key, value))
+        # distarray doesn't handle this case, just ignore it.
+        elif np.product(ary.shape) == 0:
+            pass
+        # Otherwise we don't know how to handle this
+        else:
+            raise ValueError(("Unable to assign array of "
+                "shape {ns} and type {nt} to a distarray "
+                "with shape {ds} and {dt},").format(
+                    ns=value.shape, nt=value.dtype,
+                    ds=ary.shape, dt=ary.dtype))
+
     # Assume some sort of value has been supplied
     # Give it to NumPy
     else:
         try:
             ary.fill(value)
         except BaseException as e:
-            raise ValueError(("Tried to fill array '{n}' with "
+            raise ValueError(("Tried to fill array with "
                 "value '{v}', but NumPy\'s fill function "
-                "failed with {e}").format(n=name, v=value, e=repr(e)))
+                "failed with {e}").format(v=value, e=traceback.format_exc()))
 
 def cpu_array_factory(shape, dtype, name=None,
-    ary_type=CPU_ARY_NUMPY, **kwargs):
+    ary_type=None, **kwargs):
     """
     Create an empty CPU array of specified shape and dtype.
 
@@ -169,11 +199,19 @@ def cpu_array_factory(shape, dtype, name=None,
 
     """
 
+    # Handle default arguments
+    if ary_type is None:
+        ary_type = CPU_ARY_NUMPY
+
+    # Convert any True boolean types to NumPy arrays
+    if isinstance(ary_type, types.BooleanType) and ary_type is True:
+        ary_type = CPU_ARY_NUMPY
+
     # Get any default values for the array
-    init = kwargs.get(_INIT_KWARG, None)
+    init = kwargs.get(INIT_KWARG, None)
 
     def get_context(mem_type, kwargs):
-        ctx = kwargs.get(_CONTEXT_KWARG, None)
+        ctx = kwargs.get(CONTEXT_KWARG, None)
 
         if not ctx:
             raise ValueError(('A CUDA context is required '
@@ -182,9 +220,6 @@ def cpu_array_factory(shape, dtype, name=None,
 
         return ctx
 
-    # Convert any True boolean types to NumPy arrays
-    if isinstance(ary_type, types.BooleanType) and ary_type is True:
-        ary_type = CPU_ARY_NUMPY
 
     # Standard NumPy arrays
     if ary_type == CPU_ARY_NUMPY:
@@ -218,7 +253,10 @@ def cpu_array_factory(shape, dtype, name=None,
 
     # Distributed distarray
     elif ary_type == CPU_ARY_DISTARRAY:
-        return None
+        da_lambda = kwargs.get(DISTARRAY_CONSTRUCTOR_KWARG)
+        A = da_lambda
+        init_array(A, init)
+        return A
 
     raise ValueError(("Array type '{at}' is not supported. "
         "Valid array types are {vat}").format(

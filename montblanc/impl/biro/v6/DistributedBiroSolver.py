@@ -19,7 +19,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 try:
-    from distarray.globalapi import Context, Distribution
+    from distarray.globalapi import Context, Distribution, DistArray
 except ImportError as e:
     montblanc.log.error('distarray package is not installed.')
     raise
@@ -65,6 +65,11 @@ class DistributedBiroSolver(BaseSolver):
 
         super(DistributedBiroSolver, self).__init__(slvr_cfg)
 
+        # Configure the dimensions of the beam cube
+        self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
+        self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
+        self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
+
         slvr_cfg = BiroSolverConfiguration(**slvr_cfg)
         slvr_cfg[Options.VERSION] = Options.VERSION_FIVE
         slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_DEFAULTS
@@ -87,10 +92,18 @@ class DistributedBiroSolver(BaseSolver):
         # Create the slvr variable on the remote
         ctx.view['slvr'] = None
 
-        # Get array and property dictionaries,
-        # determine memory requirements
+        # Get array and property dictionaries
         A, P = self.get_arys_and_props(slvr_cfg, cpu_ary_only=True)
-        total_mem_required = mbu.dict_array_bytes_required(A, P)
+
+        # At this point, we can register properties
+        self.register_properties(P)
+
+        # Now get solver properties for reasoning about
+        # our problem size
+        SP = self.get_properties()
+
+        # determine memory requirements
+        total_mem_required = mbu.dict_array_bytes_required(A, SP)
 
         # Get the hostnames
         ctx.targets = self.valid_engines
@@ -146,7 +159,10 @@ class DistributedBiroSolver(BaseSolver):
 
         # Get the distribution dictionary, containing array names as keys
         # and distarray distributions as values
-        dists_dict = self.get_per_ary_distributions(A, P, D)        
+        dists_dict = self.get_per_ary_distributions(A, SP, D)
+
+        print('\n'.join(['{n}: {s}'.format(n=n,s=d.shape)
+            for n,d in dists_dict.iteritems()]))
 
         # Get the ddpr dictionary, containing array names as keys and
         # distarray dim data per rank as values
@@ -156,13 +172,14 @@ class DistributedBiroSolver(BaseSolver):
         # distarray MPI comms as values
         dist_comm_dict = DistributedBiroSolver.get_per_ary_comm(dists_dict)
 
+        # Target all valid engines
         ctx.targets = self.valid_engines
 
         for ary in  A:
             name = ary['name']
             ddpr = dist_ddpr_dict[name]
             distribution = dists_dict[name]
-            dtype = mbu.dtype_from_str(ary['dtype'], P)
+            dtype = mbu.dtype_from_str(ary['dtype'], SP)
 
             assert len(ctx.targets) == len(distribution.localshapes())
 
@@ -172,18 +189,32 @@ class DistributedBiroSolver(BaseSolver):
                 ctx.view.client[e]['local_ary_shape'] = s
                 ctx.view.client[e]['local_ary_dtype'] = dtype
 
-            res = self.distarray_ctx.apply(create_local_ary,
-                args=(distribution.comm, dist_ddpr_dict[name], name))
+            # Create the local arrays on the target engines
+            iters_key = self.distarray_ctx.apply(create_local_ary,
+                args=(distribution.comm, ddpr, name))
 
-            print('Post {n} array creation {r}'.format(n=name, r=res))
+            # Stitch the local arrays together to create
+            # the distributed array
+            #dal = lambda: DistArray.from_localarrays(iters_key[0],
+            #    distribution=distribution, dtype=dtype)
 
-        # And shut them down!
-        ctx.targets = self.valid_engines
-        res = self.distarray_ctx.apply(shutdown_remote_solver)
-        print('Shutdown Results {r}'.format(r=res))
+            dal = DistArray.from_localarrays(iters_key[0],
+                distribution=distribution, dtype=dtype)
+
+            ary['distarray_constructor'] = dal
+
+        # Now register the arrays
+        self.register_arrays(A)
 
         import time as time
         time.sleep(2)
+
+    def shutdown(self):
+        # And shut them down!
+        ctx = self._distarray_context()
+        ctx.targets = self.valid_engines
+        res = self.distarray_ctx.apply(shutdown_remote_solver)
+        print('Shutdown Results {r}'.format(r=res))
 
     def __enter__(self):
         """
@@ -228,28 +259,38 @@ class DistributedBiroSolver(BaseSolver):
             for engine_id_list
             in duplicates.itervalues()]
 
+    def get_properties(self):
+        # Obtain base solver property dictionary
+        # and add the beam cube dimensions to it
+        D = super(DistributedBiroSolver, self).get_properties()
+
+        D.update({
+            Options.E_BEAM_WIDTH : self.beam_lw,
+            Options.E_BEAM_HEIGHT : self.beam_mh,
+            Options.E_BEAM_DEPTH : self.beam_nud
+        })
+
+        return D
+
     @staticmethod
     def get_arys_and_props(slvr_cfg, cpu_ary_only=True):
         """
         Get array and property definitions
         """
 
-        P = slvr_cfg.copy()
+        P = copy.deepcopy(BSV4mod.P)
 
-        # Copy the v4 arrays 
+        # Copy the v4 arrays
         if cpu_ary_only is True:
             A = [a for a in copy.deepcopy(BSV4mod.A)
                     if a['cpu'] is True]
         else:
             A = [a for a in copy.deepcopy(BSV4mod.A)]
 
-        # Duplication of functionality in BaseSolver constructor
-        P['ft'], P['ct'] = mbu.float_dtypes_from_str(P[Options.DTYPE])
-        src_nr_vars = mbu.sources_to_nr_vars(slvr_cfg[Options.SOURCES])
-        # Sum to get the total number of sources
-        nsrc = sum(src_nr_vars.itervalues())
-        P.update(src_nr_vars)
-        P['nsrc'] = nsrc
+        # On the distributed solver, just create distarrays
+        for ary in A:
+            ary['gpu'] = False
+            ary['cpu'] = 'distarray'
 
         return A, P
 
@@ -342,6 +383,7 @@ class DistributedBiroSolver(BaseSolver):
         for ary in A:
             global_dim_data = []
             # Determine the integral shape of this array
+            name = ary['name']
             sshape = ary['shape']
             ishape = mbu.shape_from_str_tuple(sshape, P)
 
@@ -369,7 +411,7 @@ class DistributedBiroSolver(BaseSolver):
 
 
             # Create a distribution for this array
-            distributions[ary['name']] = Distribution.from_global_dim_data(
+            distributions[name] = Distribution.from_global_dim_data(
                 distarray_ctx, global_dim_data)
 
         return distributions
@@ -418,3 +460,11 @@ class DistributedBiroSolver(BaseSolver):
                 break
 
         return tuple(reversed(result))
+
+    # Take these methods from the v2 BiroSolver
+    get_default_base_ant_pairs = \
+        BSV4mod.BiroSolver.__dict__['get_default_base_ant_pairs']
+    get_default_ant_pairs = \
+        BSV4mod.BiroSolver.__dict__['get_default_ant_pairs']
+    get_ap_idx = \
+        BSV4mod.BiroSolver.__dict__['get_ap_idx']
