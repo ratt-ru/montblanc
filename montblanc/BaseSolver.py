@@ -208,6 +208,9 @@ class BaseSolver(Solver):
                 cc_tuple = cuda.Context.get_device().compute_capability()
             # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
             self.cc = np.int32(np.dot(cc_tuple, (100,10)))
+        else:
+            self.context = mbu.NullContextWrapper()
+            self.cc = np.int32(np.dot( (1,0), (100, 10) ))
 
         # Dictionaries to store records about our arrays and properties
         self.arrays = {}

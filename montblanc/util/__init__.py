@@ -559,9 +559,17 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
 
     return blockdimx, blockdimy, blockdimz
 
-class ContextWrapper(object):
+class NullContextWrapper(object):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
+
+class ContextWrapper(NullContextWrapper):
     """ Context Manager Wrapper for CUDA Contexts! """
     def __init__(self, context):
+        super(ContextWrapper, self).__init__()
         self.context = context
 
     def __enter__(self):
