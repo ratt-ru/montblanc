@@ -136,3 +136,22 @@ def shutdown_remote_solver():
         return "Shutdown succeeded"
     except Exception as e:
         raise Exception(str(traceback.format_exc()))
+
+def remote_solve():
+    """
+    Call solve() on the remote solvers
+    """
+
+    import traceback
+
+    try:
+        global slvr
+
+        if slvr is None:
+            raise ValueError('slvr is None!')
+
+        slvr.solve()
+
+        return slvr.X2_cpu
+    except Exception as e:
+        raise Exception(str(traceback.format_exc()))

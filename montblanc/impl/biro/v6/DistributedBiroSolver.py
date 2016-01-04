@@ -47,6 +47,7 @@ from remote import (query_remote_memory,
     query_remote_hostname,
     create_remote_solver,
     shutdown_remote_solver,
+    remote_solve,
     create_local_ary)
 
 class DistributedBiroSolver(BaseSolver):
@@ -209,12 +210,21 @@ class DistributedBiroSolver(BaseSolver):
         import time as time
         time.sleep(2)
 
+    def initialise(self):
+        pass
+
     def shutdown(self):
         # And shut them down!
         ctx = self._distarray_context()
         ctx.targets = self.valid_engines
         res = self.distarray_ctx.apply(shutdown_remote_solver)
         print('Shutdown Results {r}'.format(r=res))
+
+    def solve(self):
+        ctx = self._distarray_context()
+        res = self.distarray_ctx.apply(remote_solve)
+        print('Solver Results {r}'.format(r=res))
+
 
     def __enter__(self):
         """
