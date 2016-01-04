@@ -141,11 +141,12 @@ def array_bytes(shape, dtype):
     """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
     return np.product(shape)*np.dtype(dtype).itemsize
 
-def random_like(ary=None, shape=None, dtype=None):
+def _numpy_random_like(ary=None, shape=None, dtype=None):
     """
     Returns a random array of the same shape and type as the
     supplied array argument, or the supplied shape and dtype
     """
+
     if ary is not None:
         shape, dtype = ary.shape, ary.dtype
     elif shape is None or dtype is None:
@@ -159,6 +160,45 @@ def random_like(ary=None, shape=None, dtype=None):
             np.random.random(size=shape)*1j).astype(dtype)
     else:
         return np.random.random(size=shape).astype(dtype)
+
+
+def _distarray_random_like(ary):
+    """
+    Returns a random distarray of the same shape and type as the
+    supplied array argument
+    """
+
+    from distarray.globalapi.random import Random
+
+    shape, dtype = ary.shape, ary.dtype
+    dist = ary.distribution
+    r = Random(ary.context)
+
+    if np.issubdtype(dtype, np.complexfloating):
+        return (r.randn(dist) + r.randn(dist)*1j)
+    else:
+        return r.randn(dist)
+
+def random_like(ary=None, shape=None, dtype=None):
+    """
+    Returns a random array of the same shape and type as the
+    supplied array argument, or the supplied shape and dtype
+    """
+
+    if ary is None or isinstance(ary, np.ndarray):
+        return _numpy_random_like(ary=ary, shape=shape, dtype=dtype)
+    else:
+        try:
+            from distarray.globalapi import DistArray
+
+            if isinstance(ary, DistArray):
+                return _distarray_random_like(ary)
+        except ImportError as e:
+            pass
+
+    raise ValueError(("No method currently exists for creating "
+        "random arrays of type '{t}'.").format(t=type(ary)))
+
 
 def rethrow_attribute_exception(e):
     """
