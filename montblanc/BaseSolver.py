@@ -133,6 +133,7 @@ DEFAULT_NCHAN=4
 DEFAULT_NTIME=10
 DEFAULT_NVIS=DEFAULT_NBL*DEFAULT_NCHAN*DEFAULT_NTIME
 DEFAULT_NSRC=1
+DEFAULT_NPARAMS=0
 
 class BaseSolver(Solver):
     """ Class that holds the elements for solving the RIME """
@@ -142,6 +143,7 @@ class BaseSolver(Solver):
     ntime = Parameter(DEFAULT_NTIME)
     nsrc = Parameter(DEFAULT_NSRC)
     nvis = Parameter(DEFAULT_NVIS)
+    nparams = Parameter(DEFAULT_NPARAMS)
 
     pipeline = PipelineDescriptor()
 
@@ -167,6 +169,7 @@ class BaseSolver(Solver):
         # - point sources
         # - gaussian sources
         # - sersic sources
+        # - X2 gradient size
         self.na = slvr_cfg[Options.NA]
         self.nbl = nbl = slvr_cfg.get(Options.NBL,
             mbu.nr_of_baselines(self.na,autocor))
@@ -175,6 +178,7 @@ class BaseSolver(Solver):
         self.npolchan = self.npol*self.nchan
         self.ntime = slvr_cfg[Options.NTIME]
         self.nvis = self.nbl*self.nchan*self.ntime
+        self.nparams = slvr_cfg.get(Options.NPARAMS, 0)
 
         # Convert the source types, and their numbers
         # to their number variables and numbers
@@ -633,6 +637,7 @@ class BaseSolver(Solver):
             'ntime' : slvr.ntime,
             'nsrc'  : slvr.nsrc,
             'nvis' : slvr.nvis,
+            'nparams' : slvr.nparams,
             # Types
             'ft' : slvr.ft,
             'ct' : slvr.ct,

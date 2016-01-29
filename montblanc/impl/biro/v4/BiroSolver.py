@@ -31,16 +31,24 @@ from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
+from montblanc.impl.biro.v4.gpu.RimeSumCoherenciesWithGradient import RimeSumCoherenciesWithGradient
 
 from montblanc.pipeline import Pipeline
 from montblanc.util import random_like as rary
 
 def get_pipeline(slvr_cfg):
     wv = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
-    return Pipeline([RimeBSqrt(),
-        RimeEBeam(),
-        RimeEKBSqrt(),
-        RimeSumCoherencies(weight_vector=wv)])
+    npar = slvr_cfg.get(Options.NPARAMS, 0)
+    if (npar == 0):
+        return Pipeline([RimeBSqrt(),
+            RimeEBeam(),
+            RimeEKBSqrt(),
+            RimeSumCoherencies(weight_vector=wv)])
+    else:
+        return Pipeline([RimeBSqrt(),
+            RimeEBeam(),
+            RimeEKBSqrt(),
+            RimeSumCoherenciesWithGradient()])
 
 def ary_dict(name,shape,dtype,cpu=True,gpu=True, **kwargs):
     D = {
@@ -163,7 +171,7 @@ A = [
         test=rand_gauss_shape),
     
     ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
-        default=np.array([0,0,0])[:,np.newaxis],
+        default=np.array([0,0,np.pi/648000])[:,np.newaxis],
         test=rand_sersic_shape),
 
     ary_dict('frequency', ('nchan',), 'ft',
@@ -201,8 +209,10 @@ A = [
     ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct', cpu=False),
     ary_dict('vis', ('ntime','nbl','nchan',4), 'ct', cpu=False),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
+    ary_dict('chi_sqrd_result_grad',('nparams','ntime','nbl','nchan'),'ft', cpu=False),
 
     ary_dict('X2', (1, ), 'ft', cpu=False, gpu=False),
+    ary_dict('X2_grad',('nparams', ), 'ft', cpu=False, gpu=False),
 ]
 
 class BiroSolver(BaseSolver):

@@ -49,6 +49,11 @@ class SolverConfigurationOptions(object):
     DEFAULT_NCHAN = 16
     NCHAN_DESCRIPTION = 'Number of channels'
 
+    # Number of model parameters for the chi squared gradient
+    NPARAMS = 'nparams'
+    DEFAULT_NPARAMS = 0
+    NPARAMS_DESCRIPTION = 'X2 gradient size' 
+
     # Are we dealing with floats or doubles?
     DTYPE = 'dtype'
     DTYPE_FLOAT = 'float'
@@ -140,6 +145,11 @@ class SolverConfigurationOptions(object):
             DEFAULT: DEFAULT_NCHAN,
             REQUIRED: True },
 
+        NPARAMS: {
+            DESCRIPTION: NPARAMS_DESCRIPTION,
+            DEFAULT: DEFAULT_NPARAMS,
+            REQUIRED: False },    
+
         DTYPE: {
             DESCRIPTION: DTYPE_DESCRIPTION,
             DEFAULT: DEFAULT_DTYPE,
@@ -191,6 +201,7 @@ class SolverConfiguration(dict):
       - antenna
       - channels
       - sources
+      - chi squared gradient size (Optional)
 
     the data type
       - float
