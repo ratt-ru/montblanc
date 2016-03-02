@@ -149,9 +149,15 @@ A = [
         default=1,
         test=lambda slvr, ary: (rary(ary)-0.5)*1e-2),
 
+    ary_dict('flag', (4, 'ntime', 'nbl', 'nchan'), np.int32,
+        default=0,
+        test=lambda slvr, ary: np.random.random_integers(
+            0, 1, size=ary.shape)),
+
     ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft',
         default=1,
         test=lambda slvr, ary: rary(ary)),
+
     ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct',
         default=0,
         test=lambda slvr, ary: rary(ary)),

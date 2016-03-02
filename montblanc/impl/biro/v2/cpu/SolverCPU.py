@@ -371,7 +371,7 @@ class SolverCPU(object):
 
         return jones
 
-    def compute_ebk_vis(self):
+    def compute_ebk_vis(self, flag=None):
         """
         Computes the complex visibilities based on the
         scalar EK term and the 2x2 B term.
@@ -383,6 +383,8 @@ class SolverCPU(object):
         nsrc, ntime, nbl, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         ebk_jones = self.compute_ebk_jones()
+
+        if flag is None: flag = slvr.flag_cpu
 
         if nsrc == 1:
             # Due to this bug
@@ -396,6 +398,9 @@ class SolverCPU(object):
                 .astype(slvr.ct)
 
         assert vis.shape == (4, ntime, nbl, nchan)
+
+        # Zero any flagged visibilities
+        vis[flag > 0] = 0
 
         return vis
 
@@ -417,7 +422,8 @@ class SolverCPU(object):
 
         return vis
 
-    def compute_chi_sqrd_sum_terms(self, weight_vector=False):
+    def compute_chi_sqrd_sum_terms(self, vis=None,
+        bayes_data=None, weight_vector=False, flag=None):
         """
         Computes the terms of the chi squared sum,
         but does not perform the sum itself.
@@ -433,11 +439,20 @@ class SolverCPU(object):
         ntime, nbl, nchan = slvr.dim_local_size('ntime', 'nbl', 'nchan')
 
         try:
+            if vis is None: vis = self.compute_ebk_vis()
+            if bayes_data is None: bayes_data = slvr.bayes_data_cpu
+            if flag is None: flag = slvr.flag_cpu
+
+            # Copy technically needed here so that flagging
+            # doesn't corrupt original array
+            bayes_data = bayes_data.copy()
+            bayes_data[flag > 0] = 0
+
             # Take the difference between the visibilities and the model
             # (4,nbl,nchan,ntime)
             d = ne.evaluate('vis - bayes', {
-                'vis': slvr.vis_cpu,
-                'bayes': slvr.bayes_data_cpu})
+                'vis': vis,
+                'bayes': bayes_data})
             assert d.shape == (4, ntime, nbl, nchan)
 
             # Square of the real and imaginary components
