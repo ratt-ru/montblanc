@@ -8,7 +8,7 @@ Montblanc is licensed under the GNU GPL v2.0 License.
 
 ## Requirements
 
-- PyCUDA 2015.1
+- PyCUDA 2015.1.3
 - A Kepler NVIDIA GPU for more recent functionality.
 
 ## Installation
@@ -17,26 +17,41 @@ Certain pre-requisites must be installed, prior to calling the `setup.py` script
 
 ### Pre-requisites
 
-Montblanc depends on [NVIDIA cub 1.4.1][cub]. It can be cloned as a submodule
-prior to running `python setup.py`:
-
-    # git submodule init
-    # git submodule update --depth 1
-
-An experimental alternative is to download [NVIDIA cub 1.4.1][cub] and unzip it
-in the include directory of `nvcc`.
-
-You'll also need to install the [python-casacore][pyrap] library which, in turn, is dependent on [casacore2][casacore]. It may be easier to add the [radio astronomy PPA][radio-astro-ppa]  and get the binaries from there.
+- **[libffi][libffi]** development files, required by cffi. On ubuntu 14.04, you can run:
+    ```bash
+    $ sudo apt-get install libffi-dev
+    ```
+- **[python-casacore][pyrap]** which depends on **[casacore2][casacore]**. On Ubuntu 14.04 add the [radio astronomy PPA][radio-astro-ppa]  and get the binaries from there:
+    ```bash
+    $ sudo apt-get install software-properties-common
+    $ sudo add-apt-repository ppa:radio-astro/main
+    $ sudo apt-get update
+    $ sudo apt-get install python-casacore
+    ```
+- **[PyCUDA 2015.1.3][pycuda]**. setup.py will attempt to install this automatically,
+    but this might not work if you have a non-standard CUDA install location. It's worth running
+    ```bash
+    $ python -c 'import pycuda.autoinit'
+    ```
+    to check if your pycuda can talk to the NVIDIA driver. If not, manually download
+    and install [PyCUDA][pycuda].
+- **[cub 1.5.1][cub]**. setup.py will attempt to download this from github
+    and install to the correct directory during install. If this fails do the following:
+    ```bash
+    $ wget -c https://codeload.github.com/NVlabs/cub/zip/1.5.1
+    $ mv 1.5.1 cub.zip
+    $ python setup.py install
+    ```
 
 ### Building the package
 
 Run
 
-    # python setup.py build
+    $ python setup.py build
 
 to build the package. The following:
 
-    # python setup.py install
+    $ python setup.py install
 
 should install the package.
 
@@ -44,22 +59,22 @@ should install the package.
 
 Once the libraries have been compiled you should be able to run the
 
-    # cd tests
-    # python -c 'import montblanc; montblanc.test()'
-    # python -m unittest test_biro_v4.TestBiroV4.test_sum_coherencies_double
+    $ cd tests
+    $ python -c 'import montblanc; montblanc.test()'
+    $ python -m unittest test_biro_v4.TestBiroV4.test_sum_coherencies_double
 
 which will run the entire test suite or only the specified test case, respectively. The reported times are for the entire test case with numpy code, and not just the CUDA kernels.
 
 If you're running on an ubuntu laptop with optimus technology, you may have to install bumblebee and run
 
-    # optirun python -c 'import montblanc; montblanc.test()'
+    $ optirun python -c 'import montblanc; montblanc.test()'
 
 ## Playing with a Measurement Set
 
 You could also try run
 
-    # cd examples
-    # python MS_example.py /home/user/data/WSRT.MS -np 10 -ng 10 -c 100
+    $ cd examples
+    $ python MS_example.py /home/user/data/WSRT.MS -np 10 -ng 10 -c 100
 
 which sets up things based on the supplied Measurement Set, with 10 point and 10 gaussian sources. It performs 100 iterations of the pipeline.
 
@@ -89,6 +104,7 @@ Everything should be considered unstable and subject to change. I will make an e
 [pyrap]:https://github.com/casacore/python-casacore
 [casacore]:https://github.com/casacore/casacore
 [radio-astro-ppa]:https://launchpad.net/~radio-astro/+archive/main
+[libffi]:https://sourceware.org/libffi/
 [biro-paper-arxiv]:http://arxiv.org/abs/1501.05304
 [biro-paper-mnras]:http://mnras.oxfordjournals.org/content/450/2/1308.abstract
 [montblanc-paper-arxiv]:http://arxiv.org/abs/1501.07719
