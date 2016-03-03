@@ -1,5 +1,7 @@
 # Python cruft
 build/
+dist/
+montblanc.egg-info/
 *.pyc
 
 # log files
@@ -26,3 +28,6 @@ build/
 *.exe
 *.out
 *.app
+
+# cub files
+montblanc/src/cub
