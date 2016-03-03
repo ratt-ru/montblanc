@@ -81,8 +81,7 @@ def is_cub_installed(readme_filename, header_filename, cub_version_str):
     return False
 
 def install_cub():
-    """ Download
-    s and installs cub """
+    """ Downloads and installs cub """
     cub_zip_file = 'cub.zip'
     cub_url = 'https://codeload.github.com/NVlabs/cub/zip/1.5.1'
     cub_sha_hash = 'b04f434f42267ff892d92b9e9e303b8e16f1dd32'
