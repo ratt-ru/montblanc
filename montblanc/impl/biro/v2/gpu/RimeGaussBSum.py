@@ -371,7 +371,6 @@ void rime_gauss_B_sum_impl(
 		}
 
 		visibilities[i] = Isum;
-        typename Tr::ct delta = data_vis[i];
         delta.x -= Isum.x; delta.y -= Isum.y;
         delta.x *= delta.x; delta.y *= delta.y;
         if(apply_weights)
@@ -406,7 +405,7 @@ void rime_gauss_B_sum_impl(
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
         i = (TIME*NBL + BL)*NCHAN + CHAN + NTIME*NBL*NCHAN;
-		delta = data_vis[i];
+        typename Tr::ct delta = data_vis[i];
 
 		// Zero polarisation if flagged
 		if(flag[i] > 0)
@@ -451,8 +450,15 @@ void rime_gauss_B_sum_impl(
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
         i = (TIME*NBL + BL)*NCHAN + CHAN + 2*NTIME*NBL*NCHAN;
-        visibilities[i] = Usum;
         typename Tr::ct delta = data_vis[i];
+
+        if(flag[i] > 0)
+        {
+            Usum.x = 0; Usum.y = 0;
+            delta.x = 0; delta.y = 0;
+        }
+
+        visibilities[i] = Usum;
         delta.x -= Usum.x; delta.y -= Usum.y;
         delta.x *= delta.x; delta.y *= delta.y;
         if(apply_weights)
@@ -488,6 +494,8 @@ void rime_gauss_B_sum_impl(
             temp.y*G[threadIdx.z][threadIdx.y][threadIdx.x].x;
 
         i = (TIME*NBL + BL)*NCHAN + CHAN + 3*NTIME*NBL*NCHAN;
+        typename Tr::ct delta = data_vis[i];
+
 		if(flag[i] > 0)
 		{
 		    Qsum.x = 0; Qsum.y = 0;
