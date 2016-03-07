@@ -609,8 +609,8 @@ class RimeGaussBSum(Node):
             else slvr.sersic_shape_gpu
 
         self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic,
-            slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
-            slvr.diag_g_gpu, slvr.flag_gpu, slvr.weight_vector_gpu,
+            slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.diag_g_gpu,
+            slvr.jones_scalar_gpu, slvr.flag_gpu, slvr.weight_vector_gpu,
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
             **self.get_kernel_params(slvr))
 
