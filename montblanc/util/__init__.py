@@ -94,6 +94,12 @@ def setter_name(name):
     """ Constructs a name for the property, based on the property name """
     return 'set_' + name
 
+def fmt_dimension_line(name,description,size):
+    return '%-*s%-*s%-*s' % (
+        20,name,
+        40,description,
+        20,size)
+
 def fmt_array_line(name,size,dtype,cpu,gpu,shape):
     """ Format array parameters on an 80 character width line """
     return '%-*s%-*s%-*s%-*s%-*s%-*s' % (

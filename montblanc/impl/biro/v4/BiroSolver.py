@@ -223,9 +223,17 @@ class BiroSolver(BaseSolver):
         super(BiroSolver, self).__init__(slvr_cfg)
 
         # Configure the dimensions of the beam cube
-        self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
-        self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
-        self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
+        self.register_dimension('beam_lw',
+            'E Beam cube width in l coords',
+            slvr_cfg[Options.E_BEAM_WIDTH])
+
+        self.register_dimension('beam_mh',
+            'E Beam cube height in m coords',
+            slvr_cfg[Options.E_BEAM_HEIGHT])
+
+        self.register_dimension('beam_nud',
+            'E Beam cube height in nu coords',
+            slvr_cfg[Options.E_BEAM_DEPTH])
 
         self.register_properties(P)
         self.register_arrays(A)
@@ -242,19 +250,6 @@ class BiroSolver(BaseSolver):
 
         # Initialise it with the current solver (self)
         mbu.init_rime_const_data(self, self.rime_const_data_cpu)
-
-    def get_properties(self):
-        # Obtain base solver property dictionary
-        # and add the beam cube dimensions to it
-        D = super(BiroSolver, self).get_properties()
-
-        D.update({
-            Options.E_BEAM_WIDTH : self.beam_lw,
-            Options.E_BEAM_HEIGHT : self.beam_mh,
-            Options.E_BEAM_DEPTH : self.beam_nud
-        })
-
-        return D
 
     def get_default_base_ant_pairs(self):
         """

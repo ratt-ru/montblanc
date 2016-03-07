@@ -330,6 +330,36 @@ class TestSolver(unittest.TestCase):
                 else:
                     self.assertFalse(hasattr(slvr,setter_name))
 
+    def test_register_dimension(self):
+        """
+        Test that registering a dimension on the solver works
+        """
+        na, ntime, nchan = 14, 5, 16
+
+        slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
+            sources=montblanc.sources(point=2, gaussian=2))
+
+        dim = 'nwombles'
+        dim_description = 'Number of Wombles'
+        dim_size = 100
+
+        with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
+            slvr.register_dimension(dim, dim_description, dim_size)
+
+            self.assertTrue(hasattr(slvr, dim))
+            self.assertTrue(getattr(slvr, dim) == dim_size)
+
+            # See https://github.com/bcj/AttrDict/issues/34
+            self.assertFalse(type(slvr.dims[dim].local_extents) is list)
+            self.assertTrue(type(slvr.dims[dim].local_extents) is tuple)
+            self.assertTrue(type(slvr.dims[dim]['local_extents']) is list)
+
+            # Test dimension attributes
+            self.assertTrue(slvr.dims[dim].local_extents == (0,dim_size))
+            self.assertTrue(slvr.dims[dim].name == dim)
+            self.assertTrue(slvr.dims[dim].size == dim_size)
+            self.assertTrue(slvr.dims[dim].description == dim_description)
+
     def test_auto_correlation(self):
         """
         Test the configuring our solver object with auto auto-correlations

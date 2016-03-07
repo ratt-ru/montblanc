@@ -30,6 +30,7 @@ import types
 
 from weakref import WeakKeyDictionary
 from attrdict import AttrDict
+from collections import OrderedDict
 
 import pycuda
 import pycuda.driver as cuda
@@ -106,42 +107,12 @@ class GPUArrayDescriptor(object):
     def __delete__(self, instance):
         del self.data[instance]
 
-class Parameter(object):
-    """ Descriptor class for describing parameters """
-    def __init__(self, default=None):
-        self.default = default
-        self.data = WeakKeyDictionary()
-
-    def __get__(self, instance, owner):
-        return self.data.get(instance,self.default)
-
-    def __set__(self, instance, value):
-        if value < 0:
-            raise ValueError('Negative parameter value: %s' % value )
-        self.data[instance] = value
-
-    def __delete__(self, instance):
-        del self.data[instance]
-
 class Solver(object):
     """ Base class for solving the RIME. """
     pass
 
-DEFAULT_NA=3
-DEFAULT_NBL=mbu.nr_of_baselines(DEFAULT_NA)
-DEFAULT_NCHAN=4
-DEFAULT_NTIME=10
-DEFAULT_NVIS=DEFAULT_NBL*DEFAULT_NCHAN*DEFAULT_NTIME
-DEFAULT_NSRC=1
-
 class BaseSolver(Solver):
     """ Class that holds the elements for solving the RIME """
-    na = Parameter(DEFAULT_NA)
-    nbl = Parameter(DEFAULT_NBL)
-    nchan = Parameter(DEFAULT_NCHAN)
-    ntime = Parameter(DEFAULT_NTIME)
-    nsrc = Parameter(DEFAULT_NSRC)
-    nvis = Parameter(DEFAULT_NVIS)
 
     pipeline = PipelineDescriptor()
 
@@ -149,46 +120,60 @@ class BaseSolver(Solver):
         """
         BaseSolver Constructor
 
-        Parameters:
+        Arguments:
             slvr_cfg : SolverConfiguration
+                A solver configuration object.
         """
 
-        super(BaseSolver, self).__init__()
+        # Dictionaries to store records about our
+        # dimensions, arrays and properties
+        self.dims = OrderedDict()
+        self.arrays = OrderedDict()
+        self.properties = OrderedDict()
 
+        # Store the solver configuration
         self.slvr_cfg = slvr_cfg
 
+        # Get the configured dimensions for this solver
         autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
+        ntime = slvr_cfg.get(Options.NTIME)
+        na = slvr_cfg.get(Options.NA)
+        nbl = slvr_cfg.get(Options.NBL, mbu.nr_of_baselines(na, autocor))
+        nchan = slvr_cfg.get(Options.NCHAN)
+        npol = 4
 
-        # Configure our problem dimensions. Number of
-        # - antenna
-        # - baselines
-        # - channels
-        # - timesteps
-        # - point sources
-        # - gaussian sources
-        # - sersic sources
-        self.na = slvr_cfg[Options.NA]
-        self.nbl = nbl = slvr_cfg.get(Options.NBL,
-            mbu.nr_of_baselines(self.na,autocor))
-        self.nchan = slvr_cfg[Options.NCHAN]
-        self.npol = 4
-        self.npolchan = self.npol*self.nchan
-        self.ntime = slvr_cfg[Options.NTIME]
-        self.nvis = self.nbl*self.nchan*self.ntime
+        # Register our problem dimensions on this solver.
+        self.register_dimension('ntime',
+            Options.NTIME_DESCRIPTION, ntime)
+        self.register_dimension('na',
+            Options.NA_DESCRIPTION, na)
+        self.register_dimension('nbl',
+            Options.NBL_DESCRIPTION, nbl)
+        self.register_dimension('nchan',
+            Options.NCHAN_DESCRIPTION, nchan)
+        self.register_dimension('npol',
+            'Number of polarisations', npol)
+        self.register_dimension('npolchan',
+            'Number of channels x polarisations', nchan*npol)
+        self.register_dimension('nvis',
+            'Number of visibilities', ntime*nbl*nchan)
 
         # Convert the source types, and their numbers
         # to their number variables and numbers
         # { 'point':10 } => { 'npsrc':10 }
-        src_nr_vars = mbu.sources_to_nr_vars(slvr_cfg[Options.SOURCES])
+        src_cfg = slvr_cfg[Options.SOURCES]
+        src_nr_vars = mbu.sources_to_nr_vars(src_cfg)
         # Sum to get the total number of sources
-        self.nsrc = sum(src_nr_vars.itervalues())
+        self.register_dimension('nsrc',
+            'Number of sources', sum(src_nr_vars.itervalues()))
 
-        for nr_var, nr_of_src in src_nr_vars.iteritems():
-            setattr(self, nr_var, nr_of_src)
+        # Register the individual source types
+        for src_type, (nr_var, nr_of_src) in zip(
+            src_cfg.iterkeys(), src_nr_vars.iteritems()):
 
-        if self.nsrc == 0:
-            raise ValueError(('The number of sources, or, '
-                'the sum of %s, must be greater than zero') % (src_nr_vars))
+            self.register_dimension(nr_var,
+                'Number of {t} sources'.format(t=src_type),
+                nr_of_src, zero_size_valid=True)
 
         # Configure our floating point and complex types
         if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
@@ -219,10 +204,6 @@ class BaseSolver(Solver):
         # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
         self.cc = np.int32(np.dot(cc_tuple, (100,10)))
 
-        # Dictionaries to store records about our arrays and properties
-        self.arrays = {}
-        self.properties = {}
-
         # Should we store CPU versions of the GPU arrays
         self.store_cpu = slvr_cfg.get(Options.STORE_CPU, False)
 
@@ -251,6 +232,58 @@ class BaseSolver(Solver):
     def mem_required(self):
         """ Return a string representation of the total memory required """
         return mbu.fmt_bytes(self.bytes_required())
+
+    def register_dimension(self, name, description,
+        size, zero_size_valid=False):
+        """
+        Registers a dimension with this Solver object
+
+        Arguments
+        ---------
+            name : string
+                The name of this dimension.
+                e.g 'ntime'.
+            description : string
+                The description for this dimension.
+                e.g. 'Number of timesteps'.
+            size : integer
+                The total dimension size.
+
+        Keyword Arguments
+        -----------------
+            zero_size_valid : boolean
+                If True, this dimension may be zero-sized.
+        """
+
+        if zero_size_valid and size < 0:
+            raise ValueError((
+                "Attempted to register dimension '{n}'' "
+                "with negative size '{s}'. "
+                "Please choose size >= 0.").format(
+                    n=name, s=size))
+
+
+        if not zero_size_valid and size <= 0:
+            raise ValueError((
+                "Attempted to register dimension {n} "
+                "with size negative or zero size {s}. "
+                "Please use a positive number.").format(
+                    n=name, s=size))
+
+        if hasattr(self, name):
+            raise AttributeError((
+                "Attempted to register dimension {n} "
+                "as an attribute of the solver, but "
+                "it already exists. Please choose "
+                "a different name!").format(
+                    n=name, s=size))
+
+        # Create the dimension dictionary
+        self.dims[name] = AttrDict(name=name,
+            size=size, description=description,
+            local_extents=[0, size])
+
+        setattr(self, name, size)
 
     def check_array(self, record_key, ary):
         """
@@ -333,7 +366,7 @@ class BaseSolver(Solver):
         """
         Register an array with this Solver object.
 
-        Parameters
+        Arguments
         ----------
             name : string
                 name of the array.
@@ -533,7 +566,7 @@ class BaseSolver(Solver):
         """
         Registers a property with this Solver object
 
-        Parameters
+        Arguments
         ----------
             name : string
                 The name of the property.
@@ -626,13 +659,6 @@ class BaseSolver(Solver):
         slvr = self
 
         D = {
-            # Dimensions
-            'na' : slvr.na,
-            'nbl' : slvr.nbl,
-            'nchan' : slvr.nchan,
-            'ntime' : slvr.ntime,
-            'nsrc'  : slvr.nsrc,
-            'nvis' : slvr.nvis,
             # Types
             'ft' : slvr.ft,
             'ct' : slvr.ct,
@@ -641,9 +667,8 @@ class BaseSolver(Solver):
             'LIGHTSPEED': montblanc.constants.C,
         }
 
-        # Update with source counts
-        src_nr_vars = mbu.sources_to_nr_vars(self.slvr_cfg[Options.SOURCES])
-        D.update(src_nr_vars)
+        # Update with dimensions
+        D.update({d.name: d.size for d in self.dims.itervalues()})
 
         # Add any registered properties to the dictionary
         for p in self.properties.itervalues():
@@ -656,6 +681,17 @@ class BaseSolver(Solver):
 
     def is_double(self):
         return self.ft == np.float64
+
+    def gen_dimension_descriptions(self):
+        """ Generator generating string describing each registered dimension """
+        yield 'Registered Dimensions'
+        yield '-'*80
+        yield mbu.fmt_dimension_line('Dimension Name', 'Description', 'Size')
+        yield '-'*80
+
+        for d in sorted(self.dims.itervalues(), key=lambda x: x.name.upper()):
+            yield mbu.fmt_dimension_line(
+                d.name, d.description, d.size)
 
     def gen_array_descriptions(self):
         """ Generator generating strings describing each registered array """
@@ -714,18 +750,13 @@ class BaseSolver(Solver):
         w = 20
 
         l = ['',
-            'RIME Dimensions',
+            'Memory Usage',
             '-'*80,
-            '%-*s: %s' % (w,'Antenna', self.na),
-            '%-*s: %s' % (w,'Baselines', self.nbl),
-            '%-*s: %s' % (w,'Channels', self.nchan),
-            '%-*s: %s' % (w,'Timesteps', self.ntime),
-            '%-*s: %s' % (w,'Point Sources', self.npsrc),
-            '%-*s: %s' % (w,'Gaussian Sources', self.ngsrc),
-            '%-*s: %s' % (w,'Sersic Sources', self.nssrc),
             '%-*s: %s' % (w,'CPU Memory', mbu.fmt_bytes(n_cpu_bytes)),
             '%-*s: %s' % (w,'GPU Memory', mbu.fmt_bytes(n_gpu_bytes))]
 
+        l.extend([''])
+        l.extend([s for s in self.gen_dimension_descriptions()])
         l.extend([''])
         l.extend([s for s in self.gen_array_descriptions()])
         l.extend([''])

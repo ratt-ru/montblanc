@@ -75,9 +75,17 @@ class CompositeBiroSolver(BaseSolver):
         self.thread_local = threading.local()
 
         # Configure the dimensions of the beam cube
-        self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
-        self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
-        self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
+        self.register_dimension('beam_lw',
+            'E Beam cube width in l coords',
+            slvr_cfg[Options.E_BEAM_WIDTH])
+
+        self.register_dimension('beam_mh',
+            'E Beam cube height in m coords',
+            slvr_cfg[Options.E_BEAM_HEIGHT])
+
+        self.register_dimension('beam_nud',
+            'E Beam cube height in nu coords',
+            slvr_cfg[Options.E_BEAM_DEPTH])
 
         # Copy the v4 arrays and properties and
         # modify them for use on this
@@ -826,19 +834,6 @@ class CompositeBiroSolver(BaseSolver):
             ex.submit(__shutdown_func).result()
 
         self.initialised = False
-
-    def get_properties(self):
-        # Obtain base solver property dictionary
-        # and add the beam cube dimensions to it
-        D = super(CompositeBiroSolver, self).get_properties()
-
-        D.update({
-            Options.E_BEAM_WIDTH : self.beam_lw,
-            Options.E_BEAM_HEIGHT : self.beam_mh,
-            Options.E_BEAM_DEPTH : self.beam_nud
-        })
-
-        return D
 
     def __get_setter_method(self,name):
         """
