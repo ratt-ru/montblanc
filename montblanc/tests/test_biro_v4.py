@@ -122,11 +122,10 @@ class TestBiroV4(unittest.TestCase):
         if cmp is None:
             cmp = {}
 
-        # In factory.py, our lm coordinates range from -5e-5 to 5e-5
-        # and pointing errors from -1e-5 to 1e-5. The following values
-        # make the beam cube sufficiently large to contain their
-        # values
-        S = 1e-4
+        # Make the beam cube sufficiently large to contain the
+        # test values for the lm and pointing error coordinates
+        # specified in BiroSolver.py
+        S = 1
 
         slvr.set_beam_ll(-S)
         slvr.set_beam_lm(-S)
@@ -166,8 +165,9 @@ class TestBiroV4(unittest.TestCase):
 
         # Test that at a decent proportion of
         # the calculated EKB terms are non-zero
-        non_zero = np.sum(ekb_cpu > 0) / float(ekb_cpu.size)
-        self.assertTrue(non_zero > 0.85,
+        non_zero = np.count_nonzero(ekb_cpu)
+        non_zero_ratio = non_zero / float(ekb_cpu.size)
+        self.assertTrue(non_zero_ratio > 0.85,
             'Non-zero EKB ratio is %f.' % non_zero)
 
     def test_EKBSqrt_float(self):
@@ -179,7 +179,7 @@ class TestBiroV4(unittest.TestCase):
             pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]))
 
         with solver(slvr_cfg) as slvr:
-            self.EKBSqrt_test_impl(slvr, cmp={'rtol': 1e-5})
+            self.EKBSqrt_test_impl(slvr, cmp={'rtol': 1e-4})
 
     def test_EKBSqrt_double(self):
         """ Double precision EKBSqrt test """
@@ -227,6 +227,7 @@ class TestBiroV4(unittest.TestCase):
         # match each other
         chi_sqrd_sum_terms_cpu = slvr_cpu.compute_chi_sqrd_sum_terms(
             vis=gekb_vis_cpu, weight_vector=weight_vector)
+
         with slvr.context:
             chi_sqrd_sum_terms_gpu = slvr.chi_sqrd_result_gpu.get()
 
@@ -337,11 +338,10 @@ class TestBiroV4(unittest.TestCase):
         if cmp is None:
             cmp = {}
 
-        # In factory.py, our lm coordinates range from -5e-5 to 5e-5
-        # and pointing errors from -1e-5 to 1e-5. The following values
-        # make the beam cube sufficiently large to contain their
-        # values
-        S = 1e-4
+        # Make the beam cube sufficiently large to contain the
+        # test values for the lm and pointing error coordinates
+        # specified in BiroSolver.py
+        S = 1
 
         slvr.set_beam_ll(-S)
         slvr.set_beam_lm(-S)
@@ -390,9 +390,10 @@ class TestBiroV4(unittest.TestCase):
 
         # Test that at a decent proportion of
         # the calculated E terms are non-zero
-        non_zero_E = np.sum(E_term_cpu > 0) / float(E_term_cpu.size)
-        self.assertTrue(non_zero_E > 0.85,
-            'Non-zero E-term ratio is %f.' % non_zero_E)
+        non_zero_E = np.count_nonzero(E_term_cpu)
+        non_zero_E_ratio = non_zero_E / float(E_term_cpu.size)
+        self.assertTrue(non_zero_E_ratio > 0.85,
+            'Non-zero E-term ratio is {r}.'.format(r=non_zero_E_ratio))
 
     def test_E_beam_float(self):
         """ Test the E Beam float kernel """
@@ -496,7 +497,7 @@ class TestBiroV4(unittest.TestCase):
             # Tile the brightness square root term over
             # the antenna dimension and transpose so that
             # polarisations are last
-            JBsqrt = np.tile(B[:,:,:,np.newaxis,:],
+            JBsqrt = np.tile(B_sqrt[:,:,:,np.newaxis,:],
                 (1,1,1,slvr.na,1)).transpose(1,2,3,4,0)
 
             assert JBsqrt.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
@@ -521,6 +522,32 @@ class TestBiroV4(unittest.TestCase):
 
             # Results from two different methods should be the same
             self.assertTrue(np.allclose(res_one, res_two))
+
+    def test_jones_multiply(self):
+        """ Verify jones matrix multiplication code against NumPy """
+
+        # Generate random matrices
+        def rmat(shape):
+            return np.random.random(size=shape) + \
+                np.random.random(size=shape)*1j
+
+        N = 100
+        shape = (100, 2,2)
+
+        A, B = rmat(shape), rmat(shape)
+
+        AM = [np.matrix(A[i,:,:]) for i in range(N)]
+        BM = [np.matrix(B[i,:,:]) for i in range(N)]
+
+        C = SolverCPU.jones_multiply(A, B, N)
+
+        for Am, Bm, Cm in zip(AM, BM, C):
+            assert np.allclose(Am*Bm, Cm)
+
+        C = SolverCPU.jones_multiply_hermitian_transpose(A, B, N)
+
+        for Am, Bm, Cm in zip(AM, BM, C):
+            assert np.allclose(Am*Bm.H, Cm)
 
     def test_transpose(self):
         slvr_cfg = BiroSolverConfiguration(na=14, ntime=10, nchan=16,

@@ -156,7 +156,7 @@ A = [
     # Source Definitions
     ary_dict('lm', ('nsrc',2), 'ft',
         default=0,
-        test=lambda slvr, ary: (rary(ary)-0.5) * 1e-4),
+        test=lambda slvr, ary: (rary(ary)-0.5) * 1e-1),
 
     ary_dict('stokes', ('nsrc','ntime', 4), 'ft',
         default=np.array([1,0,0,0])[np.newaxis,np.newaxis,:],
@@ -181,7 +181,7 @@ A = [
     # Beam
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',
         default=0,
-        test=lambda slvr, ary: (rary(ary) - 0.5)*1e-5),
+        test=lambda slvr, ary: (rary(ary) - 0.5)*1e-2),
 
     ary_dict('antenna_scaling', ('na','nchan',2), 'ft',
         default=1,

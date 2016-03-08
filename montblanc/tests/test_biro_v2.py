@@ -188,7 +188,7 @@ class TestBiroV2(unittest.TestCase):
         for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
             wv = p_slvr_cfg[Options.WEIGHT_VECTOR] 
             with solver(p_slvr_cfg) as slvr:
-                self.B_sum_test_impl(slvr, wv, {'rtol': 1e-3})
+                self.B_sum_test_impl(slvr, wv, {'rtol': 1e-2})
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """

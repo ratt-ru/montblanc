@@ -149,7 +149,7 @@ void rime_jones_EKBSqrt_impl(
             + s_uvw[threadIdx.z][threadIdx.y].y*s_lm.y
             + s_uvw[threadIdx.z][threadIdx.y].x*s_lm.x;
 
-        phase *= T(TWO_PI_OVER_C) * freq[threadIdx.x];
+        phase *= T(-TWO_PI_OVER_C) * freq[threadIdx.x];
 
         typename Tr::ct cplx_phase;
         Po::sincos(phase, &cplx_phase.y, &cplx_phase.x);
