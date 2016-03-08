@@ -41,15 +41,15 @@ class SolverCPU(object):
 
             # Calculate per baseline u from per antenna u
             u = slvr.uvw_cpu[0][ap]
-            u = ne.evaluate('ap-aq', {'ap': u[1], 'aq': u[0]})
+            u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
             # Calculate per baseline v from per antenna v
             v = slvr.uvw_cpu[1][ap]
-            v = ne.evaluate('ap-aq', {'ap': v[1], 'aq': v[0]})
+            v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
             # Calculate per baseline w from per antenna w
             w = slvr.uvw_cpu[2][ap]
-            w = ne.evaluate('ap-aq', {'ap': w[1], 'aq': w[0]})
+            w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
             el = slvr.gauss_shape_cpu[0]
             em = slvr.gauss_shape_cpu[1]
@@ -93,15 +93,15 @@ class SolverCPU(object):
 
             # Calculate per baseline u from per antenna u
             u = slvr.uvw_cpu[0][ap]
-            u = ne.evaluate('ap-aq', {'ap': u[1], 'aq': u[0]})
+            u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
             # Calculate per baseline v from per antenna v
             v = slvr.uvw_cpu[1][ap]
-            v = ne.evaluate('ap-aq', {'ap': v[1], 'aq': v[0]})
+            v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
             # Calculate per baseline w from per antenna w
             w = slvr.uvw_cpu[2][ap]
-            w = ne.evaluate('ap-aq', {'ap': w[1], 'aq': w[0]})
+            w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
             e1 = slvr.sersic_shape_cpu[0]
             e2 = slvr.sersic_shape_cpu[1]
@@ -163,7 +163,7 @@ class SolverCPU(object):
 
             # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength).
             # Dim. na x ntime x nchan x nsrcs
-            phase = ne.evaluate('exp(2*pi*1j*p/wl)', {
+            phase = ne.evaluate('exp(-2*pi*1j*p/wl)', {
                 'p': phase[:, :, :, np.newaxis],
                 'wl': wave[np.newaxis, np.newaxis, np.newaxis, :],
                 'pi': np.pi
@@ -202,7 +202,7 @@ class SolverCPU(object):
             ap = slvr.get_ap_idx(src=True, chan=True)
             k_jones = self.compute_k_jones_scalar_per_ant()[ap]
 
-            k_jones_per_bl = k_jones[1]*k_jones[0].conj()
+            k_jones_per_bl = k_jones[0]*k_jones[1].conj()
 
             # Add in the shape terms of the gaussian sources.
             if slvr.ngsrc > 0:
@@ -277,7 +277,7 @@ class SolverCPU(object):
             ap = slvr.get_ap_idx(src=True, chan=True)
             e_jones = self.compute_e_jones_scalar_per_ant()[ap]
 
-            return e_jones[1]*e_jones[0].conj()
+            return e_jones[0]*e_jones[1].conj()
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
 
