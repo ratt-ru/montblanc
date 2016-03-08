@@ -261,11 +261,11 @@ void rime_sum_coherencies_with_gradient_impl(
         u1 *= sf;
         v1 *= sf;
 
-        T dev_e1 = u1*(U-U*shared.e2*shared.e2+U*shared.e1+V*shared.e1*shared.e2);
-        dev_e1 += v1*(V*shared.e2*shared.e2+V*shared.e1-V+U*shared.e1*shared.e2);
+        T dev_e1 = u1*(U-U*shared.e2*shared.e2+2*U*shared.e1+U*shared.e1*shared.e1+2*V*shared.e1*shared.e2);
+        dev_e1 += v1*(V*shared.e2*shared.e2-V*shared.e1*shared.e1+2*V*shared.e1-V+2*U*shared.e1*shared.e2);
         dev_e1 *= sf/T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2;
-        T dev_e2 = u1*(V-V*shared.e1*shared.e1+U*shared.e2+U*shared.e1*shared.e2);
-        dev_e2 += v1*(U-U*shared.e1*shared.e1+V*shared.e2-V*shared.e1*shared.e2);
+        T dev_e2 = u1*(V-V*shared.e1*shared.e1+2*U*shared.e2+2*U*shared.e1*shared.e2+V*shared.e2*shared.e2);
+        dev_e2 += v1*(U-U*shared.e1*shared.e1+U*shared.e2*shared.e2+2*V*shared.e2-2*V*shared.e1*shared.e2);
         dev_e2 *= sf/T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2;     
 
         T sersic_factor = T(1.0) + u1*u1+v1*v1;
@@ -287,15 +287,14 @@ void rime_sum_coherencies_with_gradient_impl(
         polsum.y += ant_two.y;
 
         i = 3*(SRC - C.npsrc - C.ngsrc);
-        dev_vis[i].x = ant_two.x*dev_scale;
-        dev_vis[i].y = ant_two.y*dev_scale;
-        i++;
         dev_vis[i].x = ant_two.x*dev_e1;
         dev_vis[i].y = ant_two.y*dev_e1;
         i++;
         dev_vis[i].x = ant_two.x*dev_e2;
         dev_vis[i].y = ant_two.y*dev_e2;
-
+        i++;
+        dev_vis[i].x = ant_two.x*dev_scale;
+        dev_vis[i].y = ant_two.y*dev_scale;
     }
 
     // Multiply the visibility by antenna 2's g term
@@ -523,7 +522,7 @@ class RimeSumCoherenciesWithGradient(Node):
         slvr.X2_grad = np.zeros(slvr.nparams)
         if slvr.nparams == 3*slvr.nssrc:
             for p in xrange(slvr.nparams):
-                slvr.X2_grad[p] = -2*gpuarray.sum(slvr.chi_sqrd_result_grad_gpu[p,:,:,:]).get() 
+                slvr.X2_grad[p] = -2*gpuarray.sum(slvr.chi_sqrd_result_grad_gpu[p,:,:,:]).get()
 
         if not self.weight_vector:
             slvr.set_X2(gpu_sum/slvr.sigma_sqrd)
