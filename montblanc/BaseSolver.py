@@ -279,9 +279,16 @@ class BaseSolver(Solver):
                     n=name, s=size))
 
         # Create the dimension dictionary
+        # name : dimension name
+        # description : description string
+        # size : dimension size
+        # extents : global dimension extents
+        # zeros : zero size allowed
         self.dims[name] = AttrDict(name=name,
-            size=size, description=description,
-            local_extents=[0, size])
+            description=description,
+            size=size,
+            extents=[0, size],
+            zeros=zero_size_valid)
 
         setattr(self, name, size)
 
