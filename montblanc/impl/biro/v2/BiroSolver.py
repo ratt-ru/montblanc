@@ -69,7 +69,7 @@ P = [
     # on frequency, while we're dealing with wavelengths.
     prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi),
     prop_dict('two_pi', 'ft', 2*np.pi),
-    prop_dict('ref_wave', 'ft', 0.0),
+    prop_dict('ref_wave', 'ft', 1.5e9),
     prop_dict('sigma_sqrd', 'ft', 1.0),
     prop_dict('X2', 'ft', 0.0),
     prop_dict('beam_width', 'ft', 65),
@@ -124,7 +124,7 @@ A = [
 
     ary_dict('lm', (2,'nsrc'), 'ft',
         default=0,
-        test=lambda slvr, ary: (rary(ary)-0.5)*1e-4),
+        test=lambda slvr, ary: (rary(ary)-0.5)*1e-1),
 
     ary_dict('brightness', (5,'ntime','nsrc'), 'ft',
         default=np.array([1,0,0,1,0.8])[:,np.newaxis,np.newaxis],
@@ -140,13 +140,13 @@ A = [
 
     ary_dict('wavelength', ('nchan',), 'ft',
         default=lambda slvr, ary: montblanc.constants.C / \
-            np.linspace(1e-9, 2e-9, slvr.nchan),
+            np.linspace(1e9, 2e9, slvr.nchan),
         test=lambda slvr, ary: montblanc.constants.C / \
-            np.linspace(1e-9, 2e-9, slvr.nchan)),
+            np.linspace(1e9, 2e9, slvr.nchan)),
 
     ary_dict('point_errors', (2,'ntime','na'), 'ft',
         default=1,
-        test=lambda slvr, ary: (rary(ary)-0.5)*1e-5),
+        test=lambda slvr, ary: (rary(ary)-0.5)*1e-2),
 
     ary_dict('weight_vector', (4,'ntime','nbl','nchan'), 'ft',
         default=1,
