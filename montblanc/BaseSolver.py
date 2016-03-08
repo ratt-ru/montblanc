@@ -18,6 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import collections
 import copy
 
 try:
@@ -291,6 +292,85 @@ class BaseSolver(Solver):
             zeros=zero_size_valid)
 
         setattr(self, name, size)
+
+    def update_dimensions(self, dim_list):
+        """
+        >>> slvr.update_dimensions([
+            {'name' : 'ntime', 'size' : 10, 'extents' : [2, 7], 'safety': False },
+            {'name' : 'na', 'size' : 3, 'extents' : [2, 7]},
+            ])
+        """
+
+        for dim in dim_list:
+            self.update_dimension(**dim)
+
+    def update_dimension(self, name, size=None,
+        extents=None, safety=True):
+        """
+        Update the dimension size and extents.
+
+        Arguments
+        ---------
+            name : string
+                Dimension name, 'ntime' for instance.
+
+        Keyword Arguments
+        -----------------
+            size : integer or None
+                Dimension size. Updating the size of the dimension
+                is unusual and the safety keyword must be True
+                to allow this.
+            extents : integer sequence of length 2
+                Local dimension extents covered by the solver.
+                0 <= extents[0] < extents[1] <= size or.
+                0 <= extents[0] <= extents[1] <= size must hold,
+                depending on whether zero length dimension sizes
+                are allowed by dim.zeros
+            safety : boolean
+                if set to True, an Exception will be raised if
+                an attempt to update the size is made.
+        """
+
+        # Sanity check dimension existence
+        if name not in self.dims:
+            montblanc.log.warn("'{n}' will not be updated as it "
+                "is not a registered dimension on this solver."
+                    .format(n=name))
+
+            return
+
+        dim = self.dims[name]
+
+        # Integer size
+        if size is not None:
+            # Fail if the safety is on!
+            if safety:
+                raise ValueError(
+                    "Modifying solver dimension {d} size "
+                    "from {o} to {n}, this is dangerous!"
+                        .format(d=name, o=dim.size, n=size))
+
+            # Modify the size on the dictionary and the solver
+            dim.size = size
+            setattr(self, name, size)
+
+        # Sanity check
+        if extents is not None:
+            if (not isinstance(extents, collections.Sequence)
+                or len(extents) != 2):
+
+                raise TypeError(
+                    "Supplied 'extents' variable is "
+                    "not a sequence of length 2.")
+
+            E = dim['extents'] # See https://github.com/bcj/AttrDict/issues/34
+            E[0], E[1] = extents[0], extents[1]
+
+        # Sanity check dimensions
+        if dim.zeros:
+            assert 0 <= dim.extents[0] <= dim.extents[1] <= dim.size
+        else:
+            assert 0 <= dim.extents[0] < dim.extents[1] <= dim.size
 
     def check_array(self, record_key, ary):
         """

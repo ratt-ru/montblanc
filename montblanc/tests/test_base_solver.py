@@ -350,15 +350,34 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(getattr(slvr, dim) == dim_size)
 
             # See https://github.com/bcj/AttrDict/issues/34
-            self.assertFalse(type(slvr.dims[dim].local_extents) is list)
-            self.assertTrue(type(slvr.dims[dim].local_extents) is tuple)
-            self.assertTrue(type(slvr.dims[dim]['local_extents']) is list)
+            self.assertFalse(type(slvr.dims[dim].extents) is list)
+            self.assertTrue(type(slvr.dims[dim].extents) is tuple)
+            self.assertTrue(type(slvr.dims[dim]['extents']) is list)
 
             # Test dimension attributes
-            self.assertTrue(slvr.dims[dim].local_extents == (0,dim_size))
+            self.assertTrue(slvr.dims[dim].extents == (0,dim_size))
             self.assertTrue(slvr.dims[dim].name == dim)
             self.assertTrue(slvr.dims[dim].size == dim_size)
             self.assertTrue(slvr.dims[dim].description == dim_description)
+
+            # Check that a dimension update happens
+            slvr.update_dimensions([
+                {'name': 'ntime', 'size': 5000, 'extents': [0, 300], 'safety': False},
+                {'name': 'na', 'extents': [1, 7], 'safety': True }
+            ])
+
+            self.assertTrue(slvr.ntime == 5000)
+            self.assertTrue(slvr.dims['ntime'].extents == (0,300))
+            self.assertTrue(slvr.dims['na'].extents == (1,7))
+
+            # Check that we get an exception if we change the size
+            # and the safety is off
+            with self.assertRaises(ValueError):
+                slvr.update_dimensions([
+                    {'name': 'ntime', 'size': 5000, 'extents': [0, 300]},
+                    {'name': 'na', 'extents': [1, 7], 'safety': True }
+                ])
+
 
     def test_auto_correlation(self):
         """
