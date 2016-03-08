@@ -42,15 +42,15 @@ class SolverCPU(object):
 
             # Calculate per baseline u from per antenna u
             u = slvr.uvw_cpu[:,:,0][ap]
-            u = ne.evaluate('ap-aq', {'ap': u[1], 'aq': u[0]})
+            u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
             # Calculate per baseline v from per antenna v
             v = slvr.uvw_cpu[:,:,1][ap]
-            v = ne.evaluate('ap-aq', {'ap': v[1], 'aq': v[0]})
+            v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
             # Calculate per baseline w from per antenna w
             w = slvr.uvw_cpu[:,:,2][ap]
-            w = ne.evaluate('ap-aq', {'ap': w[1], 'aq': w[0]})
+            w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
             el = slvr.gauss_shape_cpu[0]
             em = slvr.gauss_shape_cpu[1]
@@ -93,15 +93,15 @@ class SolverCPU(object):
 
             # Calculate per baseline u from per antenna u
             u = slvr.uvw_cpu[:,:,0][ap]
-            u = ne.evaluate('ap-aq', {'ap': u[1], 'aq': u[0]})
+            u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
             # Calculate per baseline v from per antenna v
             v = slvr.uvw_cpu[:,:,1][ap]
-            v = ne.evaluate('ap-aq', {'ap': v[1], 'aq': v[0]})
+            v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
             # Calculate per baseline w from per antenna w
             w = slvr.uvw_cpu[:,:,2][ap]
-            w = ne.evaluate('ap-aq', {'ap': w[1], 'aq': w[0]})
+            w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
             e1 = slvr.sersic_shape_cpu[0]
             e2 = slvr.sersic_shape_cpu[1]
@@ -538,7 +538,7 @@ class SolverCPU(object):
             assert ekb_sqrt_idx.shape == (2, slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
             result = self.jones_multiply_hermitian_transpose(
-                ekb_sqrt_idx[1], ekb_sqrt_idx[0],
+                ekb_sqrt_idx[0], ekb_sqrt_idx[1],
                 slvr.nsrc*slvr.ntime*slvr.nbl*slvr.nchan) \
                     .reshape(slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
@@ -618,12 +618,12 @@ class SolverCPU(object):
         assert g_term.shape == (2, slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
         result = self.jones_multiply_hermitian_transpose(
-            g_term[1], ekb_vis,
+            g_term[0], ekb_vis,
             slvr.ntime*slvr.nbl*slvr.nchan) \
                 .reshape(slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
         result = self.jones_multiply_hermitian_transpose(
-            result, g_term[0],
+            result, g_term[1],
             slvr.ntime*slvr.nbl*slvr.nchan) \
                 .reshape(slvr.ntime, slvr.nbl, slvr.nchan, 4)
 
