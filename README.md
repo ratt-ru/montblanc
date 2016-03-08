@@ -57,19 +57,21 @@ to install the package.
 
 - **[PyCUDA 2015.1.3][pycuda]**. setup.py will attempt to install this automatically,
     but this might not work if you have a non-standard CUDA install location. It's worth running
+
     ```bash
     $ python -c 'import pycuda.autoinit'
     ```
+    
     to check if your pycuda can talk to the NVIDIA driver. If not, manually download
     and install [PyCUDA][pycuda].
 - **[cub 1.5.1][cub]**. setup.py will attempt to download this from github
     and install to the correct directory during install. If this fails do the following:
+
     ```bash
     $ wget -c https://codeload.github.com/NVlabs/cub/zip/1.5.1
     $ mv 1.5.1 cub.zip
     $ python setup.py install
     ```
-
 
 ## Running Tests
 
