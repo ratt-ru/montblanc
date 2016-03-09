@@ -222,8 +222,6 @@ setup(name='montblanc',
         'pytools >= 2015.1.3',
         'transitions >= 0.2.5',
     ],
-    package_data={
-        'montblanc': ['log/*.json'],
-        'montblanc': src_pkg_dirs()},
+    package_data={'montblanc': src_pkg_dirs()},
     include_package_data=True,
     zip_safe=False)

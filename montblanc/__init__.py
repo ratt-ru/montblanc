@@ -19,10 +19,6 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import inspect
-import json
-import logging
-import logging.config
-import numpy as np
 import os
 
 import montblanc.config
@@ -38,24 +34,50 @@ def get_montblanc_path():
 def get_source_path():
     return os.path.join(get_montblanc_path(), 'src')
 
-def setup_logging(default_level=logging.INFO,env_key='LOG_CFG'):
+def setup_logging():
     """ Setup logging configuration """
 
-    path = os.path.join(get_montblanc_path(), 'log', 'log.json')
-    value = os.getenv(env_key, None)
+    import logging
+    import logging.handlers
 
-    if value:
-        path = value
+   # Console formatter
+    cfmt = logging.Formatter((
+        '%(name)s - '
+        '%(levelname)s - '
+        '%(message)s'))
 
-    if os.path.exists(path):
-        with open(path, 'rt') as f:
-            config = json.load(f)
-        logging.config.dictConfig(config)
-    else:
-        logging.basicConfig(level=default_level)
+    # Console handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(cfmt)
 
-setup_logging()
-log = logging.getLogger('montblanc')
+   # File formatter
+    cfmt = logging.Formatter((
+        '%(asctime)s - '
+        '%(levelname)s - '
+        '%(message)s'))
+
+    # File handler
+    fh = logging.handlers.RotatingFileHandler('montblanc.log',
+        maxBytes=10*1024*1024, backupCount=10)
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(cfmt)
+
+    # Create the logger,
+    # adding the console and file handler
+    mb_logger = logging.getLogger('montblanc')
+    mb_logger.setLevel(logging.INFO)
+    mb_logger.addHandler(ch)
+    mb_logger.addHandler(fh)
+
+    # Set up the concurrent.futures logger
+    cf_logger = logging.getLogger('concurrent.futures')
+    cf_logger.setLevel(logging.INFO)
+    cf_logger.addHandler(ch)
+
+    return mb_logger
+
+log = setup_logging()
 
 # This solution for constants based on
 # http://stackoverflow.com/a/2688086
