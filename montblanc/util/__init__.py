@@ -331,10 +331,10 @@ def viable_dim_config(bytes_available, arrays, props,
                 modified_dims[dim_name] = dim_value
                 P[dim_name] = dim_value
             else:
-                montblanc.log.warn(('Tried to reduce dimension %s '
-                    ' of size %d to larger value %d. '
-                    ' This reduction has been ignored.') % (
-                        dim_name, P[dim_name], dim_value) )
+                montblanc.log.warn(('Tried to reduce dimension {d} '
+                    'of size {s} to larger value {v}. '
+                    'This reduction has been ignored.').format(
+                        d=dim_name, s=P[dim_name], v=dim_value))
 
         bytes_used = dict_array_bytes_required(arrays, P)*nsolvers
 
