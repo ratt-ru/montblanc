@@ -73,6 +73,21 @@ to install the package.
     $ python setup.py install
     ```
 
+- **[numexpr]**. When running `python setup.py install`, if you see an error message like this:
+
+    ```python
+    Traceback (most recent call last):
+      File "setup.py", line 154, in <module>
+        setup_package()
+      File "setup.py", line 146, in setup_package
+        from numpy.distutils.core import setup
+    ImportError: No module named numpy.distutils.core
+    ```
+    
+    Go back to [Installing the package](#installing-the-package) and install [numpy][numpy].
+
+
+
 ## Running Tests
 
 Once the libraries have been compiled you should be able to run the
@@ -137,3 +152,4 @@ I will make an effort to maintain the CHANGELOG.md, to record any breaking API c
 [montblanc-paper-arxiv]:http://arxiv.org/abs/1501.07719
 [montblanc-paper-sciencedirect]:http://www.sciencedirect.com/science/article/pii/S2213133715000633
 [numpy]:http://www.numpy.org
+[numexpr]:https://github.com/pydata/numexpr
