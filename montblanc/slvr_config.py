@@ -49,6 +49,10 @@ class SolverConfigurationOptions(object):
     DEFAULT_NCHAN = 16
     NCHAN_DESCRIPTION = 'Number of channels'
 
+    # Number of sources
+    NSRC = 'nsrc'
+    NSRC_DESCRIPTION = 'Number of sources'
+
     # Are we dealing with floats or doubles?
     DTYPE = 'dtype'
     DTYPE_FLOAT = 'float'
