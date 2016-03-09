@@ -235,7 +235,8 @@ class BaseSolver(Solver):
         return mbu.fmt_bytes(self.bytes_required())
 
     def register_dimension(self, name, description,
-        size, zero_size_valid=False):
+        global_size, local_size=None, extents=None,
+        zero_size_valid=False):
         """
         Registers a dimension with this Solver object
 
@@ -247,16 +248,27 @@ class BaseSolver(Solver):
             description : string
                 The description for this dimension.
                 e.g. 'Number of timesteps'.
-            size : integer
-                The total dimension size.
+            global_size : integer
+                The global size of this dimension across
+                all solvers.
 
         Keyword Arguments
         -----------------
+            local_size : integer or None
+                The local size of this dimension
+                on this solver. If None, set to
+                the global_size.
             zero_size_valid : boolean
                 If True, this dimension may be zero-sized.
         """
 
-        if zero_size_valid and size < 0:
+        if local_size is None:
+            local_size = global_size
+
+        if extents is None:
+            extents = [0, local_size]        
+
+        if zero_size_valid and (global_size < 0 or local_size < 0):
             raise ValueError((
                 "Attempted to register dimension '{n}'' "
                 "with negative size '{s}'. "
@@ -264,20 +276,20 @@ class BaseSolver(Solver):
                     n=name, s=size))
 
 
-        if not zero_size_valid and size <= 0:
+        if not zero_size_valid and (global_size <= 0 or local_size < 0):
             raise ValueError((
                 "Attempted to register dimension {n} "
-                "with size negative or zero size {s}. "
+                "with negative or zero global ({gs}) "
+                "or local ({ls}) size. "
                 "Please use a positive number.").format(
-                    n=name, s=size))
+                    n=name, gs=global_size, ls=local_size))
 
         if hasattr(self, name):
             raise AttributeError((
                 "Attempted to register dimension {n} "
                 "as an attribute of the solver, but "
                 "it already exists. Please choose "
-                "a different name!").format(
-                    n=name, s=size))
+                "a different name!").format(n=name))
 
         # Create the dimension dictionary
         # name : dimension name
@@ -287,11 +299,10 @@ class BaseSolver(Solver):
         # zeros : zero size allowed
         self.dims[name] = AttrDict(name=name,
             description=description,
-            size=size,
-            extents=[0, size],
+            global_size=global_size,
+            local_size=local_size,
+            extents=[0, local_size],
             zeros=zero_size_valid)
-
-        setattr(self, name, size)
 
     def update_dimensions(self, dim_list):
         """
@@ -304,7 +315,7 @@ class BaseSolver(Solver):
         for dim in dim_list:
             self.update_dimension(**dim)
 
-    def update_dimension(self, name, size=None,
+    def update_dimension(self, name, local_size=None,
         extents=None, safety=True):
         """
         Update the dimension size and extents.
@@ -316,14 +327,14 @@ class BaseSolver(Solver):
 
         Keyword Arguments
         -----------------
-            size : integer or None
+            local_size : integer or None
                 Dimension size. Updating the size of the dimension
                 is unusual and the safety keyword must be True
                 to allow this.
             extents : integer sequence of length 2
                 Local dimension extents covered by the solver.
-                0 <= extents[0] < extents[1] <= size or.
-                0 <= extents[0] <= extents[1] <= size must hold,
+                0 <= extents[0] < extents[1] <= global_size or.
+                0 <= extents[0] <= extents[1] <= global_size must hold,
                 depending on whether zero length dimension sizes
                 are allowed by dim.zeros
             safety : boolean
@@ -342,17 +353,16 @@ class BaseSolver(Solver):
         dim = self.dims[name]
 
         # Integer size
-        if size is not None:
+        if local_size is not None:
             # Fail if the safety is on!
             if safety:
                 raise ValueError(
-                    "Modifying solver dimension {d} size "
+                    "Modifying solver dimension {d} local size "
                     "from {o} to {n}, this is dangerous!"
-                        .format(d=name, o=dim.size, n=size))
+                        .format(d=name, o=dim.size, n=local_size))
 
             # Modify the size on the dictionary and the solver
-            dim.size = size
-            setattr(self, name, size)
+            dim.local_size = local_size
 
         # Sanity check
         if extents is not None:
@@ -368,9 +378,34 @@ class BaseSolver(Solver):
 
         # Sanity check dimensions
         if dim.zeros:
-            assert 0 <= dim.extents[0] <= dim.extents[1] <= dim.size
+            assert 0 <= dim.extents[0] <= dim.extents[1] <= dim.global_size
         else:
-            assert 0 <= dim.extents[0] < dim.extents[1] <= dim.size
+            assert 0 <= dim.extents[0] < dim.extents[1] <= dim.global_size
+
+    def __dim_attribute(self, attr, *args):
+        """
+        Returns a list of dimension attribute attr, for the
+        dimensions specified as strings in args.
+
+        ntime, nbl, nchan = slvr.__dim_attribute('global_size', ntime, 'nbl', 'nchan')
+        
+        or
+
+        ntime, nbl, nchan, nsrc = slvr.__dim_attribute('global_size', 'ntime,nbl:nchan nsrc')
+        """
+
+        import re
+
+        # If we got a single string argument
+        if len(args) == 1 and type(args[0]) is str:
+
+            result = [self.dims[name][attr] for name in
+                [s.strip() for s in re.split(',|:|;| ', args[0])]]
+        else:
+            result = [self.dims[name][attr] for name in args]
+
+        # Return single element if length one else entire list
+        return result[0] if len(result) == 1 else result
 
     def dim_global_size(self, *args):
         """
@@ -380,18 +415,19 @@ class BaseSolver(Solver):
 
         ntime, nbl, nchan, nsrc = slvr.dim_global_size('ntime,nbl:nchan nsrc')
         """
-        import re
 
-        # If we got a single string argument
-        if len(args) == 1 and type(args[0]) is str:
+        return self.__dim_attribute('global_size', *args)
 
-            result = [self.dims[name].size for name in
-                [s.strip() for s in re.split(',|:|;| ', args[0])]]
-        else:
-            result = [self.dims[name].size for name in args]
+    def dim_local_size(self, *args):
+        """
+        ntime, nbl, nchan = slvr.dim_local_size('ntime, 'nbl', 'nchan')
+        
+        or
 
-        # Return single element if length one else entire list
-        return result[0] if len(result) == 1 else result
+        ntime, nbl, nchan, nsrc = slvr.dim_local_size('ntime,nbl:nchan nsrc')
+        """
+
+        return self.__dim_attribute('local_size', *args)
 
     def check_array(self, record_key, ary):
         """
@@ -776,7 +812,7 @@ class BaseSolver(Solver):
         }
 
         # Update with dimensions
-        D.update({d.name: d.size for d in self.dims.itervalues()})
+        D.update({d.name: d.local_size for d in self.dims.itervalues()})
 
         # Add any registered properties to the dictionary
         for p in self.properties.itervalues():
