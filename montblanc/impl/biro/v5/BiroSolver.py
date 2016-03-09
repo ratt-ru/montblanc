@@ -47,7 +47,7 @@ class BiroSolver(BaseSolver):
             slvr_cfg : SolverConfiguration
                 Solver Configuration variables
         """
-
+        # Call the parent constructor
         super(BiroSolver, self).__init__(slvr_cfg)
 
         # Configure the dimensions of the beam cube
@@ -90,62 +90,27 @@ class BiroSolver(BaseSolver):
             self.const_data_buffer)
 
         # Initialise it with the current solver (self)
-        mbu.init_rime_const_data(self, self.rime_const_data)
+        mbu.update_rime_const_data(self, self.rime_const_data)
 
         # Indicate these variables have not been set
         self.dev_mem_pool = None
         self.pinned_mem_pool = None
 
-    def cfg_total_src_dims(self, nsrc):
+    def update_dimension(self, name, size=None,
+        extents=None, safety=True):
         """
-        Configure the total number of sources that will
-        be handled by this solver. Used by v5 to allocate
-        solvers handling subsets of the total problem.
-        Passing nsrc=100 means that the solver will handle
-        100 sources in total.
-
-        Additionally, sets the number for each individual
-        source type to 100. So npsrc=100, ngsrc=100,
-        nssrc=100 for instance. This is because if we're
-        handling 100 sources total, we'll need space for
-        at least 100 sources of each type.
-
-        The number of sources actually handled by the
-        solver on each iteration is set in the
-        rime_const_data_cpu structure.
-
-        """
-        self.nsrc = nsrc
-        
-        for nr_var in mbu.source_nr_vars():
-            setattr(self, nr_var, nsrc)
-
-    def cfg_sub_dims(self, counts):
-        """
-        Configure the dimensions of the subset of the
-        RIME solved by this solvers.
-
-        Sets these dimensions on the rime_const_data_cpu
-        structure, which is passed to the kernels on each
-        run.
+        Override update_dimension on BaseSolver.py to also
+        update rime_const_data.
         """
 
-        # Set key-value pairs on rime_const_data
-        # from kwargs
-        for key, value in counts.iteritems():
-            if hasattr(self.rime_const_data, key):
-                setattr(self.rime_const_data, key, value)
-            else:
-                montblanc.log.warn((
-                    'Attempted to set %s=%s '
-                    'on rime_const_data but key %s '
-                    'is not present') % (key, value, key))
+        # Defer to parent method for house-keeping on the
+        # solver, proper
+        super(BiroSolver, self).update_dimension(name,
+            size=size, extents=extents, safety=safety)
 
-        # Set rime_const_data.nsrc by summing
-        # each source type
-        setattr(self.rime_const_data, 'nsrc',
-            sum([getattr(self.rime_const_data, s)
-                for s in mbu.source_nr_vars()]))
+        # Update constant data
+        mbu.update_rime_const_data(self, self.rime_const_data,
+            sum_nsrc=True)
 
     def set_dev_mem_pool(self, dev_mem_pool):
         self.dev_mem_pool = dev_mem_pool

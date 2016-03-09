@@ -180,12 +180,9 @@ class CompositeBiroSolver(BaseSolver):
 
         # Create the slice dictionaries, which we use to index
         # dimensions of the CPU and GPU array.
-        # gpu_slice arrays generally start at 0 and stop
-        # at the associated associated cpu_slice array length
-        cpu_slice = {v: slice(None, None, 1) for v in nr_vars}
-        gpu_slice = {v: slice(None, None, 1) for v in nr_vars}
-        # gpu_count is explicitly set to this length
-        gpu_count = {v: 0 for v in nr_vars if v != 'na1'}
+        cpu_slice = {}
+        gpu_slice = {}
+        gpu_count = {}
 
         # Set up time slicing
         for t in xrange(0, self.ntime, self.time_diff):
@@ -618,9 +615,17 @@ class CompositeBiroSolver(BaseSolver):
         # Create solvers for this context
         for i, s in enumerate(range(nsolvers)):
             subslvr = BiroSolver(subslvr_cfg)
-            # Configure the total number of sources
-            # handled by each sub-solver
-            subslvr.cfg_total_src_dims(P['nsrc'])
+
+            # Configure the number of sources
+            # handled by each sub-solver.
+            nsrc = P[Options.NSRC]
+
+            U = [{ 'name': nr_var, 'size': nsrc,
+                'extents': [0, nsrc],'safety': False }
+                    for nr_var in [Options.NSRC] + mbu.source_nr_vars()]
+
+            subslvr.update_dimensions(U)
+
             subslvr.set_dev_mem_pool(dev_mem_pool)
             subslvr.set_pinned_mem_pool(pinned_mem_pool)
             self.thread_local.solvers[i] = subslvr
@@ -674,7 +679,9 @@ class CompositeBiroSolver(BaseSolver):
 
         # Configure the number variable counts
         # on the sub solver
-        subslvr.cfg_sub_dims(gpu_count)
+        subslvr.update_dimensions([
+            { 'name': nr_var, 'extents': [0, count] }
+            for nr_var, count in gpu_count.iteritems()])
 
         # Transfer arrays
         self.__transfer_arrays(i, cpu_slice_map, gpu_slice_map)
@@ -755,9 +762,10 @@ class CompositeBiroSolver(BaseSolver):
 
     @staticmethod
     def __rm_future_cb(f, Q):
-        # There's no actual result, but asking for it
-        # will throw any exceptions from the future execution
-        f.result()
+        # Raise any possible exceptions
+        if f.exception() is not None:
+            raise f.exception()
+
         Q.remove(f)
 
     def solve(self):

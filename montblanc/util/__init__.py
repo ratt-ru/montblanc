@@ -32,7 +32,7 @@ from const_data import (
     rime_const_data_struct,
     rime_const_data_size,
     wrap_rime_const_data,
-    init_rime_const_data)
+    update_rime_const_data)
 
 from montblanc.src_types import (
     source_types,

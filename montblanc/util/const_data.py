@@ -74,20 +74,26 @@ def wrap_rime_const_data(ndary):
     struct_size = rime_const_data_size()
 
     assert ndary.nbytes == struct_size, \
-        ('The size of the supplied array %s does '
-        'not match that of the constant data structure %s.') % (
-            ndary.nbytes, struct_size)
+        ('The size of the supplied array {as} does '
+        'not match that of the constant data structure {ds}.') \
+            .format(ws=ndary.nbytes, ds=struct_size)
 
     # Create a cdata object by wrapping ndary
     # and cast to the structure type
     return _ffi.cast(_STRUCT_PTR_TYPE, _ffi.from_buffer(ndary))
 
-def init_rime_const_data(slvr, rime_const_data):
+def update_rime_const_data(slvr, rime_const_data, sum_nsrc=False):
     """
-    Initialise the RIME constant data structure
+    Update the RIME constant data structure
     """
-    for v in _STRUCT_DATA_VAR_LIST:
-        setattr(rime_const_data, v, getattr(slvr, v))
+    # Iterate through our dimension data, setting
+    # any relevant attributes on rime_const_data
+    for name, dim in slvr.dims.iteritems():
+        if hasattr(rime_const_data, name):
+            setattr(rime_const_data, name, dim.extents[1])
 
-    for s in source_nr_vars():
-        setattr(rime_const_data, s, getattr(slvr, s))
+    if sum_nsrc is True and hasattr(rime_const_data, 'nsrc'):
+        # Set rime_const_data.nsrc by summing each source type
+        setattr(rime_const_data, 'nsrc',
+            sum([getattr(rime_const_data, s)
+                for s in source_nr_vars()]))

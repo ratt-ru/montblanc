@@ -249,7 +249,7 @@ class BiroSolver(BaseSolver):
             self.const_data_buffer)
 
         # Initialise it with the current solver (self)
-        mbu.init_rime_const_data(self, self.rime_const_data_cpu)
+        mbu.update_rime_const_data(self, self.rime_const_data_cpu)
 
     def get_default_base_ant_pairs(self):
         """
