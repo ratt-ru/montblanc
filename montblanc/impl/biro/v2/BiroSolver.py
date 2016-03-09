@@ -77,15 +77,16 @@ P = [
 ]
 
 def rand_uvw(slvr, ary):
+    ntime, na = slvr.dim_global_size('ntime', 'na')
     distance = 10
     # Distribute the antenna in a circle configuration
-    ant_angles = 2*np.pi*np.arange(slvr.na)/slvr.ft(slvr.na)
-    time_angle = np.arange(slvr.ntime)/slvr.ft(slvr.ntime)
+    ant_angles = 2*np.pi*np.arange(na)/slvr.ft(na)
+    time_angle = np.arange(ntime)/slvr.ft(ntime)
     time_ant_angles = time_angle[:,np.newaxis]*ant_angles[np.newaxis,:]
 
     ary[0,:,:] = distance*np.sin(time_ant_angles)                # U
     ary[1,:,:] = distance*np.sin(time_ant_angles)                # V
-    ary[2,:,:] = np.random.random(size=(slvr.ntime,slvr.na))*0.1 # W
+    ary[2,:,:] = np.random.random(size=(ntime, na))*0.1 # W
 
     # All antenna zero coordinate are set to (0,0,0)
     ary[:,:0] = 0
@@ -140,9 +141,9 @@ A = [
 
     ary_dict('wavelength', ('nchan',), 'ft',
         default=lambda slvr, ary: montblanc.constants.C / \
-            np.linspace(1e9, 2e9, slvr.nchan),
+            np.linspace(1e9, 2e9, slvr.dim_global_size('nchan')),
         test=lambda slvr, ary: montblanc.constants.C / \
-            np.linspace(1e9, 2e9, slvr.nchan)),
+            np.linspace(1e9, 2e9, slvr.dim_global_size('nchan'))),
 
     ary_dict('point_errors', (2,'ntime','na'), 'ft',
         default=1,
@@ -230,9 +231,8 @@ class BiroSolver(BaseSolver):
         if default_ap is None:
             default_ap = self.get_default_base_ant_pairs()
 
-        slvr = self
-
         newdim = lambda d: [np.newaxis for n in range(d)]
+        nsrc, ntime, nchan = self.dim_global_size('nsrc', 'ntime', 'nchan')
 
         sed = (1 if src else 0)      # Extra source dimension
         ced = (1 if chan else 0)     # Extra channel dimension
@@ -242,7 +242,7 @@ class BiroSolver(BaseSolver):
 
         # Create the time index, [np.newaxis,:,np.newaxis] + [...]
         time_slice = tuple([np.newaxis, all, np.newaxis] + newdim(ned))
-        idx.append(np.arange(slvr.ntime)[time_slice])
+        idx.append(np.arange(ntime)[time_slice])
 
         # Create the antenna pair index, [:, np.newaxis, :] + [...]
         ap_slice = tuple([all, np.newaxis, all] + newdim(ned))
@@ -251,12 +251,12 @@ class BiroSolver(BaseSolver):
         # Create the source index, [np.newaxis,np.newaxis,np.newaxis,:] + [...]
         if src is True:
             src_slice = tuple(newdim(3) + [all] + newdim(ced))
-            idx.append(np.arange(slvr.nsrc)[src_slice])
+            idx.append(np.arange(nsrc)[src_slice])
 
         # Create the channel index,
         # [np.newaxis,np.newaxis,np.newaxis] + [...] + [:]
         if chan is True:
             chan_slice = tuple(newdim(3 + sed) + [all])
-            idx.append(np.arange(slvr.nchan)[chan_slice])
+            idx.append(np.arange(nchan)[chan_slice])
 
         return tuple(idx)

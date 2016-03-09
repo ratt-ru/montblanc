@@ -371,16 +371,18 @@ class RimeSumCoherencies(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
+        ntime, nbl, npolchan = slvr.dim_global_size('ntime', 'nbl', 'npolchan')
 
-        self.npolchans = 4*slvr.nchan
-
+        # Get a property dictionary off the solver
         D = slvr.get_properties()
+        # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
         D['rime_const_data_struct'] = mbu.rime_const_data_struct()
 
         D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
-            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
-            self.npolchans, slvr.nbl, slvr.ntime)
+            mbu.redistribute_threads(
+                D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+                npolchan, nbl, ntime)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
             if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -410,9 +412,10 @@ class RimeSumCoherencies(Node):
         bl_per_block = D['BLOCKDIMY']
         times_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
-        bl_blocks = mbu.blocks_required(slvr.nbl, bl_per_block)
-        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
+        ntime, nbl, npolchan = slvr.dim_global_size('ntime', 'nbl', 'npolchan')
+        polchan_blocks = mbu.blocks_required(npolchan, polchans_per_block)
+        bl_blocks = mbu.blocks_required(nbl, bl_per_block)
+        time_blocks = mbu.blocks_required(ntime, times_per_block)
 
         return {
             'block' : (polchans_per_block, bl_per_block, times_per_block),

@@ -198,8 +198,7 @@ class RimeEKBSqrt(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-
-        self.npolchans = 4*slvr.nchan
+        ntime, na, npolchan = slvr.dim_global_size('ntime', 'na', 'npolchan')
 
         # Get a property dictionary off the solver
         D = slvr.get_properties()
@@ -208,8 +207,9 @@ class RimeEKBSqrt(Node):
         D['rime_const_data_struct'] = mbu.rime_const_data_struct()
 
         D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
-            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
-            self.npolchans, slvr.na, slvr.ntime)
+            mbu.redistribute_threads(
+                D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+                npolchan, na, ntime)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -239,9 +239,10 @@ class RimeEKBSqrt(Node):
         ants_per_block = D['BLOCKDIMY']
         times_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
-        ant_blocks = mbu.blocks_required(slvr.na, ants_per_block)
-        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
+        ntime, na, npolchan = slvr.dim_global_size('ntime', 'na', 'npolchan')
+        polchan_blocks = mbu.blocks_required(npolchan, polchans_per_block)
+        ant_blocks = mbu.blocks_required(na, ants_per_block)
+        time_blocks = mbu.blocks_required(ntime, times_per_block)
 
         return {
             'block' : (polchans_per_block, ants_per_block, times_per_block),

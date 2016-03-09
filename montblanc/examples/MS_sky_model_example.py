@@ -38,6 +38,7 @@ def repeat_brightness_over_time(slvr, parser):
     # this in a sky model text file. So we assume a shape here
     # (5, nsrc) and call fiddle_brightness to replicate these
     # values across the time dimension
+    ntime = slvr.dim_global_size('ntime')
     R = slvr.get_array_record('brightness')
     time_dim = R.sshape.index('ntime')
     no_time_shape = tuple([d for i, d in enumerate(R.shape) if i != time_dim])
@@ -45,7 +46,7 @@ def repeat_brightness_over_time(slvr, parser):
     brightness = parser.shape_arrays(['I','Q','U','V','alpha'],
         no_time_shape, slvr.brightness_dtype)
 
-    return np.repeat(brightness, slvr.ntime, time_dim).reshape(R.shape)
+    return np.repeat(brightness, ntime, time_dim).reshape(R.shape)
 
 if __name__ == '__main__':
     import sys
@@ -84,7 +85,7 @@ if __name__ == '__main__':
 
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
-        if slvr.ngsrc > 0:
+        if slvr.dim_global_size('ngsrc') > 0:
             gauss_shape = sky_parse.shape_arrays(['el','em','eR'],
                 slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
 

@@ -35,6 +35,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
+        ntime, nbl, ngsrc = slvr.dim_global_size('ntime', 'nbl', 'ngsrc')
 
         try:
             ap = slvr.get_ap_idx()
@@ -60,14 +61,14 @@ class SolverCPU(object):
             # v1 = u*el + v*em
             u1 = ne.evaluate('u_em - v_el',
                 {'u_em': np.outer(u, em), 'v_el': np.outer(v, el)})\
-                .reshape(slvr.ntime,slvr.nbl,slvr.ngsrc)
+                .reshape(ntime,nbl,ngsrc)
             v1 = ne.evaluate('u_el + v_em', {
                 'u_el' : np.outer(u,el), 'v_em' : np.outer(v, em)})\
-                .reshape(slvr.ntime,slvr.nbl,slvr.ngsrc)
+                .reshape(ntime,nbl,ngsrc)
 
             # Obvious given the above reshape
-            assert u1.shape == (slvr.ntime, slvr.nbl, slvr.ngsrc)
-            assert v1.shape == (slvr.ntime, slvr.nbl, slvr.ngsrc)
+            assert u1.shape == (ntime, nbl, ngsrc)
+            assert v1.shape == (ntime, nbl, ngsrc)
 
             return ne.evaluate('exp(-((u1*scale_uv*R)**2 + (v1*scale_uv)**2))',
                 local_dict={
@@ -87,6 +88,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
+        ntime, nbl, nchan, nssrc = slvr.dim_global_size('ntime', 'nbl', 'nchan', 'nssrc')
 
         try:
             ap = slvr.get_ap_idx()
@@ -111,15 +113,15 @@ class SolverCPU(object):
             # u1 = u*(1+e1) - v*e2
             # v1 = u*e2 + v*(1-e1)
             u1 = ne.evaluate('u_1_e1 + v_e2',
-                {'u_1_e1': np.outer(u,np.ones(slvr.nssrc)+e1), 'v_e2' : np.outer(v, e2)})\
-                .reshape(slvr.ntime,slvr.nbl,slvr.nssrc)
+                {'u_1_e1': np.outer(u,np.ones(nssrc)+e1), 'v_e2' : np.outer(v, e2)})\
+                .reshape(ntime,nbl,nssrc)
             v1 = ne.evaluate('u_e2 + v_1_e1', {
-                'u_e2' : np.outer(u,e2), 'v_1_e1' : np.outer(v,np.ones(slvr.nssrc)-e1)})\
-                .reshape(slvr.ntime,slvr.nbl,slvr.nssrc)
+                'u_e2' : np.outer(u,e2), 'v_1_e1' : np.outer(v,np.ones(nssrc)-e1)})\
+                .reshape(ntime,nbl,nssrc)
 
             # Obvious given the above reshape
-            assert u1.shape == (slvr.ntime, slvr.nbl, slvr.nssrc)
-            assert v1.shape == (slvr.ntime, slvr.nbl, slvr.nssrc)
+            assert u1.shape == (ntime, nbl, nssrc)
+            assert v1.shape == (ntime, nbl, nssrc)
 
             den = ne.evaluate('1 + (u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
                 local_dict={
@@ -129,7 +131,7 @@ class SolverCPU(object):
                         [np.newaxis, np.newaxis, np.newaxis, :],
                     'R': (R / (1 - e1 * e1 - e2 * e2))
                         [np.newaxis,np.newaxis,:,np.newaxis]})\
-                    .reshape(slvr.ntime, slvr.nbl, slvr.nssrc, slvr.nchan)
+                    .reshape(ntime, nbl, nssrc, nchan)
 
             return ne.evaluate('1/(den*sqrt(den))',
                 { 'den' : den[:, :, :, :] })
@@ -144,6 +146,7 @@ class SolverCPU(object):
         Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
+        nsrc, ntime, na, nchan = slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan')
 
         try:
             wave = slvr.wavelength_cpu
@@ -158,8 +161,8 @@ class SolverCPU(object):
 
             # w*n+v*m+u*l. Outer product creates array of dim ntime x na x nsrcs
             phase = (np.outer(w, n) + np.outer(v, m) + np.outer(u, l)) \
-                    .reshape(slvr.ntime, slvr.na, slvr.nsrc)
-            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc)
+                    .reshape(ntime, na, nsrc)
+            assert phase.shape == (ntime, na, nsrc)
 
             # e^(2*pi*sqrt(u*l+v*m+w*n)/wavelength).
             # Dim. na x ntime x nchan x nsrcs
@@ -169,7 +172,7 @@ class SolverCPU(object):
                 'pi': np.pi
             })
 
-            assert phase.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
+            assert phase.shape == (ntime, na, nsrc, nchan)
 
             # Dimension ntime x nsrc x nchan. Use 0.5*alpha here so that
             # when the other antenna term is multiplied with this one, we
@@ -179,7 +182,7 @@ class SolverCPU(object):
                 'wl': wave[np.newaxis, np.newaxis, :],
                 'a': alpha[:, :, np.newaxis]
             })
-            assert power.shape == (slvr.ntime, slvr.nsrc, slvr.nchan)
+            assert power.shape == (ntime, nsrc, nchan)
 
             return ne.evaluate('phs*p', {
                 'phs': phase,
@@ -196,6 +199,7 @@ class SolverCPU(object):
         Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
+        npsrc, ngsrc, nssrc = slvr.dim_global_size('npsrc', 'ngsrc', 'nssrc')
 
         try:
             # Re-arrange per antenna terms into per baseline antenna pair values
@@ -205,22 +209,22 @@ class SolverCPU(object):
             k_jones_per_bl = k_jones[0]*k_jones[1].conj()
 
             # Add in the shape terms of the gaussian sources.
-            if slvr.ngsrc > 0:
-                src_beg = slvr.npsrc
-                src_end = slvr.npsrc + slvr.ngsrc
+            if ngsrc > 0:
+                src_beg = npsrc
+                src_end = npsrc + ngsrc
                 k_jones_per_bl[:, :, src_beg:src_end, :] *=\
                     self.compute_gaussian_shape()
                 # TODO: Would like to do this, but fails because of
                 # https://github.com/pydata/numexpr/issues/155
-                #gsrc_view = k_jones_per_bl[:,:,slvr.npsrc:,:]
+                #gsrc_view = k_jones_per_bl[:,:,npsrc:,:]
                 #gshape = self.compute_gaussian_shape()
                 #ne.evaluate('kjones*complex(gshape.real,0.0)',
                 #    {'kjones' : gsrc_view, 'gshape':gshape }, out=gsrc_view)
 
             # Add in the shape terms of the sersic sources.
-            if slvr.nssrc > 0:
-                src_beg = slvr.npsrc+slvr.ngsrc
-                src_end = slvr.npsrc+slvr.ngsrc+slvr.nssrc
+            if nssrc > 0:
+                src_beg = npsrc+ngsrc
+                src_end = npsrc+ngsrc+nssrc
                 k_jones_per_bl[:, :, src_beg:src_end:, :] *=  \
                     self.compute_sersic_shape()
 
@@ -235,6 +239,7 @@ class SolverCPU(object):
         Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
+        nsrc, ntime, na, nchan = slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan')
 
         try:
             # Compute the offsets for different antenna
@@ -245,7 +250,7 @@ class SolverCPU(object):
                 'mp': slvr.point_errors_cpu[1, :, :, np.newaxis]
             })
 
-            assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc)
+            assert E_p.shape == (ntime, na, nsrc)
 
             # Broadcasting here produces, ntime x nbl x nsrc x nchan
             E_p = ne.evaluate('E*bw*1e-9*wl', {
@@ -258,7 +263,7 @@ class SolverCPU(object):
             # Cosine it, cube it and cast because of numexpr
             E_p = ne.evaluate('cos(E)**3', {'E': E_p}).astype(slvr.ct)
 
-            assert E_p.shape == (slvr.ntime, slvr.na, slvr.nsrc, slvr.nchan)
+            assert E_p.shape == (ntime, na, nsrc, nchan)
 
             return E_p
         except AttributeError as e:
@@ -308,6 +313,7 @@ class SolverCPU(object):
         Returns a (4,ntime,nsrc) matrix of complex scalars.
         """
         slvr = self.solver
+        nsrc, ntime = slvr.dim_global_size('nsrc', 'ntime')
 
         try:
             # Create the brightness matrix. Dim 4 x ntime x nsrcs
@@ -320,7 +326,7 @@ class SolverCPU(object):
                 slvr.brightness_cpu[2] - 1j*slvr.brightness_cpu[3],
                 # fI-fQ + 0j
                 slvr.brightness_cpu[0]-slvr.brightness_cpu[1] + 0j])
-            assert B.shape == (4, slvr.ntime, slvr.nsrc)
+            assert B.shape == (4, ntime, nsrc)
 
             return B
 
@@ -335,13 +341,14 @@ class SolverCPU(object):
         Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
+        nsrc, ntime, nbl, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         per_bl_ek_scalar = self.compute_ek_jones_scalar_per_bl()
         b_jones = self.compute_b_jones()
 
         jones = per_bl_ek_scalar[np.newaxis, :, :, :, :] * \
             b_jones[:, :, np.newaxis, :, np.newaxis]
-        assert jones.shape == (4, slvr.ntime, slvr.nbl, slvr.nsrc, slvr.nchan)
+        assert jones.shape == (4, ntime, nbl, nsrc, nchan)
 
         return jones
 
@@ -353,13 +360,14 @@ class SolverCPU(object):
         Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
+        nsrc, ntime, nbl, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         per_bl_k_scalar = self.compute_k_jones_scalar_per_bl()
         b_jones = self.compute_b_jones()
 
         jones = per_bl_k_scalar[np.newaxis, :, :, :, :] * \
             b_jones[:, :, np.newaxis, :, np.newaxis]
-        assert jones.shape == (4, slvr.ntime, slvr.nbl, slvr.nsrc, slvr.nchan)
+        assert jones.shape == (4, ntime, nbl, nsrc, nchan)
 
         return jones
 
@@ -372,9 +380,11 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
+        nsrc, ntime, nbl, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nbl', 'nchan')
+
         ebk_jones = self.compute_ebk_jones()
 
-        if slvr.nsrc == 1:
+        if nsrc == 1:
             # Due to this bug
             # https://github.com/pydata/numexpr/issues/79
             # numexpr may not reduce a source axis of size 1
@@ -385,7 +395,7 @@ class SolverCPU(object):
                 {'ebk': ebk_jones }) \
                 .astype(slvr.ct)
 
-        assert vis.shape == (4, slvr.ntime, slvr.nbl, slvr.nchan)
+        assert vis.shape == (4, ntime, nbl, nchan)
 
         return vis
 
@@ -398,10 +408,12 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
+        ntime, nbl, nchan = slvr.dim_global_size(ntime, nbl, nchan)
+
 
         vis = ne.evaluate('sum(bk,3)', {'bk': self.compute_bk_jones()})\
             .astype(slvr.ct)
-        assert vis.shape == (4, slvr.ntime, slvr.nbl, slvr.nchan)
+        assert vis.shape == (4, ntime, nbl, nchan)
 
         return vis
 
@@ -418,6 +430,7 @@ class SolverCPU(object):
         Returns a (ntime,nbl,nchan) matrix of floating point scalars.
         """
         slvr = self.solver
+        ntime, nbl, nchan = slvr.dim_global_size('ntime', 'nbl', 'nchan')
 
         try:
             # Take the difference between the visibilities and the model
@@ -425,7 +438,7 @@ class SolverCPU(object):
             d = ne.evaluate('vis - bayes', {
                 'vis': slvr.vis_cpu,
                 'bayes': slvr.bayes_data_cpu})
-            assert d.shape == (4, slvr.ntime, slvr.nbl, slvr.nchan)
+            assert d.shape == (4, ntime, nbl, nchan)
 
             # Square of the real and imaginary components
             re = ne.evaluate('re**2', {'re': d.real})
@@ -447,7 +460,7 @@ class SolverCPU(object):
             im_sum = ne.evaluate('sum(im,0)', {'im': im})
             chi_sqrd_terms = ne.evaluate('re_sum + im_sum',
                 {'re_sum': re_sum, 'im_sum': im_sum})
-            assert chi_sqrd_terms.shape == (slvr.ntime, slvr.nbl, slvr.nchan)
+            assert chi_sqrd_terms.shape == (ntime, nbl, nchan)
 
             return chi_sqrd_terms
 

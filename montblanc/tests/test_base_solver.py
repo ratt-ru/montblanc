@@ -65,7 +65,8 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             name='uvw'
-            shape=(3, slvr.nbl, slvr.ntime)
+            ntime, nbl = slvr.dim_global_size('ntime', 'nbl')
+            shape=(3, nbl, ntime)
             gpu_name = mbu.gpu_name(name)
             cpu_name = mbu.cpu_name(name)
             shape_name = mbu.shape_name(name)
@@ -102,7 +103,8 @@ class TestSolver(unittest.TestCase):
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
             name='uvw'
-            shape=(3, slvr.nbl, slvr.ntime)
+            ntime, nbl = slvr.dim_global_size('ntime', 'nbl')
+            shape=(3, nbl, ntime)
             gpu_name = mbu.gpu_name(name)
             cpu_name = mbu.cpu_name(name)
             shape_name = mbu.shape_name(name)
@@ -141,7 +143,8 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             name='uvw'
-            shape=(3, slvr.nbl, slvr.ntime)
+            ntime, nbl = slvr.dim_global_size('ntime', 'nbl')
+            shape=(3, nbl, ntime)
             gpu_name = mbu.gpu_name(name)
             cpu_name = mbu.cpu_name(name)
             shape_name = mbu.shape_name(name)
@@ -178,7 +181,8 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             name='uvw'
-            shape=(3, slvr.nbl, slvr.ntime)
+            ntime, nbl = slvr.dim_global_size('ntime', 'nbl')
+            shape=(3, nbl, ntime)
             gpu_name = mbu.gpu_name(name)
             cpu_name = mbu.cpu_name(name)
             shape_name = mbu.shape_name(name)
@@ -215,12 +219,13 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
 
             name='uvw'
+            ntime, nbl = slvr.dim_global_size('ntime', 'nbl')
             gpu_name = mbu.gpu_name(name)
             cpu_name = mbu.cpu_name(name)
             shape_name = mbu.shape_name(name)
             dtype_name = mbu.dtype_name(name)
 
-            shape = (3,slvr.nbl, slvr.ntime)
+            shape = (3,nbl, ntime)
             dtype = np.complex64
 
             # Before registration, descriptors may not have been created
@@ -366,7 +371,7 @@ class TestSolver(unittest.TestCase):
                 {'name': 'na', 'extents': [1, 7], 'safety': True }
             ])
 
-            self.assertTrue(slvr.ntime == 5000)
+            self.assertTrue(slvr.dims['ntime'].size == 5000)
             self.assertTrue(slvr.dims['ntime'].extents == (0,300))
             self.assertTrue(slvr.dims['na'].extents == (1,7))
 
@@ -397,8 +402,6 @@ class TestSolver(unittest.TestCase):
         Test the configuring our solver object with auto auto-correlations
         provides the correct number of baselines
         """
-        na, ntime, nchan, npsrc, ngsrc = 14, 5, 16, 2, 2
-
         # Should have 105 baselines for 14 antenna with auto-correlations on
         autocor = True
         slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
@@ -406,8 +409,9 @@ class TestSolver(unittest.TestCase):
             auto_correlations=autocor)
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
-            self.assertTrue(slvr.nbl == mbu.nr_of_baselines(na,autocor))
-            self.assertTrue(slvr.nbl == 105)
+            nbl, na = slvr.dim_global_size('nbl', 'na')
+            self.assertTrue(nbl == mbu.nr_of_baselines(na,autocor))
+            self.assertTrue(nbl == 105)
 
         # Should have 91 baselines for 14 antenna with auto-correlations on
         autocor = False
@@ -416,9 +420,9 @@ class TestSolver(unittest.TestCase):
             auto_correlations=autocor)
 
         with montblanc.factory.get_base_solver(slvr_cfg) as slvr:
-
-            self.assertTrue(slvr.nbl == mbu.nr_of_baselines(na,autocor))
-            self.assertTrue(slvr.nbl == 91)
+            nbl, na = slvr.dim_global_size('nbl', 'na')
+            self.assertTrue(nbl == mbu.nr_of_baselines(na,autocor))
+            self.assertTrue(nbl == 91)
 
     def test_viable_timesteps(self):
         """
