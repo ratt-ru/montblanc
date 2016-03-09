@@ -35,7 +35,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        ntime, nbl, ngsrc = slvr.dim_global_size('ntime', 'nbl', 'ngsrc')
+        ntime, nbl, ngsrc = slvr.dim_local_size('ntime', 'nbl', 'ngsrc')
 
         try:
             ap = slvr.get_ap_idx()
@@ -88,7 +88,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        ntime, nbl, nchan, nssrc = slvr.dim_global_size('ntime', 'nbl', 'nchan', 'nssrc')
+        ntime, nbl, nchan, nssrc = slvr.dim_local_size('ntime', 'nbl', 'nchan', 'nssrc')
 
         try:
             ap = slvr.get_ap_idx()
@@ -146,7 +146,7 @@ class SolverCPU(object):
         Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan')
+        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
         try:
             wave = slvr.wavelength_cpu
@@ -199,7 +199,7 @@ class SolverCPU(object):
         Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        npsrc, ngsrc, nssrc = slvr.dim_global_size('npsrc', 'ngsrc', 'nssrc')
+        npsrc, ngsrc, nssrc = slvr.dim_local_size('npsrc', 'ngsrc', 'nssrc')
 
         try:
             # Re-arrange per antenna terms into per baseline antenna pair values
@@ -239,7 +239,7 @@ class SolverCPU(object):
         Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan')
+        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
         try:
             # Compute the offsets for different antenna
@@ -313,7 +313,7 @@ class SolverCPU(object):
         Returns a (4,ntime,nsrc) matrix of complex scalars.
         """
         slvr = self.solver
-        nsrc, ntime = slvr.dim_global_size('nsrc', 'ntime')
+        nsrc, ntime = slvr.dim_local_size('nsrc', 'ntime')
 
         try:
             # Create the brightness matrix. Dim 4 x ntime x nsrcs
@@ -341,7 +341,7 @@ class SolverCPU(object):
         Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        nsrc, ntime, nbl, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nbl', 'nchan')
+        nsrc, ntime, nbl, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         per_bl_ek_scalar = self.compute_ek_jones_scalar_per_bl()
         b_jones = self.compute_b_jones()
@@ -360,7 +360,7 @@ class SolverCPU(object):
         Returns a (4,ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        nsrc, ntime, nbl, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nbl', 'nchan')
+        nsrc, ntime, nbl, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         per_bl_k_scalar = self.compute_k_jones_scalar_per_bl()
         b_jones = self.compute_b_jones()
@@ -380,7 +380,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        nsrc, ntime, nbl, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nbl', 'nchan')
+        nsrc, ntime, nbl, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         ebk_jones = self.compute_ebk_jones()
 
@@ -408,7 +408,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        ntime, nbl, nchan = slvr.dim_global_size(ntime, nbl, nchan)
+        ntime, nbl, nchan = slvr.dim_local_size(ntime, nbl, nchan)
 
 
         vis = ne.evaluate('sum(bk,3)', {'bk': self.compute_bk_jones()})\
@@ -430,7 +430,7 @@ class SolverCPU(object):
         Returns a (ntime,nbl,nchan) matrix of floating point scalars.
         """
         slvr = self.solver
-        ntime, nbl, nchan = slvr.dim_global_size('ntime', 'nbl', 'nchan')
+        ntime, nbl, nchan = slvr.dim_local_size('ntime', 'nbl', 'nchan')
 
         try:
             # Take the difference between the visibilities and the model

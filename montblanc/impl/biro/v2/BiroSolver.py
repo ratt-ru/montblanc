@@ -77,7 +77,7 @@ P = [
 ]
 
 def rand_uvw(slvr, ary):
-    ntime, na = slvr.dim_global_size('ntime', 'na')
+    ntime, na = slvr.dim_local_size('ntime', 'na')
     distance = 10
     # Distribute the antenna in a circle configuration
     ant_angles = 2*np.pi*np.arange(na)/slvr.ft(na)
@@ -141,9 +141,9 @@ A = [
 
     ary_dict('wavelength', ('nchan',), 'ft',
         default=lambda slvr, ary: montblanc.constants.C / \
-            np.linspace(1e9, 2e9, slvr.dim_global_size('nchan')),
+            np.linspace(1e9, 2e9, slvr.dim_local_size('nchan')),
         test=lambda slvr, ary: montblanc.constants.C / \
-            np.linspace(1e9, 2e9, slvr.dim_global_size('nchan'))),
+            np.linspace(1e9, 2e9, slvr.dim_local_size('nchan'))),
 
     ary_dict('point_errors', (2,'ntime','na'), 'ft',
         default=1,
@@ -232,7 +232,7 @@ class BiroSolver(BaseSolver):
             default_ap = self.get_default_base_ant_pairs()
 
         newdim = lambda d: [np.newaxis for n in range(d)]
-        nsrc, ntime, nchan = self.dim_global_size('nsrc', 'ntime', 'nchan')
+        nsrc, ntime, nchan = self.dim_local_size('nsrc', 'ntime', 'nchan')
 
         sed = (1 if src else 0)      # Extra source dimension
         ced = (1 if chan else 0)     # Extra channel dimension

@@ -423,7 +423,7 @@ class RimeGaussBSum(Node):
         pass
 
     def get_kernel_params(self, solver):
-        ntime, nbl, nchan = solver.dim_global_size('ntime', 'nbl', 'nchan')
+        ntime, nbl, nchan = solver.dim_local_size('ntime', 'nbl', 'nchan')
 
         D = FLOAT_PARAMS if solver.is_float() else DOUBLE_PARAMS
 

@@ -188,7 +188,7 @@ class RimeMultiply(Node):
 
     def get_kernel_params(self, solver):
         slvr = solver
-        nsrc, ntime, nbl, nchan = slvr.dim_global_size(
+        nsrc, ntime, nbl, nchan = slvr.dim_local_size(
             'nsrc', 'ntime', 'nbl', 'nchan')
         D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
 
@@ -203,7 +203,7 @@ class RimeMultiply(Node):
 
     def execute(self, solver):
         slvr = solver
-        nsrc, ntime, nbl, nchan = slvr.dim_global_size(
+        nsrc, ntime, nbl, nchan = slvr.dim_local_size(
             'nsrc', 'ntime', 'nbl', 'nchan')
 
         # Output jones matrix

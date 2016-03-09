@@ -332,7 +332,7 @@ class RimeEBeam(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-        nsrc, na, npolchan = slvr.dim_global_size('nsrc', 'na', 'npolchan')
+        nsrc, na, npolchan = slvr.dim_local_size('nsrc', 'na', 'npolchan')
 
         # Get a property dictionary off the solver
         D = slvr.get_properties()
@@ -374,7 +374,7 @@ class RimeEBeam(Node):
         ants_per_block = D['BLOCKDIMY']
         srcs_per_block = D['BLOCKDIMZ']
 
-        nsrc, na, npolchan = slvr.dim_global_size('nsrc', 'na', 'npolchan')
+        nsrc, na, npolchan = slvr.dim_local_size('nsrc', 'na', 'npolchan')
         polchan_blocks = mbu.blocks_required(npolchan, polchans_per_block)
         ant_blocks = mbu.blocks_required(na, ants_per_block)
         src_blocks = mbu.blocks_required(nsrc, srcs_per_block)

@@ -148,7 +148,7 @@ class RimeBSqrt(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-        nsrc, ntime, npolchan = slvr.dim_global_size(
+        nsrc, ntime, npolchan = slvr.dim_local_size(
             'nsrc', 'ntime', 'npolchan')
 
         # Get a property dictionary off the solver
@@ -190,7 +190,7 @@ class RimeBSqrt(Node):
         times_per_block = D['BLOCKDIMY']
         srcs_per_block = D['BLOCKDIMZ']
 
-        nsrc, ntime, npolchan = slvr.dim_global_size('nsrc', 'ntime', 'npolchan')
+        nsrc, ntime, npolchan = slvr.dim_local_size('nsrc', 'ntime', 'npolchan')
         polchan_blocks = mbu.blocks_required(npolchan, polchans_per_block)
         time_blocks = mbu.blocks_required(ntime, times_per_block)
         src_blocks = mbu.blocks_required(nsrc, srcs_per_block)

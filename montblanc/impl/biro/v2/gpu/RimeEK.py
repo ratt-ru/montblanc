@@ -223,7 +223,7 @@ class RimeEK(Node):
         pass
 
     def get_kernel_params(self, solver):
-        ntime, na, nchan = solver.dim_global_size('ntime', 'na', 'nchan')
+        ntime, na, nchan = solver.dim_local_size('ntime', 'na', 'nchan')
 
         D = FLOAT_PARAMS if solver.is_float() else DOUBLE_PARAMS
 

@@ -198,7 +198,7 @@ class RimeEKBSqrt(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-        ntime, na, npolchan = slvr.dim_global_size('ntime', 'na', 'npolchan')
+        ntime, na, npolchan = slvr.dim_local_size('ntime', 'na', 'npolchan')
 
         # Get a property dictionary off the solver
         D = slvr.get_properties()
@@ -239,7 +239,7 @@ class RimeEKBSqrt(Node):
         ants_per_block = D['BLOCKDIMY']
         times_per_block = D['BLOCKDIMZ']
 
-        ntime, na, npolchan = slvr.dim_global_size('ntime', 'na', 'npolchan')
+        ntime, na, npolchan = slvr.dim_local_size('ntime', 'na', 'npolchan')
         polchan_blocks = mbu.blocks_required(npolchan, polchans_per_block)
         ant_blocks = mbu.blocks_required(na, ants_per_block)
         time_blocks = mbu.blocks_required(ntime, times_per_block)

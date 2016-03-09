@@ -91,7 +91,7 @@ P = [
 
 def rand_uvw(slvr, ary):
     distance = 10
-    ntime, na = slvr.dim_global_size('ntime', 'na')
+    ntime, na = slvr.dim_local_size('ntime', 'na')
     # Distribute the antenna in a circle configuration
     ant_angles = 2*np.pi*np.arange(na)/slvr.ft(na)
     time_angle = np.arange(ntime)/slvr.ft(ntime)
@@ -169,7 +169,7 @@ A = [
 
     ary_dict('frequency', ('nchan',), 'ft',
         default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.nchan),
-        test=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_global_size('nchan'))),
+        test=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan'))),
 
     # Beam
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',
@@ -313,7 +313,7 @@ class BiroSolver(BaseSolver):
         ned = sed + ced             # Nr of extra dimensions
         all = slice(None, None, 1)  # all slice
         idx = []                    # Index we're returning
-        nsrc, ntime, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nchan')
+        nsrc, ntime, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nchan')
 
         # Create the source index, [np.newaxis,:,np.newaxis,np.newaxis] + [...]
         if src is True:

@@ -36,7 +36,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        ntime, nbl, ngsrc = slvr.dim_global_size('ntime', 'nbl', 'ngsrc')
+        ntime, nbl, ngsrc = slvr.dim_local_size('ntime', 'nbl', 'ngsrc')
 
         try:
             ap = slvr.get_ap_idx()
@@ -88,7 +88,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        nssrc, ntime, nbl, nchan  = slvr.dim_global_size('nssrc', 'ntime', 'nbl', 'nchan')
+        nssrc, ntime, nbl, nchan  = slvr.dim_local_size('nssrc', 'ntime', 'nbl', 'nchan')
 
         try:
             ap = slvr.get_ap_idx()
@@ -149,7 +149,7 @@ class SolverCPU(object):
         Returns a (nsrc,ntime,na,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan')
+        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
         try:
             freq = slvr.frequency_cpu
@@ -190,7 +190,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan')
+        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
         k_jones = self.compute_k_jones_scalar_per_ant()
         assert k_jones.shape == (nsrc, ntime, na, nchan)
@@ -211,7 +211,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan')
+        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
         k_jones = self.compute_k_jones_scalar_per_ant()
         b_sqrt_jones = self.compute_b_sqrt_jones()
@@ -228,7 +228,7 @@ class SolverCPU(object):
         Returns a (4,nsrc,ntime,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        nsrc, ntime, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nchan')
+        nsrc, ntime, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nchan')
 
         try:
             # Create the brightness matrix. Dim 4 x nsrcs x ntime
@@ -266,7 +266,7 @@ class SolverCPU(object):
         Returns a (4,nsrc,ntime,nchan) matrix of complex scalars.
         """
         slvr = self.solver
-        nsrc, ntime, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nchan')
+        nsrc, ntime, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nchan')
 
         try:
             # See
@@ -324,7 +324,7 @@ class SolverCPU(object):
         """
         slvr = self.solver
         nsrc, ntime, na, nchan, beam_lw, beam_mh, beam_nud = (
-            slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan',
+            slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan',
                 'beam_lw', 'beam_mh', 'beam_nud'))
 
         # Does the source lie within the beam cube?
@@ -368,7 +368,7 @@ class SolverCPU(object):
         """
         slvr = self.solver
         nsrc, ntime, na, nchan, beam_lw, beam_mh, beam_nud = (
-            slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan',
+            slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan',
                 'beam_lw', 'beam_mh', 'beam_nud'))
 
         sint = np.sin(slvr.parallactic_angle*np.arange(ntime))
@@ -520,7 +520,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_global_size('nsrc', 'ntime', 'na', 'nchan')
+        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
         N = nsrc*ntime*na*nchan
 
         E_beam = self.compute_E_beam()
@@ -542,7 +542,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        nsrc, npsrc, ngsrc, nssrc, ntime, nbl, nchan = slvr.dim_global_size(
+        nsrc, npsrc, ngsrc, nssrc, ntime, nbl, nchan = slvr.dim_local_size(
             'nsrc', 'npsrc', 'ngsrc', 'nssrc', 'ntime', 'nbl', 'nchan')
 
         try:
@@ -586,7 +586,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        nsrc, ntime, nbl, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nbl', 'nchan')
+        nsrc, ntime, nbl, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         if ekb_jones is None:
             ekb_jones = self.compute_ekb_jones_per_bl()
@@ -620,7 +620,7 @@ class SolverCPU(object):
         """
 
         slvr = self.solver
-        nsrc, ntime, nbl, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nbl', 'nchan')
+        nsrc, ntime, nbl, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         if ekb_vis is None:
             ekb_vis = self.compute_ekb_vis()
@@ -660,7 +660,7 @@ class SolverCPU(object):
         Returns a (ntime,nbl,nchan) matrix of floating point scalars.
         """
         slvr = self.solver
-        ntime, nbl, nchan = slvr.dim_global_size('ntime', 'nbl', 'nchan')
+        ntime, nbl, nchan = slvr.dim_local_size('ntime', 'nbl', 'nchan')
 
         try:
             if vis is None: vis = self.compute_ekb_vis()
