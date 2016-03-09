@@ -372,6 +372,27 @@ class BaseSolver(Solver):
         else:
             assert 0 <= dim.extents[0] < dim.extents[1] <= dim.size
 
+    def dim_global_size(self, *args):
+        """
+        ntime, nbl, nchan = slvr.dim_global_size('ntime, 'nbl', 'nchan')
+        
+        or
+
+        ntime, nbl, nchan, nsrc = slvr.dim_global_size('ntime,nbl:nchan nsrc')
+        """
+        import re
+
+        # If we got a single string argument
+        if len(args) == 1 and type(args[0]) is str:
+
+            result = [self.dims[name].size for name in
+                [s.strip() for s in re.split(',|:|;| ', args[0])]]
+        else:
+            result = [self.dims[name].size for name in args]
+
+        # Return single element if length one else entire list
+        return result[0] if len(result) == 1 else result
+
     def check_array(self, record_key, ary):
         """
         Check that the shape and type of the supplied array matches

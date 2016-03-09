@@ -378,6 +378,19 @@ class TestSolver(unittest.TestCase):
                     {'name': 'na', 'extents': [1, 7], 'safety': True }
                 ])
 
+            # Get from 
+            ntime, nbl, nchan = slvr.dim_global_size('ntime', 'nbl', 'nchan')
+            self.assertTrue(ntime == slvr.dims['ntime'].size and
+                nbl == slvr.dims['nbl'].size and
+                nchan == slvr.dims['nchan'].size)
+
+            ntime, nbl, nchan, na, nsrc = slvr.dim_global_size(
+                'ntime:nbl,nchan;na nsrc')
+
+            self.assertTrue(ntime == slvr.dims['ntime'].size and
+                nbl == slvr.dims['nbl'].size and
+                nchan == slvr.dims['nchan'].size)
+
 
     def test_auto_correlation(self):
         """
