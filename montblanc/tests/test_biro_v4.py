@@ -276,8 +276,7 @@ class TestBiroV4(unittest.TestCase):
 
         # Calculate CPU version of the B sqrt matrix
         slvr_cpu = SolverCPU(slvr)
-        b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones() \
-            .transpose(1, 2, 3, 0)
+        b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones()
 
         # Calculate the GPU version of the B sqrt matrix
         with slvr.context:
@@ -294,8 +293,7 @@ class TestBiroV4(unittest.TestCase):
         rand_t = [random.randrange(0, ntime) for i in range(N)]
         rand_ch = [random.randrange(0, nchan) for i in range(N)]
 
-        b_cpu = slvr_cpu.compute_b_jones() \
-            .transpose(1, 2, 3, 0)
+        b_cpu = slvr_cpu.compute_b_jones()
 
         # Test that the square root of B
         # multiplied by itself yields B.
@@ -479,8 +477,7 @@ class TestBiroV4(unittest.TestCase):
 
             # Tile the brightness term over the baseline dimension
             # and transpose so that polarisations are last
-            JB = np.tile(B[:,:,:,np.newaxis,:],
-                (1,1,1,nbl,1)).transpose(1,2,3,4,0)
+            JB = np.tile(B[:,:,np.newaxis,:,:], (1,1,nbl,1,1))
 
             assert JB.shape == (nsrc, ntime, nbl, nchan, 4)
 
@@ -497,8 +494,8 @@ class TestBiroV4(unittest.TestCase):
             # Tile the brightness square root term over
             # the antenna dimension and transpose so that
             # polarisations are last
-            JBsqrt = np.tile(B_sqrt[:,:,:,np.newaxis,:],
-                (1,1,1,na,1)).transpose(1,2,3,4,0)
+            JBsqrt = np.tile(B_sqrt[:,:,np.newaxis,:,:],
+                (1,1,na,1,1))
 
             assert JBsqrt.shape == (nsrc, ntime, na, nchan, 4)
 

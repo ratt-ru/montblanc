@@ -207,7 +207,7 @@ class SolverCPU(object):
         Computes the K (phase) term, multiplied by the
         square root of the brightness matrix
 
-        Returns a (4,nsrc,ntime,na,nchan) matrix of complex scalars.
+        Returns a (nsrc,ntime,na,nchan,4) matrix of complex scalars.
         """
 
         slvr = self.solver
@@ -216,8 +216,8 @@ class SolverCPU(object):
         k_jones = self.compute_k_jones_scalar_per_ant()
         b_sqrt_jones = self.compute_b_sqrt_jones()
 
-        result = k_jones[np.newaxis,:,:,:,:]*b_sqrt_jones[:,:,:,np.newaxis,:]
-        assert result.shape == (4, nsrc, ntime, na, nchan)
+        result = k_jones[:,:,:,:,np.newaxis]*b_sqrt_jones[:,:,np.newaxis,:,:]
+        assert result.shape == (nsrc, ntime, na, nchan, 4)
 
         return result
 
@@ -231,28 +231,23 @@ class SolverCPU(object):
         nsrc, ntime, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nchan')
 
         try:
-            # Create the brightness matrix. Dim 4 x nsrcs x ntime
-            B = np.array([
-                # fI+fQ + 0j
-                slvr.stokes_cpu[:,:,0]+slvr.stokes_cpu[:,:,1] + 0j,
-                # fU + fV*1j
-                slvr.stokes_cpu[:,:,2] + 1j*slvr.stokes_cpu[:,:,3],
-                # fU - fV*1j
-                slvr.stokes_cpu[:,:,2] - 1j*slvr.stokes_cpu[:,:,3],
-                # fI-fQ + 0j
-                slvr.stokes_cpu[:,:,0]-slvr.stokes_cpu[:,:,1] + 0j],
-                dtype=slvr.ct)
-
-            assert B.shape == (4, nsrc, ntime)
+            B = np.empty(shape=(nsrc, ntime, 4), dtype=slvr.ct)
+            S = slvr.stokes_cpu
+            # Create the brightness matrix from the stokes parameters
+            # Dimension (nsrc, ntime, 4)
+            B[:,:,0] = S[:,:,0] + S[:,:,1]    # I+Q
+            B[:,:,1] = S[:,:,2] + 1j*S[:,:,3] # U+Vi
+            B[:,:,2] = S[:,:,2] - 1j*S[:,:,3] # U-Vi
+            B[:,:,3] = S[:,:,0] - S[:,:,1]    # I-Q
 
             # Multiply the scalar power term into the matrix
             B_power = ne.evaluate('B*((f/rf)**a)', {
                  'rf': slvr.ref_freq,
-                 'B': B[:,:,:,np.newaxis],
-                 'f': slvr.frequency_cpu[np.newaxis, np.newaxis, np.newaxis, :],
-                 'a': slvr.alpha_cpu[np.newaxis, :, :, np.newaxis] })
+                 'B': B[:,:,np.newaxis,:],
+                 'f': slvr.frequency_cpu[np.newaxis, np.newaxis, :, np.newaxis],
+                 'a': slvr.alpha_cpu[:, :, np.newaxis, np.newaxis] })
 
-            assert B_power.shape == (4, nsrc, ntime, nchan)
+            assert B_power.shape == (nsrc, ntime, nchan, 4)
 
             return B_power
 
@@ -278,8 +273,8 @@ class SolverCPU(object):
 
             # trace = I+Q + I-Q = 2*I
             # det = (I+Q)*(I-Q) - (U+iV)*(U-iV) = I**2-Q**2-U**2-V**2
-            trace = (B[0]+B[3]).real
-            det = (B[0]*B[3] - B[1]*B[2]).real
+            trace = (B[:,:,:,0]+B[:,:,:,3]).real
+            det = (B[:,:,:,0]*B[:,:,:,3] - B[:,:,:,1]*B[:,:,:,2]).real
 
             assert trace.shape == (nsrc, ntime, nchan)
             assert det.shape == (nsrc, ntime, nchan)
@@ -301,11 +296,11 @@ class SolverCPU(object):
             t[mask] = 1.0
 
             # Add s to the diagonal entries
-            B[0] += s
-            B[3] += s
+            B[:,:,:,0] += s
+            B[:,:,:,3] += s
 
             # Divide the entire matrix by t
-            B /= t
+            B /= t[:,:,:,np.newaxis]
 
             return B
 
@@ -524,7 +519,7 @@ class SolverCPU(object):
         N = nsrc*ntime*na*nchan
 
         E_beam = self.compute_E_beam()
-        kb_sqrt = self.compute_kb_sqrt_jones_per_ant().transpose(1,2,3,4,0)
+        kb_sqrt = self.compute_kb_sqrt_jones_per_ant()
 
         assert E_beam.shape == (nsrc, ntime, na, nchan, 4)
         assert kb_sqrt.shape == (nsrc, ntime, na, nchan, 4)
