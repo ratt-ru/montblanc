@@ -43,6 +43,11 @@ from montblanc.src_types import (
     source_range_tuple,
     source_range_slices)
 
+from montblanc.dims import (
+    create_dim_data,
+    update_dim_data,
+    check_dim_data)
+
 def nr_of_baselines(na, auto_correlations=False):
     """
     Compute the number of baselines for the
@@ -292,7 +297,13 @@ def viable_dim_config(bytes_available, arrays, props,
     # dim_ord argument.
     while bytes_used > bytes_available:
         try:
-            dims = dim_ord.pop(0).strip().split('&')
+            dims = dim_ord.pop(0)
+            montblanc.log.debug('Applying reduction {s}. '
+                'Bytes available {a} used {u}'.format(
+                    s=dims,
+                    a=fmt_bytes(bytes_available),
+                    u=fmt_bytes(bytes_used)))
+            dims = dims.strip().split('&')
         except IndexError:
             # No more dimensions available for reducing
             # the problem size. Unable to fit the problem
@@ -331,9 +342,8 @@ def viable_dim_config(bytes_available, arrays, props,
                 modified_dims[dim_name] = dim_value
                 P[dim_name] = dim_value
             else:
-                montblanc.log.warn(('Tried to reduce dimension {d} '
-                    'of size {s} to larger value {v}. '
-                    'This reduction has been ignored.').format(
+                montblanc.log.info(('Ignored reduction of {d} '
+                    'of size {s} to {v}. ').format(
                         d=dim_name, s=P[dim_name], v=dim_value))
 
         bytes_used = dict_array_bytes_required(arrays, P)*nsolvers
