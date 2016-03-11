@@ -187,7 +187,8 @@ class BiroSolver(BaseSolver):
         Return an np.array(shape=(2, nbl), dtype=np.int32]) containing the
         default antenna pairs for each baseline.
         """
-        return np.int32(np.triu_indices(self.na, 1))
+        na = self.dim_local_size('na')
+        return np.int32(np.triu_indices(na, 1))
 
     def get_default_ant_pairs(self):
         """
@@ -197,8 +198,9 @@ class BiroSolver(BaseSolver):
         """
         # Create the antenna pair mapping, from upper triangle indices
         # based on the number of antenna.
-        return np.tile(self.get_default_base_ant_pairs(), self.ntime) \
-            .reshape(2, self.ntime, self.nbl)
+        ntime, nbl = self.dim_local_size('ntime', 'nbl')
+        return np.tile(self.get_default_base_ant_pairs(), ntime) \
+            .reshape(2, ntime, nbl)
 
     def get_ap_idx(self, default_ap=None, src=False, chan=False):
         """

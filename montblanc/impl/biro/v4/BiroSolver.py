@@ -168,7 +168,7 @@ A = [
         test=rand_sersic_shape),
 
     ary_dict('frequency', ('nchan',), 'ft',
-        default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.nchan),
+        default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan')),
         test=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan'))),
 
     # Beam
@@ -266,10 +266,10 @@ class BiroSolver(BaseSolver):
         containing the default antenna pairs for each timestep
         at each baseline.
         """
-        ntime, nbl = self.dim_local_size('ntime', 'nbl')
 
         # Create the antenna pair mapping, from upper triangle indices
         # based on the number of antenna.
+        ntime, nbl = self.dim_local_size('ntime', 'nbl')
         return np.tile(self.get_default_base_ant_pairs(), ntime) \
             .reshape(2, ntime, nbl)
 
