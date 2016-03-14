@@ -50,7 +50,7 @@ class RimeReduction(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        C = solver.rime_const_data
+        C = solver.const_data().cdata()
 
         # Call pycuda's internal reduction kernel on
         # the chi squared result array. We slice this array

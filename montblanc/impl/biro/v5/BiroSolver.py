@@ -72,30 +72,24 @@ class BiroSolver(BaseSolver):
         self.rime_sum = RimeSumCoherencies(weight_vector=wv)
         self.rime_reduce = RimeReduction()
 
-        # Create a page-locked ndarray to hold constant GPU data
-        # as well as
+        # Create
         # (1) A stream that this solver will asynchronously
         #     operate on
         # (2) An event indicating when an iteration of
         #     the kernels above have finished executing
         with self.context:
-            self.const_data_buffer = cuda.pagelocked_empty(
-                shape=mbu.rime_const_data_size(), dtype=np.int8)
-
             self.stream = cuda.Stream()
             self.kernels_done = cuda.Event()
 
-        # Now create a cdata object wrapping the page-locked
-        # ndarray and cast it to the rime_const_data c type.
-        self.rime_const_data = mbu.wrap_rime_const_data(
-            self.const_data_buffer)
-
-        # Initialise it with the current solver (self)
-        mbu.update_rime_const_data(self, self.rime_const_data)
+        # Create constant data for transfer to GPU
+        self._const_data = mbu.create_rime_const_data(self, self.context)
 
         # Indicate these variables have not been set
         self.dev_mem_pool = None
         self.pinned_mem_pool = None
+
+    def const_data(self):
+        return self._const_data
 
     def update_dimension(self, dim_data):
         """
@@ -107,8 +101,7 @@ class BiroSolver(BaseSolver):
         super(BiroSolver, self).update_dimension(dim_data)
 
         # Update constant data, updating nsrc with sum of source counts
-        mbu.update_rime_const_data(self, self.rime_const_data,
-            sum_nsrc=True)
+        self._const_data.update(self, sum_nsrc=True)
 
     def set_dev_mem_pool(self, dev_mem_pool):
         self.dev_mem_pool = dev_mem_pool

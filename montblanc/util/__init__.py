@@ -28,11 +28,7 @@ from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 from sky_model_parser import parse_sky_model
 
 from const_data import (
-    rime_const_data_members,
-    rime_const_data_struct,
-    rime_const_data_size,
-    wrap_rime_const_data,
-    update_rime_const_data)
+    create_rime_const_data)
 
 from montblanc.src_types import (
     source_types,

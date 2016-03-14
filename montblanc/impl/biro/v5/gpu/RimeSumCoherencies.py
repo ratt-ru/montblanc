@@ -38,12 +38,12 @@ class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCo
         if stream is not None:
             cuda.memcpy_htod_async(
                 self.rime_const_data_gpu[0],
-                solver.const_data_buffer,
+                solver.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
                 self.rime_const_data_gpu[0],
-                solver.const_data_buffer)
+                solver.const_data().ndary())
 
     def post_execution(self, solver, stream=None):
         super(RimeSumCoherencies, self).pre_execution(solver,stream)

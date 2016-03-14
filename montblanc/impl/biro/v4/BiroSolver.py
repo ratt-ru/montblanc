@@ -241,18 +241,10 @@ class BiroSolver(BaseSolver):
         self.register_properties(P)
         self.register_arrays(A)
 
-        # Create a page-locked ndarray to hold constant GPU data
-        with self.context:
-            self.const_data_buffer = cuda.pagelocked_empty(
-                shape=mbu.rime_const_data_size(), dtype=np.int8)
+        self._const_data = mbu.create_rime_const_data(self, self.context)
 
-        # Now create a cdata object wrapping the page-locked
-        # ndarray and cast it to the rime_const_data c type.
-        self.rime_const_data_cpu = mbu.wrap_rime_const_data(
-            self.const_data_buffer)
-
-        # Initialise it with the current solver (self)
-        mbu.update_rime_const_data(self, self.rime_const_data_cpu)
+    def const_data(self):
+        return self._const_data
 
     def get_default_base_ant_pairs(self):
         """

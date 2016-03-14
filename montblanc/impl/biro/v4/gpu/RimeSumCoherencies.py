@@ -377,7 +377,7 @@ class RimeSumCoherencies(Node):
         D = slvr.template_dict()
         # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
-        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
+        D['rime_const_data_struct'] = slvr.const_data().string_def()
 
         D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
             mbu.redistribute_threads(
@@ -428,12 +428,12 @@ class RimeSumCoherencies(Node):
         if stream is not None:
             cuda.memcpy_htod_async(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer,
+                slvr.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer)
+                slvr.const_data().ndary())
 
         # The gaussian shape array can be empty if
         # no gaussian sources were specified.
