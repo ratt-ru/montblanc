@@ -22,12 +22,18 @@ import numpy as np
 
 from cffi import FFI
 
+from montblanc.enums import (
+    DIMDATA)
+
 from montblanc.src_types import (
     source_types,
     source_nr_vars,
     default_sources,
     sources_to_nr_vars)
 
+_SPACE = ' '*4
+# Name of the field type
+_FIELD_TYPE = 'dim_field'
 # Name of the structure type
 _STRUCT_TYPE = 'rime_const_data'
 # Name of the structure type
@@ -42,8 +48,8 @@ class RimeConstDefinition(object):
     def __init__(self, slvr):
         self._ffi = FFI()
         # Parse the structure
-        self._ffi.cdef(self._struct(slvr))
         self._cstr = self._struct(slvr)
+        self._ffi.cdef(self._struct(slvr))
 
     @staticmethod
     def _struct(slvr):
@@ -52,13 +58,35 @@ class RimeConstDefinition(object):
         the C definition of the
         RIME constant data structure
         """
-        def _emit_struct_field_str(type, name):
-            return ' '*4 + type + ' ' + name + ';'
+        def _emit_struct_field_str(name):
+            return _SPACE + '{t} {n};'.format(t=_FIELD_TYPE, n=name)
 
-        l = ['typedef struct {']
-        l.extend([_emit_struct_field_str('unsigned int', v)
-            for v in slvr.dimensions().iterkeys()])
+        # Define our field structure. Looks something like
+        # typedef struct {
+        #     unsigned int global_size;
+        #     unsigned int local_size;
+        #     unsigned int extents[2];
+        # } _FIELD_TYPE;
+        l = ['typedef struct  {']
+        l.extend([_SPACE + 'unsigned int {n};'.format(n=n)
+            for n in (DIMDATA.GLOBAL_SIZE,
+                DIMDATA.LOCAL_SIZE,
+                DIMDATA.EXTENTS+'[2]')])
+        l.append('}} {t};'.format(t=_FIELD_TYPE))
+
+        # Define our constant data structure. Looks something like
+        # typedef struct {
+        #     _FIELD_TYPE ntime;
+        #     _FIELD_TYPE na;
+        #     ....
+        # } _STRUCT_TYPE;
+
+        l.append('typedef struct {')
+        l.extend([_emit_struct_field_str(n) for n
+            in slvr.dimensions().iterkeys()])
         l.append('} ' + _STRUCT_TYPE + ';')
+
+        # Join with newlines and return the string
         return '\n'.join(l)
 
     def struct_size(self):
@@ -88,6 +116,7 @@ class RimeConstStruct(object):
         self._cdata = self._def.wrap(ndary)
 
     def ndary(self):
+        """ Returns the wrapped numpy array backing the constant data struct """
         return self._ndary
 
     def update(self, slvr, sum_nsrc=False):
@@ -97,15 +126,34 @@ class RimeConstStruct(object):
         # Iterate through our dimension data, setting
         # any relevant attributes on cdata
         for name, dim in slvr.dimensions().iteritems():
-            setattr(self._cdata, name, dim.extents[1])
+            cdim = getattr(self._cdata, name)
 
-        if sum_nsrc is True and hasattr(self._cdata, 'nsrc'):
-            # Set cdata.nsrc by summing each source type
-            setattr(self._cdata, 'nsrc',
-                sum([getattr(self._cdata, s)
+            setattr(cdim, DIMDATA.LOCAL_SIZE,
+                getattr(dim, DIMDATA.LOCAL_SIZE))
+
+            setattr(cdim, DIMDATA.GLOBAL_SIZE,
+                getattr(dim, DIMDATA.GLOBAL_SIZE))
+
+            setattr(cdim, DIMDATA.EXTENTS, 
+                getattr(dim, DIMDATA.EXTENTS))
+
+        from montblanc.slvr_config import (
+            SolverConfigurationOptions as Options)
+
+        # If 'nsrc' exists set it by by summing each source type
+        if sum_nsrc is True:
+            cdim = getattr(self._cdata, Options.NSRC, None)
+
+            if cdim:
+                # This performs an element-wise sum over each sources extents
+                S = map(sum, zip(*[getattr(getattr(self._cdata, s),
+                        DIMDATA.EXTENTS)
                     for s in source_nr_vars()]))
 
+                setattr(cdim, DIMDATA.EXTENTS, S)
+
     def string_def(self):
+        """ Return the C string definition of the structure """
         return self._def.__str__()
 
     def cdata(self):

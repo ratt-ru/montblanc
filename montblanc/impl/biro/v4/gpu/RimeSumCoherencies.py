@@ -90,6 +90,9 @@ public:
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
+#define LEXT(name) C.name.extents[0]
+#define UEXT(name) C.name.extents[1]
+#define DEXT(name) (C.name.extents[1] - C.name.extents[0])
 
 template <
     typename T,
@@ -114,7 +117,7 @@ void rime_sum_coherencies_impl(
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
-    if(TIME >= C.ntime || BL >= C.nbl || POLCHAN >= C.npolchan)
+    if(TIME >= DEXT(ntime) || BL >= DEXT(nbl) || POLCHAN >= DEXT(npolchan))
         return;
 
     __shared__ struct {
@@ -168,7 +171,7 @@ void rime_sum_coherencies_impl(
     typename Tr::ct polsum = Po::make_ct(0.0, 0.0);
 
     // Point Sources
-    for(int SRC=0; SRC< C.npsrc; ++SRC)
+    for(int SRC=0; SRC < DEXT(npsrc); ++SRC)
     {
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
@@ -184,16 +187,16 @@ void rime_sum_coherencies_impl(
     }
 
     // Gaussian sources
-    for(int SRC = C.npsrc; SRC < C.npsrc + C.ngsrc; ++SRC)
+    for(int SRC = DEXT(npsrc); SRC < DEXT(npsrc) + DEXT(ngsrc); ++SRC)
     {
         // gaussian shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC - C.npsrc;  shared.el = gauss_shape[i];
-            i += C.ngsrc;       shared.em = gauss_shape[i];
-            i += C.ngsrc;       shared.eR = gauss_shape[i];
+            i = SRC - DEXT(npsrc);  shared.el = gauss_shape[i];
+            i += DEXT(ngsrc);       shared.em = gauss_shape[i];
+            i += DEXT(ngsrc);       shared.eR = gauss_shape[i];
         }
 
         __syncthreads();
@@ -229,16 +232,16 @@ void rime_sum_coherencies_impl(
     }
 
     // Sersic Sources
-    for(int SRC = C.npsrc + C.ngsrc; SRC < C.npsrc + C.ngsrc + C.nssrc; ++SRC)
+    for(int SRC = DEXT(npsrc) + DEXT(ngsrc); SRC < DEXT(npsrc) + DEXT(ngsrc) + DEXT(nssrc); ++SRC)
     {
         // sersic shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC - C.npsrc - C.ngsrc; shared.e1 = sersic_shape[i];
-            i += C.nssrc;                shared.e2 = sersic_shape[i];
-            i += C.nssrc;                shared.sersic_scale = sersic_shape[i];
+            i = SRC - DEXT(npsrc) - DEXT(ngsrc); shared.e1 = sersic_shape[i];
+            i += DEXT(nssrc);                   shared.e2 = sersic_shape[i];
+            i += DEXT(nssrc);                   shared.sersic_scale = sersic_shape[i];
         }
 
         __syncthreads();

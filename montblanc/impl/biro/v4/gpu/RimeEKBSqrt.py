@@ -71,6 +71,9 @@ KERNEL_TEMPLATE = string.Template("""
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
+#define LEXT(name) C.name.extents[0]
+#define UEXT(name) C.name.extents[1]
+#define DEXT(name) (C.name.extents[1] - C.name.extents[0])
 
 template <typename T>
 class EKBTraits {};
@@ -106,7 +109,7 @@ void rime_jones_EKBSqrt_impl(
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
     #define POL (threadIdx.x & 0x3)
 
-    if(TIME >= C.ntime || ANT >= C.na || POLCHAN >= C.npolchan)
+    if(TIME >= DEXT(ntime) || ANT >= DEXT(na) || POLCHAN >= DEXT(npolchan))
         return;
 
     __shared__ typename EKBTraits<T>::UVWType s_uvw[BLOCKDIMZ][BLOCKDIMY];
@@ -132,7 +135,7 @@ void rime_jones_EKBSqrt_impl(
 
     __syncthreads();
 
-    for(int SRC=0; SRC < C.nsrc; ++SRC)
+    for(int SRC=0; SRC < DEXT(nsrc); ++SRC)
     {
         // LM coordinates vary only by source, not antenna, time or channel
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.x == 0)

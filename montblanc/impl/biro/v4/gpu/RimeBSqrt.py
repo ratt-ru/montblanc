@@ -69,6 +69,9 @@ KERNEL_TEMPLATE = string.Template("""
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
+#define LEXT(name) C.name.extents[0]
+#define UEXT(name) C.name.extents[1]
+#define DEXT(name) (C.name.extents[1] - C.name.extents[0])
 
 template <
     typename T,
@@ -87,7 +90,7 @@ void rime_jones_B_sqrt_impl(
     int SRC = blockIdx.z*blockDim.z + threadIdx.z;
     #define POL (threadIdx.x & 0x3)
 
-    if(SRC >= C.nsrc || TIME >= C.ntime || POLCHAN >= C.npolchan)
+    if(SRC >= DEXT(nsrc) || TIME >= DEXT(ntime) || POLCHAN >= DEXT(npolchan))
         return;
 
     __shared__ T freq[BLOCKDIMX];

@@ -71,6 +71,9 @@ KERNEL_TEMPLATE = string.Template("""
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
+#define LEXT(name) C.name.extents[0]
+#define UEXT(name) C.name.extents[1]
+#define DEXT(name) (C.name.extents[1] - C.name.extents[0])
 
 template <
     typename T,
@@ -140,7 +143,7 @@ void rime_jones_E_beam_impl(
     #define POL (threadIdx.x & 0x3)
     #define BLOCKCHANS (BLOCKDIMX >> 2)
 
-    if(SRC >= C.nsrc || ANT >= C.na || POLCHAN >= C.npolchan)
+    if(SRC >= DEXT(nsrc) || ANT >= DEXT(na) || POLCHAN >= DEXT(npolchan))
         return;
 
     __shared__ typename EBeamTraits<T>::LMType s_lm0[BLOCKDIMZ];
@@ -167,7 +170,7 @@ void rime_jones_E_beam_impl(
 
     __syncthreads();
 
-    for(int TIME=0; TIME < C.ntime; ++TIME)
+    for(int TIME=0; TIME < DEXT(ntime); ++TIME)
     {
         // Pointing errors vary by time, antenna and channel,
         // but not source
