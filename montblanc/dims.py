@@ -6,55 +6,6 @@ from montblanc.enums import DIMDATA
 
 DEFAULT_DESCRIPTION = 'An inexplicable dimension!'
 
-"""
-DEFAULT_DIMS = {
-    Options.NTIME : Options.NTIME_DESCRIPTION,
-    Options.NA : Options.NA_DESCRIPTION,
-    Options.NBL : Options.NBL_DESCRIPTION,
-    Options.NCHAN : Options.NCHAN_DESCRIPTION,
-    Options.NSRC : Options.NSRC_DESCRIPTION,
-    Options.NPOL : Options.NPOL_DESCRIPTION,
-}
-
-DERIVED_DIMS = {
-    'npolchan' : 'Number of channels x polarisations',
-    'nvis' : 'Number of visibilities',
-}
-
-def create_dim_list(new_dims, slvr_cfg=None):
-    if not isinstance(new_dims):
-        raise TypeError('Expected a list for new_dims')
-
-    if slvr_cfg is None:
-        slvr_cfg = {}
-
-    D = {}
-
-    # Handle our default dimensions
-    for name, description in DEFAULT_DIMS.iteritems():
-        # TODO: This could be cleaner
-        cfg_dim_data = slvr.cfg.get(name, None)
-
-        D[name] = (create_dim_data(name, cfg_dim_data) if cfg_dim_data
-            else create_dim_data(name, 1, description=description))
-
-    # Handle source types
-    for name, src_type in SOURCE_VAR_TYPES.iteritems():
-        # TODO: This could be cleaner
-        cfg_dim_data = slvr.cfg.get(name, None)
-
-        if cfg_dim_data:
-            dim_data = create_dim_data(name, cfg_dim_data, zero_valid=True)
-        else:
-            description = 'Number of {t} sources'.format(t=src_type)
-            dim_data = create_dim_data(name, 0,
-                zero_valid=True, description=description)
-
-        D[name] = dim_data
-
-    return D
-"""
-
 def create_dim_data(name, dim_data, **kwargs):
     # If dim_data is an integer, start constructing a dictionary from it
     if isinstance(dim_data, (int, long, np.integer)):
