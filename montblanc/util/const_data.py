@@ -88,7 +88,7 @@ def update_rime_const_data(slvr, rime_const_data, sum_nsrc=False):
     """
     # Iterate through our dimension data, setting
     # any relevant attributes on rime_const_data
-    for name, dim in slvr.dims.iteritems():
+    for name, dim in slvr.dimensions().iteritems():
         if hasattr(rime_const_data, name):
             setattr(rime_const_data, name, dim.extents[1])
 

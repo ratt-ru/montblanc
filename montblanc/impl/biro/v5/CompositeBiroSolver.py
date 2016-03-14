@@ -316,7 +316,7 @@ class CompositeBiroSolver(BaseSolver):
                         nr_src_vars, nr_vis_vars))
 
     def __cfg_subslvr_dims(self, subslvr_cfg, P):
-        for dim in self.dims.itervalues():
+        for dim in self._dims.itervalues():
             name = dim[DIMDATA.NAME]
             if name in P:
                 # Copy dimension data for reconfiguration
@@ -431,7 +431,7 @@ class CompositeBiroSolver(BaseSolver):
 
         two_ant_case = (na == 2)
 
-        for r in self.arrays.itervalues():
+        for r in self._arrays.itervalues():
             # Is there anything to transfer for this array?
             if not r.cpu:
                 #print '%s has no CPU array' % r.name

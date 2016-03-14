@@ -352,27 +352,29 @@ class TestSolver(unittest.TestCase):
         slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
             sources=montblanc.sources(point=2, gaussian=2))
 
-        dim = 'nwombles'
-        dim_description = 'Number of Wombles'
-        dim_size = 100
+        name = 'nwombles'
+        description = 'Number of Wombles'
+        size = 100
 
         with test_solver(slvr_cfg) as slvr:
-            slvr.register_dimension(dim, dim_size, 
-                description=dim_description)
+            slvr.register_dimension(name, size, 
+                description=description)
 
-            self.assertTrue(dim in slvr.dims)
-            self.assertTrue(slvr.dims[dim].local_size == dim_size)
+            self.assertTrue(name in slvr.dimensions())
+            dim = slvr.dimension(name)
+
+            self.assertTrue(dim.local_size == size)
 
             # See https://github.com/bcj/AttrDict/issues/34
-            self.assertFalse(type(slvr.dims[dim].extents) is list)
-            self.assertTrue(type(slvr.dims[dim].extents) is tuple)
-            self.assertTrue(type(slvr.dims[dim]['extents']) is list)
+            self.assertFalse(type(dim.extents) is list)
+            self.assertTrue(type(dim.extents) is tuple)
+            self.assertTrue(type(dim['extents']) is list)
 
             # Test dimension attributes
-            self.assertTrue(slvr.dims[dim].extents == (0,dim_size))
-            self.assertTrue(slvr.dims[dim].name == dim)
-            self.assertTrue(slvr.dims[dim].local_size == dim_size)
-            self.assertTrue(slvr.dims[dim].description == dim_description)
+            self.assertTrue(dim.extents == (0,size))
+            self.assertTrue(dim.name == name)
+            self.assertTrue(dim.local_size == size)
+            self.assertTrue(dim.description == description)
 
             # Check that a dimension update happens
             slvr.update_dimensions([
@@ -380,9 +382,12 @@ class TestSolver(unittest.TestCase):
                 {'name': 'na', 'extents': [1, 7], 'safety': True }
             ])
 
-            self.assertTrue(slvr.dims['ntime'].local_size == 6)
-            self.assertTrue(slvr.dims['ntime'].extents == (1,5))
-            self.assertTrue(slvr.dims['na'].extents == (1,7))
+
+            dims = slvr.dimensions()
+
+            self.assertTrue(dims['ntime'].local_size == 6)
+            self.assertTrue(dims['ntime'].extents == (1,5))
+            self.assertTrue(dims['na'].extents == (1,7))
 
             # Check that we get an exception if we change the size
             # and the safety is off
@@ -394,16 +399,16 @@ class TestSolver(unittest.TestCase):
 
             # Get from 
             ntime, nbl, nchan = slvr.dim_global_size('ntime', 'nbl', 'nchan')
-            self.assertTrue(ntime == slvr.dims['ntime'].global_size and
-                nbl == slvr.dims['nbl'].global_size and
-                nchan == slvr.dims['nchan'].global_size)
+            self.assertTrue(ntime == dims['ntime'].global_size and
+                nbl == dims['nbl'].global_size and
+                nchan == dims['nchan'].global_size)
 
             ntime, nbl, nchan, na, nsrc = slvr.dim_global_size(
                 'ntime:nbl,nchan;na nsrc')
 
-            self.assertTrue(ntime == slvr.dims['ntime'].global_size and
-                nbl == slvr.dims['nbl'].global_size and
-                nchan == slvr.dims['nchan'].global_size)
+            self.assertTrue(ntime == dims['ntime'].global_size and
+                nbl == dims['nbl'].global_size and
+                nchan == dims['nchan'].global_size)
 
 
     def test_auto_correlation(self):
@@ -454,7 +459,7 @@ class TestSolver(unittest.TestCase):
             # Don't bother with the actual value, the assert in viable_timesteps
             # actually tests things quite well
             mbu.viable_timesteps(2*1024*1024*1024,
-                slvr.arrays, slvr.get_properties())
+                slvr.arrays(), slvr.get_properties())
 
     def test_solver_factory(self):
         """ Test that the solver factory produces the correct types """

@@ -30,23 +30,38 @@ def repeat_brightness_over_time(slvr, parser):
     [I Q U V alpha] values for each timestep,
     we need to replicate these values across
     each timestep. Figure out the time dimension
-    of the the brightness array and repeat
+    of the the stokes and alpha array and repeat
     the array along it.
     """
-    # Get the brightness matrix. In general, montblanc support
-    # time-varying brightness, but it's not practical to specify
-    # this in a sky model text file. So we assume a shape here
-    # (5, nsrc) and call fiddle_brightness to replicate these
+    # Get the stokes matrix. In general, montblanc supports
+    # time-varying stokes, but it's not practical to specify
+    # this in a sky model text file, so we replicate these
     # values across the time dimension
     ntime = slvr.dim_global_size('ntime')
-    R = slvr.get_array_record('brightness')
-    time_dim = R.sshape.index('ntime')
-    no_time_shape = tuple([d for i, d in enumerate(R.shape) if i != time_dim])
 
-    brightness = parser.shape_arrays(['I','Q','U','V','alpha'],
-        no_time_shape, slvr.brightness_dtype)
+    stokes_record = slvr.array('stokes')
+    time_dim = stokes_record.sshape.index('ntime')
+    no_time_shape = tuple([d if i != time_dim else 1
+        for i, d in enumerate(stokes_record.shape)])
 
-    return np.repeat(brightness, ntime, time_dim).reshape(R.shape)
+    stokes = parser.shape_arrays(['I','Q','U','V'],
+        no_time_shape, slvr.stokes_dtype)
+    stokes = (np.repeat(stokes, ntime, time_dim)
+        .reshape(stokes_record.shape))
+
+    alpha_record = slvr.array('alpha')
+    time_dim = alpha_record.sshape.index('ntime')
+    no_time_shape = tuple([d if i != time_dim else 1
+        for i, d in enumerate(alpha_record.shape)])
+
+    alpha = parser.shape_arrays(['alpha'],
+        no_time_shape, slvr.alpha_dtype)
+
+    print alpha.shape, alpha_record.sshape
+    alpha = (np.repeat(alpha, ntime, time_dim)
+        .reshape(alpha_record.shape))
+
+    return stokes, alpha
 
 if __name__ == '__main__':
     import sys
@@ -56,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('msfile', help='Measurement Set File')
     parser.add_argument('-s', '--sky-file', dest='sky_file', type=str, required=True, help='Sky Model File')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v2','v3','v4','v5'],
+    parser.add_argument('-v','--version',dest='version', type=str, default='v4', choices=['v4'],
         help='BIRO Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
@@ -76,12 +91,11 @@ if __name__ == '__main__':
         store_cpu=False, version=args.version)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
-
         # Get the lm coordinates
         lm = sky_parse.shape_arrays(['l','m'], slvr.lm_shape, slvr.lm_dtype)
 
-        # Get the brightness values, repeating them over time
-        brightness = repeat_brightness_over_time(slvr, sky_parse)
+        # Get the stokes and alpha parameters
+        stokes, alpha = repeat_brightness_over_time(slvr, sky_parse)
 
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
@@ -91,6 +105,7 @@ if __name__ == '__main__':
 
         # Create a bayesian model and upload it to the GPU
         bayes_data = mbu.random_like(slvr.bayes_data_gpu)
+        slvr.transfer_bayes_data(bayes_data)
 
         # Generate random antenna pointing errors
         point_errors = mbu.random_like(slvr.point_errors_gpu)
@@ -103,7 +118,8 @@ if __name__ == '__main__':
         for i in range(args.count):
             # Set data on the solver object. Uploads to GPU
             slvr.transfer_lm(lm)
-            slvr.transfer_brightness(brightness)
+            slvr.transfer_stokes(stokes)
+            slvr.transfer_alpha(alpha)
             slvr.transfer_point_errors(point_errors)
             # Change parameters for this run
             slvr.set_sigma_sqrd((np.random.random(1)**2)[0])

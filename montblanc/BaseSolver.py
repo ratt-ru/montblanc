@@ -68,7 +68,7 @@ class PropertyDescriptor(object):
         return self.data.get(instance,self.default)
 
     def __set__(self, instance, value):
-        dtype = instance.properties[self.record_key].dtype
+        dtype = instance._properties[self.record_key].dtype
         self.data[instance] = dtype(value)
 
     def __delete__(self, instance):
@@ -128,9 +128,9 @@ class BaseSolver(Solver):
 
         # Dictionaries to store records about our
         # dimensions, arrays and properties
-        self.dims = OrderedDict()
-        self.arrays = OrderedDict()
-        self.properties = OrderedDict()
+        self._dims = OrderedDict()
+        self._arrays = OrderedDict()
+        self._properties = OrderedDict()
 
         # Store the solver configuration
         self._slvr_cfg = slvr_cfg
@@ -180,17 +180,17 @@ class BaseSolver(Solver):
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
         return np.sum([mbu.array_bytes(a.shape,a.dtype)
-            for a in self.arrays.itervalues()])
+            for a in self._arrays.itervalues()])
 
     def cpu_bytes_required(self):
         """ returns the memory required by all CPU arrays in bytes. """
         return np.sum([mbu.array_bytes(a.shape,a.dtype)
-            for a in self.arrays.itervalues() if a.cpu])
+            for a in self._arrays.itervalues() if a.cpu])
 
     def gpu_bytes_required(self):
         """ returns the memory required by all GPU arrays in bytes. """
         return np.sum([mbu.array_bytes(a.shape,a.dtype)
-            for a in self.arrays.itervalues() if a.gpu])
+            for a in self._arrays.itervalues() if a.gpu])
 
     def mem_required(self):
         """ Return a string representation of the total memory required """
@@ -225,7 +225,7 @@ class BaseSolver(Solver):
         """
         from montblanc.enums import DIMDATA
 
-        if name in self.dims:
+        if name in self._dims:
             raise AttributeError((
                 "Attempted to register dimension '{n}'' "
                 "as an attribute of the solver, but "
@@ -233,10 +233,10 @@ class BaseSolver(Solver):
                 "a different name!").format(n=name))
 
         # Create the dimension dictionary
-        self.dims[name] = mbu.create_dim_data(name, dim_data, **kwargs)
+        self._dims[name] = mbu.create_dim_data(name, dim_data, **kwargs)
 
         # Check that we've been given valid values
-        mbu.check_dim_data(self.dims[name])
+        mbu.check_dim_data(self._dims[name])
 
     def register_default_dimensions(self):
         """ Register the default dimensions for a RIME solver """ 
@@ -326,7 +326,7 @@ class BaseSolver(Solver):
                 "a dimension. Update dictionary {u}."
                     .format(u=update_dict))
 
-        dim = self.dims.get(name, None)
+        dim = self._dims.get(name, None)
 
         # Sanity check dimension existence
         if not dim:
@@ -355,10 +355,10 @@ class BaseSolver(Solver):
         # If we got a single string argument
         if len(args) == 1 and type(args[0]) is str:
 
-            result = [self.dims[name][attr] for name in
+            result = [self._dims[name][attr] for name in
                 [s.strip() for s in re.split(',|:|;| ', args[0])]]
         else:
-            result = [self.dims[name][attr] for name in args]
+            result = [self._dims[name][attr] for name in args]
 
         # Return single element if length one else entire list
         return result[0] if len(result) == 1 else result
@@ -390,7 +390,7 @@ class BaseSolver(Solver):
         Check that the shape and type of the supplied array matches
         our supplied record
         """
-        record = self.arrays[record_key]
+        record = self._arrays[record_key]
 
         if record.shape != ary.shape:
             raise ValueError(('%s\'s shape %s is different '
@@ -520,8 +520,8 @@ class BaseSolver(Solver):
         dtype = mbu.dtype_from_str(dtype, P)
 
         # OK, create a record for this array
-        if name not in self.arrays:
-            self.arrays[name] = AttrDict(name=name, dtype=dtype,
+        if name not in self._arrays:
+            self._arrays[name] = AttrDict(name=name, dtype=dtype,
                 shape=shape, sshape=sshape,
                 registrant=registrant, **kwargs)
         else:
@@ -703,8 +703,8 @@ class BaseSolver(Solver):
         # appropriate data type
         dtype = mbu.dtype_from_str(dtype, P)
 
-        if name not in self.properties:
-            self.properties[name] = AttrDict(name=name, dtype=dtype,
+        if name not in self._properties:
+            self._properties[name] = AttrDict(name=name, dtype=dtype,
                 default=default, registrant=registrant)
         else:
             raise ValueError(('Property %s is already registered '
@@ -757,9 +757,6 @@ class BaseSolver(Solver):
         for prop in property_list:
             self.register_property(**prop)
 
-    def get_array_record(self, name):
-        return self.arrays[name]
-
     def get_properties(self):
         """
         Returns a dictionary of properties related to this Solver object.
@@ -778,10 +775,10 @@ class BaseSolver(Solver):
         }
 
         # Update with dimensions
-        D.update({d.name: d.local_size for d in self.dims.itervalues()})
+        D.update({d.name: d.local_size for d in self._dims.itervalues()})
 
         # Add any registered properties to the dictionary
-        for p in self.properties.itervalues():
+        for p in self._properties.itervalues():
             D[p.name] = getattr(self, p.name)
 
         return D
@@ -796,6 +793,42 @@ class BaseSolver(Solver):
         """ Is this a master solver """
         return self._is_master == Options.SOLVER_TYPE_MASTER
 
+    def properties(self):
+        """ Returns a dictionary of properties """
+        return self._properties
+
+    def property(self, name):
+        """ Returns a property """
+        try:
+            return self._properties[name]
+        except KeyError:
+            raise KeyError("Property '{n}' is not registered "
+                "on this solver".format(n=name))
+
+    def arrays(self):
+        """ Returns a dictionary of arrays """
+        return self._arrays
+
+    def array(self, name):
+        """ Returns an array """
+        try:
+            return self._arrays[name]
+        except KeyError:
+            raise KeyError("Array '{n}' is not registered "
+                "on this solver".format(n=name))
+
+    def dimensions(self):
+        """ Return a dictionary of dimensions """
+        return self._dims
+
+    def dimension(self, name):
+        """ Returns a dimension """
+        try:
+            return self._dims[name]
+        except KeyError:
+            raise KeyError("Array '{n}' is not registered "
+                "on this solver".format(n=name))
+
     def gen_dimension_descriptions(self):
         """ Generator generating string describing each registered dimension """
         yield 'Registered Dimensions'
@@ -803,7 +836,7 @@ class BaseSolver(Solver):
         yield mbu.fmt_dimension_line('Dimension Name', 'Description', 'Size')
         yield '-'*80
 
-        for d in sorted(self.dims.itervalues(), key=lambda x: x.name.upper()):
+        for d in sorted(self._dims.itervalues(), key=lambda x: x.name.upper()):
             yield mbu.fmt_dimension_line(
                 d.name, d.description, d.local_size)
 
@@ -814,7 +847,7 @@ class BaseSolver(Solver):
         yield mbu.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
         yield '-'*80
 
-        for a in sorted(self.arrays.itervalues(), key=lambda x: x.name.upper()):
+        for a in sorted(self._arrays.itervalues(), key=lambda x: x.name.upper()):
             yield mbu.fmt_array_line(a.name,
                 mbu.fmt_bytes(mbu.array_bytes(a.shape, a.dtype)),
                 np.dtype(a.dtype).name,
@@ -830,7 +863,7 @@ class BaseSolver(Solver):
             'Type', 'Value', 'Default Value')
         yield '-'*80
 
-        for p in sorted(self.properties.itervalues(), key=lambda x: x.name.upper()):
+        for p in sorted(self._properties.itervalues(), key=lambda x: x.name.upper()):
             yield mbu.fmt_property_line(
                 p.name, np.dtype(p.dtype).name,
                 getattr(self, p.name), p.default)
