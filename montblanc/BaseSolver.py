@@ -133,48 +133,7 @@ class BaseSolver(Solver):
         self.properties = OrderedDict()
 
         # Store the solver configuration
-        self.slvr_cfg = slvr_cfg
-
-        # Get the configured dimensions for this solver
-        autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
-        ntime = slvr_cfg.get(Options.NTIME)
-        na = slvr_cfg.get(Options.NA)
-        nbl = slvr_cfg.get(Options.NBL, mbu.nr_of_baselines(na, autocor))
-        nchan = slvr_cfg.get(Options.NCHAN)
-        npol = 4
-
-        # Register our problem dimensions on this solver.
-        self.register_dimension('ntime',
-            Options.NTIME_DESCRIPTION, ntime)
-        self.register_dimension('na',
-            Options.NA_DESCRIPTION, na)
-        self.register_dimension('nbl',
-            Options.NBL_DESCRIPTION, nbl)
-        self.register_dimension('nchan',
-            Options.NCHAN_DESCRIPTION, nchan)
-        self.register_dimension('npol',
-            'Number of polarisations', npol)
-        self.register_dimension('npolchan',
-            'Number of channels x polarisations', nchan*npol)
-        self.register_dimension('nvis',
-            'Number of visibilities', ntime*nbl*nchan)
-
-        # Convert the source types, and their numbers
-        # to their number variables and numbers
-        # { 'point':10 } => { 'npsrc':10 }
-        src_cfg = slvr_cfg[Options.SOURCES]
-        src_nr_vars = mbu.sources_to_nr_vars(src_cfg)
-        # Sum to get the total number of sources
-        self.register_dimension('nsrc',
-            'Number of sources', sum(src_nr_vars.itervalues()))
-
-        # Register the individual source types
-        for src_type, (nr_var, nr_of_src) in zip(
-            src_cfg.iterkeys(), src_nr_vars.iteritems()):
-
-            self.register_dimension(nr_var,
-                'Number of {t} sources'.format(t=src_type),
-                nr_of_src, zero_size_valid=True)
+        self._slvr_cfg = slvr_cfg
 
         # Configure our floating point and complex types
         if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
@@ -208,6 +167,9 @@ class BaseSolver(Solver):
         # Should we store CPU versions of the GPU arrays
         self.store_cpu = slvr_cfg.get(Options.STORE_CPU, False)
 
+        # Is this a master solver or not
+        self._is_master = slvr_cfg.get(Options.SOLVER_TYPE)
+
         # Configure our solver pipeline
         pipeline = slvr_cfg.get('pipeline', None)
 
@@ -234,153 +196,147 @@ class BaseSolver(Solver):
         """ Return a string representation of the total memory required """
         return mbu.fmt_bytes(self.bytes_required())
 
-    def register_dimension(self, name, description,
-        global_size, local_size=None, extents=None,
-        zero_size_valid=False):
+    def register_dimension(self, name, dim_data, **kwargs):
         """
         Registers a dimension with this Solver object
 
         Arguments
         ---------
-            name : string
-                The name of this dimension.
-                e.g 'ntime'.
+            dim_data : integer or dict
+
+
+        Keyword Arguments
+        -----------------
             description : string
                 The description for this dimension.
                 e.g. 'Number of timesteps'.
             global_size : integer
                 The global size of this dimension across
                 all solvers.
-
-        Keyword Arguments
-        -----------------
             local_size : integer or None
                 The local size of this dimension
                 on this solver. If None, set to
                 the global_size.
-            zero_size_valid : boolean
+            extents : list or tuple of length 2
+                The extent of the dimension on the solver.
+                E[0] < E[1] <= local_size must hold.
+            zero_valid : boolean
                 If True, this dimension may be zero-sized.
         """
+        from montblanc.enums import DIMDATA
 
-        if local_size is None:
-            local_size = global_size
-
-        if extents is None:
-            extents = [0, local_size]        
-
-        if zero_size_valid and (global_size < 0 or local_size < 0):
-            raise ValueError((
-                "Attempted to register dimension '{n}'' "
-                "with negative size '{s}'. "
-                "Please choose size >= 0.").format(
-                    n=name, s=size))
-
-
-        if not zero_size_valid and (global_size <= 0 or local_size < 0):
-            raise ValueError((
-                "Attempted to register dimension {n} "
-                "with negative or zero global ({gs}) "
-                "or local ({ls}) size. "
-                "Please use a positive number.").format(
-                    n=name, gs=global_size, ls=local_size))
-
-        if hasattr(self, name):
+        if name in self.dims:
             raise AttributeError((
-                "Attempted to register dimension {n} "
+                "Attempted to register dimension '{n}'' "
                 "as an attribute of the solver, but "
                 "it already exists. Please choose "
                 "a different name!").format(n=name))
 
         # Create the dimension dictionary
-        # name : dimension name
-        # description : description string
-        # size : dimension size
-        # extents : global dimension extents
-        # zeros : zero size allowed
-        self.dims[name] = AttrDict(name=name,
-            description=description,
-            global_size=global_size,
-            local_size=local_size,
-            extents=[0, local_size],
-            zeros=zero_size_valid)
+        self.dims[name] = mbu.create_dim_data(name, dim_data, **kwargs)
+
+        # Check that we've been given valid values
+        mbu.check_dim_data(self.dims[name])
+
+    def register_default_dimensions(self):
+        """ Register the default dimensions for a RIME solver """ 
+
+        # Pull out the configuration options for the basics
+        autocor = self._slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
+        ntime = self._slvr_cfg.get(Options.NTIME)
+        na = self._slvr_cfg.get(Options.NA)
+        nchan = self._slvr_cfg.get(Options.NCHAN)
+        npol = self._slvr_cfg.get(Options.NPOL)
+
+        # Register these dimensions on this solver.
+        self.register_dimension('ntime', ntime,
+            description=Options.NTIME_DESCRIPTION)
+        self.register_dimension('na', na,
+            description=Options.NA_DESCRIPTION)
+        self.register_dimension('nchan', nchan,
+            description=Options.NCHAN_DESCRIPTION)
+        self.register_dimension(Options.NPOL, npol,
+            description=Options.NPOL_DESCRIPTION)
+
+        size_func = (self.dim_global_size if self.is_master()
+            else self.dim_local_size)
+
+        # Now get the size of the registered dimensions
+        ntime, na, nchan, npol = size_func('ntime', 'na', 'nchan', 'npol')
+        
+        nbl = self._slvr_cfg.get(Options.NBL,
+            mbu.nr_of_baselines(na, autocor))
+
+        self.register_dimension('nbl', nbl,
+            description=Options.NBL_DESCRIPTION)
+
+        nbl = size_func('nbl')
+
+        self.register_dimension('npolchan', nchan*npol,
+            description='Number of channels x polarisations')
+        self.register_dimension('nvis', ntime*nbl*nchan,
+            description='Number of visibilities')
+
+        # Convert the source types, and their numbers
+        # to their number variables and numbers
+        # { 'point':10 } => { 'npsrc':10 }
+        src_cfg = self._slvr_cfg[Options.SOURCES]
+        src_nr_vars = mbu.sources_to_nr_vars(src_cfg)
+        # Sum to get the total number of sources
+        self.register_dimension('nsrc', sum(src_nr_vars.itervalues()),
+            description='Number of sources (total)')
+
+        # Register the individual source types
+        for src_type, (nr_var, nr_of_src) in zip(
+            src_cfg.iterkeys(), src_nr_vars.iteritems()):
+
+            self.register_dimension(nr_var, nr_of_src, 
+                description='Number of {t} sources'.format(t=src_type),
+                zero_valid=True)        
+
+    def register_dimensions(self, dim_list, defaults=True):
+        for dim in dim_list:
+            self.register_dimension(dim)
 
     def update_dimensions(self, dim_list):
         """
         >>> slvr.update_dimensions([
-            {'name' : 'ntime', 'size' : 10, 'extents' : [2, 7], 'safety': False },
-            {'name' : 'na', 'size' : 3, 'extents' : [2, 7]},
+            {'name' : 'ntime', 'local_size' : 10, 'extents' : [2, 7], 'safety': False },
+            {'name' : 'na', 'local_size' : 3, 'extents' : [2, 7]},
             ])
         """
+        for dim_data in dim_list:
+            self.update_dimension(dim_data)
 
-        for dim in dim_list:
-            self.update_dimension(**dim)
 
-    def update_dimension(self, name, local_size=None,
-        extents=None, safety=True):
+    def update_dimension(self, update_dict):
         """
         Update the dimension size and extents.
 
         Arguments
         ---------
-            name : string
-                Dimension name, 'ntime' for instance.
-
-        Keyword Arguments
-        -----------------
-            local_size : integer or None
-                Dimension size. Updating the size of the dimension
-                is unusual and the safety keyword must be True
-                to allow this.
-            extents : integer sequence of length 2
-                Local dimension extents covered by the solver.
-                0 <= extents[0] < extents[1] <= global_size or.
-                0 <= extents[0] <= extents[1] <= global_size must hold,
-                depending on whether zero length dimension sizes
-                are allowed by dim.zeros
-            safety : boolean
-                if set to True, an Exception will be raised if
-                an attempt to update the size is made.
+            update_dict : dict
         """
+        from montblanc.enums import DIMDATA
+
+        name = update_dict.get(DIMDATA.NAME, None)
+
+        if not name:
+            raise AttributeError("A dimension name is required to update "
+                "a dimension. Update dictionary {u}."
+                    .format(u=update_dict))
+
+        dim = self.dims.get(name, None)
 
         # Sanity check dimension existence
-        if name not in self.dims:
-            montblanc.log.warn("'{n}' will not be updated as it "
-                "is not a registered dimension on this solver."
+        if not dim:
+            montblanc.log.warn("'Dimension {n}' cannot be updated as it "
+                "is not registered in the dimension dictionary."
                     .format(n=name))
 
             return
 
-        dim = self.dims[name]
-
-        # Integer size
-        if local_size is not None:
-            # Fail if the safety is on!
-            if safety:
-                raise ValueError(
-                    "Modifying solver dimension {d} local size "
-                    "from {o} to {n}, this is dangerous!"
-                        .format(d=name, o=dim.size, n=local_size))
-
-            # Modify the size on the dictionary and the solver
-            dim.local_size = local_size
-
-        # Sanity check
-        if extents is not None:
-            if (not isinstance(extents, collections.Sequence)
-                or len(extents) != 2):
-
-                raise TypeError(
-                    "Supplied 'extents' variable is "
-                    "not a sequence of length 2.")
-
-            E = dim['extents'] # See https://github.com/bcj/AttrDict/issues/34
-            E[0], E[1] = extents[0], extents[1]
-
-        # Sanity check dimensions
-        if dim.zeros:
-            assert 0 <= dim.extents[0] <= dim.extents[1] <= dim.global_size
-        else:
-            assert 0 <= dim.extents[0] < dim.extents[1] <= dim.global_size
+        mbu.update_dim_data(dim, update_dict)
 
     def __dim_attribute(self, attr, *args):
         """
@@ -601,7 +557,7 @@ class BaseSolver(Solver):
 
         # If we're creating test data, initialise the array with
         # data from the test key, otherwise take data from the default key
-        if self.slvr_cfg[Options.DATA_SOURCE] == Options.DATA_SOURCE_TEST:
+        if self._slvr_cfg[Options.DATA_SOURCE] == Options.DATA_SOURCE_TEST:
             source_key = 'test'
         else:
             source_key = 'default'
@@ -635,6 +591,16 @@ class BaseSolver(Solver):
             # the gpuarray returned by gpuarray.empty() doesn't
             # have GPU memory allocated to it.
             with self.context as ctx:
+                # Query free memory on this context
+                (free_mem,total_mem) = cuda.mem_get_info()
+
+                montblanc.log.debug("Allocating GPU memory "
+                    "of size {s} for array '{n}'. {f} free "
+                    "{t} total on device.".format(n=name,
+                        s=mbu.fmt_bytes(mbu.array_bytes(shape, dtype)),
+                        f=mbu.fmt_bytes(free_mem),
+                        t=mbu.fmt_bytes(total_mem)))
+
                 gpu_ary = gpuarray.empty(shape=shape, dtype=dtype)
 
                 # If the array length is non-zero initialise it
@@ -816,7 +782,7 @@ class BaseSolver(Solver):
 
         # Add any registered properties to the dictionary
         for p in self.properties.itervalues():
-            D[p.name] = getattr(self,p.name)
+            D[p.name] = getattr(self, p.name)
 
         return D
 
@@ -825,6 +791,10 @@ class BaseSolver(Solver):
 
     def is_double(self):
         return self.ft == np.float64
+
+    def is_master(self):
+        """ Is this a master solver """
+        return self._is_master == Options.SOLVER_TYPE_MASTER
 
     def gen_dimension_descriptions(self):
         """ Generator generating string describing each registered dimension """
@@ -835,7 +805,7 @@ class BaseSolver(Solver):
 
         for d in sorted(self.dims.itervalues(), key=lambda x: x.name.upper()):
             yield mbu.fmt_dimension_line(
-                d.name, d.description, d.size)
+                d.name, d.description, d.local_size)
 
     def gen_array_descriptions(self):
         """ Generator generating strings describing each registered array """

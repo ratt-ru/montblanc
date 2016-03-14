@@ -223,18 +223,20 @@ class BiroSolver(BaseSolver):
 
         super(BiroSolver, self).__init__(slvr_cfg)
 
+        self.register_default_dimensions()
+
         # Configure the dimensions of the beam cube
         self.register_dimension('beam_lw',
-            'E Beam cube width in l coords',
-            slvr_cfg[Options.E_BEAM_WIDTH])
+            slvr_cfg[Options.E_BEAM_WIDTH],
+            description='E Beam cube width in l coords')
 
         self.register_dimension('beam_mh',
-            'E Beam cube height in m coords',
-            slvr_cfg[Options.E_BEAM_HEIGHT])
+            slvr_cfg[Options.E_BEAM_HEIGHT],
+            description='E Beam cube height in m coords')
 
         self.register_dimension('beam_nud',
-            'E Beam cube height in nu coords',
-            slvr_cfg[Options.E_BEAM_DEPTH])
+            slvr_cfg[Options.E_BEAM_DEPTH],
+            description='E Beam cube height in nu coords')
 
         self.register_properties(P)
         self.register_arrays(A)

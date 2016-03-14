@@ -50,19 +50,20 @@ class BiroSolver(BaseSolver):
         # Call the parent constructor
         super(BiroSolver, self).__init__(slvr_cfg)
 
+        self.register_default_dimensions()
+
         # Configure the dimensions of the beam cube
-        self.register_dimension('beam_lw',
-            'E Beam cube width in l coords',
-            slvr_cfg[Options.E_BEAM_WIDTH])
+        self.register_dimension(Options.E_BEAM_WIDTH,
+            slvr_cfg[Options.E_BEAM_WIDTH],
+            description='E Beam cube width in l coords')
 
-        self.register_dimension('beam_mh',
-            'E Beam cube height in m coords',
-            slvr_cfg[Options.E_BEAM_HEIGHT])
+        self.register_dimension(Options.E_BEAM_HEIGHT,
+            slvr_cfg[Options.E_BEAM_HEIGHT],
+            description='E Beam cube height in m coords')
 
-        self.register_dimension('beam_nud',
-            'E Beam cube height in nu coords',
-            slvr_cfg[Options.E_BEAM_DEPTH])
-
+        self.register_dimension(Options.E_BEAM_DEPTH,
+            slvr_cfg[Options.E_BEAM_DEPTH],
+            description='E Beam cube height in nu coords')
         wv = slvr_cfg[Options.WEIGHT_VECTOR]
 
         self.rime_e_beam = RimeEBeam()
@@ -96,19 +97,16 @@ class BiroSolver(BaseSolver):
         self.dev_mem_pool = None
         self.pinned_mem_pool = None
 
-    def update_dimension(self, name, size=None,
-        extents=None, safety=True):
+    def update_dimension(self, dim_data):
         """
         Override update_dimension on BaseSolver.py to also
         update rime_const_data.
         """
 
-        # Defer to parent method for house-keeping on the
-        # solver, proper
-        super(BiroSolver, self).update_dimension(name,
-            size=size, extents=extents, safety=safety)
+        # Defer to parent method on the base solver
+        super(BiroSolver, self).update_dimension(dim_data)
 
-        # Update constant data
+        # Update constant data, updating nsrc with sum of source counts
         mbu.update_rime_const_data(self, self.rime_const_data,
             sum_nsrc=True)
 

@@ -179,6 +179,7 @@ class BiroSolver(BaseSolver):
 
         super(BiroSolver, self).__init__(slvr_cfg)
 
+        self.register_default_dimensions()
         self.register_properties(P)
         self.register_arrays(A)
 

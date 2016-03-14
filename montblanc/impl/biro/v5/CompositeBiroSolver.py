@@ -36,6 +36,8 @@ from montblanc.BaseSolver import BaseSolver
 from montblanc.config import (BiroSolverConfiguration,
     BiroSolverConfigurationOptions as Options)
 
+from montblanc.enums import DIMDATA
+
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
 from montblanc.impl.biro.v5.BiroSolver import BiroSolver
@@ -66,26 +68,25 @@ class CompositeBiroSolver(BaseSolver):
             slvr_cfg : SolverConfiguration
                 Solver Configuration variables
         """
-
-        # Set up a default pipeline if None is supplied
-
         super(CompositeBiroSolver, self).__init__(slvr_cfg)
 
         # Create thread local storage
         self.thread_local = threading.local()
 
+        self.register_default_dimensions()
+
         # Configure the dimensions of the beam cube
-        self.register_dimension('beam_lw',
-            'E Beam cube width in l coords',
-            slvr_cfg[Options.E_BEAM_WIDTH])
+        self.register_dimension(Options.E_BEAM_WIDTH,
+            slvr_cfg[Options.E_BEAM_WIDTH],
+            description='E Beam cube width in l coords')
 
-        self.register_dimension('beam_mh',
-            'E Beam cube height in m coords',
-            slvr_cfg[Options.E_BEAM_HEIGHT])
+        self.register_dimension(Options.E_BEAM_HEIGHT,
+            slvr_cfg[Options.E_BEAM_HEIGHT],
+            description='E Beam cube height in m coords')
 
-        self.register_dimension('beam_nud',
-            'E Beam cube height in nu coords',
-            slvr_cfg[Options.E_BEAM_DEPTH])
+        self.register_dimension(Options.E_BEAM_DEPTH,
+            slvr_cfg[Options.E_BEAM_DEPTH],
+            description='E Beam cube height in nu coords')
 
         # Copy the v4 arrays and properties and
         # modify them for use on this
@@ -118,8 +119,12 @@ class CompositeBiroSolver(BaseSolver):
         # i.e. a thread per device
         executors = [cf.ThreadPoolExecutor(1) for ctx in self.dev_ctxs]
 
+        montblanc.log.info('Executors Created')
+
         for ex, ctx in zip(executors, self.dev_ctxs):
             ex.submit(C.__thread_init, self, ctx).result()
+
+        montblanc.log.info('Threads Initialised')
 
         # Find the budget with the lowest memory usage
         # Work with the device with the lowest memory
@@ -143,23 +148,26 @@ class CompositeBiroSolver(BaseSolver):
         # Create the sub solver configuration
         subslvr_cfg = BiroSolverConfiguration(**slvr_cfg)
         subslvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_DEFAULTS
-        subslvr_cfg[Options.NTIME] = P[Options.NTIME]
-        subslvr_cfg[Options.NA] = P[Options.NA]
-        subslvr_cfg[Options.NBL] = P[Options.NBL]
-        subslvr_cfg[Options.NCHAN] = P[Options.NCHAN]
         subslvr_cfg[Options.CONTEXT] = ctx
+        subslvr_cfg[Options.SOLVER_TYPE] = Options.SOLVER_TYPE_SLAVE
+
+        subslvr_cfg = self.__cfg_subslvr_dims(subslvr_cfg, P)
 
         # Extract the dimension differences
-        self.src_diff = P['nsrc']
+        self.src_diff = P[Options.NSRC]
         self.time_diff = P[Options.NTIME]
         self.ant_diff = P[Options.NA]
         self.bl_diff = P[Options.NBL]
         self.chan_diff = P[Options.NCHAN]
 
+        montblanc.log.info('Creating Solvers')
+
         # Now create the solvers on each thread
         for ex in executors:
             ex.submit(C.__thread_create_solvers,
                 self, subslvr_cfg, P, nsolvers).result()
+
+        montblanc.log.info('Solvers Created')
 
         A_sub, P_sub = self.__twiddle_v4_subarys_and_props(A_sub, P_sub)
 
@@ -174,9 +182,12 @@ class CompositeBiroSolver(BaseSolver):
     def __gen_rime_slices(self):
         nr_vars = ['ntime', 'nbl', 'na', 'na1', 'nchan', 'nsrc']
         src_nr_var_counts = mbu.sources_to_nr_vars(
-            self.slvr_cfg[Options.SOURCES])
+            self._slvr_cfg[Options.SOURCES])
         src_nr_vars = mbu.source_nr_vars()
         nr_vars.extend(src_nr_vars)
+
+        ntime, nbl, na, nchan, nsrc = self.dim_local_size(
+            'ntime', 'nbl', 'na', 'nchan', 'nsrc')
 
         # Create the slice dictionaries, which we use to index
         # dimensions of the CPU and GPU array.
@@ -184,17 +195,19 @@ class CompositeBiroSolver(BaseSolver):
         gpu_slice = {}
         gpu_count = {}
 
+        montblanc.log.info('Generating RIME slices')
+
         # Set up time slicing
-        for t in xrange(0, self.ntime, self.time_diff):
-            t_end = min(t + self.time_diff, self.ntime)
+        for t in xrange(0, ntime, self.time_diff):
+            t_end = min(t + self.time_diff, ntime)
             t_diff = t_end - t
             cpu_slice['ntime'] = slice(t,  t_end, 1)
             gpu_slice['ntime'] = slice(0, t_diff, 1)
             gpu_count['ntime'] = t_diff
 
             # Set up baseline and antenna slicing
-            for bl in xrange(0, self.nbl, self.bl_diff):
-                bl_end = min(bl + self.bl_diff, self.nbl)
+            for bl in xrange(0, nbl, self.bl_diff):
+                bl_end = min(bl + self.bl_diff, nbl)
                 bl_diff = bl_end - bl
                 cpu_slice['nbl'] = slice(bl,  bl_end, 1)
                 gpu_slice['nbl'] = slice(0, bl_diff, 1)
@@ -219,23 +232,23 @@ class CompositeBiroSolver(BaseSolver):
                 # Otherwise just take all antenna pairs
                 # 'na1' will be ignored in this case
                 else:
-                    cpu_slice['na'] = slice(0, self.na, 1)
-                    cpu_slice['na1'] = slice(0, self.na, 1)
-                    gpu_slice['na'] = slice(0, self.na, 1)
-                    gpu_slice['na1'] = slice(0, self.na, 1)
-                    gpu_count['na'] = self.na
+                    cpu_slice['na'] = slice(0, na, 1)
+                    cpu_slice['na1'] = slice(0, na, 1)
+                    gpu_slice['na'] = slice(0, na, 1)
+                    gpu_slice['na1'] = slice(0, na, 1)
+                    gpu_count['na'] = na
 
                 # Set up channel slicing
-                for ch in xrange(0, self.nchan, self.chan_diff):
-                    ch_end = min(ch + self.chan_diff, self.nchan)
+                for ch in xrange(0, nchan, self.chan_diff):
+                    ch_end = min(ch + self.chan_diff, nchan)
                     ch_diff = ch_end - ch
                     cpu_slice['nchan'] = slice(ch, ch_end, 1)
                     gpu_slice['nchan'] = slice(0, ch_diff, 1)
                     gpu_count['nchan'] = ch_diff
 
                     # Set up source slicing
-                    for src in xrange(0, self.nsrc, self.src_diff):
-                        src_end = min(src + self.src_diff, self.nsrc)
+                    for src in xrange(0, nsrc, self.src_diff):
+                        src_end = min(src + self.src_diff, nsrc)
                         src_diff = src_end - src
                         cpu_slice['nsrc'] = slice(src, src_end, 1)
                         gpu_slice['nsrc'] = slice(0, src_diff, 1)
@@ -301,6 +314,24 @@ class CompositeBiroSolver(BaseSolver):
                     'support this mix') % (
                         A['name'], A['shape'],
                         nr_src_vars, nr_vis_vars))
+
+    def __cfg_subslvr_dims(self, subslvr_cfg, P):
+        for dim in self.dims.itervalues():
+            name = dim[DIMDATA.NAME]
+            if name in P:
+                # Copy dimension data for reconfiguration
+                sub_dim = dim.copy()
+
+                mbu.update_dim_data(sub_dim, {
+                    DIMDATA.NAME: name,
+                    DIMDATA.LOCAL_SIZE: P[name],
+                    DIMDATA.EXTENTS: [0, P[name]],
+                    DIMDATA.SAFETY: False })
+
+                subslvr_cfg[name] = sub_dim
+
+        return subslvr_cfg
+
 
     def __twiddle_v4_arys_and_props(self, arys, props):
         # Add a custom transfer method for transferring
@@ -396,7 +427,9 @@ class CompositeBiroSolver(BaseSolver):
         all_slice = slice(None,None,1)
         empty_slice = slice(0,0,1)
 
-        two_ant_case = (subslvr.na == 2)
+        na = subslvr.dim_local_size('na')
+
+        two_ant_case = (na == 2)
 
         for r in self.arrays.itervalues():
             # Is there anything to transfer for this array?
@@ -516,10 +549,13 @@ class CompositeBiroSolver(BaseSolver):
         # Query free memory on this context
         (free_mem,total_mem) = cuda.mem_get_info()
 
+        montblanc.log.info('CUDA free {f} total {t}'.format(
+            f=mbu.fmt_bytes(free_mem), t=mbu.fmt_bytes(total_mem)))
+
         # Work with a supplied memory budget, otherwise use
         # free memory less an amount equal to the upper size
         # of an NVIDIA context
-        mem_budget = slvr_cfg.get('mem_budget', free_mem - 100*ONE_MB)
+        mem_budget = slvr_cfg.get('mem_budget', free_mem - 200*ONE_MB)
 
         nsolvers = slvr_cfg.get('nsolvers', 2)
         na = slvr_cfg.get(Options.NA)
@@ -613,16 +649,19 @@ class CompositeBiroSolver(BaseSolver):
         subslvr_cfg[Options.CONTEXT] = self.thread_local.context
 
         # Create solvers for this context
-        for i, s in enumerate(range(nsolvers)):
+        for i in range(nsolvers):
             subslvr = BiroSolver(subslvr_cfg)
 
             # Configure the number of sources
             # handled by each sub-solver.
             nsrc = P[Options.NSRC]
 
-            U = [{ 'name': nr_var, 'size': nsrc,
-                'extents': [0, nsrc],'safety': False }
-                    for nr_var in [Options.NSRC] + mbu.source_nr_vars()]
+            U = [{
+                DIMDATA.NAME: nr_var,
+                DIMDATA.LOCAL_SIZE: nsrc if nsrc < P[nr_var] else P[nr_var],
+                DIMDATA.EXTENTS: [0, nsrc if nsrc < P[nr_var] else P[nr_var]],
+                DIMDATA.SAFETY: False
+            } for nr_var in [Options.NSRC] + mbu.source_nr_vars()]
 
             subslvr.update_dimensions(U)
 
@@ -680,7 +719,7 @@ class CompositeBiroSolver(BaseSolver):
         # Configure the number variable counts
         # on the sub solver
         subslvr.update_dimensions([
-            { 'name': nr_var, 'extents': [0, count] }
+            { DIMDATA.NAME: nr_var, DIMDATA.EXTENTS: [0, count] }
             for nr_var, count in gpu_count.iteritems()])
 
         # Transfer arrays
