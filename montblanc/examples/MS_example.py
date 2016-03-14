@@ -93,6 +93,7 @@ if __name__ == '__main__':
 
         # Create a bayesian model and upload it to the GPU
         bayes_data = mbu.random_like(slvr.bayes_data_gpu)
+        slvr.transfer_bayes_data(bayes_data)
 
         # Generate random antenna pointing errors
         point_errors = mbu.random_like(slvr.point_errors_gpu)
