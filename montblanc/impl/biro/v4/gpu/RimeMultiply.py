@@ -166,7 +166,7 @@ class RimeMultiply(Node):
         slvr = solver
 
         D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
-        D.update(slvr.get_properties())
+        D.update(slvr.template_dict())
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),

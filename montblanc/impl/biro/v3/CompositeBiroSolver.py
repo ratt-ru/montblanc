@@ -113,7 +113,7 @@ class CompositeBiroSolver(BaseSolver):
 
             # Work out how many timesteps we can fit in our memory budget
             self.vtime = mbu.viable_timesteps(mem_budget,
-                self._arrays, self.get_properties())
+                self._arrays, self.template_dict())
 
             (free_mem,total_mem) = cuda.mem_get_info()
             #print 'free %s total %s ntime %s vtime %s' \

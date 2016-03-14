@@ -508,16 +508,16 @@ class BaseSolver(Solver):
         create_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
         create_gpu_ary = kwargs.get('gpu', True)
 
-        # Get a property dictionary to perform string replacements
-        P = self.get_properties()
+        # Get a template dictionary to perform string replacements
+        T = self.template_dict()
 
         # Figure out the actual integer shape
         sshape = shape
-        shape = mbu.shape_from_str_tuple(sshape, P)
+        shape = mbu.shape_from_str_tuple(sshape, T)
 
         # Replace any string representations with the
         # appropriate data type
-        dtype = mbu.dtype_from_str(dtype, P)
+        dtype = mbu.dtype_from_str(dtype, T)
 
         # OK, create a record for this array
         if name not in self._arrays:
@@ -697,11 +697,11 @@ class BaseSolver(Solver):
 
         """
 
-        P = self.get_properties()
+        T = self.template_dict()
 
         # Replace any string representations with the
         # appropriate data type
-        dtype = mbu.dtype_from_str(dtype, P)
+        dtype = mbu.dtype_from_str(dtype, T)
 
         if name not in self._properties:
             self._properties[name] = AttrDict(name=name, dtype=dtype,
@@ -757,9 +757,10 @@ class BaseSolver(Solver):
         for prop in property_list:
             self.register_property(**prop)
 
-    def get_properties(self):
+    def template_dict(self):
         """
-        Returns a dictionary of properties related to this Solver object.
+        Returns a dictionary suitable for templating strings with
+        properties and dimensions related to this Solver object.
 
         Used in templated GPU kernels.
         """

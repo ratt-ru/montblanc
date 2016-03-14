@@ -97,7 +97,7 @@ class CompositeBiroSolver(BaseSolver):
         self.register_properties(P_main)
         self.register_arrays(A_main)
 
-        props = self.get_properties()
+        props = self.template_dict()
         A_sub = copy.deepcopy(BSV4mod.A)
         P_sub = copy.deepcopy(BSV4mod.P)
 

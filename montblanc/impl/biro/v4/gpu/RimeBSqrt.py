@@ -152,7 +152,7 @@ class RimeBSqrt(Node):
             'nsrc', 'ntime', 'npolchan')
 
         # Get a property dictionary off the solver
-        D = slvr.get_properties()
+        D = slvr.template_dict()
         # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
         D['rime_const_data_struct'] = mbu.rime_const_data_struct()

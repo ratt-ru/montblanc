@@ -398,7 +398,7 @@ class RimeGaussBSum(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
-        D = slvr.get_properties()
+        D = slvr.template_dict()
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
