@@ -49,6 +49,26 @@ class SolverConfigurationOptions(object):
     DEFAULT_NCHAN = 16
     NCHAN_DESCRIPTION = 'Number of channels'
 
+    # Number of polarisations
+    NPOL = 'npol'
+    DEFAULT_NPOL = 4
+    NPOL_DESCRIPTION = 'Number of Polarisations'
+
+    # Number of sources
+    NSRC = 'nsrc'
+    NSRC_DESCRIPTION = 'Number of sources (total)'
+
+    # Master solver
+    SOLVER_TYPE = 'solver_type'
+    SOLVER_TYPE_MASTER = 'master'
+    SOLVER_TYPE_SLAVE = 'slave'
+    DEFAULT_SOLVER_TYPE = SOLVER_TYPE_MASTER
+    VALID_SOLVER_TYPE = [SOLVER_TYPE_MASTER, SOLVER_TYPE_SLAVE]
+    SOLVER_TYPE_DESCRIPTION = (
+        'String indicating the solver type',
+        "If '%s' it controls other solvers" % SOLVER_TYPE_MASTER,
+        "If '%s' it is controlled by master solvers" % SOLVER_TYPE_SLAVE)
+
     # Are we dealing with floats or doubles?
     DTYPE = 'dtype'
     DTYPE_FLOAT = 'float'
@@ -140,6 +160,11 @@ class SolverConfigurationOptions(object):
             DEFAULT: DEFAULT_NCHAN,
             REQUIRED: True },
 
+        NPOL: {
+            DESCRIPTION: NPOL_DESCRIPTION,
+            DEFAULT: DEFAULT_NPOL,
+            REQUIRED: True },
+
         DTYPE: {
             DESCRIPTION: DTYPE_DESCRIPTION,
             DEFAULT: DEFAULT_DTYPE,
@@ -172,6 +197,12 @@ class SolverConfigurationOptions(object):
 
         CONTEXT : {
             DESCRIPTION: CONTEXT_DESCRIPTION,
+            REQUIRED: True
+        },
+
+        SOLVER_TYPE : {
+            DESCRIPTION: SOLVER_TYPE_DESCRIPTION,
+            DEFAULT: DEFAULT_SOLVER_TYPE,
             REQUIRED: True
         },
 

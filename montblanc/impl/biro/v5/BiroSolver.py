@@ -47,14 +47,23 @@ class BiroSolver(BaseSolver):
             slvr_cfg : SolverConfiguration
                 Solver Configuration variables
         """
-
+        # Call the parent constructor
         super(BiroSolver, self).__init__(slvr_cfg)
 
-        # Configure the dimensions of the beam cube
-        self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
-        self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
-        self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
+        self.register_default_dimensions()
 
+        # Configure the dimensions of the beam cube
+        self.register_dimension(Options.E_BEAM_WIDTH,
+            slvr_cfg[Options.E_BEAM_WIDTH],
+            description='E Beam cube width in l coords')
+
+        self.register_dimension(Options.E_BEAM_HEIGHT,
+            slvr_cfg[Options.E_BEAM_HEIGHT],
+            description='E Beam cube height in m coords')
+
+        self.register_dimension(Options.E_BEAM_DEPTH,
+            slvr_cfg[Options.E_BEAM_DEPTH],
+            description='E Beam cube height in nu coords')
         wv = slvr_cfg[Options.WEIGHT_VECTOR]
 
         self.rime_e_beam = RimeEBeam()
@@ -63,95 +72,36 @@ class BiroSolver(BaseSolver):
         self.rime_sum = RimeSumCoherencies(weight_vector=wv)
         self.rime_reduce = RimeReduction()
 
-        # Create a page-locked ndarray to hold constant GPU data
-        # as well as
+        # Create
         # (1) A stream that this solver will asynchronously
         #     operate on
         # (2) An event indicating when an iteration of
         #     the kernels above have finished executing
         with self.context:
-            self.const_data_buffer = cuda.pagelocked_empty(
-                shape=mbu.rime_const_data_size(), dtype=np.int8)
-
             self.stream = cuda.Stream()
             self.kernels_done = cuda.Event()
 
-        # Now create a cdata object wrapping the page-locked
-        # ndarray and cast it to the rime_const_data c type.
-        self.rime_const_data = mbu.wrap_rime_const_data(
-            self.const_data_buffer)
-
-        # Initialise it with the current solver (self)
-        mbu.init_rime_const_data(self, self.rime_const_data)
+        # Create constant data for transfer to GPU
+        self._const_data = mbu.create_rime_const_data(self, self.context)
 
         # Indicate these variables have not been set
         self.dev_mem_pool = None
         self.pinned_mem_pool = None
 
-    def cfg_total_src_dims(self, nsrc):
+    def const_data(self):
+        return self._const_data
+
+    def update_dimension(self, dim_data):
         """
-        Configure the total number of sources that will
-        be handled by this solver. Used by v5 to allocate
-        solvers handling subsets of the total problem.
-        Passing nsrc=100 means that the solver will handle
-        100 sources in total.
-
-        Additionally, sets the number for each individual
-        source type to 100. So npsrc=100, ngsrc=100,
-        nssrc=100 for instance. This is because if we're
-        handling 100 sources total, we'll need space for
-        at least 100 sources of each type.
-
-        The number of sources actually handled by the
-        solver on each iteration is set in the
-        rime_const_data_cpu structure.
-
-        """
-        self.nsrc = nsrc
-        
-        for nr_var in mbu.source_nr_vars():
-            setattr(self, nr_var, nsrc)
-
-    def cfg_sub_dims(self, counts):
-        """
-        Configure the dimensions of the subset of the
-        RIME solved by this solvers.
-
-        Sets these dimensions on the rime_const_data_cpu
-        structure, which is passed to the kernels on each
-        run.
+        Override update_dimension on BaseSolver.py to also
+        update rime_const_data.
         """
 
-        # Set key-value pairs on rime_const_data
-        # from kwargs
-        for key, value in counts.iteritems():
-            if hasattr(self.rime_const_data, key):
-                setattr(self.rime_const_data, key, value)
-            else:
-                montblanc.log.warn((
-                    'Attempted to set %s=%s '
-                    'on rime_const_data but key %s '
-                    'is not present') % (key, value, key))
+        # Defer to parent method on the base solver
+        super(BiroSolver, self).update_dimension(dim_data)
 
-        # Set rime_const_data.nsrc by summing
-        # each source type
-        setattr(self.rime_const_data, 'nsrc',
-            sum([getattr(self.rime_const_data, s)
-                for s in mbu.source_nr_vars()]))
-
-
-    def get_properties(self):
-        # Obtain base solver property dictionary
-        # and add the beam cube dimensions to it
-        D = super(BiroSolver, self).get_properties()
-
-        D.update({
-            Options.E_BEAM_WIDTH : self.beam_lw,
-            Options.E_BEAM_HEIGHT : self.beam_mh,
-            Options.E_BEAM_DEPTH : self.beam_nud
-        })
-
-        return D
+        # Update constant data, updating nsrc with sum of source counts
+        self._const_data.update(self, sum_nsrc=True)
 
     def set_dev_mem_pool(self, dev_mem_pool):
         self.dev_mem_pool = dev_mem_pool

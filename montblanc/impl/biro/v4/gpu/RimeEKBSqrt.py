@@ -71,6 +71,9 @@ KERNEL_TEMPLATE = string.Template("""
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
+#define LEXT(name) C.name.extents[0]
+#define UEXT(name) C.name.extents[1]
+#define DEXT(name) (C.name.extents[1] - C.name.extents[0])
 
 template <typename T>
 class EKBTraits {};
@@ -106,7 +109,7 @@ void rime_jones_EKBSqrt_impl(
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
     #define POL (threadIdx.x & 0x3)
 
-    if(TIME >= C.ntime || ANT >= C.na || POLCHAN >= C.npolchan)
+    if(TIME >= DEXT(ntime) || ANT >= DEXT(na) || POLCHAN >= DEXT(npolchan))
         return;
 
     __shared__ typename EKBTraits<T>::UVWType s_uvw[BLOCKDIMZ][BLOCKDIMY];
@@ -132,7 +135,7 @@ void rime_jones_EKBSqrt_impl(
 
     __syncthreads();
 
-    for(int SRC=0; SRC < C.nsrc; ++SRC)
+    for(int SRC=0; SRC < DEXT(nsrc); ++SRC)
     {
         // LM coordinates vary only by source, not antenna, time or channel
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.x == 0)
@@ -198,18 +201,18 @@ class RimeEKBSqrt(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-
-        self.npolchans = 4*slvr.nchan
+        ntime, na, npolchan = slvr.dim_local_size('ntime', 'na', 'npolchan')
 
         # Get a property dictionary off the solver
-        D = slvr.get_properties()
+        D = slvr.template_dict()
         # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
-        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
+        D['rime_const_data_struct'] = slvr.const_data().string_def()
 
         D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
-            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
-            self.npolchans, slvr.na, slvr.ntime)
+            mbu.redistribute_threads(
+                D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+                npolchan, na, ntime)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -239,9 +242,10 @@ class RimeEKBSqrt(Node):
         ants_per_block = D['BLOCKDIMY']
         times_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
-        ant_blocks = mbu.blocks_required(slvr.na, ants_per_block)
-        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
+        ntime, na, npolchan = slvr.dim_local_size('ntime', 'na', 'npolchan')
+        polchan_blocks = mbu.blocks_required(npolchan, polchans_per_block)
+        ant_blocks = mbu.blocks_required(na, ants_per_block)
+        time_blocks = mbu.blocks_required(ntime, times_per_block)
 
         return {
             'block' : (polchans_per_block, ants_per_block, times_per_block),
@@ -254,12 +258,12 @@ class RimeEKBSqrt(Node):
         if stream is not None:
             cuda.memcpy_htod_async(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer,
+                slvr.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer)
+                slvr.const_data().ndary())
 
         self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.frequency_gpu,
             slvr.B_sqrt_gpu, slvr.jones_gpu,

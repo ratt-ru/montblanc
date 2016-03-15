@@ -398,7 +398,7 @@ class RimeGaussBSum(Node):
     def initialise(self, solver, stream=None):
         slvr = solver
 
-        D = slvr.get_properties()
+        D = slvr.template_dict()
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
@@ -423,17 +423,17 @@ class RimeGaussBSum(Node):
         pass
 
     def get_kernel_params(self, solver):
-        slvr = solver
+        ntime, nbl, nchan = solver.dim_local_size('ntime', 'nbl', 'nchan')
 
-        D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
+        D = FLOAT_PARAMS if solver.is_float() else DOUBLE_PARAMS
 
-        chans_per_block = D['BLOCKDIMX'] if slvr.nchan > D['BLOCKDIMX'] else slvr.nchan
-        bl_per_block = D['BLOCKDIMY'] if slvr.nbl > D['BLOCKDIMY'] else slvr.nbl
-        times_per_block = D['BLOCKDIMZ'] if slvr.ntime > D['BLOCKDIMZ'] else slvr.ntime
+        chans_per_block = D['BLOCKDIMX'] if nchan > D['BLOCKDIMX'] else nchan
+        bl_per_block = D['BLOCKDIMY'] if nbl > D['BLOCKDIMY'] else nbl
+        times_per_block = D['BLOCKDIMZ'] if ntime > D['BLOCKDIMZ'] else ntime
 
-        chan_blocks = mbu.blocks_required(slvr.nchan, chans_per_block)
-        bl_blocks = mbu.blocks_required(slvr.nbl, bl_per_block)
-        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
+        chan_blocks = mbu.blocks_required(nchan, chans_per_block)
+        bl_blocks = mbu.blocks_required(nbl, bl_per_block)
+        time_blocks = mbu.blocks_required(ntime, times_per_block)
 
         return {
             'block' : (chans_per_block, bl_per_block, times_per_block),

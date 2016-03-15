@@ -276,8 +276,7 @@ class TestBiroV4(unittest.TestCase):
 
         # Calculate CPU version of the B sqrt matrix
         slvr_cpu = SolverCPU(slvr)
-        b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones() \
-            .transpose(1, 2, 3, 0)
+        b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones()
 
         # Calculate the GPU version of the B sqrt matrix
         with slvr.context:
@@ -285,19 +284,16 @@ class TestBiroV4(unittest.TestCase):
 
         self.assertTrue(np.allclose(b_sqrt_cpu, b_sqrt_gpu, **cmp))
 
-        # Space of comparison is potentially just too large
-        # and I can't see any easy numpy code for avoiding
-        # looping over dimension and multiplying the jones
-        # matrices. So...
+        # TODO: Replace with np.einsum
         # Pick 16 random points in the same and
         # check our square roots are OK for that
+        nsrc, ntime, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nchan')
         N = 16
-        rand_srcs = [random.randrange(0, slvr.nsrc) for i in range(N)]
-        rand_t = [random.randrange(0, slvr.ntime) for i in range(N)]
-        rand_ch = [random.randrange(0, slvr.nchan) for i in range(N)]
+        rand_srcs = [random.randrange(0, nsrc) for i in range(N)]
+        rand_t = [random.randrange(0, ntime) for i in range(N)]
+        rand_ch = [random.randrange(0, nchan) for i in range(N)]
 
-        b_cpu = slvr_cpu.compute_b_jones() \
-            .transpose(1, 2, 3, 0)
+        b_cpu = slvr_cpu.compute_b_jones()
 
         # Test that the square root of B
         # multiplied by itself yields B.
@@ -395,17 +391,11 @@ class TestBiroV4(unittest.TestCase):
         self.assertTrue(non_zero_E_ratio > 0.85,
             'Non-zero E-term ratio is {r}.'.format(r=non_zero_E_ratio))
 
-    def test_E_beam_float(self):
-        """ Test the E Beam float kernel """
-        # Randomly configure the beam cube dimensions
-        beam_lw = np.random.randint(50, 60)
-        beam_mh = np.random.randint(50, 60)
-        beam_nud = np.random.randint(50, 60)
-
+    def E_beam_test_helper(self, beam_lw, beam_mh, beam_nud, dtype):
         slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
             sources=montblanc.sources(point=10, gaussian=10),
             beam_lw=beam_lw, beam_mh=beam_mh, beam_nud=beam_nud,
-            dtype=Options.DTYPE_FLOAT,
+            dtype=dtype,
             pipeline=Pipeline([RimeEBeam()]))
 
         with solver(slvr_cfg) as slvr:
@@ -416,26 +406,31 @@ class TestBiroV4(unittest.TestCase):
 
             self.E_beam_test_impl(slvr, cmp={'rtol': 1e-4})
 
+    def test_E_beam_float(self):
+        """ Test the E Beam float kernel """
+        # Randomly configure the beam cube dimensions
+        beam_lw = np.random.randint(50, 60)
+        beam_mh = np.random.randint(50, 60)
+        beam_nud = np.random.randint(50, 60)
+        self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
+            Options.DTYPE_FLOAT)
+
+        beam_lw, beam_mh, beam_nud = 1, 1, 1
+        self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
+            Options.DTYPE_FLOAT)
+
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
         # Randomly configure the beam cube dimensions
         beam_lw = np.random.randint(50, 60)
         beam_mh = np.random.randint(50, 60)
         beam_nud = np.random.randint(50, 60)
+        self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
+            Options.DTYPE_DOUBLE)
 
-        slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
-            sources=montblanc.sources(point=10, gaussian=10),
-            beam_lw=beam_lw, beam_mh=beam_mh, beam_nud=beam_nud,
-            dtype=Options.DTYPE_DOUBLE,
-            pipeline=Pipeline([RimeEBeam()]))
-
-        with solver(slvr_cfg) as slvr:
-            # Check that the beam cube dimensions are
-            # correctly configured
-            self.assertTrue(slvr.E_beam_shape ==
-                (beam_lw, beam_mh, beam_nud, 4))
-
-            self.E_beam_test_impl(slvr)
+        beam_lw, beam_mh, beam_nud = 1, 1, 1
+        self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
+            Options.DTYPE_DOUBLE)
 
     def test_sqrt_multiply(self):
         """
@@ -455,6 +450,8 @@ class TestBiroV4(unittest.TestCase):
         with solver(slvr_cfg) as slvr:
 
             slvr_cpu = SolverCPU(slvr)
+            nsrc, ntime, na, nbl, nchan = slvr.dim_global_size(
+                'nsrc', 'ntime', 'na', 'nbl', 'nchan')
 
             # Calculate per baseline antenna pair indexes
             idx = slvr.get_ap_idx(src=True, chan=True)
@@ -469,20 +466,19 @@ class TestBiroV4(unittest.TestCase):
                     size=slvr.jones_shape).astype(slvr.jones_dtype)
 
             # Superfluous really, but makes below readable
-            assert slvr.jones_shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+            assert slvr.jones_shape == (nsrc, ntime, na, nchan, 4)
 
             # Get per baseline jones matrices from
             # the per antenna jones matrices
             J2, J1 = slvr.jones_cpu[idx]
-            assert J1.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
-            assert J2.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+            assert J1.shape == (nsrc, ntime, nbl, nchan, 4)
+            assert J2.shape == (nsrc, ntime, nbl, nchan, 4)
 
             # Tile the brightness term over the baseline dimension
             # and transpose so that polarisations are last
-            JB = np.tile(B[:,:,:,np.newaxis,:],
-                (1,1,1,slvr.nbl,1)).transpose(1,2,3,4,0)
+            JB = np.tile(B[:,:,np.newaxis,:,:], (1,1,nbl,1,1))
 
-            assert JB.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+            assert JB.shape == (nsrc, ntime, nbl, nchan, 4)
 
             # Calculate the first result using the classic equation
             # J2.B.J1^H
@@ -497,21 +493,21 @@ class TestBiroV4(unittest.TestCase):
             # Tile the brightness square root term over
             # the antenna dimension and transpose so that
             # polarisations are last
-            JBsqrt = np.tile(B_sqrt[:,:,:,np.newaxis,:],
-                (1,1,1,slvr.na,1)).transpose(1,2,3,4,0)
+            JBsqrt = np.tile(B_sqrt[:,:,np.newaxis,:,:],
+                (1,1,na,1,1))
 
-            assert JBsqrt.shape == (slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+            assert JBsqrt.shape == (nsrc, ntime, na, nchan, 4)
 
             # Multiply the square root of the brightness matrix
             # into the per antenna jones terms
             J = SolverCPU.jones_multiply(slvr.jones_cpu, JBsqrt, JBsqrt.size/4) \
-                .reshape(slvr.nsrc, slvr.ntime, slvr.na, slvr.nchan, 4)
+                .reshape(nsrc, ntime, na, nchan, 4)
 
             # Get per baseline jones matrices from
             # the per antenna jones matrices
             J2, J1 = J[idx]
-            assert J2.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
-            assert J1.shape == (slvr.nsrc, slvr.ntime, slvr.nbl, slvr.nchan, 4)
+            assert J2.shape == (nsrc, ntime, nbl, nchan, 4)
+            assert J1.shape == (nsrc, ntime, nbl, nchan, 4)
 
             # Calculate the first result using the optimised version
             # (J2.sqrt(B)).(J1.sqrt(B))^H == J2.sqrt(B).sqrt(B)^H.J1^H
@@ -557,6 +553,7 @@ class TestBiroV4(unittest.TestCase):
 
 
         with solver(slvr_cfg) as slvr:
+            nsrc, nchan = slvr.dim_global_size('nsrc', 'nchan')
 
             slvr.register_array(
                 name='matrix_in',
@@ -571,7 +568,7 @@ class TestBiroV4(unittest.TestCase):
                 registrant='test_biro_v4')
 
             matrix = np.random.random(
-                size=(slvr.nsrc, slvr.nchan)).astype(slvr.ft)
+                size=(nsrc, nchan)).astype(slvr.ft)
 
             slvr.transfer_matrix_in(matrix)
 

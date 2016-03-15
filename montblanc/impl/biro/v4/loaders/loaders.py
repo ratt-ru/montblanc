@@ -34,7 +34,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         ta = self.tables['ant']
         tf = self.tables['freq']
 
-        na, nbl, ntime, nchan = solver.na, solver.nbl, solver.ntime, solver.nchan
+        ntime, na, nbl, nchan = solver.dim_global_size('ntime', 'na', 'nbl', 'nchan')
 
         # Check that we're getting the correct shape...
         uvw_shape = (ntime*nbl, 3)

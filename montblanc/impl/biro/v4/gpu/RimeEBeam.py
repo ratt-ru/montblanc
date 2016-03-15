@@ -32,7 +32,7 @@ FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels and polarisations
     'BLOCKDIMY' : 32,   # Number of antenna
     'BLOCKDIMZ' : 1,    #
-    'maxregs'   : 32    # Maximum number of registers
+    'maxregs'   : 48    # Maximum number of registers
 }
 
 DOUBLE_PARAMS = {
@@ -71,6 +71,10 @@ KERNEL_TEMPLATE = string.Template("""
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
+#define LEXT(name) C.name.extents[0]
+#define UEXT(name) C.name.extents[1]
+#define DEXT(name) (C.name.extents[1] - C.name.extents[0])
+#define GLOBAL(name) C.name.global_size
 
 template <
     typename T,
@@ -140,7 +144,7 @@ void rime_jones_E_beam_impl(
     #define POL (threadIdx.x & 0x3)
     #define BLOCKCHANS (BLOCKDIMX >> 2)
 
-    if(SRC >= C.nsrc || ANT >= C.na || POLCHAN >= C.npolchan)
+    if(SRC >= DEXT(nsrc) || ANT >= DEXT(na) || POLCHAN >= DEXT(npolchan))
         return;
 
     __shared__ typename EBeamTraits<T>::LMType s_lm0[BLOCKDIMZ];
@@ -167,7 +171,7 @@ void rime_jones_E_beam_impl(
 
     __syncthreads();
 
-    for(int TIME=0; TIME < C.ntime; ++TIME)
+    for(int TIME=0; TIME < DEXT(ntime); ++TIME)
     {
         // Pointing errors vary by time, antenna and channel,
         // but not source
@@ -208,11 +212,18 @@ void rime_jones_E_beam_impl(
         float gm = floorf(m);
         float md = m - gm;
 
-#if NCHAN > 1
-        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2)/float(NCHAN-1);
-#else
-        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2);
-#endif
+        // Work out where we are in the beam cube.
+        // POLCHAN >> 2 is our position in the local channel space
+        // Add this to the lower extent in the global channel space
+        float chan = float(POLCHAN>>2 + LEXT(nchan));
+
+        // Divide by the size of the global channel space gives us
+        // a normalised position, also accounts for the one channel case.
+        if(GLOBAL(nchan) > 1)
+            { chan /= float(GLOBAL(nchan)-1); }
+
+        // Now multiply by beam cube depth to get position in the cube.
+        chan *= float(BEAM_NUD-1);
 
         float gchan = floorf(chan);
         float chd = chan - gchan;
@@ -332,18 +343,18 @@ class RimeEBeam(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-
-        self.npolchans = 4*slvr.nchan
+        nsrc, na, npolchan = slvr.dim_local_size('nsrc', 'na', 'npolchan')
 
         # Get a property dictionary off the solver
-        D = slvr.get_properties()
+        D = slvr.template_dict()
         # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
-        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
+        D['rime_const_data_struct'] = slvr.const_data().string_def()
 
         D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
-            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
-            self.npolchans, slvr.na, slvr.nsrc)
+            mbu.redistribute_threads(
+                D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+                npolchan, na, nsrc)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -374,9 +385,10 @@ class RimeEBeam(Node):
         ants_per_block = D['BLOCKDIMY']
         srcs_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
-        ant_blocks = mbu.blocks_required(slvr.na, ants_per_block)
-        src_blocks = mbu.blocks_required(slvr.nsrc, srcs_per_block)
+        nsrc, na, npolchan = slvr.dim_local_size('nsrc', 'na', 'npolchan')
+        polchan_blocks = mbu.blocks_required(npolchan, polchans_per_block)
+        ant_blocks = mbu.blocks_required(na, ants_per_block)
+        src_blocks = mbu.blocks_required(nsrc, srcs_per_block)
 
         return {
             'block' : (polchans_per_block, ants_per_block, srcs_per_block),
@@ -389,12 +401,12 @@ class RimeEBeam(Node):
         if stream is not None:
             cuda.memcpy_htod_async(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer,
+                slvr.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer)
+                slvr.const_data().ndary())
 
         self.kernel(slvr.lm_gpu,
             slvr.point_errors_gpu, slvr.antenna_scaling_gpu,
