@@ -652,8 +652,11 @@ class CompositeBiroSolver(BaseSolver):
         for i in range(nsolvers):
             subslvr = BiroSolver(subslvr_cfg)
 
-            # Configure the number of sources
-            # handled by each sub-solver.
+            # Configure the source dimensions of each sub-solver.
+            # Change the local size of each source dim so that there is
+            # enough space in the associated arrays for NSRC sources.
+            # Initially, configure the extents to be [0, NSRC], although
+            # this will be setup properly in __thread_solve_sub
             nsrc = P[Options.NSRC]
 
             U = [{
@@ -716,12 +719,11 @@ class CompositeBiroSolver(BaseSolver):
             # Add to the running total on the local thread
             tl.X2 += sub_X2
 
-        # Configure the number variable counts
-        # on the sub solver
+        # Configure dimension extents on the sub-solver
         subslvr.update_dimensions([
-            { DIMDATA.NAME: nr_var, DIMDATA.EXTENTS: [0, count] }
-                for nr_var, count in gpu_count.iteritems()])
-        
+            { DIMDATA.NAME: dim, DIMDATA.EXTENTS: [S.start, S.stop] }
+            for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
+
         # Transfer arrays
         self.__transfer_arrays(i, cpu_slice_map, gpu_slice_map)
 
