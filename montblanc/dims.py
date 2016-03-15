@@ -7,6 +7,25 @@ from montblanc.enums import DIMDATA
 DEFAULT_DESCRIPTION = 'An inexplicable dimension!'
 
 def create_dim_data(name, dim_data, **kwargs):
+    """
+    Create a dimension data dictionary from dim_data
+    and keyword arguments. Keyword arguments will be
+    used to update the dictionary.
+
+    Arguments
+    ---------
+        name : str
+            Name of the dimension
+        dim_data : integer or another dimension data dictionary
+            If integer a fresh dictionary will be created, otherwise
+            dim_data will be copied.
+
+    Returns
+    -------
+        A dimension data dictionary
+
+    """
+
     # If dim_data is an integer, start constructing a dictionary from it
     if isinstance(dim_data, (int, long, np.integer)):
         dim_data = { DIMDATA.NAME : name, DIMDATA.GLOBAL_SIZE : dim_data }
@@ -14,7 +33,7 @@ def create_dim_data(name, dim_data, **kwargs):
         raise TypeError('dim_data must be an integer or a dict')
 
     if not isinstance(dim_data, AttrDict):
-        dim_data = AttrDict(dim_data)
+        dim_data = AttrDict(dim_data.copy())
 
     # Now update the dimension data from any keyword arguments
     dim_data.update(kwargs)
@@ -49,6 +68,17 @@ def create_dim_data(name, dim_data, **kwargs):
     return dim_data
 
 def update_dim_data(dim, update_dict):
+    """
+    Sanitised dimension data update
+
+    Arguments
+    ---------
+        dim : dict
+            dimension data dictionary
+        update_dict : dict
+            Dictionary containing a list of key-values
+            for updating dim
+    """
     import collections
 
     name = dim[DIMDATA.NAME]
@@ -87,6 +117,7 @@ def update_dim_data(dim, update_dict):
     check_dim_data(dim)
 
 def check_dim_data(dim_data):
+    """ Sanity check the contents of a dimension data dictionary """
     ls, gs, E, name, zeros = (dim_data[DIMDATA.LOCAL_SIZE],
         dim_data[DIMDATA.GLOBAL_SIZE],
         dim_data[DIMDATA.EXTENTS],
