@@ -41,6 +41,8 @@ import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
+from montblanc.enums import (DIMDATA)
+
 from montblanc.config import (BiroSolverConfigurationOptions as Options)
 
 class PipelineDescriptor(object):
@@ -372,7 +374,7 @@ class BaseSolver(Solver):
         ntime, nbl, nchan, nsrc = slvr.dim_global_size('ntime,nbl:nchan nsrc')
         """
 
-        return self.__dim_attribute('global_size', *args)
+        return self.__dim_attribute(DIMDATA.GLOBAL_SIZE, *args)
 
     def dim_local_size(self, *args):
         """
@@ -383,7 +385,18 @@ class BaseSolver(Solver):
         ntime, nbl, nchan, nsrc = slvr.dim_local_size('ntime,nbl:nchan nsrc')
         """
 
-        return self.__dim_attribute('local_size', *args)
+        return self.__dim_attribute(DIMDATA.LOCAL_SIZE, *args)
+
+    def dim_extents(self, *args):
+        """
+        t_ex, bl_ex, ch_ex = slvr.dim_extents('ntime, 'nbl', 'nchan')
+        
+        or
+
+        t_ex, bl_ex, ch_ex, src_ex = slvr.dim_extents('ntime,nbl:nchan nsrc')
+        """
+
+        return self.__dim_attribute(DIMDATA.EXTENTS, *args)
 
     def check_array(self, record_key, ary):
         """
