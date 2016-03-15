@@ -42,6 +42,8 @@ import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
 from montblanc.impl.biro.v5.BiroSolver import BiroSolver
 
+NA_EXTRA = 'na1'
+
 ONE_KB = 1024
 ONE_MB = ONE_KB**2
 ONE_GB = ONE_KB**3
@@ -180,11 +182,9 @@ class CompositeBiroSolver(BaseSolver):
         self.initialised = False
 
     def __gen_rime_slices(self):
-        nr_vars = ['ntime', 'nbl', 'na', 'na1', 'nchan', 'nsrc']
         src_nr_var_counts = mbu.sources_to_nr_vars(
             self._slvr_cfg[Options.SOURCES])
         src_nr_vars = mbu.source_nr_vars()
-        nr_vars.extend(src_nr_vars)
 
         ntime, nbl, na, nchan, nsrc = self.dim_local_size(
             'ntime', 'nbl', 'na', 'nchan', 'nsrc')
@@ -201,58 +201,58 @@ class CompositeBiroSolver(BaseSolver):
         for t in xrange(0, ntime, self.time_diff):
             t_end = min(t + self.time_diff, ntime)
             t_diff = t_end - t
-            cpu_slice['ntime'] = slice(t,  t_end, 1)
-            gpu_slice['ntime'] = slice(0, t_diff, 1)
-            gpu_count['ntime'] = t_diff
+            cpu_slice[Options.NTIME] = slice(t,  t_end, 1)
+            gpu_slice[Options.NTIME] = slice(0, t_diff, 1)
+            gpu_count[Options.NTIME] = t_diff
 
             # Set up baseline and antenna slicing
             for bl in xrange(0, nbl, self.bl_diff):
                 bl_end = min(bl + self.bl_diff, nbl)
                 bl_diff = bl_end - bl
-                cpu_slice['nbl'] = slice(bl,  bl_end, 1)
-                gpu_slice['nbl'] = slice(0, bl_diff, 1)
-                gpu_count['nbl'] = bl_diff
+                cpu_slice[Options.NBL] = slice(bl,  bl_end, 1)
+                gpu_slice[Options.NBL] = slice(0, bl_diff, 1)
+                gpu_count[Options.NBL] = bl_diff
 
                 # If we have one baseline, create
                 # slices for the two related baselines,
                 # obtained from the antenna pairs array
                 # The antenna indices will be random
                 # on the CPU side, but fit into indices
-                # 0 and 1 on the GPU. We have the 'na1'
+                # 0 and 1 on the GPU. We have the NA_EXTRA
                 # key, so that transfer_data can handle
                 # the first and second antenna index
                 if bl_diff == 1:
                     ant0 = self.ant_pairs_cpu[0, t, bl]
                     ant1 = self.ant_pairs_cpu[1, t, bl]
-                    cpu_slice['na'] = slice(ant0, ant0 + 1, 1)
-                    cpu_slice['na1'] = slice(ant1, ant1 + 1, 1)
-                    gpu_slice['na'] = slice(0, 1, 1)
-                    gpu_slice['na1'] = slice(1, 2, 1)
-                    gpu_count['na'] = 2
+                    cpu_slice[Options.NA] = slice(ant0, ant0 + 1, 1)
+                    cpu_slice[NA_EXTRA] = slice(ant1, ant1 + 1, 1)
+                    gpu_slice[Options.NA] = slice(0, 1, 1)
+                    gpu_slice[NA_EXTRA] = slice(1, 2, 1)
+                    gpu_count[Options.NA] = 2
                 # Otherwise just take all antenna pairs
-                # 'na1' will be ignored in this case
+                # NA_EXTRA will be ignored in this case
                 else:
-                    cpu_slice['na'] = slice(0, na, 1)
-                    cpu_slice['na1'] = slice(0, na, 1)
-                    gpu_slice['na'] = slice(0, na, 1)
-                    gpu_slice['na1'] = slice(0, na, 1)
-                    gpu_count['na'] = na
+                    cpu_slice[Options.NA] = slice(0, na, 1)
+                    cpu_slice[NA_EXTRA] = slice(0, na, 1)
+                    gpu_slice[Options.NA] = slice(0, na, 1)
+                    gpu_slice[NA_EXTRA] = slice(0, na, 1)
+                    gpu_count[Options.NA] = na
 
                 # Set up channel slicing
                 for ch in xrange(0, nchan, self.chan_diff):
                     ch_end = min(ch + self.chan_diff, nchan)
                     ch_diff = ch_end - ch
-                    cpu_slice['nchan'] = slice(ch, ch_end, 1)
-                    gpu_slice['nchan'] = slice(0, ch_diff, 1)
-                    gpu_count['nchan'] = ch_diff
+                    cpu_slice[Options.NCHAN] = slice(ch, ch_end, 1)
+                    gpu_slice[Options.NCHAN] = slice(0, ch_diff, 1)
+                    gpu_count[Options.NCHAN] = ch_diff
 
                     # Set up source slicing
                     for src in xrange(0, nsrc, self.src_diff):
                         src_end = min(src + self.src_diff, nsrc)
                         src_diff = src_end - src
-                        cpu_slice['nsrc'] = slice(src, src_end, 1)
-                        gpu_slice['nsrc'] = slice(0, src_diff, 1)
-                        gpu_count['nsrc'] = src_diff
+                        cpu_slice[Options.NSRC] = slice(src, src_end, 1)
+                        gpu_slice[Options.NSRC] = slice(0, src_diff, 1)
+                        gpu_count[Options.NSRC] = src_diff
 
                         # Set up the CPU source range slices
                         cpu_slice.update(mbu.source_range_slices(
@@ -498,7 +498,7 @@ class CompositeBiroSolver(BaseSolver):
                 # Slice the CPU and GPU arrays
                 # at the second antenna position
                 gpu_idx[na_idx] = 1
-                cpu_idx[na_idx] = cpu_slice_map['na1']
+                cpu_idx[na_idx] = cpu_slice_map[NA_EXTRA]
 
                 self.__transfer_slice(r, subslvr,
                     cpu_ary, cpu_idx,
@@ -720,8 +720,8 @@ class CompositeBiroSolver(BaseSolver):
         # on the sub solver
         subslvr.update_dimensions([
             { DIMDATA.NAME: nr_var, DIMDATA.EXTENTS: [0, count] }
-            for nr_var, count in gpu_count.iteritems()])
-
+                for nr_var, count in gpu_count.iteritems()])
+        
         # Transfer arrays
         self.__transfer_arrays(i, cpu_slice_map, gpu_slice_map)
 
