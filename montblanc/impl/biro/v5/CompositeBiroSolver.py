@@ -193,7 +193,6 @@ class CompositeBiroSolver(BaseSolver):
         # dimensions of the CPU and GPU array.
         cpu_slice = {}
         gpu_slice = {}
-        gpu_count = {}
 
         montblanc.log.info('Generating RIME slices')
 
@@ -203,7 +202,6 @@ class CompositeBiroSolver(BaseSolver):
             t_diff = t_end - t
             cpu_slice[Options.NTIME] = slice(t,  t_end, 1)
             gpu_slice[Options.NTIME] = slice(0, t_diff, 1)
-            gpu_count[Options.NTIME] = t_diff
 
             # Set up baseline and antenna slicing
             for bl in xrange(0, nbl, self.bl_diff):
@@ -211,7 +209,6 @@ class CompositeBiroSolver(BaseSolver):
                 bl_diff = bl_end - bl
                 cpu_slice[Options.NBL] = slice(bl,  bl_end, 1)
                 gpu_slice[Options.NBL] = slice(0, bl_diff, 1)
-                gpu_count[Options.NBL] = bl_diff
 
                 # If we have one baseline, create
                 # slices for the two related baselines,
@@ -228,7 +225,6 @@ class CompositeBiroSolver(BaseSolver):
                     cpu_slice[NA_EXTRA] = slice(ant1, ant1 + 1, 1)
                     gpu_slice[Options.NA] = slice(0, 1, 1)
                     gpu_slice[NA_EXTRA] = slice(1, 2, 1)
-                    gpu_count[Options.NA] = 2
                 # Otherwise just take all antenna pairs
                 # NA_EXTRA will be ignored in this case
                 else:
@@ -236,7 +232,6 @@ class CompositeBiroSolver(BaseSolver):
                     cpu_slice[NA_EXTRA] = slice(0, na, 1)
                     gpu_slice[Options.NA] = slice(0, na, 1)
                     gpu_slice[NA_EXTRA] = slice(0, na, 1)
-                    gpu_count[Options.NA] = na
 
                 # Set up channel slicing
                 for ch in xrange(0, nchan, self.chan_diff):
@@ -244,7 +239,6 @@ class CompositeBiroSolver(BaseSolver):
                     ch_diff = ch_end - ch
                     cpu_slice[Options.NCHAN] = slice(ch, ch_end, 1)
                     gpu_slice[Options.NCHAN] = slice(0, ch_diff, 1)
-                    gpu_count[Options.NCHAN] = ch_diff
 
                     # Set up source slicing
                     for src in xrange(0, nsrc, self.src_diff):
@@ -252,7 +246,6 @@ class CompositeBiroSolver(BaseSolver):
                         src_diff = src_end - src
                         cpu_slice[Options.NSRC] = slice(src, src_end, 1)
                         gpu_slice[Options.NSRC] = slice(0, src_diff, 1)
-                        gpu_count[Options.NSRC] = src_diff
 
                         # Set up the CPU source range slices
                         cpu_slice.update(mbu.source_range_slices(
@@ -262,9 +255,8 @@ class CompositeBiroSolver(BaseSolver):
                         for s in src_nr_vars:
                             cpu_var = cpu_slice[s]
                             gpu_slice[s] = slice(0, cpu_var.stop - cpu_var.start, 1)
-                            gpu_count[s] = cpu_var.stop - cpu_var.start
 
-                        yield (cpu_slice.copy(), gpu_slice.copy(), gpu_count.copy())
+                        yield (cpu_slice.copy(), gpu_slice.copy())
 
     def __thread_gen_sub_solvers(self):
         # Loop infinitely over the sub-solvers.
@@ -684,7 +676,7 @@ class CompositeBiroSolver(BaseSolver):
             subslvr.register_properties(P_sub)
             subslvr.register_arrays(A_sub)
 
-    def __thread_solve_sub(self, cpu_slice_map, gpu_slice_map, gpu_count, first=False):
+    def __thread_solve_sub(self, cpu_slice_map, gpu_slice_map, first=False):
         """
         Solve a portion of the RIME, specified by the cpu_slice_map and
         gpu_slice_map dictionaries.
@@ -827,7 +819,7 @@ class CompositeBiroSolver(BaseSolver):
             for i in range(nr_ex)]
 
         # Iterate over the RIME space, i.e. slices over the CPU and GPU
-        for cpu_slice_map, gpu_slice_map, gpu_count in self.__gen_rime_slices():
+        for cpu_slice_map, gpu_slice_map in self.__gen_rime_slices():
             # Attempt to submit work to an executor
             submitted = False
 
@@ -839,7 +831,7 @@ class CompositeBiroSolver(BaseSolver):
 
                     # Submit work to the thread, solve this portion of the RIME
                     f = ex.submit(C.__thread_solve_sub, self,
-                        cpu_slice_map, gpu_slice_map, gpu_count, first=first[i])
+                        cpu_slice_map, gpu_slice_map, first=first[i])
 
                     # Add the future to the queue
                     future_Q[i].append(f)
