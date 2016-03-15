@@ -402,10 +402,21 @@ class SolverCPU(object):
         gm = np.floor(m)
         md = m - gm
 
-        div = slvr.ft(nchan-1) if nchan > 1 else 1.0
-        chan_range = np.arange(nchan).astype(slvr.ft)
+        # Work out where we are in the beam cube, relative
+        # the position in the global channel space.
+        # Get our problem extents and the global size of
+        # the channel dimension
+        chan_low, chan_high = slvr.dim_extents('nchan')
+        nchan_global = slvr.dim_global_size('nchan')
+
+        # Global channel size is divisor, but handle one channel case
+        div = slvr.ft(nchan_global-1) if nchan_global > 1 else 1.0
+        # Create the channel range from the extents
+        chan_range = np.arange(chan_low, chan_high).astype(slvr.ft)
+        # Divide channel range by global size and multiply
+        # to obtain position in the beam cube
         chan = (beam_nud-1)*chan_range / div
-        assert chan.shape == (nchan, )
+        assert chan.shape == (chan_high - chan_low, )
         gchan = np.floor(chan)
         chd = (chan - gchan)[np.newaxis,np.newaxis,np.newaxis,:]
 

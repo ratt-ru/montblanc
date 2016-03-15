@@ -391,17 +391,11 @@ class TestBiroV4(unittest.TestCase):
         self.assertTrue(non_zero_E_ratio > 0.85,
             'Non-zero E-term ratio is {r}.'.format(r=non_zero_E_ratio))
 
-    def test_E_beam_float(self):
-        """ Test the E Beam float kernel """
-        # Randomly configure the beam cube dimensions
-        beam_lw = np.random.randint(50, 60)
-        beam_mh = np.random.randint(50, 60)
-        beam_nud = np.random.randint(50, 60)
-
+    def E_beam_test_helper(self, beam_lw, beam_mh, beam_nud, dtype):
         slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
             sources=montblanc.sources(point=10, gaussian=10),
             beam_lw=beam_lw, beam_mh=beam_mh, beam_nud=beam_nud,
-            dtype=Options.DTYPE_FLOAT,
+            dtype=dtype,
             pipeline=Pipeline([RimeEBeam()]))
 
         with solver(slvr_cfg) as slvr:
@@ -412,26 +406,31 @@ class TestBiroV4(unittest.TestCase):
 
             self.E_beam_test_impl(slvr, cmp={'rtol': 1e-4})
 
+    def test_E_beam_float(self):
+        """ Test the E Beam float kernel """
+        # Randomly configure the beam cube dimensions
+        beam_lw = np.random.randint(50, 60)
+        beam_mh = np.random.randint(50, 60)
+        beam_nud = np.random.randint(50, 60)
+        self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
+            Options.DTYPE_FLOAT)
+
+        beam_lw, beam_mh, beam_nud = 1, 1, 1
+        self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
+            Options.DTYPE_FLOAT)
+
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
         # Randomly configure the beam cube dimensions
         beam_lw = np.random.randint(50, 60)
         beam_mh = np.random.randint(50, 60)
         beam_nud = np.random.randint(50, 60)
+        self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
+            Options.DTYPE_DOUBLE)
 
-        slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
-            sources=montblanc.sources(point=10, gaussian=10),
-            beam_lw=beam_lw, beam_mh=beam_mh, beam_nud=beam_nud,
-            dtype=Options.DTYPE_DOUBLE,
-            pipeline=Pipeline([RimeEBeam()]))
-
-        with solver(slvr_cfg) as slvr:
-            # Check that the beam cube dimensions are
-            # correctly configured
-            self.assertTrue(slvr.E_beam_shape ==
-                (beam_lw, beam_mh, beam_nud, 4))
-
-            self.E_beam_test_impl(slvr)
+        beam_lw, beam_mh, beam_nud = 1, 1, 1
+        self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
+            Options.DTYPE_DOUBLE)
 
     def test_sqrt_multiply(self):
         """

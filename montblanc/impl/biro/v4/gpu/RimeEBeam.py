@@ -74,6 +74,7 @@ __constant__ rime_const_data C;
 #define LEXT(name) C.name.extents[0]
 #define UEXT(name) C.name.extents[1]
 #define DEXT(name) (C.name.extents[1] - C.name.extents[0])
+#define GLOBAL(name) C.name.global_size
 
 template <
     typename T,
@@ -211,11 +212,18 @@ void rime_jones_E_beam_impl(
         float gm = floorf(m);
         float md = m - gm;
 
-#if NCHAN > 1
-        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2)/float(NCHAN-1);
-#else
-        float chan = T(BEAM_NUD-1) * float(POLCHAN>>2);
-#endif
+        // Work out where we are in the beam cube.
+        // POLCHAN >> 2 is our position in the local channel space
+        // Add this to the lower extent in the global channel space
+        float chan = float(POLCHAN>>2 + LEXT(nchan));
+
+        // Divide by the size of the global channel space gives us
+        // a normalised position, also accounts for the one channel case.
+        if(GLOBAL(nchan) > 1)
+            { chan /= float(GLOBAL(nchan)-1); }
+
+        // Now multiply by beam cube depth to get position in the cube.
+        chan *= float(BEAM_NUD-1);
 
         float gchan = floorf(chan);
         float chd = chan - gchan;
