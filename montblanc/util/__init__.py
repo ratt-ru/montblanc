@@ -40,9 +40,7 @@ from montblanc.src_types import (
     source_range_slices)
 
 from montblanc.dims import (
-    create_dim_data,
-    update_dim_data,
-    check_dim_data)
+    create_dim_data)
 
 def nr_of_baselines(na, auto_correlations=False):
     """

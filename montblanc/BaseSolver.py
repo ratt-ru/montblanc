@@ -237,9 +237,6 @@ class BaseSolver(Solver):
         # Create the dimension dictionary
         self._dims[name] = mbu.create_dim_data(name, dim_data, **kwargs)
 
-        # Check that we've been given valid values
-        mbu.check_dim_data(self._dims[name])
-
     def register_default_dimensions(self):
         """ Register the default dimensions for a RIME solver """ 
 
@@ -319,8 +316,6 @@ class BaseSolver(Solver):
         ---------
             update_dict : dict
         """
-        from montblanc.enums import DIMDATA
-
         name = update_dict.get(DIMDATA.NAME, None)
 
         if not name:
@@ -338,7 +333,7 @@ class BaseSolver(Solver):
 
             return
 
-        mbu.update_dim_data(dim, update_dict)
+        dim.update(update_dict)
 
     def __dim_attribute(self, attr, *args):
         """

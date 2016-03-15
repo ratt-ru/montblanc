@@ -314,8 +314,7 @@ class CompositeBiroSolver(BaseSolver):
                 # Copy dimension data for reconfiguration
                 sub_dim = dim.copy()
 
-                mbu.update_dim_data(sub_dim, {
-                    DIMDATA.NAME: name,
+                sub_dim.update({
                     DIMDATA.LOCAL_SIZE: P[name],
                     DIMDATA.EXTENTS: [0, P[name]],
                     DIMDATA.SAFETY: False })
