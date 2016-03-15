@@ -8,7 +8,7 @@ Montblanc is licensed under the GNU GPL v2.0 License.
 
 ## Requirements
 
-- PyCUDA 2015.1.3
+- PyCUDA 2016.1
 - A Kepler NVIDIA GPU for more recent functionality.
 
 ## Installation
@@ -55,7 +55,7 @@ to install the package.
 
 ### Possible Issues
 
-- **[PyCUDA 2015.1.3][pycuda]**. setup.py will attempt to install this automatically,
+- **[PyCUDA 2016.1][pycuda]**. setup.py will attempt to install this automatically,
     but this might not work if you have a non-standard CUDA install location. It's worth running
 
     ```bash
