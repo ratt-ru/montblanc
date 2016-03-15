@@ -32,7 +32,7 @@ FLOAT_PARAMS = {
     'BLOCKDIMX' : 32,   # Number of channels and polarisations
     'BLOCKDIMY' : 32,   # Number of antenna
     'BLOCKDIMZ' : 1,    #
-    'maxregs'   : 32    # Maximum number of registers
+    'maxregs'   : 48    # Maximum number of registers
 }
 
 DOUBLE_PARAMS = {
