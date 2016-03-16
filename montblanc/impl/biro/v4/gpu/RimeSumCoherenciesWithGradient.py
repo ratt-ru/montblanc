@@ -57,9 +57,9 @@ KERNEL_TEMPLATE = string.Template("""
 #define NGSRC ${ngsrc}
 #define NSSRC ${nssrc}
 #define NSRC ${nsrc}
-#define NPARAMS (3*NSSRC)
 #define NPOL (4)
 #define NPOLCHAN (NPOL*NCHAN)
+#define NPARAMS (3*NSSRC)
 
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
@@ -92,8 +92,6 @@ public:
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
 
-
-// Visibilities are computed non polarised!
 template <
     typename T,
     bool apply_weights=false,
@@ -140,6 +138,7 @@ void rime_sum_coherencies_with_gradient_impl(
     T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
     T & W = shared.uvw[threadIdx.z][threadIdx.y].z; 
 
+
     int i;
 
     // Figure out the antenna pairs
@@ -180,10 +179,10 @@ void rime_sum_coherencies_with_gradient_impl(
         typename Tr::ct ant_one = jones[i];
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
-        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_two, ant_one);
+        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
 
-        polsum.x += ant_two.x;
-        polsum.y += ant_two.y;
+        polsum.x += ant_one.x;
+        polsum.y += ant_one.y;
     }
 
     // Gaussian sources
@@ -223,10 +222,10 @@ void rime_sum_coherencies_with_gradient_impl(
         ant_one.y *= exp;
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
-        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_two, ant_one);
+        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
 
-        polsum.x += ant_two.x;
-        polsum.y += ant_two.y;
+        polsum.x += ant_one.x;
+        polsum.y += ant_one.y;
 
         __syncthreads();
     }
@@ -257,8 +256,8 @@ void rime_sum_coherencies_with_gradient_impl(
         T sf = T(TWO_PI_OVER_C)*shared.freq[threadIdx.x]*shared.sersic_scale;
         sf /= (T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2);
         T u1 = U*(T(1.0)+shared.e1) + V*shared.e2;
-        T v1 = U*shared.e2 + V*(T(1.0)-shared.e1);
         u1 *= sf;
+        T v1 = U*shared.e2 + V*(T(1.0)-shared.e1);
         v1 *= sf;
 
         T dev_e1 = u1*(U-U*shared.e2*shared.e2+2*U*shared.e1+U*shared.e1*shared.e1+2*V*shared.e1*shared.e2);
@@ -267,7 +266,7 @@ void rime_sum_coherencies_with_gradient_impl(
         T dev_e2 = u1*(V-V*shared.e1*shared.e1+2*U*shared.e2+2*U*shared.e1*shared.e2+V*shared.e2*shared.e2);
         dev_e2 += v1*(U-U*shared.e1*shared.e1+U*shared.e2*shared.e2+2*V*shared.e2-2*V*shared.e1*shared.e2);
         dev_e2 *= sf/T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2;     
-
+   
         T sersic_factor = T(1.0) + u1*u1+v1*v1;
         T dev_scale = (u1*u1+v1+v1)/(shared.sersic_scale*sersic_factor);
         sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));
@@ -281,43 +280,43 @@ void rime_sum_coherencies_with_gradient_impl(
         ant_one.y *= sersic_factor;
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
-        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_two, ant_one);
+        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
 
-        polsum.x += ant_two.x;
-        polsum.y += ant_two.y;
+        polsum.x += ant_one.x;
+        polsum.y += ant_one.y;
 
         i = 3*(SRC - C.npsrc - C.ngsrc);
-        dev_vis[i].x = ant_two.x*dev_e1;
-        dev_vis[i].y = ant_two.y*dev_e1;
+        dev_vis[i].x = ant_one.x*dev_e1;
+        dev_vis[i].y = ant_one.y*dev_e1;
         i++;
-        dev_vis[i].x = ant_two.x*dev_e2;
-        dev_vis[i].y = ant_two.y*dev_e2;
+        dev_vis[i].x = ant_one.x*dev_e2;
+        dev_vis[i].y = ant_one.y*dev_e2;
         i++;
-        dev_vis[i].x = ant_two.x*dev_scale;
-        dev_vis[i].y = ant_two.y*dev_scale;
+        dev_vis[i].x = ant_one.x*dev_scale;
+        dev_vis[i].y = ant_one.y*dev_scale;
     }
-
-    // Multiply the visibility by antenna 2's g term
-    i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
-    typename Tr::ct ant2_g_term = G_term[i];
-    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant2_g_term, polsum);
 
     // Multiply the visibility by antenna 1's g term
     i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
     typename Tr::ct ant1_g_term = G_term[i];
-    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant2_g_term, ant1_g_term);
+    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, polsum);
+
+    // Multiply the visibility by antenna 2's g term
+    i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
+    typename Tr::ct ant2_g_term = G_term[i];
+    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, ant2_g_term);
 
     // Write out the visibilities
     i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
-    visibilities[i] = ant2_g_term;
+    visibilities[i] = ant1_g_term;
 
     // Compute the chi squared sum terms
     typename Tr::ct delta = bayes_data[i];
-    delta.x -= ant2_g_term.x; delta.y -= ant2_g_term.y;
-
+    delta.x -= ant1_g_term.x; delta.y -= ant1_g_term.y;
+    
     // Save (bayes_data[i] - vis[i])
     typename Tr::ct delta1 = delta;
- 
+    
     delta.x *= delta.x; delta.y *= delta.y;
 
     // Apply any necessary weighting factors
@@ -329,7 +328,7 @@ void rime_sum_coherencies_with_gradient_impl(
         delta.x *= w;
         delta.y *= w;
     }
- 
+
     // Now, add the real and imaginary components
     // of each adjacent group of four polarisations
     // into the first polarisation.
@@ -350,10 +349,9 @@ void rime_sum_coherencies_with_gradient_impl(
         delta.x += other.x;
         delta.y += other.y;
 
-        // write out this chi squared sum term
         i = (TIME*NBL + BL)*NCHAN + (POLCHAN >> 2);
-        chi_sqrd_result[i] = delta.x + delta.y;  
-    }   
+        chi_sqrd_result[i] = delta.x + delta.y;
+    }
 
     // Write partial derivative with respect to sersic parameters
     for(int SRC = 0; SRC < C.nssrc; ++SRC)
@@ -382,7 +380,6 @@ void rime_sum_coherencies_with_gradient_impl(
            chi_sqrd_result_grad[i] = -3*(polsum.x+polsum.y);
        }
      }
-    
 }
 
 extern "C" {
@@ -501,7 +498,6 @@ class RimeSumCoherenciesWithGradient(Node):
         sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
             else slvr.sersic_shape_gpu
 
-        # no polarization
         self.kernel(slvr.uvw_gpu, gauss, sersic,
             slvr.frequency_gpu, slvr.ant_pairs_gpu,
             slvr.jones_gpu, slvr.weight_vector_gpu,
@@ -515,6 +511,7 @@ class RimeSumCoherenciesWithGradient(Node):
         # is not required. Otherwise the kernel will incorporate the
         # individual sigma squared values into the sum
         gpu_sum = gpuarray.sum(slvr.chi_sqrd_result_gpu).get()
+
         # loop over number of Sersic parameters to reduce gradient over number of visibilities
         # first, nssrc sersic scalelengths
         # then, nssrc ellipticity 1st components
@@ -529,7 +526,6 @@ class RimeSumCoherenciesWithGradient(Node):
             slvr.X2_grad = slvr.X2_grad/slvr.sigma_sqrd
         else:
             slvr.set_X2(gpu_sum)
-
 
     def post_execution(self, solver, stream=None):
         pass
