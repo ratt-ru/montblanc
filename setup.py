@@ -163,7 +163,7 @@ def get_version():
     return version_git
 
 def readme():
-    with open('README.md') as f:
+    with open('README.rst') as f:
         return f.read()
 
 def src_pkg_dirs():
@@ -214,6 +214,7 @@ setup(name='montblanc',
     install_requires=[
         'attrdict >= 2.0.0',
         'cffi >= 1.1.2',
+        'ConfigArgParse >= 0.10.0',
         'funcsigs >= 0.4',
         'futures >= 3.0.3',
         'numpy >= 1.9.2',
