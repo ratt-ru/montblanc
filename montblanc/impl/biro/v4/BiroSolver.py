@@ -252,7 +252,7 @@ class BiroSolver(BaseSolver):
         self.register_dimension('nparams',
             slvr_cfg[Options.NPARAMS],
             zero_valid=True,
-            description='number of sersic parameters = gradient dimension')
+            description='X2 gradient dimension')
 
         self.register_properties(P)
         self.register_arrays(A)
