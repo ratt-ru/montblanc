@@ -248,6 +248,11 @@ class BiroSolver(BaseSolver):
             slvr_cfg[Options.E_BEAM_DEPTH],
             description='E Beam cube height in nu coords')
 
+        # Configure the dimensions of the chi squared gradient
+        self.register_dimension('nparams',
+            slvr_cfg[Options.NPARAMS],
+            description='number of sersic parameters = gradient dimension')
+
         self.register_properties(P)
         self.register_arrays(A)
 
