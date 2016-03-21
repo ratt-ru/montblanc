@@ -641,7 +641,7 @@ class SolverCPU(object):
 
         assert g_term.shape == (2, ntime, nbl, nchan, 4)
 
-        result = self.jones_multiply_hermitian_transpose(
+        result = self.jones_multiply(
             g_term[0], ekb_vis,
             ntime*nbl*nchan) \
                 .reshape(ntime, nbl, nchan, 4)

@@ -91,6 +91,9 @@ public:
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
+#define LEXT(name) C.name.extents[0]
+#define UEXT(name) C.name.extents[1]
+#define DEXT(name) (C.name.extents[1] - C.name.extents[0])
 
 template <
     typename T,
@@ -116,7 +119,7 @@ void rime_sum_coherencies_with_gradient_impl(
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
 
-    if(TIME >= C.ntime || BL >= C.nbl || POLCHAN >= C.npolchan)
+    if(TIME >= DEXT(ntime) || BL >= DEXT(nbl) || POLCHAN >= DEXT(npolchan))
         return;
 
     __shared__ struct {
@@ -170,7 +173,7 @@ void rime_sum_coherencies_with_gradient_impl(
     typename Tr::ct polsum = Po::make_ct(0.0, 0.0);
 
     // Point Sources
-    for(int SRC=0; SRC< C.npsrc; ++SRC)
+    for(int SRC=0; SRC < DEXT(npsrc); ++SRC)
     {
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
@@ -186,16 +189,16 @@ void rime_sum_coherencies_with_gradient_impl(
     }
 
     // Gaussian sources
-    for(int SRC = C.npsrc; SRC < C.npsrc + C.ngsrc; ++SRC)
+    for(int SRC = DEXT(npsrc); SRC < DEXT(npsrc) + DEXT(ngsrc); ++SRC)
     {
         // gaussian shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC - C.npsrc;  shared.el = gauss_shape[i];
-            i += C.ngsrc;       shared.em = gauss_shape[i];
-            i += C.ngsrc;       shared.eR = gauss_shape[i];
+            i = SRC - DEXT(npsrc);  shared.el = gauss_shape[i];
+            i += DEXT(ngsrc);       shared.em = gauss_shape[i];
+            i += DEXT(ngsrc);       shared.eR = gauss_shape[i];
         }
 
         __syncthreads();
@@ -233,16 +236,16 @@ void rime_sum_coherencies_with_gradient_impl(
     // Sersic Sources
     typename Tr::ct dev_vis[NPARAMS];
 
-    for(int SRC = C.npsrc + C.ngsrc; SRC < C.npsrc + C.ngsrc + C.nssrc; ++SRC)
+    for(int SRC = DEXT(npsrc) + DEXT(ngsrc); SRC < DEXT(npsrc) + DEXT(ngsrc) + DEXT(nssrc); ++SRC)
     {
         // sersic shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC - C.npsrc - C.ngsrc; shared.e1 = sersic_shape[i];
-            i += C.nssrc;                shared.e2 = sersic_shape[i];
-            i += C.nssrc;                shared.sersic_scale = sersic_shape[i];
+            i = SRC - DEXT(npsrc) - DEXT(ngsrc); shared.e1 = sersic_shape[i];
+            i += DEXT(nssrc);                   shared.e2 = sersic_shape[i];
+            i += DEXT(nssrc);                   shared.sersic_scale = sersic_shape[i];
         }
 
         __syncthreads();
@@ -285,7 +288,7 @@ void rime_sum_coherencies_with_gradient_impl(
         polsum.x += ant_one.x;
         polsum.y += ant_one.y;
 
-        i = 3*(SRC - C.npsrc - C.ngsrc);
+        i = 3*(SRC - DEXT(npsrc) - DEXT(ngsrc));
         dev_vis[i].x = ant_one.x*dev_e1;
         dev_vis[i].y = ant_one.y*dev_e1;
         i++;
@@ -299,7 +302,7 @@ void rime_sum_coherencies_with_gradient_impl(
     // Multiply the visibility by antenna 1's g term
     i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
     typename Tr::ct ant1_g_term = G_term[i];
-    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, polsum);
+    montblanc::jones_multiply_4x4_in_place<T>(ant1_g_term, polsum);
 
     // Multiply the visibility by antenna 2's g term
     i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
@@ -354,7 +357,7 @@ void rime_sum_coherencies_with_gradient_impl(
     }
 
     // Write partial derivative with respect to sersic parameters
-    for(int SRC = 0; SRC < C.nssrc; ++SRC)
+    for(int SRC = 0; SRC < DEXT(nssrc); ++SRC)
       for (int p = 0; p < 3; ++p)
       {
         polsum.x = dev_vis[3*SRC+p].x * delta1.x;
@@ -429,16 +432,17 @@ class RimeSumCoherenciesWithGradient(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
+        ntime, nbl, npolchan = slvr.dim_local_size('ntime', 'nbl', 'npolchan')
 
-        self.npolchans = 4*slvr.nchan
-
-        D = slvr.get_properties()
+          # Get a property dictionary off the solver
+        D = slvr.template_dict()
+        # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
-        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
+        D['rime_const_data_struct'] = slvr.const_data().string_def()
 
         D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
             mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
-            self.npolchans, slvr.nbl, slvr.ntime)
+            npolchan, nbl, ntime)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
             if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -468,9 +472,10 @@ class RimeSumCoherenciesWithGradient(Node):
         bl_per_block = D['BLOCKDIMY']
         times_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
-        bl_blocks = mbu.blocks_required(slvr.nbl, bl_per_block)
-        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
+        ntime, nbl, npolchan = slvr.dim_local_size('ntime', 'nbl', 'npolchan')
+        polchan_blocks = mbu.blocks_required(npolchan, polchans_per_block)
+        bl_blocks = mbu.blocks_required(nbl, bl_per_block)
+        time_blocks = mbu.blocks_required(ntime, times_per_block)
 
         return {
             'block' : (polchans_per_block, bl_per_block, times_per_block),
@@ -479,16 +484,17 @@ class RimeSumCoherenciesWithGradient(Node):
 
     def execute(self, solver, stream=None):
         slvr = solver
+        nparams, nssrc = slvr.dim_local_size('nparams','nssrc')
 
         if stream is not None:
             cuda.memcpy_htod_async(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer,
+                slvr.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer)
+                slvr.const_data().ndary())
 
         # The gaussian shape array can be empty if
         # no gaussian sources were specified.
@@ -516,9 +522,9 @@ class RimeSumCoherenciesWithGradient(Node):
         # first, nssrc sersic scalelengths
         # then, nssrc ellipticity 1st components
         # then, nssrc ellipticity 2nd components
-        slvr.X2_grad = np.zeros(slvr.nparams)
-        if slvr.nparams == 3*slvr.nssrc:
-            for p in xrange(slvr.nparams):
+        slvr.X2_grad = np.zeros(nparams)
+        if nparams == 3*nssrc:
+            for p in xrange(nparams):
                 slvr.X2_grad[p] = -2*gpuarray.sum(slvr.chi_sqrd_result_grad_gpu[p,:,:,:]).get()
 
         if not self.weight_vector:

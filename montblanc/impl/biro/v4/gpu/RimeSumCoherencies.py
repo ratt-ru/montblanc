@@ -279,7 +279,7 @@ void rime_sum_coherencies_impl(
     // Multiply the visibility by antenna 1's g term
     i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
     typename Tr::ct ant1_g_term = G_term[i];
-    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, polsum);
+    montblanc::jones_multiply_4x4_in_place<T>(ant1_g_term, polsum);
 
     // Multiply the visibility by antenna 2's g term
     i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
