@@ -166,7 +166,7 @@ class RimeMultiply(Node):
         slvr = solver
 
         D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
-        D.update(slvr.get_properties())
+        D.update(slvr.template_dict())
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
@@ -188,9 +188,11 @@ class RimeMultiply(Node):
 
     def get_kernel_params(self, solver):
         slvr = solver
+        nsrc, ntime, nbl, nchan = slvr.dim_local_size(
+            'nsrc', 'ntime', 'nbl', 'nchan')
         D = FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS
 
-        njones = slvr.nbl*slvr.nchan*slvr.ntime*slvr.nsrc
+        njones = nbl*nchan*ntime*nsrc
         jones_per_block = D['BLOCKDIMX'] if njones > D['BLOCKDIMX'] else njones
         jones_blocks = mbu.blocks_required(njones,jones_per_block)
 
@@ -201,9 +203,11 @@ class RimeMultiply(Node):
 
     def execute(self, solver):
         slvr = solver
+        nsrc, ntime, nbl, nchan = slvr.dim_local_size(
+            'nsrc', 'ntime', 'nbl', 'nchan')
 
         # Output jones matrix
-        njones = slvr.nbl*slvr.nchan*slvr.ntime*slvr.nsrc
+        njones = nbl*nchan*ntime*nsrc
         jsize = np.product(slvr.jones_shape) # Number of complex  numbers
 
         # TODO: This is all wrong and should be replaced with actual gpuarray's

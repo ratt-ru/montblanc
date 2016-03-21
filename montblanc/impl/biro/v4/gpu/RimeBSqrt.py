@@ -69,6 +69,9 @@ KERNEL_TEMPLATE = string.Template("""
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
+#define LEXT(name) C.name.extents[0]
+#define UEXT(name) C.name.extents[1]
+#define DEXT(name) (C.name.extents[1] - C.name.extents[0])
 
 template <
     typename T,
@@ -87,7 +90,7 @@ void rime_jones_B_sqrt_impl(
     int SRC = blockIdx.z*blockDim.z + threadIdx.z;
     #define POL (threadIdx.x & 0x3)
 
-    if(SRC >= C.nsrc || TIME >= C.ntime || POLCHAN >= C.npolchan)
+    if(SRC >= DEXT(nsrc) || TIME >= DEXT(ntime) || POLCHAN >= DEXT(npolchan))
         return;
 
     __shared__ T freq[BLOCKDIMX];
@@ -148,18 +151,19 @@ class RimeBSqrt(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-
-        self.npolchans = 4*slvr.nchan
+        nsrc, ntime, npolchan = slvr.dim_local_size(
+            'nsrc', 'ntime', 'npolchan')
 
         # Get a property dictionary off the solver
-        D = slvr.get_properties()
+        D = slvr.template_dict()
         # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
-        D['rime_const_data_struct'] = mbu.rime_const_data_struct()
+        D['rime_const_data_struct'] = slvr.const_data().string_def()
 
         D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
-            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
-            self.npolchans, slvr.ntime, slvr.nsrc)
+            mbu.redistribute_threads(
+                D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+                npolchan, ntime, nsrc)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
@@ -189,9 +193,10 @@ class RimeBSqrt(Node):
         times_per_block = D['BLOCKDIMY']
         srcs_per_block = D['BLOCKDIMZ']
 
-        polchan_blocks = mbu.blocks_required(self.npolchans, polchans_per_block)
-        time_blocks = mbu.blocks_required(slvr.ntime, times_per_block)
-        src_blocks = mbu.blocks_required(slvr.nsrc, srcs_per_block)
+        nsrc, ntime, npolchan = slvr.dim_local_size('nsrc', 'ntime', 'npolchan')
+        polchan_blocks = mbu.blocks_required(npolchan, polchans_per_block)
+        time_blocks = mbu.blocks_required(ntime, times_per_block)
+        src_blocks = mbu.blocks_required(nsrc, srcs_per_block)
 
         return {
             'block' : (polchans_per_block, times_per_block, srcs_per_block),
@@ -204,12 +209,12 @@ class RimeBSqrt(Node):
         if stream is not None:
             cuda.memcpy_htod_async(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer,
+                slvr.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
                 self.rime_const_data_gpu[0],
-                slvr.const_data_buffer)
+                slvr.const_data().ndary())
 
         self.kernel(slvr.stokes_gpu, slvr.alpha_gpu,
             slvr.frequency_gpu, slvr.B_sqrt_gpu,

@@ -50,7 +50,7 @@ class RimeReduction(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        C = solver.rime_const_data
+        C = solver.const_data().cdata()
 
         # Call pycuda's internal reduction kernel on
         # the chi squared result array. We slice this array
@@ -59,7 +59,8 @@ class RimeReduction(Node):
         # Note the returned result is a gpuarray
         # allocated with the supplied device memory pool
         self.X2_gpu_ary = gpuarray.sum(
-            slvr.chi_sqrd_result_gpu[0:C.ntime, 0:C.nbl, 0:C.nchan],
+            slvr.chi_sqrd_result_gpu[0:C.ntime.extents[1],
+                0:C.nbl.extents[1], 0:C.nchan.extents[1]],
             stream=stream, allocator=slvr.dev_mem_pool.allocate)
 
     def post_execution(self, solver, stream=None):

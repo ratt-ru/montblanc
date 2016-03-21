@@ -99,14 +99,15 @@ P = [
 
 def rand_uvw(slvr, ary):
     distance = 10
+    ntime, na = slvr.dim_local_size('ntime', 'na')
     # Distribute the antenna in a circle configuration
-    ant_angles = 2*np.pi*np.arange(slvr.na)/slvr.ft(slvr.na)
-    time_angle = np.arange(slvr.ntime)/slvr.ft(slvr.ntime)
+    ant_angles = 2*np.pi*np.arange(na)/slvr.ft(na)
+    time_angle = np.arange(ntime)/slvr.ft(ntime)
     time_ant_angles = time_angle[:,np.newaxis]*ant_angles[np.newaxis,:]
 
     ary[:,:,0] = distance*np.sin(time_ant_angles)                # U
     ary[:,:,1] = distance*np.sin(time_ant_angles)                # V
-    ary[:,:,2] = np.random.random(size=(slvr.ntime,slvr.na))*0.1 # W
+    ary[:,:,2] = np.random.random(size=(ntime,na))*0.1 # W
 
     # All antenna zero coordinate are set to (0,0,0)
     ary[:,0,:] = 0
@@ -175,8 +176,8 @@ A = [
         test=rand_sersic_shape),
 
     ary_dict('frequency', ('nchan',), 'ft',
-        default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.nchan),
-        test=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.nchan)),
+        default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan')),
+        test=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan'))),
 
     # Beam
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',
@@ -232,46 +233,36 @@ class BiroSolver(BaseSolver):
 
         super(BiroSolver, self).__init__(slvr_cfg)
 
+        self.register_default_dimensions()
+
         # Configure the dimensions of the beam cube
-        self.beam_lw = self.slvr_cfg[Options.E_BEAM_WIDTH]
-        self.beam_mh = self.slvr_cfg[Options.E_BEAM_HEIGHT]
-        self.beam_nud = self.slvr_cfg[Options.E_BEAM_DEPTH]
+        self.register_dimension('beam_lw',
+            slvr_cfg[Options.E_BEAM_WIDTH],
+            description='E Beam cube width in l coords')
+
+        self.register_dimension('beam_mh',
+            slvr_cfg[Options.E_BEAM_HEIGHT],
+            description='E Beam cube height in m coords')
+
+        self.register_dimension('beam_nud',
+            slvr_cfg[Options.E_BEAM_DEPTH],
+            description='E Beam cube height in nu coords')
 
         self.register_properties(P)
         self.register_arrays(A)
 
-        # Create a page-locked ndarray to hold constant GPU data
-        with self.context:
-            self.const_data_buffer = cuda.pagelocked_empty(
-                shape=mbu.rime_const_data_size(), dtype=np.int8)
+        self._const_data = mbu.create_rime_const_data(self, self.context)
 
-        # Now create a cdata object wrapping the page-locked
-        # ndarray and cast it to the rime_const_data c type.
-        self.rime_const_data_cpu = mbu.wrap_rime_const_data(
-            self.const_data_buffer)
-
-        # Initialise it with the current solver (self)
-        mbu.init_rime_const_data(self, self.rime_const_data_cpu)
-
-    def get_properties(self):
-        # Obtain base solver property dictionary
-        # and add the beam cube dimensions to it
-        D = super(BiroSolver, self).get_properties()
-
-        D.update({
-            Options.E_BEAM_WIDTH : self.beam_lw,
-            Options.E_BEAM_HEIGHT : self.beam_mh,
-            Options.E_BEAM_DEPTH : self.beam_nud
-        })
-
-        return D
+    def const_data(self):
+        return self._const_data
 
     def get_default_base_ant_pairs(self):
         """
         Return an np.array(shape=(2, nbl), dtype=np.int32]) containing the
         default antenna pairs for each baseline.
         """
-        return np.int32(np.triu_indices(self.na, 1))
+        na = self.dim_local_size('na')
+        return np.int32(np.triu_indices(na, 1))
 
     def get_default_ant_pairs(self):
         """
@@ -279,10 +270,12 @@ class BiroSolver(BaseSolver):
         containing the default antenna pairs for each timestep
         at each baseline.
         """
+
         # Create the antenna pair mapping, from upper triangle indices
         # based on the number of antenna.
-        return np.tile(self.get_default_base_ant_pairs(), self.ntime) \
-            .reshape(2, self.ntime, self.nbl)
+        ntime, nbl = self.dim_local_size('ntime', 'nbl')
+        return np.tile(self.get_default_base_ant_pairs(), ntime) \
+            .reshape(2, ntime, nbl)
 
     def get_ap_idx(self, default_ap=None, src=False, chan=False):
         """
@@ -324,16 +317,17 @@ class BiroSolver(BaseSolver):
         ned = sed + ced             # Nr of extra dimensions
         all = slice(None, None, 1)  # all slice
         idx = []                    # Index we're returning
+        nsrc, ntime, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nchan')
 
         # Create the source index, [np.newaxis,:,np.newaxis,np.newaxis] + [...]
         if src is True:
             src_slice = tuple(newdim(1) + [all] + newdim(2) + newdim(ced))
-            idx.append(np.arange(slvr.nsrc)[src_slice])
+            idx.append(np.arange(nsrc)[src_slice])
 
         # Create the time index, [np.newaxis] + [...]  + [:,np.newaxis] + [...]
         time_slice = tuple(newdim(1) + newdim(sed) +
             [all, np.newaxis] + newdim(ced))
-        idx.append(np.arange(slvr.ntime)[time_slice])
+        idx.append(np.arange(ntime)[time_slice])
 
         # Create the antenna pair index, [:] + [...]  + [np.newaxis,:] + [...]
         ap_slice = tuple([all] + newdim(sed) +
@@ -345,6 +339,6 @@ class BiroSolver(BaseSolver):
         if chan is True:
             chan_slice = tuple(newdim(1) + newdim(sed) +
                 [np.newaxis, np.newaxis] + [all])
-            idx.append(np.arange(slvr.nchan)[chan_slice])
+            idx.append(np.arange(nchan)[chan_slice])
 
         return tuple(idx)

@@ -34,7 +34,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         ta = self.tables['ant']
         tf = self.tables['freq']
 
-        na, nbl, ntime, nchan = solver.na, solver.nbl, solver.ntime, solver.nchan
+        ntime, na, nbl, nchan = solver.dim_global_size('ntime', 'na', 'nbl', 'nchan')
         data_order = slvr_cfg.get(Options.DATA_ORDER, Options.DATA_ORDER_CASA)
 
         # Define transpose axes to convert file uvw order
@@ -63,9 +63,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         ms_uvw = tm.getcol('UVW')
         assert ms_uvw.shape == uvw_shape, \
             'MS UVW shape %s != expected %s' % (ms_uvw.shape,uvw_shape)
-        uvw_rec = solver.get_array_record('uvw')
 
-        uvw=np.empty(shape=uvw_rec.shape, dtype=uvw_rec.dtype)
+        uvw=np.empty(shape=solver.uvw_shape, dtype=solver.uvw_dtype)
         uvw[:,:,1:na] = ms_uvw.reshape(file_uvw_shape).transpose(uvw_transpose) \
             .astype(solver.ft)[:,:,:na-1]
         uvw[:,:,0] = solver.ft(0)

@@ -28,11 +28,7 @@ from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 from sky_model_parser import parse_sky_model
 
 from const_data import (
-    rime_const_data_members,
-    rime_const_data_struct,
-    rime_const_data_size,
-    wrap_rime_const_data,
-    init_rime_const_data)
+    create_rime_const_data)
 
 from montblanc.src_types import (
     source_types,
@@ -42,6 +38,9 @@ from montblanc.src_types import (
     source_range,
     source_range_tuple,
     source_range_slices)
+
+from montblanc.dims import (
+    create_dim_data)
 
 def nr_of_baselines(na, auto_correlations=False):
     """
@@ -93,6 +92,12 @@ def dtype_name(name):
 def setter_name(name):
     """ Constructs a name for the property, based on the property name """
     return 'set_' + name
+
+def fmt_dimension_line(name,description,size):
+    return '%-*s%-*s%-*s' % (
+        20,name,
+        40,description,
+        20,size)
 
 def fmt_array_line(name,size,dtype,cpu,gpu,shape):
     """ Format array parameters on an 80 character width line """
@@ -167,7 +172,7 @@ def flatten(nested):
 
     return flat_return
 
-def dict_array_bytes(ary, props):
+def dict_array_bytes(ary, template):
     """
     Return the number of bytes required by an array
 
@@ -175,7 +180,7 @@ def dict_array_bytes(ary, props):
     ---------------
     ary : dict
         Dictionary representation of an array
-    props : dict
+    template : dict
         A dictionary of key-values, used to replace any
         string values in the array with concrete integral
         values
@@ -185,12 +190,12 @@ def dict_array_bytes(ary, props):
     The number of bytes required to represent
     the array.
     """
-    shape = shape_from_str_tuple(ary['shape'], props)
-    dtype = dtype_from_str(ary['dtype'], props)
+    shape = shape_from_str_tuple(ary['shape'], template)
+    dtype = dtype_from_str(ary['dtype'], template)
 
     return array_bytes(shape, dtype)
 
-def dict_array_bytes_required(arrays, props):
+def dict_array_bytes_required(arrays, template):
     """
     Return the number of bytes required by
     a dictionary of arrays.
@@ -199,7 +204,7 @@ def dict_array_bytes_required(arrays, props):
     ---------------
     arrays : list
         A list of dictionaries defining the arrays
-    props : dict
+    template : dict
         A dictionary of key-values, used to replace any
         string values in the arrays with concrete integral
         values
@@ -209,7 +214,7 @@ def dict_array_bytes_required(arrays, props):
     The number of bytes required to represent
     all the arrays.
     """
-    return np.sum([dict_array_bytes(ary, props)
+    return np.sum([dict_array_bytes(ary, template)
         for ary in arrays])
 
 __DIM_REDUCTION_RE = re.compile(    # Capture Groups and Subgroups
@@ -219,7 +224,7 @@ __DIM_REDUCTION_RE = re.compile(    # Capture Groups and Subgroups
         "(?P<percent>\%?)"          # 2.2  Possibly followed by a percentage
     ")?\s*?$")                      #      Capture group 2 possibly occurs
 
-def viable_dim_config(bytes_available, arrays, props,
+def viable_dim_config(bytes_available, arrays, template,
         dim_ord, nsolvers=1):
     """
     Returns the number of timesteps possible, given the registered arrays
@@ -232,10 +237,10 @@ def viable_dim_config(bytes_available, arrays, props,
         for solving the problem.
     arrays : list
         List of dictionaries describing the arrays
-    props : dict
+    template : dict
         Dictionary containing key-values that will be used
         to replace any string representations of dimensions
-        and types. slvr.get_properties() will return something
+        and types. slvr.template_dict() will return something
         suitable.
     dim_ord : list
         list of dimension string names that the problem should be
@@ -277,16 +282,22 @@ def viable_dim_config(bytes_available, arrays, props,
         bytes_available = 0
 
     modified_dims = {}
-    P = props.copy()
+    T = template.copy()
 
-    bytes_used = dict_array_bytes_required(arrays, P)*nsolvers
+    bytes_used = dict_array_bytes_required(arrays, T)*nsolvers
 
     # While more bytes are used than are available, set
     # dimensions to one in the order specified by the
     # dim_ord argument.
     while bytes_used > bytes_available:
         try:
-            dims = dim_ord.pop(0).strip().split('&')
+            dims = dim_ord.pop(0)
+            montblanc.log.debug('Applying reduction {s}. '
+                'Bytes available {a} used {u}'.format(
+                    s=dims,
+                    a=fmt_bytes(bytes_available),
+                    u=fmt_bytes(bytes_used)))
+            dims = dims.strip().split('&')
         except IndexError:
             # No more dimensions available for reducing
             # the problem size. Unable to fit the problem
@@ -311,7 +322,7 @@ def viable_dim_config(bytes_available, arrays, props,
 
             # Attempt reduction by a percentage
             if dim_percent == '%':
-                dim_value = int(P[dim_name] * int(dim_value) / 100.0)
+                dim_value = int(T[dim_name] * int(dim_value) / 100.0)
                 if dim_value < 1:
                     # This can't be reduced any further
                     dim_value = 1
@@ -321,20 +332,19 @@ def viable_dim_config(bytes_available, arrays, props,
                     dim_ord.insert(0, dim)
 
             # Apply the dimension reduction
-            if P[dim_name] > dim_value:
+            if T[dim_name] > dim_value:
                 modified_dims[dim_name] = dim_value
-                P[dim_name] = dim_value
+                T[dim_name] = dim_value
             else:
-                montblanc.log.warn(('Tried to reduce dimension %s '
-                    ' of size %d to larger value %d. '
-                    ' This reduction has been ignored.') % (
-                        dim_name, P[dim_name], dim_value) )
+                montblanc.log.info(('Ignored reduction of {d} '
+                    'of size {s} to {v}. ').format(
+                        d=dim_name, s=T[dim_name], v=dim_value))
 
-        bytes_used = dict_array_bytes_required(arrays, P)*nsolvers
+        bytes_used = dict_array_bytes_required(arrays, T)*nsolvers
 
     return True, modified_dims
 
-def viable_timesteps(bytes_available, arrays, props):
+def viable_timesteps(bytes_available, arrays, template):
     """
     Returns the number of timesteps possible, given the registered arrays
     and a memory budget defined by bytes_available
@@ -351,7 +361,7 @@ def viable_timesteps(bytes_available, arrays, props):
     # Get the shape product of each array, EXCLUDING any ntime dimension,
     # multiplied by the size of the array type in bytes.
     products = np.array([array_bytes(
-        shape_from_str_tuple(t.sshape, props,
+        shape_from_str_tuple(t.sshape, template,
             ignore=['ntime']),
         t.dtype)
         for t in arrays.values()])
@@ -359,7 +369,7 @@ def viable_timesteps(bytes_available, arrays, props):
     # TODO: Remove duplicate code paths
     # This really replicates solver.bytes_required
     bytes_required = np.array([array_bytes(
-        shape_from_str_tuple(t.sshape, props),
+        shape_from_str_tuple(t.sshape, template),
         t.dtype)
         for t in arrays.values()]).sum()
 
@@ -370,13 +380,13 @@ def viable_timesteps(bytes_available, arrays, props):
 
     # Check that if we substitute ntime for x, we agree on the
     # memory requirements
-    assert a + b*props['ntime'] == bytes_required
+    assert a + b*template['ntime'] == bytes_required
 
     # Given the number of bytes available,
     # how many timesteps can we fit in our budget?
     return (bytes_available - a + b - 1) // b
 
-def dtype_from_str(sdtype, props):
+def dtype_from_str(sdtype, template):
     """
     Substitutes string dtype parameters
     using a a property dictionary
@@ -384,19 +394,20 @@ def dtype_from_str(sdtype, props):
     Parameters
     ----------
         sdtype :
-            string defining the dtype
-        props
+            string defining the dtype. e.g. 'ft'
+        template:
+            Dictionary contain actual types, {'ft' : np.float32' }
 
     Returns
         sdtype if it isn't a string
-        props[sdtype] otherwise
+        template[sdtype] otherwise
 
     """
 
     if not isinstance(sdtype, str):
         return sdtype
 
-    return props[sdtype]
+    return template[sdtype]
 
 def shape_from_str_tuple(sshape, variables, ignore=None):
     """

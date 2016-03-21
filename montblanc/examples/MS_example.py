@@ -87,12 +87,13 @@ if __name__ == '__main__':
 
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
-        if slvr.ngsrc > 0:
+        if slvr.dim_global_size('ngsrc') > 0:
             gauss_shape = mbu.random_like(slvr.gauss_shape_gpu)*0.1
             slvr.transfer_gauss_shape(gauss_shape)
 
         # Create a bayesian model and upload it to the GPU
         bayes_data = mbu.random_like(slvr.bayes_data_gpu)
+        slvr.transfer_bayes_data(bayes_data)
 
         # Generate random antenna pointing errors
         point_errors = mbu.random_like(slvr.point_errors_gpu)

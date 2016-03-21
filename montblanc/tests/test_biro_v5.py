@@ -148,48 +148,48 @@ class TestBiroV5(unittest.TestCase):
         with solver(slvr_cfg) as slvr:
 
             A = copy.deepcopy(BSV4mod.A)
-            P = slvr.get_properties()
+            T = slvr.template_dict()
 
-            viable, MP = mbu.viable_dim_config(128*1024*1024,
-                A, P, ['ntime', 'nbl&na', 'nchan'], 1)
-            self.assertTrue(viable is True and len(MP) == 1 and
-                MP['ntime'] == 1)
+            viable, MT = mbu.viable_dim_config(128*1024*1024,
+                A, T, ['ntime', 'nbl&na', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MT) == 1 and
+                MT['ntime'] == 1)
 
-            viable, MP = mbu.viable_dim_config(8*1024*1024,
-                A, P, ['ntime', 'nbl&na', 'nchan'], 1)
-            self.assertTrue(viable is True and len(MP) == 3 and
-                MP['ntime'] == 1 and
-                MP['na'] == 1 and
-                MP['nbl'] == 1)
+            viable, MT = mbu.viable_dim_config(8*1024*1024,
+                A, T, ['ntime', 'nbl&na', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MT) == 3 and
+                MT['ntime'] == 1 and
+                MT['na'] == 1 and
+                MT['nbl'] == 1)
 
-            viable, MP = mbu.viable_dim_config(1*1024*1024,
-                A, P, ['ntime', 'nbl&na', 'nchan'], 1)
-            self.assertTrue(viable is True and len(MP) == 4 and
-                MP['ntime'] == 1 and
-                MP['na'] == 1 and
-                MP['nbl'] == 1 and
-                MP['nchan'] == 1)
+            viable, MT = mbu.viable_dim_config(1*1024*1024,
+                A, T, ['ntime', 'nbl&na', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MT) == 4 and
+                MT['ntime'] == 1 and
+                MT['na'] == 1 and
+                MT['nbl'] == 1 and
+                MT['nchan'] == 1)
 
-            viable, MP = mbu.viable_dim_config(512*1024,
-                A, P, ['ntime', 'nbl=6&na=3', 'nchan'], 1)
-            self.assertTrue(viable is True and len(MP) == 4 and
-                MP['ntime'] == 1 and
-                MP['na'] == 3 and
-                MP['nbl'] == 6 and
-                MP['nchan'] == 1)
+            viable, MT = mbu.viable_dim_config(512*1024,
+                A, T, ['ntime', 'nbl=6&na=3', 'nchan'], 1)
+            self.assertTrue(viable is True and len(MT) == 4 and
+                MT['ntime'] == 1 and
+                MT['na'] == 3 and
+                MT['nbl'] == 6 and
+                MT['nchan'] == 1)
 
-            viable, MP = mbu.viable_dim_config(
-                1024, A, P, ['ntime', 'nbl&na'], 1)
-            self.assertTrue(viable is False and len(MP) == 3 and
-                MP['ntime'] == 1 and
-                MP['na'] == 1 and
-                MP['nbl'] == 1)
+            viable, MT = mbu.viable_dim_config(
+                1024, A, T, ['ntime', 'nbl&na'], 1)
+            self.assertTrue(viable is False and len(MT) == 3 and
+                MT['ntime'] == 1 and
+                MT['na'] == 1 and
+                MT['nbl'] == 1)
 
             # Try with 3 solvers.
-            viable, MP = mbu.viable_dim_config(128*1024*1024,
-                A, P, ['ntime', 'nbl&na', 'nchan'], 3)
-            self.assertTrue(viable is True and len(MP) == 1 and
-                MP['ntime'] == 1)
+            viable, MT = mbu.viable_dim_config(128*1024*1024,
+                A, T, ['ntime', 'nbl&na', 'nchan'], 3)
+            self.assertTrue(viable is True and len(MT) == 1 and
+                MT['ntime'] == 1)
 
 
     @unittest.skip('Skip timing test')

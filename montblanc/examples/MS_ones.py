@@ -45,9 +45,10 @@ if __name__ == '__main__':
 
     # Get the solver.
     with montblanc.rime_solver(slvr_cfg) as slvr:
+        nsrc = slvr.dim_global_size('nsrc')
         # Create point sources at zeros
-        l=slvr.ft(np.zeros(slvr.nsrc))
-        m=slvr.ft(np.zeros(slvr.nsrc))
+        l=slvr.ft(np.zeros(nsrc))
+        m=slvr.ft(np.zeros(nsrc))
         lm=mbu.shape_list([l,m], shape=slvr.lm_shape, dtype=slvr.lm_dtype)
 
         slvr.transfer_lm(lm)

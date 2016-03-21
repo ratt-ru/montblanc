@@ -113,7 +113,7 @@ class CompositeBiroSolver(BaseSolver):
 
             # Work out how many timesteps we can fit in our memory budget
             self.vtime = mbu.viable_timesteps(mem_budget,
-                self.arrays, self.get_properties())
+                self._arrays, self.template_dict())
 
             (free_mem,total_mem) = cuda.mem_get_info()
             #print 'free %s total %s ntime %s vtime %s' \
@@ -170,7 +170,7 @@ class CompositeBiroSolver(BaseSolver):
             # Indicate that all numpy arrays on the CompositeSolver
             # have been transferred to the sub-solvers
             slvr.was_transferred = {}.fromkeys(
-                [v.name for v in self.arrays.itervalues()], True)
+                [v.name for v in self._arrays.itervalues()], True)
 
         self.use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
         self.initialised = False
@@ -191,7 +191,7 @@ class CompositeBiroSolver(BaseSolver):
         subslvr = self.solvers[i]
         stream = self.stream[i]
 
-        for r in self.arrays.itervalues():
+        for r in self._arrays.itervalues():
             # Is there anything to transfer for this array?
             if not r.cpu:
                 continue
