@@ -126,7 +126,7 @@ class BiroSolverConfigurationOptions(Options):
 
         NPARAMS: {
             Options.DESCRIPTION: NPARAMS_DESCRIPTION,
-            Options.DEFAULT: DEFAUL_NPARAMS,
+            Options.DEFAULT: DEFAULT_NPARAMS,
             Options.REQUIRED: False
         },
 
