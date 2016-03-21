@@ -251,6 +251,7 @@ class BiroSolver(BaseSolver):
         # Configure the dimensions of the chi squared gradient
         self.register_dimension('nparams',
             slvr_cfg[Options.NPARAMS],
+            zero_valid=True,
             description='number of sersic parameters = gradient dimension')
 
         self.register_properties(P)
