@@ -33,8 +33,7 @@ import montblanc
 import montblanc.util as mbu
 
 from montblanc.BaseSolver import BaseSolver
-from montblanc.config import (BiroSolverConfiguration,
-    BiroSolverConfigurationOptions as Options)
+from montblanc.config import BiroSolverConfig as Options
 
 from montblanc.enums import DIMDATA
 
@@ -148,7 +147,7 @@ class CompositeBiroSolver(BaseSolver):
                 mbu.fmt_bytes(mem), nsolvers, ', '.join(changes))
 
         # Create the sub solver configuration
-        subslvr_cfg = BiroSolverConfiguration(**slvr_cfg)
+        subslvr_cfg = slvr_cfg.copy()
         subslvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_DEFAULTS
         subslvr_cfg[Options.CONTEXT] = ctx
         subslvr_cfg[Options.SOLVER_TYPE] = Options.SOLVER_TYPE_SLAVE

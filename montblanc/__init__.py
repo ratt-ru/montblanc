@@ -157,10 +157,10 @@ def rime_solver_cfg(**kwargs):
     %s
     """
 
-    from montblanc.impl.biro.slvr_config import (BiroSolverConfiguration,
-        BiroSolverConfigurationOptions as Options)
+    from montblanc.impl.biro.slvr_config import (
+        BiroSolverConfig as Options)
 
-    slvr_cfg = BiroSolverConfiguration(**kwargs)
+    slvr_cfg = Options().gen_cfg(**kwargs)
 
     # Assume a MeasurementSet data source, if none is supplied
     slvr_cfg.setdefault(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)

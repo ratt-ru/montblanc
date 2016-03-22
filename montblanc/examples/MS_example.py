@@ -24,8 +24,7 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.config import (BiroSolverConfiguration,
-    BiroSolverConfigurationOptions as Options)
+from montblanc.config import BiroSolverConfig as Options
 
 if __name__ == '__main__':
     import sys
@@ -43,7 +42,7 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     # Set the logging level
-    montblanc.log.setLevel(logging.WARN)
+    montblanc.log.setLevel(logging.INFO)
 
     slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
         sources=montblanc.sources(point=args.npsrc, gaussian=args.ngsrc, sersic=args.nssrc),

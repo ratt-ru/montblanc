@@ -23,7 +23,7 @@ import numpy as np
 import montblanc
 
 from montblanc.BaseSolver import BaseSolver
-from montblanc.config import BiroSolverConfigurationOptions as Options
+from montblanc.config import BiroSolverConfig as Options
 
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum

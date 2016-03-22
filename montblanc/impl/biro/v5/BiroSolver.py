@@ -34,8 +34,7 @@ from montblanc.impl.biro.v5.gpu.RimeReduction import RimeReduction
 
 from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
-from montblanc.config import (BiroSolverConfiguration,
-    BiroSolverConfigurationOptions as Options)
+from montblanc.config import BiroSolverConfig as Options
 
 class BiroSolver(BaseSolver):
     """ BIRO Solver Implementation """

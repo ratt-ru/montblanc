@@ -18,10 +18,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from montblanc.slvr_config import (SolverConfiguration,
-    SolverConfigurationOptions)
-from montblanc.impl.biro.slvr_config import (BiroSolverConfiguration,
-    BiroSolverConfigurationOptions)
+from montblanc.slvr_config import (
+    SolverConfig,
+    SolverConfig as SCO)
+from montblanc.impl.biro.slvr_config import (
+    BiroSolverConfig,
+    BiroSolverConfig as BSCO)
 
 __PADDING = ' '*4
 
@@ -62,20 +64,21 @@ def __gen_opt_str_list(descriptions):
 
     iterator = descriptions.iteritems()
 
-    for option, info in iter(sorted(iterator)):
-        l.append('Option:\n%s%s' % (__PADDING,option))
+    from textwrap import TextWrapper
 
-        default = info.get(SolverConfigurationOptions.DEFAULT)
-        l.append('Default Value:\n%s%s' % (__PADDING,default))
+    W = TextWrapper(initial_indent=' '*4, subsequent_indent=' '*8)
 
-        valid = info.get(SolverConfigurationOptions.VALID, None)
+    for option, info in iter(sorted(iterator)):        
+        l.append(W.fill('Option: {o}'.format(o=option)))
+        l.append(W.fill('Default Value: {dv}'.format(dv=info.get(SCO.DEFAULT))))
+
+        valid = info.get(SCO.VALID, None)
         if valid is not None:
-            l.append('Valid Values:\n%s%s' % (__PADDING,valid))
+            l.append(W.fill('Valid Values: {vv}'.format(vv=valid)))
 
-        description = info.get(SolverConfigurationOptions.DESCRIPTION, None)
+        description = info.get(SCO.DESCRIPTION, None)
         if description is not None:
-            l.extend(__fmt_description('Description', description))
-
+            l.append(W.fill('Description: {d}'.format(d=description)))
 
         l.append('\n')
 
@@ -87,7 +90,7 @@ def describe_options():
     options, their defaults and the valid
     values that they may be set to
     """    
-    opt_list = __gen_opt_str_list(SolverConfigurationOptions.descriptions)
-    opt_list.extend(__gen_opt_str_list(BiroSolverConfigurationOptions.descriptions))
+    opt_list = __gen_opt_str_list(SCO.descriptions)
+    opt_list.extend(__gen_opt_str_list(BSCO.descriptions))
 
     return '\n'.join(opt_list)

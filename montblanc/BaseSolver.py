@@ -43,7 +43,7 @@ import montblanc.util as mbu
 
 from montblanc.enums import (DIMDATA)
 
-from montblanc.config import (BiroSolverConfigurationOptions as Options)
+from montblanc.config import (BiroSolverConfig as Options)
 
 class PipelineDescriptor(object):
     """ Descriptor class for pipelines """

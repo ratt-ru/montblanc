@@ -24,6 +24,7 @@ import unittest
 import numpy as np
 import time
 
+import montblanc
 import montblanc.factory
 
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
@@ -31,8 +32,7 @@ from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v2.cpu.SolverCPU import SolverCPU
 from montblanc.pipeline import Pipeline
 
-from montblanc.config import (BiroSolverConfiguration,
-    BiroSolverConfigurationOptions as Options)
+from montblanc.config import BiroSolverConfig as Options
 
 def solver(slvr_cfg, **kwargs):
     slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
@@ -67,7 +67,7 @@ def src_perms(slvr_cfg, permute_weights=False):
     """
 
     if slvr_cfg is None:
-        slvr_cfg = BiroSolverConfiguration()
+        slvr_cfg = montblanc.rime_solver_cfg()
 
     from montblanc.src_types import SOURCE_VAR_TYPES
 
@@ -85,7 +85,7 @@ def src_perms(slvr_cfg, permute_weights=False):
             if count == 1:
                 continue
 
-            params = BiroSolverConfiguration(**slvr_cfg)
+            params = montblanc.rime_solver_cfg(**slvr_cfg)
             params[Options.WEIGHT_VECTOR] = wv
             src_dict = {s: p[i] for i,s in enumerate(src_types)}
             params[Options.SOURCES] = montblanc.sources(**src_dict)
@@ -138,7 +138,7 @@ class TestBiroV2(unittest.TestCase):
     def test_EK_float(self):
         """ Single precision EK test  """
 
-        slvr_cfg = BiroSolverConfiguration(na=64, ntime=10, nchan=64,
+        slvr_cfg = montblanc.rime_solver_cfg(na=64, ntime=10, nchan=64,
             sources=montblanc.sources(point=10, gaussian=10, sersic=10),
             dtype=Options.DTYPE_FLOAT, pipeline=Pipeline([RimeEK()]))
 
@@ -147,7 +147,7 @@ class TestBiroV2(unittest.TestCase):
 
     def test_EK_double(self):
         """ Double precision EK test """
-        slvr_cfg = BiroSolverConfiguration(na=64, ntime=10, nchan=64,
+        slvr_cfg = montblanc.rime_solver_cfg(na=64, ntime=10, nchan=64,
             sources=montblanc.sources(point=10, gaussian=10, sersic=10),
             dtype=Options.DTYPE_DOUBLE, pipeline=Pipeline([RimeEK()]))
 
@@ -182,7 +182,7 @@ class TestBiroV2(unittest.TestCase):
 
     def test_B_sum_float(self):
         """ Test the B sum float kernel """
-        slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=48,
+        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=20, nchan=48,
             dtype=Options.DTYPE_FLOAT)
 
         for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
@@ -192,7 +192,7 @@ class TestBiroV2(unittest.TestCase):
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """
-        slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=48,
+        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=20, nchan=48,
             dtype=Options.DTYPE_DOUBLE)
 
         for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):

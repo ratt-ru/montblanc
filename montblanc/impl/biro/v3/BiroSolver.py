@@ -26,7 +26,7 @@ from montblanc.impl.biro.v3.gpu.RimeGaussBSum import RimeGaussBSum
 from montblanc.BaseSolver import BaseSolver
 
 from montblanc.config import (BiroSolverConfiguration,
-    BiroSolverConfigurationOptions as Options)
+    BiroSolverConfig as Options)
 
 class BiroSolver(BaseSolver):
     """ Solver implementation for BIRO """

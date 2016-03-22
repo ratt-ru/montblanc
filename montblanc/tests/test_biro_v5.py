@@ -29,8 +29,7 @@ import montblanc.util as mbu
 
 from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
 
-from montblanc.config import (BiroSolverConfiguration,
-    BiroSolverConfigurationOptions as Options)
+from montblanc.config import BiroSolverConfig as Options
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 
@@ -65,7 +64,7 @@ class TestBiroV5(unittest.TestCase):
         """ Basic Test """
         cmp = { 'rtol' : 1e-4}
 
-        slvr_cfg = BiroSolverConfiguration(na=14, ntime=27, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=27, nchan=32,
             sources=montblanc.sources(point=50, gaussian=50),
             dtype=Options.DTYPE_DOUBLE)
 
@@ -113,7 +112,7 @@ class TestBiroV5(unittest.TestCase):
     def test_big_budget(self):
         wv = True
 
-        slvr_cfg = BiroSolverConfiguration(na=64, ntime=10000, nchan=32768,
+        slvr_cfg = montblanc.rime_solver_cfg(na=64, ntime=10000, nchan=32768,
             sources=montblanc.sources(point=10000, gaussian=10000, sersic=10000),
             beam_lw=1, beam_mh=1, beam_nud=1,
             weight_vector=wv, nsolvers=3,
@@ -125,7 +124,7 @@ class TestBiroV5(unittest.TestCase):
     def test_medium_budget(self):
         wv = True
 
-        slvr_cfg = BiroSolverConfiguration(na=27, ntime=100, nchan=64,
+        slvr_cfg = montblanc.rime_solver_cfg(na=27, ntime=100, nchan=64,
             sources=montblanc.sources(point=100, gaussian=100, sersic=100),
             beam_lw=1, beam_mh=1, beam_nud=1,
             weight_vector=wv, nsolvers=3,
@@ -139,7 +138,7 @@ class TestBiroV5(unittest.TestCase):
     def test_smart_budget(self):
         wv = True
 
-        slvr_cfg = BiroSolverConfiguration(na=28, ntime=27, nchan=128,
+        slvr_cfg = montblanc.rime_solver_cfg(na=28, ntime=27, nchan=128,
             sources=montblanc.sources(point=50, gaussian=50),
             beam_lw=1, beam_mh=1, beam_nud=1,
             weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3,
