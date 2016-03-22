@@ -463,7 +463,7 @@ class SolverCPU(object):
         ntime, nbl, nchan = slvr.dim_local_size('ntime', 'nbl', 'nchan')
 
         try:
-            if vis is None: vis = self.compute_ebk_vis()
+            if vis is None: vis = self.compute_gebk_vis()
             if bayes_data is None: bayes_data = slvr.bayes_data_cpu
             if flag is None: flag = slvr.flag_cpu
 
