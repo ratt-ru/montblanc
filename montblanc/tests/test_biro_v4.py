@@ -249,7 +249,7 @@ class TestBiroV4(unittest.TestCase):
             with solver(p_slvr_cfg) as slvr:
 
                 self.sum_coherencies_test_impl(slvr,
-                    cmp={'rtol': 1e-4},
+                    cmp={'rtol': 1e-3},
                     weight_vector=wv)
 
     def test_sum_coherencies_double(self):

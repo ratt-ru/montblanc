@@ -189,6 +189,12 @@ A = [
         default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:],
         test=lambda slvr, ary: rary(ary)),
 
+    # Visibility flagging arrays
+    ary_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.int32,
+        default=0,
+        test=lambda slvr, ary: np.random.random_integers(
+            0, 1, size=ary.shape)),
+
     # Bayesian Data
     ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft',
         default=1,

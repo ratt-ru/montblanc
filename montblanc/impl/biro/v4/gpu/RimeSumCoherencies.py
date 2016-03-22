@@ -107,6 +107,7 @@ void rime_sum_coherencies_impl(
     typename Tr::ft * frequency,
     int * ant_pairs,
     typename Tr::ct * jones,
+    int * flag,
     typename Tr::ft * weight_vector,
     typename Tr::ct * bayes_data,
     typename Tr::ct * G_term,
@@ -286,12 +287,20 @@ void rime_sum_coherencies_impl(
     typename Tr::ct ant2_g_term = G_term[i];
     montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, ant2_g_term);
 
-    // Write out the visibilities
+    // Compute the chi squared sum terms
     i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
+    typename Tr::ct delta = bayes_data[i];
+
+    // Zero the polarisation if it is flagged
+    if(flag[i] > 0)
+    {
+        ant1_g_term.x = 0; ant1_g_term.y = 0;
+        delta.x = 0; delta.y = 0;
+    }
+
+    // Write out the visibilities
     visibilities[i] = ant1_g_term;
 
-    // Compute the chi squared sum terms
-    typename Tr::ct delta = bayes_data[i];
     delta.x -= ant1_g_term.x; delta.y -= ant1_g_term.y;
     delta.x *= delta.x; delta.y *= delta.y;
 
@@ -347,6 +356,7 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ft * frequency, \
     int * ant_pairs, \
     ct * jones, \
+    int * flag, \
     ft * weight_vector, \
     ct * bayes_data, \
     ct * G_term, \
@@ -354,7 +364,7 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ft * chi_sqrd_result) \
 { \
     rime_sum_coherencies_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
-        frequency, ant_pairs, jones, \
+        frequency, ant_pairs, jones, flag, \
         weight_vector, bayes_data, G_term, \
         visibilities, chi_sqrd_result); \
 }
@@ -448,7 +458,7 @@ class RimeSumCoherencies(Node):
 
         self.kernel(slvr.uvw_gpu, gauss, sersic,
             slvr.frequency_gpu, slvr.ant_pairs_gpu,
-            slvr.jones_gpu, slvr.weight_vector_gpu,
+            slvr.jones_gpu, slvr.flag_gpu, slvr.weight_vector_gpu,
             slvr.bayes_data_gpu, slvr.G_term_gpu,
             slvr.vis_gpu, slvr.chi_sqrd_result_gpu,
             stream=stream, **self.launch_params)
