@@ -216,17 +216,14 @@ class SolverConfigurationOptions(object):
 class SolverConfiguration(dict):
     """
     Object defining the Solver Configuration. Inherits from dict.
-
     Tracks the following quantities defining the problem size
       - timesteps
       - antenna
       - channels
       - sources
-
     the data type
       - float
       - double
-
     the data source for the solver
       - None (data takes defaults)
       - A Measurement Set
@@ -289,3 +286,4 @@ class SolverConfiguration(dict):
         for name, info in descriptions.iteritems():
             if Options.DEFAULT in info:
                 self.setdefault(name, info.get(Options.DEFAULT))
+

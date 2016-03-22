@@ -45,6 +45,11 @@ class BiroSolverConfigurationOptions(Options):
         'Governs the level of discretisation of '
         'the nu (frequency) dimension.')
 
+    NPARAMS = 'nparams'
+    DEFAULT_NPARAMS = 0
+    NPARAMS_DESCRIPTION = (
+        'X2 gradient size.')
+
     # Should a weight vector (sigma) be used to
     # when calculating the chi-squared values?
     WEIGHT_VECTOR = 'weight_vector'
@@ -118,6 +123,13 @@ class BiroSolverConfigurationOptions(Options):
             Options.DEFAULT: DEFAULT_E_BEAM_DEPTH,
             Options.REQUIRED: True
         },
+
+        NPARAMS: {
+            Options.DESCRIPTION: NPARAMS_DESCRIPTION,
+            Options.DEFAULT: DEFAULT_NPARAMS,
+            Options.REQUIRED: False
+        },
+
     }
 
 

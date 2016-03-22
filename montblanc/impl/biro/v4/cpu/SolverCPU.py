@@ -82,7 +82,7 @@ class SolverCPU(object):
 
     def compute_sersic_shape(self):
         """
-        Compute the shape values for the sersic (exponential) sources.
+        Compute shape alues for the sersic (exponential) sources
 
         Returns a (nssrc, ntime, nbl, nchan) matrix of floating point scalars.
         """
@@ -141,6 +141,7 @@ class SolverCPU(object):
 
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
+
 
     def compute_k_jones_scalar_per_ant(self):
         """
@@ -617,6 +618,137 @@ class SolverCPU(object):
 
         return vis
 
+
+        def compute_sersic_derivatives(self):
+        """
+        Compute the partial derivative values for the sersic (exponential) sources.
+        Returns a (nssrc, ntime, nbl, nchan) matrix of floating point scalars.
+        """
+
+        slvr = self.solver
+        nssrc, ntime, nbl, nchan  = slvr.dim_local_size('nssrc', 'ntime', 'nbl', 'nchan')
+
+        try:
+            ap = slvr.get_ap_idx()
+
+            # Calculate per baseline u from per antenna u
+            u = slvr.uvw_cpu[:,:,0][ap]
+            u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
+
+            # Calculate per baseline v from per antenna v
+            v = slvr.uvw_cpu[:,:,1][ap]
+            v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
+
+            # Calculate per baseline w from per antenna w
+            w = slvr.uvw_cpu[:,:,2][ap]
+            w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
+
+            e1 = slvr.sersic_shape_cpu[0]
+            e2 = slvr.sersic_shape_cpu[1]
+            R = slvr.sersic_shape_cpu[2]
+
+            # OK, try obtain the same results with the fwhm factored out!
+            # u1 = u*(1+e1) - v*e2
+            # v1 = u*e2 + v*(1-e1)
+            u1 = ne.evaluate('u_1_e1 + v_e2',
+                {'u_1_e1': np.outer(np.ones(nssrc)+e1, u), 'v_e2' : np.outer(e2, v)})\
+                .reshape(nssrc, ntime,nbl)
+            v1 = ne.evaluate('u_e2 + v_1_e1', {
+                'u_e2' : np.outer(e2, u), 'v_1_e1' : np.outer(np.ones(nssrc)-e1,v)})\
+                .reshape(nssrc, ntime,nbl)
+
+            # Obvious given the above reshape
+            assert u1.shape == (nssrc, ntime, nbl)
+            assert v1.shape == (nssrc, ntime, nbl)
+
+            scale_uv = (slvr.two_pi_over_c * slvr.frequency_cpu)\
+                [np.newaxis, np.newaxis, np.newaxis, :]
+
+            den1 = ne.evaluate('(u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
+                local_dict={
+                    'u1': u1[:, :, :, np.newaxis],
+                    'v1': v1[:, :, :, np.newaxis],
+                    'scale_uv': scale_uv,
+                    'R': (R / (1 - e1 * e1 - e2 * e2))
+                        [:,np.newaxis,np.newaxis,np.newaxis]})
+
+            assert den1.shape == (nssrc, ntime, nbl, nchan)
+
+            # partial derivatives with respect to scalelength
+            slvr.vis_dR = ne.evaluate('den1/(R*(1+den1*sqrt(den1)))',
+                {  
+                  'R' : R,
+                  'den1' : den1 }) 
+
+            # partial derivative with respect to e1
+            num = ne.evaluate('(u1*(u_ex+v_2e1e2)+v1*(u_2e1e2+v_ex))*R**3'),
+                local_dict={
+                    'u1': u1,
+                    'v1': v1,
+                    'u_ex': np.outer(np.ones(nssrc)+(e1*e1-e_2*e_2+2*e_1), u),
+                    'v_2e1e2': np.outer(np.ones(nssrc)*2*e1*e2, v),
+                    'u_2e1e2': np.outer(np.ones(nssrc)*2*e1*e2, u),
+                    'v_ex': np.outer((e2*e2-e_1*e_1+2*e_1)-np.ones(nssrc), v),
+                    'R': (1 / (1 - e1 * e1 - e2 * e2))
+                        [:,np.newaxis,np.newaxis,np.newaxis]}).reshape(nssrc,ntime,nbl)
+
+            slvr.vis_de1 = ne.evaluate('num*(scale_uv)**2/(1+den1*sqrt(den1))',
+                { 
+                  'scale_uv': scale_uv*R,
+                  'num' : num[:,:,:,np.newaxis],
+                  'den1' : den1 }) 
+
+            # partial derivative with respect to e2
+            num = ne.evaluate('(u1*(u_2e1e2+v_ex)+v1*(u_ex+v_2e1e2))*R**3'),
+                local_dict={
+                    'u1': u1,
+                    'v1': v1,
+                    'u_2e1e2': np.outer(np.ones(nssrc)*2*(e2+e1*e2),u),
+                    'v_ex': np.outer(np.ones(nssrc)-e1*e1+e2*e2),v),
+                    'v_2e1e2': np.outer(np.ones(nssrc)*2*(e2-e1*e2),v),
+                    'u_ex': np.outer(np.ones(nssrc)-e1*e1+e2*e2),u)
+                    'R': (1 / (1 - e1 * e1 - e2 * e2))
+                        [:,np.newaxis,np.newaxis,np.newaxis]}).reshape(nssrc,ntime,nbl)
+
+            slvr.vis_de2 = ne.evaluate('num*(scale_uv)**2/(1+den1*sqrt(den1))',
+                {
+                  'scale_uv': scale_uv*R,
+                  'num' : num[:,:,:,np.newaxis],
+                  'den1' : den1 })
+
+        except AttributeError as e:
+            mbu.rethrow_attribute_exception(e)
+
+
+        def compute_ekb_vis_grad(self, ekb_jones=None):
+        """
+        Computes the gradient of the complex visibilities with respect to the sersic parameters,
+        based on the scalar EK term and the 2x2 B term.
+
+        Returns a (nparams,nssrc,ntime,nbl,nchan,4) matrix of complex scalars.
+        """
+
+        slvr = self.solver
+        nssrc, npsrc, ngsrc, nsrc, ntime, nbl, nchan = slvr.dim_local_size('nssrc', 'npsrc', 'ngsrc', 'nsrc', 'ntime', 'nbl', 'nchan')
+
+        if ekb_jones is None:
+            ekb_jones = self.compute_ekb_jones_per_bl()
+
+        want_shape = (nsrc, ntime, nbl, nchan, 4)
+        assert ekb_jones.shape == want_shape, \
+            'Expected shape %s. Got %s instead.' % \
+            (want_shape, ekb_jones.shape)
+
+        start = nsrc - npsrc - ngsrc
+        vis_grad = np.zeros(3*nssrc*ntime*nbl*nchan).reshape(3,nssrc,ntime,nbl,nchan)
+        vis_grad[0] = ekb_jones[start:]*slvr.vis_de1
+        vis_grad[1] = ekb_jones[start:]*slvr.vis_de2
+        vis_grad[2] = ekb_jones[start:]*slvr.vis_dR
+
+        assert vis_grad.shape == (3, nssrc, ntime, nbl, nchan, 4)
+
+        return vis_grad
+
     def compute_gekb_vis(self, ekb_vis=None):
         """
         Computes the complex visibilities based on the
@@ -641,7 +773,7 @@ class SolverCPU(object):
 
         assert g_term.shape == (2, ntime, nbl, nchan, 4)
 
-        result = self.jones_multiply_hermitian_transpose(
+        result = self.jones_multiply(
             g_term[0], ekb_vis,
             ntime*nbl*nchan) \
                 .reshape(ntime, nbl, nchan, 4)
@@ -729,6 +861,65 @@ class SolverCPU(object):
             chi_sqrd_terms = self.compute_chi_sqrd_sum_terms(
                 vis=vis, bayes_data=bayes_data, weight_vector=weight_vector)
             term_sum = ne.evaluate('sum(terms)', {'terms': chi_sqrd_terms})
+            return term_sum if weight_vector is True \
+                else term_sum / slvr.sigma_sqrd
+        except AttributeError as e:
+            mbu.rethrow_attribute_exception(e)
+
+    def compute_chi_sqrd_gradient(self, vis=None, bayes_data=None, vis_grad=None, weight_vector=False):
+        """ Computes the chi squared gradient with respect to Sersic parameters.
+
+        Parameters:
+            weight_vector : boolean
+                True if the chi squared test
+                should be computed with a noise vector
+
+        Returns a (nparams,nssrc) matrix of real values
+        """
+        slvr = self.solver
+        nparams, nssrc, ntime, nbl, nchan = slvr.dim_local_size('nparams', 'nssrc', 'ntime', 'nbl', 'nchan')
+
+        # Do the chi squared gradient on the CPU.
+        # If we're not using the weight vector, sum and
+        # divide by the sigma squared.
+        # Otherwise, simply return the sum
+        try:
+            if vis is None: vis = self.compute_ekb_vis()
+            if bayes_data is None: bayes_data = slvr.bayes_data_cpu
+            if vis_grad is None: vis_grad = self.compute_ekb_vis_grad()
+
+            # Take the difference between the visibilities and the model
+            # (4,nbl,nchan,ntime)
+            d = ne.evaluate('vis - bayes', {
+                'vis': vis,
+                'bayes': bayes_data })
+            assert d.shape == (ntime, nbl, nchan, 4)
+            re = d.real
+            im = d.imag
+
+            # Multiply by the weight vector if required
+            if weight_vector is True:
+                wv = slvr.weight_vector_cpu
+                ne.evaluate('re*wv', {'re': re, 'wv': wv}, out=re)
+                ne.evaluate('im*wv', {'im': im, 'wv': wv}, out=im)       
+
+            # Multiply by the visibilities gradient
+            for p in xrange(3):
+                for s in xrange(nssrc):
+                    vis_grad[p,s].real = ne.evaluate('re*dre', {'re': re, 'dre': vis_grad[p,s].real})
+                    vis_grad[p,s].imag = ne.evaluate('re*dre', {'im': im, 'dim': vis_grad[p,s].imag})
+
+            # Sum the real and imaginary terms together
+            # for the final result.
+            re_sum = ne.evaluate('sum(re,5)', {'re': vis_grad.real})
+            im_sum = ne.evaluate('sum(im,5)', {'im': vis_grad.imag})
+            chi_sqrd_grad_terms = ne.evaluate('re_sum + im_sum',
+                {'re_sum': re_sum, 'im_sum': im_sum})
+            assert chi_sqrd_grad_terms.shape == (nparams,nssrc,ntime, nbl, nchan)
+
+            term_sum = -2*ne.evaluate('sum(terms,(2,3,4))', {'terms': chi_sqrd_grad_terms})
+            assert term_sum.shape == (nparams,nssrc)
+           
             return term_sum if weight_vector is True \
                 else term_sum / slvr.sigma_sqrd
         except AttributeError as e:

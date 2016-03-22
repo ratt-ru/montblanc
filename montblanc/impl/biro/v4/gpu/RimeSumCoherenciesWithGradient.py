@@ -59,6 +59,7 @@ KERNEL_TEMPLATE = string.Template("""
 #define NSRC ${nsrc}
 #define NPOL (4)
 #define NPOLCHAN (NPOL*NCHAN)
+#define NPARAMS (3*NSSRC)
 
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
@@ -100,7 +101,7 @@ template <
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
-void rime_sum_coherencies_impl(
+void rime_sum_coherencies_with_gradient_impl(
     typename SumCohTraits<T>::UVWType * uvw,
     typename Tr::ft * gauss_shape,
     typename Tr::ft * sersic_shape,
@@ -111,7 +112,8 @@ void rime_sum_coherencies_impl(
     typename Tr::ct * bayes_data,
     typename Tr::ct * G_term,
     typename Tr::ct * visibilities,
-    typename Tr::ft * chi_sqrd_result)
+    typename Tr::ft * chi_sqrd_result,
+    typename Tr::ft * chi_sqrd_result_grad)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
@@ -232,6 +234,8 @@ void rime_sum_coherencies_impl(
     }
 
     // Sersic Sources
+    typename Tr::ct dev_vis[NPARAMS];
+
     for(int SRC = DEXT(npsrc) + DEXT(ngsrc); SRC < DEXT(npsrc) + DEXT(ngsrc) + DEXT(nssrc); ++SRC)
     {
         // sersic shape only varies by source. Shape parameters
@@ -252,13 +256,22 @@ void rime_sum_coherencies_impl(
         const T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
 
         // sersic source in  the Fourier domain
+        T sf = T(TWO_PI_OVER_C)*shared.freq[threadIdx.x]*shared.sersic_scale;
+        sf /= (T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2);
         T u1 = U*(T(1.0)+shared.e1) + V*shared.e2;
-        u1 *= T(TWO_PI_OVER_C)*shared.freq[threadIdx.x];
-        u1 *= shared.sersic_scale/(T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2);
+        u1 *= sf;
         T v1 = U*shared.e2 + V*(T(1.0)-shared.e1);
-        v1 *= T(TWO_PI_OVER_C)*shared.freq[threadIdx.x];
-        v1 *= shared.sersic_scale/(T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2);
+        v1 *= sf;
+
+        T dev_e1 = u1*(U-U*shared.e2*shared.e2+2*U*shared.e1+U*shared.e1*shared.e1+2*V*shared.e1*shared.e2);
+        dev_e1 += v1*(V*shared.e2*shared.e2-V*shared.e1*shared.e1+2*V*shared.e1-V+2*U*shared.e1*shared.e2);
+        dev_e1 *= sf/T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2;
+        T dev_e2 = u1*(V-V*shared.e1*shared.e1+2*U*shared.e2+2*U*shared.e1*shared.e2+V*shared.e2*shared.e2);
+        dev_e2 += v1*(U-U*shared.e1*shared.e1+U*shared.e2*shared.e2+2*V*shared.e2-2*V*shared.e1*shared.e2);
+        dev_e2 *= sf/T(1.0)-shared.e1*shared.e1-shared.e2*shared.e2;     
+   
         T sersic_factor = T(1.0) + u1*u1+v1*v1;
+        T dev_scale = (u1*u1+v1+v1)/(shared.sersic_scale*sersic_factor);
         sersic_factor = T(1.0) / (sersic_factor*Po::sqrt(sersic_factor));
 
         // Get the complex scalars for antenna two and multiply
@@ -274,6 +287,16 @@ void rime_sum_coherencies_impl(
 
         polsum.x += ant_one.x;
         polsum.y += ant_one.y;
+
+        i = 3*(SRC - DEXT(npsrc) - DEXT(ngsrc));
+        dev_vis[i].x = ant_one.x*dev_e1;
+        dev_vis[i].y = ant_one.y*dev_e1;
+        i++;
+        dev_vis[i].x = ant_one.x*dev_e2;
+        dev_vis[i].y = ant_one.y*dev_e2;
+        i++;
+        dev_vis[i].x = ant_one.x*dev_scale;
+        dev_vis[i].y = ant_one.y*dev_scale;
     }
 
     // Multiply the visibility by antenna 1's g term
@@ -293,12 +316,18 @@ void rime_sum_coherencies_impl(
     // Compute the chi squared sum terms
     typename Tr::ct delta = bayes_data[i];
     delta.x -= ant1_g_term.x; delta.y -= ant1_g_term.y;
+    
+    // Save (bayes_data[i] - vis[i])
+    typename Tr::ct delta1 = delta;
+    
     delta.x *= delta.x; delta.y *= delta.y;
 
     // Apply any necessary weighting factors
     if(apply_weights)
     {
         T w = weight_vector[i];
+        delta1.x *= w;
+        delta1.y *= w;
         delta.x *= w;
         delta.y *= w;
     }
@@ -326,6 +355,34 @@ void rime_sum_coherencies_impl(
         i = (TIME*NBL + BL)*NCHAN + (POLCHAN >> 2);
         chi_sqrd_result[i] = delta.x + delta.y;
     }
+
+    // Write partial derivative with respect to sersic parameters
+    for(int SRC = 0; SRC < DEXT(nssrc); ++SRC)
+      for (int p = 0; p < 3; ++p)
+      {
+        polsum.x = dev_vis[3*SRC+p].x * delta1.x;
+        polsum.y = dev_vis[3*SRC+p].y * delta1.y;
+
+        other = cub::ShuffleIndex(polsum, cub::LaneId() + 2);
+        // Add polarisations 2 and 3 to 0 and 1
+        if((POLCHAN & 0x3) < 2)
+        {
+           polsum.x += other.x;
+           polsum.y += other.y;
+        }
+        other = cub::ShuffleIndex(polsum, cub::LaneId() + 1);
+
+        // If this is the polarisation 0, add polarisation 1
+        // and write out this chi squared grad term
+        if((POLCHAN & 0x3) == 0) {
+           polsum.x += other.x;
+           polsum.y += other.y;
+
+           i = (p*NSSRC+SRC)*NTIME*NBL*NCHAN;
+           i += (TIME*NBL + BL)*NCHAN + (POLCHAN >> 2);
+           chi_sqrd_result_grad[i] = -3*(polsum.x+polsum.y);
+       }
+     }
 }
 
 extern "C" {
@@ -338,9 +395,9 @@ extern "C" {
 // - apply_weights: boolean indicating whether we're weighting our visibilities
 // - symbol: u or w depending on whether we're handling unweighted/weighted visibilities.
 
-#define stamp_sum_coherencies_fn(ft, ct, uvwt, apply_weights, symbol) \
+#define stamp_sum_coherencies_with_gradient_fn(ft, ct, uvwt, apply_weights, symbol) \
 __global__ void \
-rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
+rime_sum_coherencies_with_gradient_ ## symbol ## chi_ ## ft( \
     uvwt * uvw, \
     ft * gauss_shape, \
     ft * sersic_shape, \
@@ -351,46 +408,46 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ct * bayes_data, \
     ct * G_term, \
     ct * visibilities, \
-    ft * chi_sqrd_result) \
+    ft * chi_sqrd_result, \
+    ft * chi_sqrd_result_grad) \
 { \
-    rime_sum_coherencies_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
+    rime_sum_coherencies_with_gradient_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
         frequency, ant_pairs, jones, \
         weight_vector, bayes_data, G_term, \
-        visibilities, chi_sqrd_result); \
+        visibilities, chi_sqrd_result, chi_sqrd_result_grad); \
 }
 
-stamp_sum_coherencies_fn(float, float2, float3, false, u)
-stamp_sum_coherencies_fn(float, float2, float3, true, w)
-stamp_sum_coherencies_fn(double, double2, double3, false, u)
-stamp_sum_coherencies_fn(double, double2, double3, true, w)
+stamp_sum_coherencies_with_gradient_fn(float, float2, float3, false, u)
+stamp_sum_coherencies_with_gradient_fn(float, float2, float3, true, w)
+stamp_sum_coherencies_with_gradient_fn(double, double2, double3, false, u)
+stamp_sum_coherencies_with_gradient_fn(double, double2, double3, true, w)
 
 } // extern "C" {
 """)
 
-class RimeSumCoherencies(Node):
+class RimeSumCoherenciesWithGradient(Node):
     def __init__(self, weight_vector=False):
-        super(RimeSumCoherencies, self).__init__()
+        super(RimeSumCoherenciesWithGradient, self).__init__()
         self.weight_vector = weight_vector
 
     def initialise(self, solver, stream=None):
         slvr = solver
         ntime, nbl, npolchan = slvr.dim_local_size('ntime', 'nbl', 'npolchan')
 
-        # Get a property dictionary off the solver
+          # Get a property dictionary off the solver
         D = slvr.template_dict()
         # Include our kernel parameters
         D.update(FLOAT_PARAMS if slvr.is_float() else DOUBLE_PARAMS)
         D['rime_const_data_struct'] = slvr.const_data().string_def()
 
         D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'] = \
-            mbu.redistribute_threads(
-                D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
-                npolchan, nbl, ntime)
+            mbu.redistribute_threads(D['BLOCKDIMX'], D['BLOCKDIMY'], D['BLOCKDIMZ'],
+            npolchan, nbl, ntime)
 
         regs = str(FLOAT_PARAMS['maxregs'] \
             if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
 
-        kname = 'rime_sum_coherencies_' + \
+        kname = 'rime_sum_coherencies_with_gradient_' + \
             ('w' if self.weight_vector else 'u') + 'chi_' + \
             ('float' if slvr.is_float() is True else 'double')
 
@@ -427,6 +484,7 @@ class RimeSumCoherencies(Node):
 
     def execute(self, solver, stream=None):
         slvr = solver
+        nparams, nssrc = slvr.dim_local_size('nparams','nssrc')
 
         if stream is not None:
             cuda.memcpy_htod_async(
@@ -451,6 +509,7 @@ class RimeSumCoherencies(Node):
             slvr.jones_gpu, slvr.weight_vector_gpu,
             slvr.bayes_data_gpu, slvr.G_term_gpu,
             slvr.vis_gpu, slvr.chi_sqrd_result_gpu,
+            slvr.chi_sqrd_result_grad_gpu,
             stream=stream, **self.launch_params)
 
         # Call the pycuda reduction kernel.
@@ -459,8 +518,18 @@ class RimeSumCoherencies(Node):
         # individual sigma squared values into the sum
         gpu_sum = gpuarray.sum(slvr.chi_sqrd_result_gpu).get()
 
+        # loop over number of Sersic parameters to reduce gradient over number of visibilities
+        # first, nssrc sersic scalelengths
+        # then, nssrc ellipticity 1st components
+        # then, nssrc ellipticity 2nd components
+        slvr.X2_grad = np.zeros(nparams)
+        if nparams == 3*nssrc:
+            for p in xrange(nparams):
+                slvr.X2_grad[p] = -2*gpuarray.sum(slvr.chi_sqrd_result_grad_gpu[p,:,:,:]).get()
+
         if not self.weight_vector:
             slvr.set_X2(gpu_sum/slvr.sigma_sqrd)
+            slvr.X2_grad = slvr.X2_grad/slvr.sigma_sqrd
         else:
             slvr.set_X2(gpu_sum)
 

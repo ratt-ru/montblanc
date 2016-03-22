@@ -122,7 +122,6 @@ class BaseSolver(Solver):
     def __init__(self, slvr_cfg):
         """
         BaseSolver Constructor
-
         Arguments:
             slvr_cfg : SolverConfiguration
                 A solver configuration object.
@@ -201,12 +200,9 @@ class BaseSolver(Solver):
     def register_dimension(self, name, dim_data, **kwargs):
         """
         Registers a dimension with this Solver object
-
         Arguments
         ---------
             dim_data : integer or dict
-
-
         Keyword Arguments
         -----------------
             description : string
@@ -311,7 +307,6 @@ class BaseSolver(Solver):
     def update_dimension(self, update_dict):
         """
         Update the dimension size and extents.
-
         Arguments
         ---------
             update_dict : dict
@@ -339,11 +334,9 @@ class BaseSolver(Solver):
         """
         Returns a list of dimension attribute attr, for the
         dimensions specified as strings in args.
-
         ntime, nbl, nchan = slvr.__dim_attribute('global_size', ntime, 'nbl', 'nchan')
         
         or
-
         ntime, nbl, nchan, nsrc = slvr.__dim_attribute('global_size', 'ntime,nbl:nchan nsrc')
         """
 
@@ -365,7 +358,6 @@ class BaseSolver(Solver):
         ntime, nbl, nchan = slvr.dim_global_size('ntime, 'nbl', 'nchan')
         
         or
-
         ntime, nbl, nchan, nsrc = slvr.dim_global_size('ntime,nbl:nchan nsrc')
         """
 
@@ -376,7 +368,6 @@ class BaseSolver(Solver):
         ntime, nbl, nchan = slvr.dim_local_size('ntime, 'nbl', 'nchan')
         
         or
-
         ntime, nbl, nchan, nsrc = slvr.dim_local_size('ntime,nbl:nchan nsrc')
         """
 
@@ -387,7 +378,6 @@ class BaseSolver(Solver):
         t_ex, bl_ex, ch_ex = slvr.dim_extents('ntime, 'nbl', 'nchan')
         
         or
-
         t_ex, bl_ex, ch_ex, src_ex = slvr.dim_extents('ntime,nbl:nchan nsrc')
         """
 
@@ -473,7 +463,6 @@ class BaseSolver(Solver):
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         """
         Register an array with this Solver object.
-
         Arguments
         ----------
             name : string
@@ -484,7 +473,6 @@ class BaseSolver(Solver):
                 The data-type for the array.
             registrant : string
                 Name of the entity registering this array.
-
         Keyword Arguments
         -----------------
             cpu : boolean
@@ -669,9 +657,7 @@ class BaseSolver(Solver):
     def register_arrays(self, array_list):
         """
         Register arrays using a list of dictionaries defining the arrays.
-
         The list should itself contain dictionaries. i.e.
-
         >>> D = [
             'uvw' : { 'name':'uvw', 'shape':(3,'ntime','nbl'),'dtype':np.float32 },
             'lm' : { 'name':'lm', 'shape':(2,'nsrc'),'dtype':np.float32 }
@@ -683,7 +669,6 @@ class BaseSolver(Solver):
     def register_property(self, name, dtype, default, registrant, **kwargs):
         """
         Registers a property with this Solver object
-
         Arguments
         ----------
             name : string
@@ -694,7 +679,6 @@ class BaseSolver(Solver):
                 Default value for the property.
             registrant : string
                 Name of the entity registering the property.
-
         Keyword Arguments
         -----------------
             setter : boolean or function
@@ -702,7 +686,6 @@ class BaseSolver(Solver):
                 If a method, this is used instead.
             setter_docstring : string
                 docstring for the default setter.
-
         """
 
         T = self.template_dict()
@@ -754,9 +737,7 @@ class BaseSolver(Solver):
     def register_properties(self, property_list):
         """
         Register properties using a list defining the properties.
-
         The dictionary should itself contain dictionaries. i.e.
-
         >>> D = [
             { 'name':'ref_wave','dtype':np.float32,
                 'default':1.41e6, 'registrant':'solver' },
@@ -769,7 +750,6 @@ class BaseSolver(Solver):
         """
         Returns a dictionary suitable for templating strings with
         properties and dimensions related to this Solver object.
-
         Used in templated GPU kernels.
         """
         slvr = self
