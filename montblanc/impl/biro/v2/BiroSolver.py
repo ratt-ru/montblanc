@@ -149,7 +149,7 @@ A = [
         default=1,
         test=lambda slvr, ary: (rary(ary)-0.5)*1e-2),
 
-    ary_dict('flag', (4, 'ntime', 'nbl', 'nchan'), np.uint8,
+    ary_dict('flag', (4, 'ntime', 'nbl', 'nchan'), np.int32,
         default=0,
         test=lambda slvr, ary: np.random.random_integers(
             0, 1, size=ary.shape)),

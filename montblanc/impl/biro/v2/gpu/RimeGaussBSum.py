@@ -44,7 +44,6 @@ DOUBLE_PARAMS = {
 
 KERNEL_TEMPLATE = string.Template("""
 #include <cstdio>
-#include <stdint.h>
 #include \"math_constants.h\"
 #include <montblanc/include/abstraction.cuh>
 
@@ -78,7 +77,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * wavelength,
     int * ant_pairs,
     typename Tr::ct * jones_EK_scalar,
-    uint8_t * flag,
+    int * flag,
     typename Tr::ft * weight_vector,
     typename Tr::ct * visibilities,
     typename Tr::ct * data_vis,
@@ -407,7 +406,7 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * wavelength, \
     int * ant_pairs, \
     ct * jones_EK_scalar, \
-    uint8_t * flag, \
+    int * flag, \
     ft * weight_vector, \
     ct * visibilities, \
     ct * data_vis, \
