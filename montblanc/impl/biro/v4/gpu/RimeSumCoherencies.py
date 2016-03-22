@@ -44,6 +44,7 @@ DOUBLE_PARAMS = {
 }
 
 KERNEL_TEMPLATE = string.Template("""
+#include <stdint.h>
 #include <cstdio>
 #include \"math_constants.h\"
 #include <montblanc/include/abstraction.cuh>
@@ -107,7 +108,7 @@ void rime_sum_coherencies_impl(
     typename Tr::ft * frequency,
     int * ant_pairs,
     typename Tr::ct * jones,
-    int * flag,
+    uint8_t * flag,
     typename Tr::ft * weight_vector,
     typename Tr::ct * bayes_data,
     typename Tr::ct * G_term,
@@ -356,7 +357,7 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ft * frequency, \
     int * ant_pairs, \
     ct * jones, \
-    int * flag, \
+    uint8_t * flag, \
     ft * weight_vector, \
     ct * bayes_data, \
     ct * G_term, \

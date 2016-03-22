@@ -190,7 +190,7 @@ A = [
         test=lambda slvr, ary: rary(ary)),
 
     # Visibility flagging arrays
-    ary_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.int32,
+    ary_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
         default=0,
         test=lambda slvr, ary: np.random.random_integers(
             0, 1, size=ary.shape)),
