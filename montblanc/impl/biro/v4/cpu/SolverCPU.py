@@ -617,7 +617,7 @@ class SolverCPU(object):
 
         return vis
 
-    def compute_gekb_vis(self, ekb_vis=None):
+    def compute_gekb_vis(self, ekb_vis=None, flag=None):
         """
         Computes the complex visibilities based on the
         scalar EK term and the 2x2 B term.
@@ -630,6 +630,9 @@ class SolverCPU(object):
 
         if ekb_vis is None:
             ekb_vis = self.compute_ekb_vis()
+
+        if flag is None:
+            flag = slvr.flag_cpu
 
         want_shape = (ntime, nbl, nchan, 4)
         assert ekb_vis.shape == want_shape, \
@@ -651,9 +654,13 @@ class SolverCPU(object):
             ntime*nbl*nchan) \
                 .reshape(ntime, nbl, nchan, 4)
 
+        # Zero any flagged visibilities
+        result[flag > 0] = 0
+
         return result
 
-    def compute_chi_sqrd_sum_terms(self, vis=None, bayes_data=None, weight_vector=False):
+    def compute_chi_sqrd_sum_terms(self, vis=None,
+        bayes_data=None, weight_vector=False, flag=None):
         """
         Computes the terms of the chi squared sum,
         but does not perform the sum itself.
@@ -669,11 +676,17 @@ class SolverCPU(object):
         ntime, nbl, nchan = slvr.dim_local_size('ntime', 'nbl', 'nchan')
 
         try:
-            if vis is None: vis = self.compute_ekb_vis()
+            if vis is None: vis = self.compute_gekb_vis()
             if bayes_data is None: bayes_data = slvr.bayes_data_cpu
+            if flag is None: flag = slvr.flag_cpu
+
+            # Copy technically needed here so that flagging
+            # doesn't corrupt original array
+            bayes_data = bayes_data.copy()
+            bayes_data[flag > 0] = 0
 
             # Take the difference between the visibilities and the model
-            # (4,nbl,nchan,ntime)
+            # (nbl,nchan,ntime,4)
             d = ne.evaluate('vis - bayes', {
                 'vis': vis,
                 'bayes': bayes_data })

@@ -25,6 +25,20 @@ import montblanc.impl.common.loaders
 
 from montblanc.config import (BiroSolverConfig as Options)
 
+# Measurement Set string constants
+UVW = 'UVW'
+CHAN_FREQ = 'CHAN_FREQ'
+REF_FREQUENCY = 'REF_FREQUENCY'
+ANTENNA1 = 'ANTENNA1'
+ANTENNA2 = 'ANTENNA2'
+DATA = 'DATA'
+FLAG = 'FLAG'
+FLAG_ROW = 'FLAG_ROW'
+WEIGHT_SPECTRUM = 'WEIGHT_SPECTRUM'
+WEIGHT = 'WEIGHT'
+SIGMA_SPECTRUM = 'SIGMA_SPECTRUM'
+SIGMA = 'SIGMA'
+
 class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
     def load(self, solver, slvr_cfg):
         """
@@ -41,7 +55,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
         # Read in UVW
         # Reshape the array and correct the axes
-        ms_uvw = tm.getcol('UVW')
+        ms_uvw = tm.getcol(UVW)
         assert ms_uvw.shape == uvw_shape, \
             'MS UVW shape %s != expected %s' % (ms_uvw.shape, uvw_shape)
 
@@ -67,24 +81,26 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         solver.transfer_uvw(np.ascontiguousarray(uvw))
 
         # Determine the frequencys
-        freqs = tf.getcol('CHAN_FREQ')
+        freqs = tf.getcol(CHAN_FREQ)
         solver.transfer_frequency(freqs[0].astype(solver.ft))
 
         # First dimension also seems to be of size 1 here...
         # Divide speed of light by frequency to get the frequency here.
-        solver.set_ref_freq(tf.getcol('REF_FREQUENCY')[0])
+        solver.set_ref_freq(tf.getcol(REF_FREQUENCY)[0])
 
         # Get the baseline antenna pairs and correct the axes
-        ant1 = tm.getcol('ANTENNA1').reshape(ntime,nbl)
-        ant2 = tm.getcol('ANTENNA2').reshape(ntime,nbl)
+        ant1 = tm.getcol(ANTENNA1).reshape(ntime,nbl)
+        ant2 = tm.getcol(ANTENNA2).reshape(ntime,nbl)
 
         expected_ant_shape = (ntime,nbl)
 
         assert expected_ant_shape == ant1.shape, \
-            'ANTENNA1 shape is %s != expected %s' % (ant1.shape,expected_ant_shape)
+            '{a1} shape is {r} != expected {e}'.format(
+                a=ANTENNA1, r=ant1.shape, e=expected_ant_shape)
 
         assert expected_ant_shape == ant2.shape, \
-            'ANTENNA2 shape is %s != expected %s' % (ant2.shape,expected_ant_shape)
+            '{a} shape is {r} != expected {e}'.format(
+                a=ANTENNA2, r=ant2.shape, e=expected_ant_shape)
 
         ant_pairs = np.vstack((ant1,ant2)).reshape(solver.ant_pairs_shape)
 
@@ -92,61 +108,105 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         solver.transfer_ant_pairs(np.ascontiguousarray(ant_pairs))
 
         # Load in visibility data, if it exists.
-        if tm.colnames().count('DATA') > 0:
+        if tm.colnames().count(DATA) > 0:
+            montblanc.log.info('{lp} Loading visibilities '
+                'into the {bd} array'.format(
+                    lp=self.LOG_PREFIX, bd='bayes_data'))
             # Obtain visibilities stored in the DATA column
             # This comes in as (ntime*nbl,nchan,4)
-            vis_data = tm.getcol('DATA').reshape(ntime,nbl,nchan,4) \
-                .astype(solver.ct)
+            vis_data = (tm.getcol(DATA).reshape(solver.bayes_data_shape)
+                .astype(solver.ct))
             solver.transfer_bayes_data(np.ascontiguousarray(vis_data))
+        else:
+            montblanc.log.info('{lp} No visibilities found.'
+                .format(lp=self.LOG_PREFIX))
+            # Should be zeroed out by array defaults
+
+        # Load in flag data if available
+        if tm.colnames().count(FLAG) > 0:
+            montblanc.log.info('{lp} Loading flag data.'.format(
+                    lp=self.LOG_PREFIX))
+
+            flag = tm.getcol(FLAG)
+            flag_row = tm.getcol(FLAG_ROW)
+
+            # Incorporate the flag_row data into the larger flag matrix
+            flag = np.logical_or(flag, flag_row[:,np.newaxis,np.newaxis])
+
+            # Reshape
+            flag = flag.reshape(solver.flag_shape).astype(solver.flag_dtype)
+
+            # Transfer, asking for contiguity
+            solver.transfer_flag(np.ascontiguousarray(flag))
+        else:
+            montblanc.log.info('{lp} No flag data found.'
+                .format(lp=self.LOG_PREFIX))
+            # Should be zeroed out by array defaults
 
         # Should we initialise our weights from the MS data?
         init_weights = slvr_cfg.get(Options.INIT_WEIGHTS)
-
-        # Load in flag and weighting data, if it exists
-        if init_weights is not Options.INIT_WEIGHTS_NONE and \
-            tm.colnames().count('FLAG') > 0:
-            # Get the flag data. Data flagged as True should be ignored,
-            # therefore we flip the values so that when we multiply flag
-            # by the weights later, a False value zeroes out the weight
-            flag = (tm.getcol('FLAG') == False)
-            flag_row = (tm.getcol('FLAG_ROW') == False)
-
-            # Incorporate the flag_row data into the larger
-            # flag matrix
-            flag = np.logical_or(flag, flag_row[:,np.newaxis,np.newaxis])
-
+ 
+        # Load in weighting data, if it exists
+        if init_weights is not Options.INIT_WEIGHTS_NONE:
             if init_weights == Options.INIT_WEIGHTS_WEIGHT:
-                # Obtain weighting information from WEIGHT_SPECTRUM
-                # preferably, otherwise WEIGHtm.
-                if tm.colnames().count('WEIGHT_SPECTRUM') > 0:
+            # Obtain weighting information from WEIGHT_SPECTRUM
+            # preferably, otherwise WEIGHT.
+                if tm.colnames().count(WEIGHT_SPECTRUM) > 0:
                     # Try obtain the weightings from WEIGHT_SPECTRUM first.
-                    # It has the same dimensions as 'FLAG'
-                    weight_vector = flag*tm.getcol('WEIGHT_SPECTRUM')
-                elif tm.colnames().count('WEIGHT') > 0:
+                    montblanc.log.info('{lp} Initialising {wv} from {n}.'
+                        .format(lp=self.LOG_PREFIX, wv='weight_vector',
+                            n=WEIGHT_SPECTRUM))
+
+                    weight_vector = tm.getcol(WEIGHT_SPECTRUM)
+                elif tm.colnames().count(WEIGHT) > 0:
                     # Otherwise we should try obtain the weightings from WEIGHT.
                     # This doesn't have per-channel weighting, so we introduce
                     # this with a broadcast
-                    weight_vector = flag * \
-                        (tm.getcol('WEIGHT')[:,np.newaxis,:]*np.ones(shape=(nchan,1)))
+                    montblanc.log.info('{lp} Initialising {wv} from {n}.'
+                        .format(lp=self.LOG_PREFIX, wv='weight_vector',
+                            n=WEIGHT))
+
+                    weight = tm.getcol(WEIGHT)[:,np.newaxis,:]
+                    weight_vector = weight*np.ones(shape=(nchan,1))
                 else:
-                    # Just use the boolean flags as weighting values
-                    weight_vector = flag.astype(solver.ft)
+                    # We couldn't find anything, set to one
+                    montblanc.log.info('{lp} No {ws} or {w} columns. '
+                        'Initialising {wv} from with ones.'
+                        .format(lp=self.LOG_PREFIX, ws=WEIGHT_SPECTRUM,
+                            w=WEIGHT, wv='weight_vector'))
+
+                    weight_vector = np.ones(
+                        shape=solver.weight_vector_shape,
+                        dtype=solver.weight_vector_dtype)
             elif init_weights == Options.INIT_WEIGHTS_SIGMA:
                 # Obtain weighting information from SIGMA_SPECTRUM
                 # preferably, otherwise SIGMA.
-                if tm.colnames().count('SIGMA_SPECTRUM') > 0:
+                if tm.colnames().count(SIGMA_SPECTRUM) > 0:
                     # Try obtain the weightings from WEIGHT_SPECTRUM first.
-                    # It has the same dimensions as 'FLAG'
-                    weight_vector = flag*tm.getcol('SIGMA_SPECTRUM')
-                elif tm.colnames().count('SIGMA') > 0:
-                    # Otherwise we should try obtain the weightings from WEIGHt.
+                    montblanc.log.info('{lp} Initialising {wv} from {n}.'
+                        .format(lp=self.LOG_PREFIX, wv='weight_vector',
+                            n=SIGMA_SPECTRUM))
+
+                    weight_vector = tm.getcol(SIGMA_SPECTRUM)
+                elif tm.colnames().count(SIGMA) > 0:
+                    # Otherwise we should try obtain the weightings from WEIGHT.
                     # This doesn't have per-channel weighting, so we introduce
                     # this with a broadcast
-                    weight_vector = flag * \
-                        (tm.getcol('SIGMA')[:,np.newaxis,:]*np.ones(shape=(nchan,1)))
+                    montblanc.log.info('{lp} Initialising {wv} from {n}.'
+                        .format(lp=self.LOG_PREFIX, wv='weight_vector',
+                            n=SIGMA))
+
+                    sigma = tm.getcol(SIGMA)[:,np.newaxis,:]
+                    weight_vector = (sigma*np.ones(shape=(nchan,1)))
                 else:
-                    # Just use the boolean flags as weighting values
-                    weight_vector = flag.astype(solver.ft)
+                    # We couldn't find anything, set to one
+                    montblanc.log.info('{lp} No {ss} or {s} columns. '
+                        'Initialising {wv} from with ones.'
+                        .format(lp=self.LOG_PREFIX, ss=SIGMA_SPECTRUM,
+                            s=SIGMA, wv='weight_vector'))
+
+                    weight_vector = np.ones(shape=solver.weight_vector_shape,
+                        dtype=solver.weight_vector_dtype)
             else:
                 raise Exception, 'init_weights used incorrectly!'
 

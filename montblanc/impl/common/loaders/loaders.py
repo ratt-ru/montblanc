@@ -21,6 +21,7 @@
 import pyrap.tables as pt
 import os
 
+import montblanc
 import montblanc.util as mbu
 
 from montblanc.api.loaders import BaseLoader
@@ -29,6 +30,8 @@ ANTENNA_TABLE = 'ANTENNA'
 SPECTRAL_WINDOW = 'SPECTRAL_WINDOW'
 
 class MeasurementSetLoader(BaseLoader):
+    LOG_PREFIX = 'LOADER:'
+
     def __init__(self, msfile):
         super(MeasurementSetLoader, self).__init__()
 
@@ -36,6 +39,9 @@ class MeasurementSetLoader(BaseLoader):
         self.msfile = msfile
         self.antfile = os.path.join(self.msfile, ANTENNA_TABLE)
         self.freqfile = os.path.join(self.msfile, SPECTRAL_WINDOW)
+
+        montblanc.log.info("{lp} Opening Measurement Set {ms}.".format(
+            lp=self.LOG_PREFIX, ms=self.msfile))
 
         self.tables['main'] = pt.table(self.msfile, ack=False) \
             .query('ANTENNA1 != ANTENNA2')

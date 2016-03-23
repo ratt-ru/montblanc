@@ -77,6 +77,7 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * wavelength,
     int * ant_pairs,
     typename Tr::ct * jones_EK_scalar,
+    int * flag,
     typename Tr::ft * weight_vector,
     typename Tr::ct * visibilities,
     typename Tr::ct * data_vis,
@@ -315,33 +316,67 @@ void rime_gauss_B_sum_impl(
         __syncthreads();
     }
 
+    // XX polarisation
     i = (TIME*NBL + BL)*NCHAN + CHAN;
-    visibilities[i] = Isum;
     typename Tr::ct delta = data_vis[i];
+
+    // Zero polarisation if flagged
+    if(flag[i] > 0)
+    {
+        Isum.x = 0; Isum.y = 0;
+        delta.x = 0; delta.y = 0;
+    }
+
+    visibilities[i] = Isum;
     delta.x -= Isum.x; delta.y -= Isum.y;
     delta.x *= delta.x; delta.y *= delta.y;
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x = delta.x; Isum.y = delta.y;
 
+    // YY polarisation
     i += 3*NTIME*NBL*NCHAN;
-    visibilities[i] = Qsum;
     delta = data_vis[i];
+
+    // Zero polarisation if flagged
+    if(flag[i] > 0)
+    {
+        Qsum.x = 0; Qsum.y = 0;
+        delta.x = 0; delta.y = 0;
+    }
+
+    visibilities[i] = Qsum;
     delta.x -= Qsum.x; delta.y -= Qsum.y;
     delta.x *= delta.x; delta.y *= delta.y;
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
     i -= NTIME*NBL*NCHAN;
-    visibilities[i] = Usum;
     delta = data_vis[i];
+
+    // Zero polarisation if flagged
+    if(flag[i] > 0)
+    {
+        Usum.x = 0; Usum.y = 0;
+        delta.x = 0; delta.y = 0;
+    }
+
+    visibilities[i] = Usum;
     delta.x -= Usum.x; delta.y -= Usum.y;
     delta.x *= delta.x; delta.y *= delta.y;
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
     Isum.x += delta.x; Isum.y += delta.y;
 
     i -= NTIME*NBL*NCHAN;
-    visibilities[i] = Vsum;
     delta = data_vis[i];
+
+    // Zero polarisation if flagged
+    if(flag[i] > 0)
+    {
+        Vsum.x = 0; Vsum.y = 0;
+        delta.x = 0; delta.y = 0;
+    }
+
+    visibilities[i] = Vsum;
     delta.x -= Vsum.x; delta.y -= Vsum.y;
     delta.x *= delta.x; delta.y *= delta.y;
     if(apply_weights) { T w = weight_vector[i]; delta.x *= w; delta.y *= w; }
@@ -371,13 +406,14 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * wavelength, \
     int * ant_pairs, \
     ct * jones_EK_scalar, \
+    int * flag, \
     ft * weight_vector, \
     ct * visibilities, \
     ct * data_vis, \
     ft * chi_sqrd_result) \
 { \
     rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, sersic_shape, \
-        wavelength, ant_pairs, jones_EK_scalar, \
+        wavelength, ant_pairs, jones_EK_scalar, flag, \
         weight_vector, visibilities, data_vis, \
         chi_sqrd_result); \
 }
@@ -453,7 +489,7 @@ class RimeGaussBSum(Node):
 
         self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic,
             slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
-            slvr.weight_vector_gpu,
+            slvr.flag_gpu, slvr.weight_vector_gpu,
             slvr.vis_gpu, slvr.bayes_data_gpu, slvr.chi_sqrd_result_gpu,
             **self.get_kernel_params(slvr))
 
