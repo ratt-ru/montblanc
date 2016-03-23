@@ -527,6 +527,16 @@ class BaseSolver(Solver):
         # appropriate data type
         dtype = mbu.dtype_from_str(dtype, T)
 
+        # Set up a member describing the shape
+        if kwargs.get('shape_member', False) is True:
+            shape_name = mbu.shape_name(name)
+            setattr(self, shape_name, shape)
+
+        # Set up a member describing the dtype
+        if kwargs.get('dtype_member', False) is True:
+            dtype_name = mbu.dtype_name(name)
+            setattr(self, dtype_name, dtype)
+
         # OK, create a record for this array
         if name not in self._arrays:
             self._arrays[name] = AttrDict(name=name, dtype=dtype,
@@ -654,17 +664,6 @@ class BaseSolver(Solver):
         Transfers the npary numpy array to the %s gpuarray.
         npary and %s must be the same shape and type.
         """ % (gpu_name,gpu_name)
-
-
-        # Set up a member describing the shape
-        if kwargs.get('shape_member', False) is True:
-            shape_name = mbu.shape_name(name)
-            setattr(self, shape_name, shape)
-
-        # Set up a member describing the dtype
-        if kwargs.get('dtype_member', False) is True:
-            dtype_name = mbu.dtype_name(name)
-            setattr(self, dtype_name, dtype)
 
     def register_arrays(self, array_list):
         """
