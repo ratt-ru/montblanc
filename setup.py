@@ -82,16 +82,16 @@ def is_cub_installed(readme_filename, header_filename, cub_version_str):
 
 def install_cub():
     """ Downloads and installs cub """
+    cub_url = 'https://github.com/NVlabs/cub/archive/1.5.2.zip'
+    cub_sha_hash = 'b98dabe346c5e1ab24db250379d73afe14189055'
+    cub_version_str = 'Current release: v1.5.2 (03/21/2016)'
     cub_zip_file = 'cub.zip'
-    cub_url = 'https://codeload.github.com/NVlabs/cub/zip/1.5.1'
-    cub_sha_hash = 'b04f434f42267ff892d92b9e9e303b8e16f1dd32'
-    cub_zip_dir = 'cub-1.5.1'
+    cub_zip_dir = 'cub-1.5.2'
     src_path = os.path.join('montblanc', 'src')
     cub_unzipped_path = os.path.join(src_path, cub_zip_dir)
     cub_new_unzipped_path = os.path.join(src_path, 'cub')
     cub_header = os.path.join(cub_new_unzipped_path, 'cub', 'cub.cuh')
     cub_readme = os.path.join(cub_new_unzipped_path, 'README.md' )
-    cub_version_str = 'Current release: v1.5.1 (12/28/2015)'
 
     # Check for a reasonably valid install
     cub_installed = is_cub_installed(cub_readme, cub_header, cub_version_str)
