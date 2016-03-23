@@ -21,8 +21,8 @@
 import numpy as np
 import montblanc
 
-from montblanc.config import (BiroSolverConfiguration,
-    BiroSolverConfigurationOptions as Options)
+from montblanc.config import (
+    BiroSolverConfig as Options)
 
 if __name__ == '__main__':
     import sys

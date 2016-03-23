@@ -27,7 +27,7 @@ import pycuda.driver as cuda
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.config import (BiroSolverConfigurationOptions as Options)
+from montblanc.config import (BiroSolverConfig as Options)
 
 from montblanc.pipeline import Pipeline
 
@@ -180,9 +180,6 @@ def rime_solver(slvr_cfg):
     # Set the default cuda context if none is provided
     if slvr_cfg.get(Options.CONTEXT, None) is None:
         slvr_cfg[Options.CONTEXT] = get_default_context()
-
-    # Verify the configuration
-    slvr_cfg.verify()
 
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
     version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)

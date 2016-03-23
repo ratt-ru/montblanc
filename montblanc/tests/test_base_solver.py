@@ -33,9 +33,7 @@ import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
-from montblanc.config import (SolverConfiguration,
-    BiroSolverConfiguration,
-    BiroSolverConfigurationOptions as Options)
+from montblanc.config import BiroSolverConfig as Options
 
 def test_solver(slvr_cfg, **kwargs):
     slvr_cfg.update(kwargs)
@@ -67,11 +65,12 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_basic(self):
         """ """
-        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=montblanc.sources(point=10, gaussian=10))
 
-        with test_solver(slvr_cfg) as slvr:
+        from montblanc.BaseSolver import BaseSolver
 
+        with test_solver(slvr_cfg) as slvr:
             name='uvw'
             ntime, nbl = slvr.dim_global_size('ntime', 'nbl')
             shape=(3, nbl, ntime)
@@ -79,8 +78,6 @@ class TestSolver(unittest.TestCase):
             cpu_name = mbu.cpu_name(name)
             shape_name = mbu.shape_name(name)
             dtype_name = mbu.dtype_name(name)
-
-            from montblanc.BaseSolver import BaseSolver
 
             # Before registration, descriptors may not have been created
             # on the BaseSolver class. If they have, check that
@@ -102,11 +99,11 @@ class TestSolver(unittest.TestCase):
             # while uvw_cpu should only have a descriptor backing it
             # at this stage with no concrete NumPy array
             self.assertTrue(isinstance(getattr(slvr, gpu_name), gpuarray.GPUArray))
-            self.assertTrue(getattr(slvr, cpu_name) is None)
+            self.assertTrue(getattr(slvr, cpu_name, None) is None)
 
     def test_register_array_create_cpu(self):
         """ Test array registration requiring the creation of a CPU array """
-        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=montblanc.sources(point=10, gaussian=10))
 
         with test_solver(slvr_cfg) as slvr:
@@ -144,7 +141,7 @@ class TestSolver(unittest.TestCase):
     def test_register_array_store_cpu(self):
         """ Test array registration deferring to BaseSolver """
 
-        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=montblanc.sources(point=10, gaussian=10),
             store_cpu=True)
 
@@ -159,7 +156,7 @@ class TestSolver(unittest.TestCase):
             dtype_name = mbu.dtype_name(name)
 
             # Before registration, descriptors may not have been created
-            # on the montblanc.factory.get_base_solver class. If they have, check that
+            # on the BaseSolver class. If they have, check that
             # attributes associated with the slvr instance are None
             if hasattr(BaseSolver, cpu_name):
                 self.assertTrue(getattr(slvr, cpu_name) is None)
@@ -183,7 +180,7 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_create_cpu_not_gpu(self):
         """  Test array registration requiring a CPU array, but not a GPU array """
-        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=montblanc.sources(point=10, gaussian=10))
 
         with test_solver(slvr_cfg) as slvr:
@@ -221,7 +218,7 @@ class TestSolver(unittest.TestCase):
 
     def test_register_array_shape_and_dtype(self):
         """ Test array registration requiring shape and dtype attributes to be created """
-        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=montblanc.sources(point=10, gaussian=10))
 
         with test_solver(slvr_cfg) as slvr:
@@ -279,7 +276,7 @@ class TestSolver(unittest.TestCase):
                 'dtype_member':False, 'shape_member':False }
         ]
 
-        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=montblanc.sources(point=10, gaussian=10))
 
         with test_solver(slvr_cfg) as slvr:
@@ -325,7 +322,7 @@ class TestSolver(unittest.TestCase):
         ]
 
         sources = montblanc.sources(point=10, gaussian=10)
-        slvr_cfg = SolverConfiguration(na=3, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=sources)
 
         with test_solver(slvr_cfg) as slvr:
@@ -349,7 +346,7 @@ class TestSolver(unittest.TestCase):
         """
         na, ntime, nchan = 14, 5, 16
 
-        slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=10, nchan=32,
             sources=montblanc.sources(point=2, gaussian=2))
 
         name = 'nwombles'
@@ -418,7 +415,7 @@ class TestSolver(unittest.TestCase):
         """
         # Should have 105 baselines for 14 antenna with auto-correlations on
         autocor = True
-        slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=10, nchan=32,
             sources=montblanc.sources(point=2, gaussian=2),
             auto_correlations=autocor)
 
@@ -429,7 +426,7 @@ class TestSolver(unittest.TestCase):
 
         # Should have 91 baselines for 14 antenna with auto-correlations on
         autocor = False
-        slvr_cfg = SolverConfiguration(na=14, ntime=10, nchan=32,
+        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=10, nchan=32,
             sources=montblanc.sources(point=2, gaussian=2),
             auto_correlations=autocor)
 
@@ -444,7 +441,7 @@ class TestSolver(unittest.TestCase):
         number of viable timesteps work
         """
         ntime, nchan, npsrc, ngsrc = 5, 16, 2, 2
-        slvr_cfg = SolverConfiguration(na=14, ntime=ntime, nchan=nchan,
+        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=ntime, nchan=nchan,
             sources=montblanc.sources(point=2, gaussian=2))
 
         with test_solver(slvr_cfg) as slvr:
@@ -463,17 +460,53 @@ class TestSolver(unittest.TestCase):
 
     def test_solver_factory(self):
         """ Test that the solver factory produces the correct types """
-        slvr_cfg = BiroSolverConfiguration(
+        slvr_cfg = montblanc.rime_solver_cfg(
             data_source=Options.DATA_SOURCE_DEFAULTS, version=Options.VERSION_TWO)
 
         with montblanc.factory.rime_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
 
-        slvr_cfg = BiroSolverConfiguration(
+        slvr_cfg = montblanc.rime_solver_cfg(
             data_source=Options.DATA_SOURCE_TEST, version=Options.VERSION_TWO)
 
         with montblanc.factory.rime_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
+
+    def test_config_file(self):
+        """ Test config file """
+        import tempfile
+
+        key, value = 'frobulate', 'laksfjdsflk'
+
+        cfg_file_contents = (
+            "[montblanc]\n"
+            "na = 10\n"
+            "nchan = 64\n"
+            "{k} = {v}\n".format(k=key, v=value))
+
+        with tempfile.NamedTemporaryFile('w') as f:
+            f.write(cfg_file_contents)
+            f.flush()
+
+            # Create some keyword arguments used for
+            # generating the RIME solver configuration.
+            # We provide a configuration file that will
+            # provide some defaults which should be overwridden
+            # by these keyword arguments.
+            D = {
+                Options.CFG_FILE: f.name,
+                Options.DATA_SOURCE: Options.DATA_SOURCE_DEFAULTS,
+                Options.VERSION: Options.VERSION_FOUR,
+                Options.NA: 14
+            }
+
+            slvr_cfg = montblanc.rime_solver_cfg(**D)
+
+            assert slvr_cfg[Options.NA] == 14
+            assert slvr_cfg[Options.NCHAN] == 64
+            assert slvr_cfg[Options.VERSION] == Options.VERSION_FOUR
+            assert slvr_cfg[key] == value
+
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSolver)

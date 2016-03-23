@@ -18,17 +18,56 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import montblanc.util as mbu
-
+import argparse
+import json
 import numpy as np
 import os
+import re
 
-class SolverConfigurationOptions(object):
+import montblanc
+from montblanc.src_types import default_sources
+
+# Argument
+class ArgumentParserError(Exception):
+    pass
+
+class ThrowingArgumentParser(argparse.ArgumentParser):
+    """
+    Inherit from argparse.ArgumentParser and override
+    the error message
+    """
+    _ARG_STR_RE = re.compile('^(?:argument\s*?(\S*?)):\s*?(.*?)$')
+
+    def error(self, message):
+        """
+        Massage the error message a bit and throw
+        an exception, instead of calling the sys.exit
+        in the argparse.ArgumentParser parent class
+        """
+        m = self._ARG_STR_RE.match(message)
+
+        if not m:
+            raise ArgumentParserError(message)
+
+        arg_name = m.group(1).strip('-')
+
+        if len(arg_name) > 0:
+            raise ArgumentParserError(
+                "argument '{n}': {m}".format(
+                    n=arg_name, m=m.group(2)))
+
+        raise ArgumentParserError(message)
+
+class SolverConfig(object):
+    CFG_FILE = 'cfg_file'
+    CFG_FILE_DESCRIPTION = 'Configuration File'
+
     SOURCES = 'sources'
-    DEFAULT_SOURCES = mbu.default_sources()
+    DEFAULT_SOURCES = {k: v for k, v
+            in default_sources().iteritems()}
     SOURCES_DESCRIPTION = (
-        'A dictionary defining the number of source types.',
-        'Keywords are source types. Values are the number of that source type.')
+        "Dictionary containing source type numbers "
+        "e.g. {d}").format(d=DEFAULT_SOURCES)
 
     # Number of timesteps
     NTIME = 'ntime'
@@ -65,9 +104,10 @@ class SolverConfigurationOptions(object):
     DEFAULT_SOLVER_TYPE = SOLVER_TYPE_MASTER
     VALID_SOLVER_TYPE = [SOLVER_TYPE_MASTER, SOLVER_TYPE_SLAVE]
     SOLVER_TYPE_DESCRIPTION = (
-        'String indicating the solver type',
-        "If '%s' it controls other solvers" % SOLVER_TYPE_MASTER,
-        "If '%s' it is controlled by master solvers" % SOLVER_TYPE_SLAVE)
+        'String indicating the solver type. '
+        "If '{m}' it controls other solvers "
+        "If '{s}' it is controlled by master solvers ").format(
+            m=SOLVER_TYPE_MASTER, s=SOLVER_TYPE_SLAVE)
 
     # Are we dealing with floats or doubles?
     DTYPE = 'dtype'
@@ -76,15 +116,17 @@ class SolverConfigurationOptions(object):
     DEFAULT_DTYPE = DTYPE_DOUBLE
     VALID_DTYPES = [DTYPE_FLOAT, DTYPE_DOUBLE]
     DTYPE_DESCRIPTION = (
-        'Type of floating point precision used to compute the RIME',
-        "If '%s', compute the RIME with single-precision" % DTYPE_FLOAT,
-        "If '%s', compute the RIME with double-precision" % DTYPE_DOUBLE)
+        'Type of floating point precision used to compute the RIME. ' 
+        "If '{f}', compute the RIME with single-precision "
+        "If '{d}', compute the RIME with double-precision.").format(
+            f=DTYPE_FLOAT, d=DTYPE_DOUBLE)
 
     # Should we handle auto correlations
     AUTO_CORRELATIONS = 'auto_correlations'
     DEFAULT_AUTO_CORRELATIONS = False
     VALID_AUTO_CORRELATIONS = [True, False]
-    AUTO_CORRELATIONS_DESCRIPTION = 'Should auto-correlations be taken into account'
+    AUTO_CORRELATIONS_DESCRIPTION = ('Take auto-correlations into account '
+        'when computing number of baselines from number antenna.')
 
     # Data Source. Defaults/A MeasurementSet/Random Test data
     DATA_SOURCE = 'data_source'
@@ -94,11 +136,12 @@ class SolverConfigurationOptions(object):
     DEFAULT_DATA_SOURCE = DATA_SOURCE_MS
     VALID_DATA_SOURCES = [DATA_SOURCE_DEFAULTS, DATA_SOURCE_MS, DATA_SOURCE_TEST]
     DATA_SOURCE_DESCRIPTION = (
-        "The data source for initialising data arrays.",
-        "If '%s', data is initialised with defaults." % DATA_SOURCE_DEFAULTS,
-        ("If '%s', some data will be read from a MeasurementSet. "
-        "otherwise defaults will be used.") % DATA_SOURCE_MS,
-        "If '%s' filled with random test data." % DATA_SOURCE_TEST)
+        "The data source for initialising data arrays. "
+        "If '{d}', data is initialised with defaults. " 
+        "If '{t}' filled with random test data. "
+        "If '{ms}', some data will be read from a MeasurementSet, "
+        "and defaults will be used for the rest.").format(
+            d=DATA_SOURCE_DEFAULTS, ms=DATA_SOURCE_MS, t=DATA_SOURCE_TEST)
 
     # MeasurementSet file
     MS_FILE = 'msfile'
@@ -110,9 +153,10 @@ class SolverConfigurationOptions(object):
     DEFAULT_DATA_ORDER = DATA_ORDER_CASA
     VALID_DATA_ORDER = [DATA_ORDER_CASA, DATA_ORDER_OTHER]
     DATA_ORDER_DESCRIPTION = (
-        "MeasurementSet data ordering",
-        "If 'casa' - Assume CASA's default ordering of time x baseline.",
-        "If 'other' - Assume baseline x time ordering")
+        "MeasurementSet data ordering. "
+        "If '{c}', assume CASA's default ordering of time x baseline. "
+        "If '{o}', assume baseline x time ordering").format(
+            c=DATA_ORDER_CASA, o=DATA_ORDER_OTHER)
 
     # Should we store CPU versions when
     # transferring data to the GPU?
@@ -121,7 +165,9 @@ class SolverConfigurationOptions(object):
     VALID_STORE_CPU = [True, False]
     STORE_CPU_DESCRIPTION = (
         'Governs whether array transfers to the GPU '
-        'will be stored in CPU arrays on the solver.')
+        'will be stored in CPU arrays on the solver. '
+        'This flag is used for testing purposes only '
+        'and is not generally supported')
 
 
     CONTEXT = 'context'
@@ -213,79 +259,118 @@ class SolverConfigurationOptions(object):
         },
     }
 
-class SolverConfiguration(dict):
-    """
-    Object defining the Solver Configuration. Inherits from dict.
-
-    Tracks the following quantities defining the problem size
-      - timesteps
-      - antenna
-      - channels
-      - sources
-
-    the data type
-      - float
-      - double
-
-    the data source for the solver
-      - None (data takes defaults)
-      - A Measurement Set
-      - Random data
-    """
-
-    def __init__(self, *args, **kwargs):
+    def parser(self):
         """
-        Construct a default solver configuration
+        Returns an argparse parser suitable for parsing command line options,
+        but employed here to manage the Solver Configuration options defined above.
         """
-        super(SolverConfiguration,self).__init__(*args, **kwargs)
-        self.set_defaults()
+        p = ThrowingArgumentParser()
 
-    def check_key_values(self, key, description=None, valid_values=None):
-        if description is None:
-            description = "" 
+        p.add_argument('--{v}'.format(v=self.SOURCES),
+            required=False,
+            type=json.loads,
+            help=self.SOURCES_DESCRIPTION,
+            default=json.dumps(self.DEFAULT_SOURCES))
 
-        if key not in self:
-            raise KeyError(("Solver configuration is missing "
-                "key ''%s''. Description: %s") % (key, description))
+        p.add_argument('--{v}'.format(v=self.NTIME),
+            required=False,
+            type=int,
+            help=self.NTIME_DESCRIPTION,
+            default=self.DEFAULT_NTIME)
 
-        if valid_values is not None and self[key] not in valid_values:
-            raise KeyError(("Value ''%s'' for solver configuration "
-                "key ''%s'' is invalid. "
-                "Valid values are %s.") % (self[key], key, valid_values))
+        p.add_argument('--{v}'.format(v=self.NA),
+            required=False,
+            type=int,
+            help=self.NA_DESCRIPTION,
+            default=self.DEFAULT_NA)
 
-    def verify(self, descriptions=None):
-        """
-        Verify that required parts of the solver configuration
-        are present.
-        """
+        p.add_argument('--{v}'.format(v=self.NPOL),
+            required=False,
+            type=int,
+            help=self.NPOL_DESCRIPTION,
+            default=self.DEFAULT_NPOL)
 
-        Options = SolverConfigurationOptions
+        p.add_argument('--{v}'.format(v=self.NCHAN),
+            required=False,
+            type=int,
+            help=self.NCHAN_DESCRIPTION,
+            default=self.DEFAULT_NCHAN)
 
-        if descriptions is None:
-            descriptions = Options.descriptions
+        p.add_argument('--{v}'.format(v=self.SOLVER_TYPE),
+            required=False,
+            type=str,
+            help=self.SOLVER_TYPE_DESCRIPTION,
+            choices=self.VALID_SOLVER_TYPE,
+            default=self.SOLVER_TYPE_MASTER)
 
-        for name, info in descriptions.iteritems():
-            required = info.get(Options.REQUIRED, False)
+        p.add_argument('--{v}'.format(v=self.DTYPE),
+            required=False,
+            type=str,
+            choices=self.VALID_DTYPES,
+            help=self.DTYPE_DESCRIPTION,
+            default=self.DEFAULT_DTYPE)
 
-            if required and name not in self:
-                description = info.get(Options.DESCRIPTION, 'None')
+        p.add_argument('--{v}'.format(v=self.AUTO_CORRELATIONS),
+            required=False,
+            type=bool,
+            choices=self.VALID_AUTO_CORRELATIONS,
+            help=self.AUTO_CORRELATIONS_DESCRIPTION,
+            default=self.DEFAULT_AUTO_CORRELATIONS)
 
-                raise KeyError(("Solver configuration is missing "
-                    "key '%s'. Description: %s") % (name, description))
+        p.add_argument('--{v}'.format(v=self.DATA_SOURCE),
+            required=False,
+            type=str,
+            choices=self.VALID_DATA_SOURCES,
+            help=self.DATA_SOURCE_DESCRIPTION,
+            default=self.DEFAULT_DATA_SOURCE)
 
-            valid_values = info.get(Options.VALID, None)
+        p.add_argument('--{v}'.format(v=self.MS_FILE),
+            required=False,
+            type=str,
+            help=self.MS_FILE_DESCRIPTION)
 
-            if valid_values is not None and self[name] not in valid_values:
-                raise KeyError(("Value '%s for solver configuration "
-                    "key '%s' is invalid. "
-                    "Valid values are %s.") % (self[name], name, valid_values))
+        p.add_argument('--{v}'.format(v=self.DATA_ORDER),
+            required=False,
+            type=str,
+            choices=self.VALID_DATA_ORDER,
+            help=self.DATA_ORDER_DESCRIPTION,
+            default=self.DEFAULT_DATA_ORDER)
 
-    def set_defaults(self, descriptions=None):
-        Options = SolverConfigurationOptions
+        p.add_argument('--{v}'.format(v=self.STORE_CPU),
+            required=False,
+            type=bool,
+            choices=self.VALID_STORE_CPU,
+            help=self.STORE_CPU_DESCRIPTION,
+            default=self.DEFAULT_STORE_CPU)
 
-        if descriptions is None:
-            descriptions = Options.descriptions
+        p.add_argument('--{v}'.format(v=self.CONTEXT),
+            required=False,
+            help=self.CONTEXT_DESCRIPTION)
 
-        for name, info in descriptions.iteritems():
-            if Options.DEFAULT in info:
-                self.setdefault(name, info.get(Options.DEFAULT))
+        return p
+
+    def gen_cfg(self, **kwargs):
+        """ Generate a configuration dictionary from the supplied kwargs """
+        # Get a parser
+        p = self.parser()
+
+        # A configuration file was specified
+        # Load any montblanc section options into theargument parser
+        if self.CFG_FILE in kwargs:
+            import ConfigParser
+            
+            montblanc.log.info("Loading defaults from '{cf}'.".format(
+                cf=kwargs[self.CFG_FILE]))
+            config = ConfigParser.SafeConfigParser()
+            config.read([kwargs[self.CFG_FILE]])
+            defaults = dict(config.items('montblanc'))
+            p.set_defaults(**defaults)
+
+        # Update defaults with supplied kwargs
+        p.set_defaults(**kwargs)
+        # Now parse the arguments and get a dictionary
+        # representing the solver configuration
+        slvr_cfg = vars(p.parse_args([]))
+
+        return slvr_cfg
+

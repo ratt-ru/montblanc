@@ -23,7 +23,7 @@ import numpy as np
 import montblanc
 import montblanc.impl.common.loaders
 
-from montblanc.config import (BiroSolverConfigurationOptions as Options)
+from montblanc.config import (BiroSolverConfig as Options)
 
 class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
     def load(self, solver, slvr_cfg):

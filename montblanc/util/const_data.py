@@ -138,7 +138,7 @@ class RimeConstStruct(object):
                 getattr(dim, DIMDATA.EXTENTS))
 
         from montblanc.slvr_config import (
-            SolverConfigurationOptions as Options)
+            SolverConfig as Options)
 
         # If 'nsrc' exists set it by by summing each source type
         if sum_nsrc is True:

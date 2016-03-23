@@ -36,7 +36,7 @@ import montblanc.impl.biro.common
 from montblanc.impl.biro.v3.BiroSolver import BiroSolver
 
 from montblanc.config import (BiroSolverConfiguration,
-    BiroSolverConfigurationOptions as Options)
+    BiroSolverConfig as Options)
 
 
 ONE_KB = 1024
