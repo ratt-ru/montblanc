@@ -140,7 +140,7 @@ def get_base_solver(slvr_cfg):
     if slvr_cfg.get(Options.CONTEXT, None) is None:
         slvr_cfg[Options.CONTEXT]=get_default_context()
 
-    from montblanc.BaseSolver import BaseSolver
+    from montblanc.base_solver import BaseSolver
 
     return BaseSolver(slvr_cfg)
 

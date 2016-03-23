@@ -24,7 +24,7 @@ import pycuda.driver as cuda
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.BaseSolver import BaseSolver
+from montblanc.base_solver import BaseSolver
 
 from montblanc.impl.biro.v5.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v5.gpu.RimeBSqrt import RimeBSqrt

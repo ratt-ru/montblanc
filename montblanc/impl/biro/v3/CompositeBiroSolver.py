@@ -28,7 +28,7 @@ import types
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.BaseSolver import BaseSolver
+from montblanc.base_solver import BaseSolver
 
 import montblanc.impl.biro.v2.BiroSolver as BSV2mod
 import montblanc.impl.biro.common

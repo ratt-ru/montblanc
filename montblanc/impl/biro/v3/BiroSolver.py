@@ -23,7 +23,7 @@ from montblanc.impl.biro.v2.BiroSolver import BiroSolver as BiroSolverV2
 from montblanc.impl.biro.v3.gpu.RimeEK import RimeEK
 from montblanc.impl.biro.v3.gpu.RimeGaussBSum import RimeGaussBSum
 
-from montblanc.BaseSolver import BaseSolver
+from montblanc.base_solver import BaseSolver
 
 from montblanc.config import (BiroSolverConfiguration,
     BiroSolverConfig as Options)

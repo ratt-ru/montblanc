@@ -28,11 +28,11 @@ import pycuda.driver
 import pycuda.gpuarray as gpuarray
 import pycuda.curandom
 
-from montblanc import BaseSolver
 import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
+from montblanc.base_solver import BaseSolver
 from montblanc.config import BiroSolverConfig as Options
 
 def test_solver(slvr_cfg, **kwargs):
@@ -67,8 +67,6 @@ class TestSolver(unittest.TestCase):
         """ """
         slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=montblanc.sources(point=10, gaussian=10))
-
-        from montblanc.BaseSolver import BaseSolver
 
         with test_solver(slvr_cfg) as slvr:
             name='uvw'

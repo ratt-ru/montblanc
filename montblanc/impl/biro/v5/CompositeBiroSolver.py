@@ -32,7 +32,7 @@ import pycuda.tools
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.BaseSolver import BaseSolver
+from montblanc.base_solver import BaseSolver
 from montblanc.config import BiroSolverConfig as Options
 
 from montblanc.enums import DIMDATA
