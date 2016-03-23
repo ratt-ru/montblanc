@@ -90,14 +90,14 @@ Possible Issues
    to check if your pycuda can talk to the NVIDIA driver. If not,
    manually download and install
    `PyCUDA <http://mathema.tician.de/software/pycuda/>`__.
--  `cub 1.5.1 <https://github.com/nvlabs/cub>`__. setup.py will
+-  `cub 1.5.2 <https://github.com/nvlabs/cub>`__. setup.py will
    attempt to download this from github and install to the correct
    directory during install. If this fails do the following:
 
    .. code:: bash
 
-       $ wget -c https://codeload.github.com/NVlabs/cub/zip/1.5.1
-       $ mv 1.5.1 cub.zip
+       $ wget -c https://codeload.github.com/NVlabs/cub/zip/1.5.2
+       $ mv 1.5.2 cub.zip
        $ python setup.py install
 
 -  `numexpr <https://github.com/pydata/numexpr>`__. When running
