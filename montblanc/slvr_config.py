@@ -62,6 +62,17 @@ class SolverConfig(object):
     CFG_FILE = 'cfg_file'
     CFG_FILE_DESCRIPTION = 'Configuration File'
 
+    MODE = 'mode'
+    MODE_X2 = 'X2'
+    MODE_SIMULATOR = 'simulator'
+    DEFAULT_MODE = MODE_X2
+    MODE_DESCRIPTION = (
+        "Montblanc's execution mode. "
+        "If '{x2}', montblanc will compute model visibilities and "
+        "use them in conjunction with observed visibilities, "
+        "flag data and weighting vectors to compute a chi-squared value. "
+        "If '{sim}', montblanc will compute model visibilities.")
+
     SOURCES = 'sources'
     DEFAULT_SOURCES = {k: v for k, v
             in default_sources().iteritems()}
@@ -182,6 +193,11 @@ class SolverConfig(object):
     REQUIRED = 'required'
 
     descriptions = {
+        MODE : {
+            DESCRIPTION: MODE_DESCRIPTION,
+            DEFAULT: DEFAULT_MODE,
+            REQUIRED: True },
+
         SOURCES: {
             DESCRIPTION: SOURCES_DESCRIPTION,
             DEFAULT: DEFAULT_SOURCES,
@@ -265,6 +281,12 @@ class SolverConfig(object):
         but employed here to manage the Solver Configuration options defined above.
         """
         p = ThrowingArgumentParser()
+
+        p.add_argument('--{v}'.format(v=self.MODE),
+            required=False,
+            type=str,
+            help=self.MODE_DESCRIPTION,
+            default=self.DEFAULT_MODE)
 
         p.add_argument('--{v}'.format(v=self.SOURCES),
             required=False,
