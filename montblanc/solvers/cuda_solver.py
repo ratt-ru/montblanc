@@ -90,19 +90,22 @@ class CUDASolver(RIMESolver):
         if gpu_name not in CUDASolver.__dict__:
             setattr(CUDASolver, gpu_name, CUDAArrayDescriptor(record_key=A.name))
 
-        # If we're creating arrays, then we'll want to initialise
-        # them with default values
-        default_ary = None
+        # Create an empty array
+        cpu_ary = np.empty(shape=A.shape, dtype=A.dtype)                
+        data_source =self._slvr_cfg[Options.DATA_SOURCE]
 
         # If we're creating test data, initialise the array with
-        # data from the test key, otherwise take data from the default key
-        if self._slvr_cfg[Options.DATA_SOURCE] == Options.DATA_SOURCE_TEST:
-            source_key = 'test'
+        # data from the test key, don't initialise if we've been
+        # explicitly told the array should be empty, otherwise
+        # set the defaults
+        if data_source == Options.DATA_SOURCE_TEST:
+            self.init_array(name, cpu_ary,
+                kwargs.get(Options.DATA_SOURCE_TEST, None))
+        elif data_source == Options.DATA_SOURCE_EMPTY:
+            pass
         else:
-            source_key = 'default'
-
-        default_ary = np.empty(shape=A.shape, dtype=A.dtype)                    
-        self.init_array(A.name, default_ary, kwargs.get(source_key, None))
+            self.init_array(name, cpu_ary,
+                kwargs.get(Options.DATA_SOURCE_DEFAULTS, None))               
 
         # We don't use gpuarray.zeros, since it fails for
         # a zero-length array. This is kind of bad since
@@ -122,8 +125,9 @@ class CUDASolver(RIMESolver):
             gpu_ary = gpuarray.empty(shape=A.shape, dtype=A.dtype)
 
             # If the array length is non-zero initialise it
-            if np.product(A.shape) > 0:
-                gpu_ary.set(default_ary)
+            if (data_source != Options.DATA_SOURCE_EMPTY and
+                np.product(A.shape) > 0):
+                gpu_ary.set(cpu_ary)
             
             setattr(self, gpu_name, gpu_ary)
 
