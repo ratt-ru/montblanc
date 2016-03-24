@@ -199,6 +199,8 @@ public:
         { return ::rint(value); }
 };
 
+
+// result = rhs*lhs;
 template <
     typename T,
     typename Tr=kernel_traits<T>,
@@ -214,6 +216,24 @@ __device__ __forceinline__ void complex_multiply(
     result.y = lhs.x*rhs.y + lhs.y*rhs.x;
 }
 
+// rhs *= lhs;
+template <
+    typename T,
+    typename Tr=kernel_traits<T>,
+    typename Po=kernel_policies<T> >
+__device__ __forceinline__ void complex_conjugate_multiply(
+    typename Tr::ct & result,
+    const typename Tr::ct & lhs,
+    const typename Tr::ct & rhs)
+{
+    // (a+bi)(c-di) = (ac+bd) + (-ad+bc)i
+    // a = lhs.x b=lhs.y c=rhs.x d = rhs.y
+    result.x = lhs.x*rhs.x + lhs.y*rhs.y;
+    result.y = -lhs.x*rhs.y + lhs.y*rhs.x;
+}
+
+
+// result = rhs*conj(lhs);
 template <
     typename T,
     typename Tr=kernel_traits<T>,
@@ -230,6 +250,26 @@ __device__ __forceinline__ void complex_multiply_in_place(
     lhs.y += tmp*rhs.y;
 }
 
+// rhs *= conj(lhs);
+template <
+    typename T,
+    typename Tr=kernel_traits<T>,
+    typename Po=kernel_policies<T> >
+__device__ __forceinline__ void complex_conjugate_multiply_in_place(
+    typename Tr::ct & lhs,
+    const typename Tr::ct & rhs)
+{
+    typename Tr::ft tmp = -lhs.x;
+
+    lhs.x *= rhs.x;
+    lhs.x += lhs.y*rhs.y;
+    lhs.y *= rhs.x;
+    lhs.y += tmp*rhs.y;
+}
+
+
+
 } // namespace montblanc
+
 
 #endif // _MONTBLANC_KERNEL_TRAITS_CUH

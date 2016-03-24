@@ -158,12 +158,11 @@ void rime_gauss_B_sum_impl(
         // Get the complex scalars for antenna two and conjugate it
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
-        ant_two.y = - ant_two.y;
         // Get the complex scalar for antenna one
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i];
 
-        montblanc::complex_multiply_in_place<T>(ant_one, ant_two);
+        montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
         typename Tr::ct pol;
 
         pol.x = I[threadIdx.z]+Q[threadIdx.z]; pol.y = 0;
@@ -222,12 +221,11 @@ void rime_gauss_B_sum_impl(
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
         ant_two.x *= exp; ant_two.y *= exp;
-        ant_two.y = - ant_two.y;
         // Get the complex scalar for antenna one
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i];
 
-        montblanc::complex_multiply_in_place<T>(ant_one, ant_two);
+        montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
         typename Tr::ct pol;
 
         pol.x = I[threadIdx.z]+Q[threadIdx.z]; pol.y = 0;
@@ -289,12 +287,11 @@ void rime_gauss_B_sum_impl(
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_two = jones_EK_scalar[i];
         ant_two.x *= sersic_factor; ant_two.y *= sersic_factor;
-        ant_two.y = - ant_two.y;
         // Get the complex scalar for antenna one
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
         typename Tr::ct ant_one = jones_EK_scalar[i];
 
-        montblanc::complex_multiply_in_place<T>(ant_one, ant_two);
+        montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
         typename Tr::ct pol;
 
         pol.x = I[threadIdx.z]+Q[threadIdx.z]; pol.y = 0;
