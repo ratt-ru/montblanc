@@ -21,11 +21,6 @@
 import collections
 import copy
 
-try:
-    from inspect import signature
-except ImportError:
-    from funcsigs import signature
-
 import numpy as np
 import types
 
@@ -33,31 +28,10 @@ from weakref import WeakKeyDictionary
 from attrdict import AttrDict
 from collections import OrderedDict
 
-import pycuda
-import pycuda.driver as cuda
-import pycuda.gpuarray as gpuarray
-
 import montblanc
-import montblanc.factory
 import montblanc.util as mbu
 
-from montblanc.enums import (DIMDATA)
-
-from montblanc.config import (BiroSolverConfig as Options)
-
-class PipelineDescriptor(object):
-    """ Descriptor class for pipelines """
-    def __init__(self):
-        self.data = WeakKeyDictionary()
-
-    def __get__(self, instance, owner):
-        return self.data.get(instance,None)
-
-    def __set__(self, instance, value):
-        self.data[instance] = value
-
-    def __delete__(self, instance):
-        del self.data[instance]
+from montblanc.enums import DIMDATA
 
 class PropertyDescriptor(object):
     """ Descriptor class for properties """
@@ -76,56 +50,12 @@ class PropertyDescriptor(object):
     def __delete__(self, instance):
         del self.data[instance]
 
-class CPUArrayDescriptor(object):
-    """ Descriptor class for NumPy ndarrays arrays on the CPU """
-    def __init__(self, record_key, default=None):
-        self.default = default
-        self.record_key = record_key
-        self.data = WeakKeyDictionary()
-
-    def __get__(self, instance, owner):
-        return self.data.get(instance,self.default)
-
-    def __set__(self, instance, value):
-        instance.check_array(self.record_key, value)
-        self.data[instance] = value
-
-    def __delete__(self, instance):
-        del self.data[instance]
-
-class GPUArrayDescriptor(object):
-    """ Descriptor class for pycuda.gpuarrays on the GPU """
-    def __init__(self, record_key, default=None):
-        self.default = default
-        self.record_key = record_key
-        self.data = WeakKeyDictionary()
-
-    def __get__(self, instance, owner):
-        return self.data.get(instance,self.default)
-
-    def __set__(self, instance, value):
-        instance.check_array(self.record_key, value)
-        self.data[instance] = value
-
-    def __delete__(self, instance):
-        del self.data[instance]
-
-class Solver(object):
+class BaseSolver(object):
     """ Base class for solving the RIME. """
-    pass
 
-class BaseSolver(Solver):
-    """ Class that holds the elements for solving the RIME """
-
-    pipeline = PipelineDescriptor()
-
-    def __init__(self, slvr_cfg):
+    def __init__(self):
         """
         BaseSolver Constructor
-
-        Arguments:
-            slvr_cfg : SolverConfiguration
-                A solver configuration object.
         """
 
         # Dictionaries to store records about our
@@ -134,69 +64,26 @@ class BaseSolver(Solver):
         self._arrays = OrderedDict()
         self._properties = OrderedDict()
 
-        # Store the solver configuration
-        self._slvr_cfg = slvr_cfg
-
-        # Configure our floating point and complex types
-        if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
-            self.ft = np.float32
-            self.ct = np.complex64
-        elif slvr_cfg[Options.DTYPE] == Options.DTYPE_DOUBLE:
-            self.ft = np.float64
-            self.ct = np.complex128
-        else:
-            raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
-
-        # Store the context, choosing the default if not specified
-        ctx = slvr_cfg.get(Options.CONTEXT, None)
-
-        if ctx is None:
-            raise Exception('No CUDA context was supplied to the BaseSolver')
-
-        if isinstance(ctx, list):
-            ctx = ctx[0]
-
-        # Create a context wrapper
-        self.context = mbu.ContextWrapper(ctx)
-
-        # Figure out the integer compute cability of the device
-        # associated with the context
-        with self.context as ctx:
-            cc_tuple = cuda.Context.get_device().compute_capability()
-        # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
-        self.cc = np.int32(np.dot(cc_tuple, (100,10)))
-
-        # Should we store CPU versions of the GPU arrays
-        self.store_cpu = slvr_cfg.get(Options.STORE_CPU, False)
-
-        # Is this a master solver or not
-        self._is_master = slvr_cfg.get(Options.SOLVER_TYPE)
-
-        # Configure our solver pipeline
-        pipeline = slvr_cfg.get('pipeline', None)
-
-        if pipeline is None:
-            pipeline = montblanc.factory.get_empty_pipeline(slvr_cfg)
-        self.pipeline = pipeline
-
     def bytes_required(self):
         """ Returns the memory required by all arrays in bytes."""
-        return np.sum([mbu.array_bytes(a.shape,a.dtype)
-            for a in self._arrays.itervalues()])
+        return np.sum([self.array_bytes(a) for a in self._arrays.itervalues()])
 
-    def cpu_bytes_required(self):
-        """ returns the memory required by all CPU arrays in bytes. """
-        return np.sum([mbu.array_bytes(a.shape,a.dtype)
-            for a in self._arrays.itervalues() if a.cpu])
+    def array_bytes(self, array):
+        """ Estimates the memory of the supplied array in bytes """
+        return np.product(array.shape)*np.dtype(array.dtype).itemsize
 
-    def gpu_bytes_required(self):
-        """ returns the memory required by all GPU arrays in bytes. """
-        return np.sum([mbu.array_bytes(a.shape,a.dtype)
-            for a in self._arrays.itervalues() if a.gpu])
+    def fmt_bytes(self, nbytes):
+        """ Returns a human readable string, given the number of bytes """
+        for x in ['B','KB','MB','GB', 'TB']:
+            if nbytes < 1024.0:
+                return "%3.1f%s" % (nbytes, x)
+            nbytes /= 1024.0
+
+        return "%.1f%s" % (nbytes, 'PB')
 
     def mem_required(self):
         """ Return a string representation of the total memory required """
-        return mbu.fmt_bytes(self.bytes_required())
+        return self.fmt_bytes(self.bytes_required())
 
     def register_dimension(self, name, dim_data, **kwargs):
         """
@@ -224,6 +111,10 @@ class BaseSolver(Solver):
                 E[0] < E[1] <= local_size must hold.
             zero_valid : boolean
                 If True, this dimension may be zero-sized.
+
+        Returns
+        -------
+        A dictionary describing this dimension
         """
         from montblanc.enums import DIMDATA
 
@@ -235,63 +126,9 @@ class BaseSolver(Solver):
                 "a different name!").format(n=name))
 
         # Create the dimension dictionary
-        self._dims[name] = mbu.create_dim_data(name, dim_data, **kwargs)
+        D = self._dims[name] = mbu.create_dim_data(name, dim_data, **kwargs)
 
-    def register_default_dimensions(self):
-        """ Register the default dimensions for a RIME solver """ 
-
-        # Pull out the configuration options for the basics
-        autocor = self._slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
-        ntime = self._slvr_cfg.get(Options.NTIME)
-        na = self._slvr_cfg.get(Options.NA)
-        nchan = self._slvr_cfg.get(Options.NCHAN)
-        npol = self._slvr_cfg.get(Options.NPOL)
-
-        # Register these dimensions on this solver.
-        self.register_dimension('ntime', ntime,
-            description=Options.NTIME_DESCRIPTION)
-        self.register_dimension('na', na,
-            description=Options.NA_DESCRIPTION)
-        self.register_dimension('nchan', nchan,
-            description=Options.NCHAN_DESCRIPTION)
-        self.register_dimension(Options.NPOL, npol,
-            description=Options.NPOL_DESCRIPTION)
-
-        size_func = (self.dim_global_size if self.is_master()
-            else self.dim_local_size)
-
-        # Now get the size of the registered dimensions
-        ntime, na, nchan, npol = size_func('ntime', 'na', 'nchan', 'npol')
-        
-        nbl = self._slvr_cfg.get(Options.NBL,
-            mbu.nr_of_baselines(na, autocor))
-
-        self.register_dimension('nbl', nbl,
-            description=Options.NBL_DESCRIPTION)
-
-        nbl = size_func('nbl')
-
-        self.register_dimension('npolchan', nchan*npol,
-            description='Number of channels x polarisations')
-        self.register_dimension('nvis', ntime*nbl*nchan,
-            description='Number of visibilities')
-
-        # Convert the source types, and their numbers
-        # to their number variables and numbers
-        # { 'point':10 } => { 'npsrc':10 }
-        src_cfg = self._slvr_cfg[Options.SOURCES]
-        src_nr_vars = mbu.sources_to_nr_vars(src_cfg)
-        # Sum to get the total number of sources
-        self.register_dimension('nsrc', sum(src_nr_vars.itervalues()),
-            description='Number of sources (total)')
-
-        # Register the individual source types
-        for src_type, (nr_var, nr_of_src) in zip(
-            src_cfg.iterkeys(), src_nr_vars.iteritems()):
-
-            self.register_dimension(nr_var, nr_of_src, 
-                description='Number of {t} sources'.format(t=src_type),
-                zero_valid=True)        
+        return D
 
     def register_dimensions(self, dim_list, defaults=True):
         for dim in dim_list:
@@ -371,6 +208,10 @@ class BaseSolver(Solver):
 
         return self.__dim_attribute(DIMDATA.GLOBAL_SIZE, *args)
 
+    def dim_global_size_dict(self):
+        """ Returns a mapping of dimension name to global size """
+        return { d.name: d.global_size for d in self._dims.itervalues() }
+
     def dim_local_size(self, *args):
         """
         ntime, nbl, nchan = slvr.dim_local_size('ntime, 'nbl', 'nchan')
@@ -382,6 +223,10 @@ class BaseSolver(Solver):
 
         return self.__dim_attribute(DIMDATA.LOCAL_SIZE, *args)
 
+    def dim_local_size_dict(self):
+        """ Returns a mapping of dimension name to local size """
+        return { d.name: d.local_size for d in self._dims.itervalues() }
+
     def dim_extents(self, *args):
         """
         t_ex, bl_ex, ch_ex = slvr.dim_extents('ntime, 'nbl', 'nchan')
@@ -392,6 +237,10 @@ class BaseSolver(Solver):
         """
 
         return self.__dim_attribute(DIMDATA.EXTENTS, *args)
+
+    def dim_extents_dict(self):
+        """ Returns a mapping of dimension name to extents """
+        return { d.name: d.extents for d in self.__dims.itervalues() }
 
     def check_array(self, record_key, ary):
         """
@@ -412,63 +261,6 @@ class BaseSolver(Solver):
                     np.dtype(record.dtype).name,
                     np.dtype(ary.dtype).name))
 
-    def init_array(self, name, ary, value):
-        # No defaults are supplied
-        if value is None:
-            ary.fill(0)
-        # The array is defaulted with some function
-        elif isinstance(value, types.MethodType):
-            try:
-                signature(value).bind(self, ary)
-            except TypeError:
-                raise TypeError(('The signature of the function supplied '
-                    'for setting the value on array %s is incorrect. '
-                    'The function signature has the form f(slvr, ary), '
-                    'where f is some function that will set values '
-                    'on the array, slvr is a Solver object which provides ' 
-                    'useful information to the function, '
-                    'and ary is the NumPy array which must be '
-                    'initialised with values.') % (name))
-
-            returned_ary = value(self, ary)
-
-            if returned_ary is not None:
-                ary[:] = returned_ary
-        elif isinstance(value, types.LambdaType):
-            try:
-                signature(value).bind(self, ary)
-            except TypeError:
-                raise TypeError(('The signature of the lambda supplied '
-                    'for setting the value on array %s is incorrect. '
-                    'The function signature has the form lambda slvr, ary:, '
-                    'where lambda provides functionality for setting values '
-                    'on the array, slvr is a Solver object which provides ' 
-                    'useful information to the function, '
-                    'and ary is the NumPy array which must be '
-                    'initialised with values.') % (name))
-
-            returned_ary = value(self, ary)
-
-            if returned_ary is not None:
-                ary[:] = returned_ary
-        # Got an ndarray, try set it equal
-        elif isinstance(value, np.ndarray):
-            try:
-                ary[:] = value
-            except BaseException as e:
-                raise ValueError(('Tried to assign array %s with '
-                    'value NumPy array, but this failed '
-                    'with %s') % (name, repr(e)))
-        # Assume some sort of value has been supplied
-        # Give it to NumPy
-        else:
-            try:
-                ary.fill(value)
-            except BaseException as e:
-                raise ValueError(('Tried to fill array %s with '
-                    'value value %s, but NumPy\'s fill function '
-                    'failed with %s') % (name, value, repr(e)))
-
 
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         """
@@ -487,12 +279,6 @@ class BaseSolver(Solver):
 
         Keyword Arguments
         -----------------
-            cpu : boolean
-                True if a ndarray called 'name_cpu' should be
-                created on the Solver object.
-            gpu : boolean
-                True if a gpuarray called 'name_gpu' should be
-                created on the Solver object.
             shape_member : boolean
                 True if a member called 'name_shape' should be
                 created on the Solver object.
@@ -510,22 +296,17 @@ class BaseSolver(Solver):
                 an page-aligned array.
             replace : boolean
                 True if existing arrays should be replaced.
-        """
-        # Should we create arrays? By default we don't create CPU arrays
-        # but we do create GPU arrays by default.
-        create_cpu_ary = kwargs.get('cpu', False) or self.store_cpu
-        create_gpu_ary = kwargs.get('gpu', True)
 
+        Returns
+        -------
+            A dictionary describing this array.
+        """
         # Get a template dictionary to perform string replacements
-        T = self.template_dict()
+        T = self.dim_local_size_dict()
 
         # Figure out the actual integer shape
         sshape = shape
         shape = mbu.shape_from_str_tuple(sshape, T)
-
-        # Replace any string representations with the
-        # appropriate data type
-        dtype = mbu.dtype_from_str(dtype, T)
 
         # Set up a member describing the shape
         if kwargs.get('shape_member', False) is True:
@@ -537,14 +318,17 @@ class BaseSolver(Solver):
             dtype_name = mbu.dtype_name(name)
             setattr(self, dtype_name, dtype)
 
-        # OK, create a record for this array
-        if name not in self._arrays:
-            self._arrays[name] = AttrDict(name=name, dtype=dtype,
-                shape=shape, sshape=sshape,
-                registrant=registrant, **kwargs)
-        else:
+        # Complain if array exists
+        if name in self._arrays:
             raise ValueError(('Array %s is already registered '
                 'on this solver object.') % name)
+
+        # OK, create a record for this array
+        A = self._arrays[name] = AttrDict(name=name,
+            dtype=dtype, shape=shape, sshape=sshape,
+            registrant=registrant, **kwargs)
+
+        return A
 
         # Attribute names
         cpu_name = mbu.cpu_name(name)
@@ -701,21 +485,13 @@ class BaseSolver(Solver):
                 If a method, this is used instead.
             setter_docstring : string
                 docstring for the default setter.
-
         """
-
-        T = self.template_dict()
-
-        # Replace any string representations with the
-        # appropriate data type
-        dtype = mbu.dtype_from_str(dtype, T)
-
-        if name not in self._properties:
-            self._properties[name] = AttrDict(name=name, dtype=dtype,
-                default=default, registrant=registrant)
-        else:
+        if name in self._properties:
             raise ValueError(('Property %s is already registered '
                 'on this solver object.') % name)
+
+        P = self._properties[name] = AttrDict(name=name, dtype=dtype,
+            default=default, registrant=registrant)
 
         #if not hasattr(BaseSolver, name):
         if not BaseSolver.__dict__.has_key(name):
@@ -750,6 +526,8 @@ class BaseSolver(Solver):
             raise TypeError, ('setter keyword argument set',
                 ' to an invalid type %s' % (type(setter)))
 
+        return P
+
     def register_properties(self, property_list):
         """
         Register properties using a list defining the properties.
@@ -763,43 +541,6 @@ class BaseSolver(Solver):
         """
         for prop in property_list:
             self.register_property(**prop)
-
-    def template_dict(self):
-        """
-        Returns a dictionary suitable for templating strings with
-        properties and dimensions related to this Solver object.
-
-        Used in templated GPU kernels.
-        """
-        slvr = self
-
-        D = {
-            # Types
-            'ft' : slvr.ft,
-            'ct' : slvr.ct,
-            'int' : int,
-            # Constants
-            'LIGHTSPEED': montblanc.constants.C,
-        }
-
-        # Update with dimensions
-        D.update({d.name: d.local_size for d in self._dims.itervalues()})
-
-        # Add any registered properties to the dictionary
-        for p in self._properties.itervalues():
-            D[p.name] = getattr(self, p.name)
-
-        return D
-
-    def is_float(self):
-        return self.ft == np.float32
-
-    def is_double(self):
-        return self.ft == np.float64
-
-    def is_master(self):
-        """ Is this a master solver """
-        return self._is_master == Options.SOLVER_TYPE_MASTER
 
     def properties(self):
         """ Returns a dictionary of properties """
@@ -878,17 +619,15 @@ class BaseSolver(Solver):
 
     def solve(self):
         """ Solve the RIME """
-        with self.context as ctx:
-            self.pipeline.execute(self)
+        pass
 
     def initialise(self):
-        with self.context as ctx:
-            self.pipeline.initialise(self)
+        """ Initialise the RIME solver """
+        pass
 
     def shutdown(self):
         """ Stop the RIME solver """
-        with self.context as ctx:
-            self.pipeline.shutdown(self)
+        pass
 
     def __enter__(self):
         self.initialise()
@@ -899,16 +638,12 @@ class BaseSolver(Solver):
 
     def __str__(self):
         """ Outputs a string representation of this object """
-        n_cpu_bytes = self.cpu_bytes_required()
-        n_gpu_bytes = self.gpu_bytes_required()
 
         w = 20
 
         l = ['',
-            'Memory Usage',
-            '-'*80,
-            '%-*s: %s' % (w,'CPU Memory', mbu.fmt_bytes(n_cpu_bytes)),
-            '%-*s: %s' % (w,'GPU Memory', mbu.fmt_bytes(n_gpu_bytes))]
+            '%-*s: %s' % (w,'Memory Usage', self.mem_required()),
+            '-'*80]
 
         l.extend([''])
         l.extend([s for s in self.gen_dimension_descriptions()])

@@ -81,6 +81,10 @@ def transfer_method_name(name):
     """ Constructs a transfer method name, given the array name """
     return 'transfer_' + name
 
+def retrieve_method_name(name):
+    """ Constructs a transfer method name, given the array name """
+    return 'retrieve_' + name
+
 def shape_name(name):
     """ Constructs a name for the array shape member, based on the array name """
     return name + '_shape'
