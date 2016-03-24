@@ -188,8 +188,7 @@ class TestBiroV2(unittest.TestCase):
 
         self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
 
-        chi_sqrd_result_cpu = cpu_slvr.compute_biro_chi_sqrd(
-            weight_vector=weight_vector)
+        chi_sqrd_result_cpu = cpu_slvr.compute_biro_chi_sqrd()
 
         # So technically the chi squared should be living
         # on the GPU array, but RimeGaussBSum places it

@@ -95,7 +95,8 @@ class SolverCPU(CPUSolver):
             local_dict={
                 'u1':u1[:,:,:,np.newaxis],
                 'v1':v1[:,:,:,np.newaxis],
-                'scale_uv':(self.gauss_scale/self.wavelength_cpu)[np.newaxis,np.newaxis,np.newaxis,:],
+                'scale_uv':(self.gauss_scale/
+                    self.wavelength_cpu)[np.newaxis,np.newaxis,np.newaxis,:],
                 'R':R[np.newaxis,np.newaxis,:,np.newaxis]})
 
     def compute_sersic_shape(self):
@@ -217,7 +218,7 @@ class SolverCPU(CPUSolver):
         if ngsrc > 0:
             src_beg = npsrc
             src_end = npsrc + ngsrc
-            k_jones_per_bl[:, :, src_beg:src_end, :] *=\
+            k_jones_per_bl[:, :, src_beg:src_end, :] *= \
                 self.compute_gaussian_shape()
             # TODO: Would like to do this, but fails because of
             # https://github.com/pydata/numexpr/issues/155
@@ -230,7 +231,7 @@ class SolverCPU(CPUSolver):
         if nssrc > 0:
             src_beg = npsrc+ngsrc
             src_end = npsrc+ngsrc+nssrc
-            k_jones_per_bl[:, :, src_beg:src_end:, :] *=  \
+            k_jones_per_bl[:, :, src_beg:src_end:, :] *= \
                 self.compute_sersic_shape()
 
         return k_jones_per_bl
@@ -287,8 +288,8 @@ class SolverCPU(CPUSolver):
 
         Returns a (ntime,na,nsrc,nchan) matrix of complex scalars.
         """
-        return self.compute_k_jones_scalar_per_ant() * \
-            self.compute_e_jones_scalar_per_ant()
+        return (self.compute_k_jones_scalar_per_ant() *
+            self.compute_e_jones_scalar_per_ant())
 
     def compute_ek_jones_scalar_per_bl(self):
         """
@@ -296,8 +297,8 @@ class SolverCPU(CPUSolver):
 
         Returns a (ntime,nbl,nsrc,nchan) matrix of complex scalars.
         """
-        per_bl_ek_scalar = self.compute_k_jones_scalar_per_bl() * \
-            self.compute_e_jones_scalar_per_bl()
+        per_bl_ek_scalar = (self.compute_k_jones_scalar_per_bl() *
+            self.compute_e_jones_scalar_per_bl())
 
         return per_bl_ek_scalar
 
@@ -359,7 +360,7 @@ class SolverCPU(CPUSolver):
 
         return jones
 
-    def compute_ebk_vis(self, flag=None):
+    def compute_ebk_vis(self):
         """
         Computes the complex visibilities based on the
         scalar EK term and the 2x2 B term.
@@ -369,8 +370,6 @@ class SolverCPU(CPUSolver):
         nsrc, ntime, nbl, nchan = self.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         ebk_jones = self.compute_ebk_jones()
-
-        if flag is None: flag = self.flag_cpu
 
         if nsrc == 1:
             # Due to this bug
@@ -386,7 +385,7 @@ class SolverCPU(CPUSolver):
         assert vis.shape == (4, ntime, nbl, nchan)
 
         # Zero any flagged visibilities
-        vis[flag > 0] = 0
+        vis[self.flag_cpu > 0] = 0
 
         return vis
 
@@ -406,44 +405,32 @@ class SolverCPU(CPUSolver):
 
         return vis
 
-    def compute_chi_sqrd_sum_terms(self, vis=None,
-        bayes_data=None, weight_vector=False, flag=None):
+    def compute_chi_sqrd_sum_terms(self, vis=None):
         """
         Computes the terms of the chi squared sum,
-        but does not perform the sum itself.
-
-        Parameters:
-            weight_vector : boolean
-                True if the chi squared test terms
-                should be computed with a noise vector
+        but does not itself perform the sum.
 
         Returns a (ntime,nbl,nchan) matrix of floating point scalars.
         """        
         ntime, nbl, nchan = self.dim_local_size('ntime', 'nbl', 'nchan')
 
         if vis is None: vis = self.compute_ebk_vis()
-        if bayes_data is None: bayes_data = self.bayes_data_cpu
-        if flag is None: flag = self.flag_cpu
-
-        # Copy technically needed here so that flagging
-        # doesn't corrupt original array
-        bayes_data = bayes_data.copy()
-        bayes_data[flag > 0] = 0
 
         # Take the difference between the visibilities and the model
         # (4,nbl,nchan,ntime)
-        d = ne.evaluate('vis - bayes', {
+        d = ne.evaluate('vis - (bayes*where(flag > 0, 0, 1))', {
             'vis': vis,
-            'bayes': bayes_data})
+            'bayes': self.bayes_data_cpu,
+            'flag': self.flag_cpu})
         assert d.shape == (4, ntime, nbl, nchan)
 
         # Square of the real and imaginary components
         re = ne.evaluate('re**2', {'re': d.real})
         im = ne.evaluate('im**2', {'im': d.imag})
-        wv = self.weight_vector_cpu
 
         # Multiply by the weight vector if required
-        if weight_vector is True:
+        if self.use_weight_vector() is True:
+            wv = self.weight_vector_cpu
             ne.evaluate('re*wv', {'re': re, 'wv': wv}, out=re)
             ne.evaluate('im*wv', {'im': im, 'wv': wv}, out=im)
 
@@ -461,27 +448,20 @@ class SolverCPU(CPUSolver):
 
         return chi_sqrd_terms
 
-    def compute_chi_sqrd(self, weight_vector=False):
-        """ Computes the chi squared value.
-
-        Parameters:
-            weight_vector : boolean
-                True if the chi squared test
-                should be computed with a noise vector
-
-        Returns a floating point scalar values
-        """
+    def compute_chi_sqrd(self, chi_sqrd_terms=None):
+        """ Computes the floating point scalar chi squared value. """
 
         # Do the chi squared sum on the CPU.
         # If we're not using the weight vector, sum and
         # divide by the sigma squared.
         # Otherwise, simply return the sum
-        chi_sqrd_terms = self.compute_chi_sqrd_sum_terms(
-            weight_vector=weight_vector)
-        term_sum = ne.evaluate('sum(terms)', {'terms': chi_sqrd_terms})
-        return term_sum if weight_vector is True \
-            else term_sum / self.sigma_sqrd
+        if chi_sqrd_terms is None:
+            chi_sqrd_terms = self.compute_chi_sqrd_sum_terms()
 
-    def compute_biro_chi_sqrd(self, weight_vector=False):        
+        term_sum = ne.evaluate('sum(terms)', {'terms': chi_sqrd_terms})
+        return (term_sum if self.use_weight_vector() 
+            else term_sum / self.sigma_sqrd)
+
+    def compute_biro_chi_sqrd(self):
         self.vis_cpu = self.compute_ebk_vis()
-        return self.compute_chi_sqrd(weight_vector=weight_vector)
+        return self.compute_chi_sqrd()
