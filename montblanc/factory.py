@@ -202,9 +202,10 @@ def rime_solver(slvr_cfg):
     if data_source == Options.DATA_SOURCE_MS:
         return create_rime_solver_from_ms(BiroSolver, slvr_cfg)
     elif data_source == Options.DATA_SOURCE_TEST:
-        slvr_cfg[Options.STORE_CPU] = True
         return BiroSolver(slvr_cfg)
     elif data_source == Options.DATA_SOURCE_DEFAULTS:
+        return BiroSolver(slvr_cfg)
+    elif data_source == Options.DATA_SOURCE_EMPTY:
         return BiroSolver(slvr_cfg)
     else:
         raise ValueError('Invalid data source %s' % data_source)
