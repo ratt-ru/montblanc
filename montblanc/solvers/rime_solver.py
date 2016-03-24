@@ -61,6 +61,23 @@ class RIMESolver(BaseSolver):
         # Is this a master solver or not
         self._is_master = slvr_cfg.get(Options.SOLVER_TYPE)
 
+        # Should we use the weight vector when computing the X2?
+        self._use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR)
+
+    def is_float(self):
+        return self.ft == np.float32
+
+    def is_double(self):
+        return self.ft == np.float64
+
+    def use_weight_vector(self):
+        return self._use_weight_vector
+
+    def is_master(self):
+        """ Is this a master solver """
+        return self._is_master == Options.SOLVER_TYPE_MASTER
+
+
     def register_default_dimensions(self):
         """ Register the default dimensions for a RIME solver """ 
 
@@ -201,16 +218,6 @@ class RIMESolver(BaseSolver):
         return super(RIMESolver, self).register_property(name,
             mbu.dtype_from_str(dtype, self.type_dict()),
             default, registrant, **kwargs)
-
-    def is_float(self):
-        return self.ft == np.float32
-
-    def is_double(self):
-        return self.ft == np.float64
-
-    def is_master(self):
-        """ Is this a master solver """
-        return self._is_master == Options.SOLVER_TYPE_MASTER
 
     def init_array(self, name, ary, value):
         # No defaults are supplied
