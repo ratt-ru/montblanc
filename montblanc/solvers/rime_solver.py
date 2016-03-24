@@ -27,7 +27,7 @@ except ImportError:
     from funcsigs import signature
 
 import montblanc
-from montblanc.base_solver import BaseSolver
+from montblanc.solvers import BaseSolver
 from montblanc.config import BiroSolverConfig as Options
 
 import montblanc.util as mbu

@@ -18,8 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import montblanc
 import numpy as np
+
+import montblanc
+from montblanc.util import random_like as rary
 
 def ary_dict(name, shape, dtype, cpu=False, gpu=True, **kwargs):
     D = {

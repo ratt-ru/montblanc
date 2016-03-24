@@ -22,7 +22,7 @@ import numpy as np
 
 import montblanc
 
-from montblanc.cuda_solver import CUDASolver
+from montblanc.solvers import CUDASolver
 from montblanc.config import BiroSolverConfig as Options
 
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK

@@ -10,11 +10,10 @@ import pycuda.gpuarray as gpuarray
 import montblanc
 import montblanc.util as mbu
 
-from base_solver import BaseSolver
-from rime_solver import RIMESolver
+from montblanc.solvers import RIMESolver
 from montblanc.config import SolverConfig as Options
 
-class GPUArrayDescriptor(object):
+class CUDAArrayDescriptor(object):
     """ Descriptor class for pycuda.gpuarrays on the GPU """
     def __init__(self, record_key, default=None):
         self.default = default
@@ -32,6 +31,7 @@ class GPUArrayDescriptor(object):
         del self.data[instance]
 
 class CUDASolver(RIMESolver):
+    """ Solves the RIME using CUDA """
     def __init__(self, slvr_cfg):
         super(CUDASolver, self).__init__(slvr_cfg)
 
@@ -39,7 +39,9 @@ class CUDASolver(RIMESolver):
         ctx = slvr_cfg.get(Options.CONTEXT, None)
 
         if ctx is None:
-            raise Exception('No CUDA context was supplied to the BaseSolver')
+            raise Exception(('No CUDA context was supplied'
+                ' provided in the slvr_cfg argument of {c}')
+                    .format(c=self.__class__.__name__))
 
         if isinstance(ctx, list):
             ctx = ctx[0]
@@ -82,10 +84,9 @@ class CUDASolver(RIMESolver):
 
         # TODO, there's probably a better way of figuring out if a descriptor
         # is set on the class
-        #if not hasattr(BaseSolver, cpu_name):
-        #if not hasattr(BaseSolver, gpu_name):
-        if gpu_name not in BaseSolver.__dict__:
-            setattr(BaseSolver, gpu_name, GPUArrayDescriptor(record_key=A.name))
+        #if not hasattr(CUDASolver, gpu_name):
+        if gpu_name not in CUDASolver.__dict__:
+            setattr(CUDASolver, gpu_name, CUDAArrayDescriptor(record_key=A.name))
 
         # If we're creating arrays, then we'll want to initialise
         # them with default values
