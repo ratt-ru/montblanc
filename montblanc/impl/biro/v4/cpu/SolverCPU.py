@@ -491,31 +491,29 @@ class SolverCPU(object):
         return abs_sum*np.exp(1j*angle)
 
     @staticmethod
-    def jones_multiply(A, B, N):
-        # Based on
-        # https://jameshensman.wordpress.com/2010/06/14/multiple-matrix-multiplication-in-numpy/
+    def jones_multiply(A, B, hermitian=None, jones_shape=None):
+        if hermitian is None:
+            hermitian = False
 
-        AR = A.reshape(N, 2, 2)
-        #b = B.reshape(N, 2, 2)
+        if jones_shape is None:
+            jones_shape = '1x4'
 
-        return np.sum(
-            AR.transpose(0,2,1).reshape(N,2,2,1)*B.reshape(N,2,1,2),
-            -3)
+        if type(hermitian) != type(True):
+            raise ValueError('hermitian must be True or False')
 
-    @staticmethod
-    def jones_multiply_hermitian_transpose(A, B, N):
-        # Based on
-        # https://jameshensman.wordpress.com/2010/06/14/multiple-matrix-multiplication-in-numpy/
+        if hermitian:
+            result = np.einsum("...ij,...kj->...ik",
+                A.reshape(-1,2,2), B.reshape(-1,2,2).conj())
+        else:
+            result = np.einsum("...ij,...jk->...ik",
+                A.reshape(-1,2,2), B.reshape(-1,2,2))
 
-        AR = A.reshape(N, 2, 2)
-        BRT = B.reshape(N, 2, 2).transpose(0,2,1).conj()
-        #b = B.reshape(N, 2, 2)
-
-        result = np.sum(
-            AR.transpose(0,2,1).reshape(N,2,2,1)*BRT.reshape(N,2,1,2),
-            -3)
-
-        return result
+        if jones_shape == '1x4':
+            return result.reshape(-1, 4)
+        elif jones_shape == '2x2':
+            return result
+        else:
+            raise ValueError("jones_shape must be '1x4' or '2x2'.")
 
     def compute_ekb_sqrt_jones_per_ant(self):
         """
@@ -535,8 +533,7 @@ class SolverCPU(object):
         assert E_beam.shape == (nsrc, ntime, na, nchan, 4)
         assert kb_sqrt.shape == (nsrc, ntime, na, nchan, 4)
 
-        result = SolverCPU.jones_multiply(E_beam, kb_sqrt,
-            nsrc*ntime*na*nchan)
+        result = SolverCPU.jones_multiply(E_beam, kb_sqrt)
         return result.reshape(nsrc, ntime, na, nchan, 4)
 
     def compute_ekb_jones_per_bl(self, ekb_sqrt=None):
@@ -559,10 +556,8 @@ class SolverCPU(object):
             ekb_sqrt_idx = ekb_sqrt[ap]
             assert ekb_sqrt_idx.shape == (2, nsrc, ntime, nbl, nchan, 4)
 
-            result = self.jones_multiply_hermitian_transpose(
-                ekb_sqrt_idx[0], ekb_sqrt_idx[1],
-                nsrc*ntime*nbl*nchan) \
-                    .reshape(nsrc, ntime, nbl, nchan, 4)
+            result = self.jones_multiply(ekb_sqrt_idx[0], ekb_sqrt_idx[1],
+                hermitian=True).reshape(nsrc, ntime, nbl, nchan, 4)
 
             # Multiply in Gaussian Shape Terms
             if ngsrc > 0:
@@ -644,15 +639,11 @@ class SolverCPU(object):
 
         assert g_term.shape == (2, ntime, nbl, nchan, 4)
 
-        result = self.jones_multiply_hermitian_transpose(
-            g_term[0], ekb_vis,
-            ntime*nbl*nchan) \
-                .reshape(ntime, nbl, nchan, 4)
+        result = (self.jones_multiply(g_term[0], ekb_vis, hermitian=True)
+            .reshape(ntime, nbl, nchan, 4))
 
-        result = self.jones_multiply_hermitian_transpose(
-            result, g_term[1],
-            ntime*nbl*nchan) \
-                .reshape(ntime, nbl, nchan, 4)
+        result = (self.jones_multiply(result, g_term[1], hermitian=True)
+            .reshape(ntime, nbl, nchan, 4))
 
         # Zero any flagged visibilities
         result[flag > 0] = 0

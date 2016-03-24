@@ -28,3 +28,7 @@ Montblanc contributors (sorted alphabetically)
 * Jonathan Zwart
 
   * Theory and Testing
+
+* **[Jonathan Kenyon](https://github.com/JSKenyon)**
+  
+  * Jones Matrix Multiply with np.einsum

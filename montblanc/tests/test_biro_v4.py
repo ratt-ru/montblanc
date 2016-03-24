@@ -481,9 +481,8 @@ class TestBiroV4(unittest.TestCase):
 
             # Calculate the first result using the classic equation
             # J2.B.J1^H
-            res_one = SolverCPU.jones_multiply(J2, JB, J2.size/4)
-            res_one = SolverCPU.jones_multiply_hermitian_transpose(
-                res_one, J1, res_one.size/4)
+            res_one = SolverCPU.jones_multiply(J2, JB)
+            res_one = SolverCPU.jones_multiply(res_one, J1, hermitian=True)
 
             # Compute the square root of the
             # brightness matrix
@@ -499,8 +498,8 @@ class TestBiroV4(unittest.TestCase):
 
             # Multiply the square root of the brightness matrix
             # into the per antenna jones terms
-            J = SolverCPU.jones_multiply(slvr.jones_cpu, JBsqrt, JBsqrt.size/4) \
-                .reshape(nsrc, ntime, na, nchan, 4)
+            J = (SolverCPU.jones_multiply(slvr.jones_cpu, JBsqrt)
+                .reshape(nsrc, ntime, na, nchan, 4))
 
             # Get per baseline jones matrices from
             # the per antenna jones matrices
@@ -512,8 +511,7 @@ class TestBiroV4(unittest.TestCase):
             # (J2.sqrt(B)).(J1.sqrt(B))^H == J2.sqrt(B).sqrt(B)^H.J1^H
             # == J2.sqrt(B).sqrt(B).J1^H
             # == J2.B.J1^H
-            res_two = SolverCPU.jones_multiply_hermitian_transpose(
-                J2, J1, J2.size/4)
+            res_two = SolverCPU.jones_multiply(J2, J1, hermitian=True)
 
             # Results from two different methods should be the same
             self.assertTrue(np.allclose(res_one, res_two))
@@ -534,12 +532,12 @@ class TestBiroV4(unittest.TestCase):
         AM = [np.matrix(A[i,:,:]) for i in range(N)]
         BM = [np.matrix(B[i,:,:]) for i in range(N)]
 
-        C = SolverCPU.jones_multiply(A, B, N)
+        C = SolverCPU.jones_multiply(A, B, jones_shape='2x2')
 
         for Am, Bm, Cm in zip(AM, BM, C):
             assert np.allclose(Am*Bm, Cm)
 
-        C = SolverCPU.jones_multiply_hermitian_transpose(A, B, N)
+        C = SolverCPU.jones_multiply(A, B, hermitian=True, jones_shape='2x2')
 
         for Am, Bm, Cm in zip(AM, BM, C):
             assert np.allclose(Am*Bm.H, Cm)
