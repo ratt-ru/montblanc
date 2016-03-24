@@ -465,3 +465,15 @@ class SolverCPU(CPUSolver):
     def compute_biro_chi_sqrd(self):
         self.vis_cpu = self.compute_ebk_vis()
         return self.compute_chi_sqrd()
+    def solve(self):
+        """ Solve the RIME """
+
+        self.jones_scalar_cpu[:] = self.compute_ek_jones_scalar_per_ant()
+        
+        self.vis_cpu[:] = self.compute_ebk_vis()
+        
+        self.chi_sqrd_result_cpu[:] = self.compute_chi_sqrd_sum_terms(
+            self.vis_cpu)
+        
+        self.set_X2(self.compute_chi_sqrd(
+            self.chi_sqrd_result_cpu))

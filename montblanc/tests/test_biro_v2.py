@@ -182,18 +182,18 @@ class TestBiroV2(unittest.TestCase):
 
         # Call the GPU solver
         gpu_slvr.solve()
+        cpu_slvr.solve()
 
-        ebk_vis_cpu = cpu_slvr.compute_ebk_vis()
+        ebk_vis_cpu = cpu_slvr.vis_cpu
         ebk_vis_gpu = gpu_slvr.retrieve_vis()
 
         self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
-
-        chi_sqrd_result_cpu = cpu_slvr.compute_biro_chi_sqrd()
 
         # So technically the chi squared should be living
         # on the GPU array, but RimeGaussBSum places it
         # in the X2 property
         # chi_sqrd_result_gpu = gpu_slvr.retrieve_X2()
+        chi_sqrd_result_cpu = cpu_slvr.X2
         chi_sqrd_result_gpu = gpu_slvr.X2
 
         self.assertTrue(np.allclose(chi_sqrd_result_cpu,
