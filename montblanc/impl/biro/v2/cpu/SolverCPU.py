@@ -462,9 +462,6 @@ class SolverCPU(CPUSolver):
         return (term_sum if self.use_weight_vector() 
             else term_sum / self.sigma_sqrd)
 
-    def compute_biro_chi_sqrd(self):
-        self.vis_cpu = self.compute_ebk_vis()
-        return self.compute_chi_sqrd()
     def solve(self):
         """ Solve the RIME """
 
