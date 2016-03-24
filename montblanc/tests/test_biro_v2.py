@@ -27,6 +27,7 @@ import time
 import montblanc
 import montblanc.factory
 
+from montblanc.solvers import copy_solver
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 
 from montblanc.impl.biro.v2.cpu.SolverCPU import SolverCPU
@@ -34,12 +35,19 @@ from montblanc.pipeline import Pipeline
 
 from montblanc.config import BiroSolverConfig as Options
 
-def solver(slvr_cfg, **kwargs):
-    slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
-    slvr_cfg[Options.VERSION] = Options.VERSION_TWO
-    slvr_cfg.update(kwargs)
+def solvers(slvr_cfg, **kwargs):
+    """ Returns CPU and GPU solvers for computing the RIME """
+    cpu_slvr_cfg = slvr_cfg.copy()
+    cpu_slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
+    cpu_slvr_cfg[Options.VERSION] = Options.VERSION_TWO
+    cpu_slvr_cfg.update(kwargs)
 
-    return montblanc.factory.rime_solver(slvr_cfg)
+    gpu_slvr_cfg = slvr_cfg.copy()
+    gpu_slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_EMPTY
+    gpu_slvr_cfg[Options.VERSION] = Options.VERSION_TWO
+    gpu_slvr_cfg.update(kwargs)
+
+    return montblanc.factory.rime_solver(gpu_slvr_cfg), SolverCPU(cpu_slvr_cfg)
 
 def src_perms(slvr_cfg, permute_weights=False):
     """
@@ -113,23 +121,23 @@ class TestBiroV2(unittest.TestCase):
         """ Tear down each test case """
         pass
 
-    def EK_test_impl(self, slvr, cmp=None):
+    def EK_test_impl(self, gpu_slvr, cpu_slvr, cmp=None):
         """ Type independent implementation of the EK test """
         if cmp is None:
             cmp = {}
 
         # This beam width produces reasonable values
         # for testing the E term
-        slvr.set_beam_width(65*1e5)
+        cpu_slvr.set_beam_width(65*1e5)
 
-        slvr_cpu = SolverCPU(slvr)
+        # Copy CPU solver data into the gpu solver
+        copy_solver(cpu_slvr, gpu_slvr)
 
         # Call the GPU solver
-        slvr.solve()
+        gpu_slvr.solve()
 
-        ek_cpu = slvr_cpu.compute_ek_jones_scalar_per_ant()
-        with slvr.context:
-            ek_gpu = slvr.jones_scalar_gpu.get()
+        ek_cpu = cpu_slvr.compute_ek_jones_scalar_per_ant()
+        ek_gpu = gpu_slvr.retrieve_jones_scalar()
 
         # Test that the jones CPU calculation matches
         # that of the GPU calculation
@@ -142,8 +150,10 @@ class TestBiroV2(unittest.TestCase):
             sources=montblanc.sources(point=10, gaussian=10, sersic=10),
             dtype=Options.DTYPE_FLOAT, pipeline=Pipeline([RimeEK()]))
 
-        with solver(slvr_cfg) as slvr:
-            self.EK_test_impl(slvr)
+        gpu_slvr, cpu_slvr = solvers(slvr_cfg)
+
+        with gpu_slvr, cpu_slvr:
+            self.EK_test_impl(gpu_slvr, cpu_slvr)
 
     def test_EK_double(self):
         """ Double precision EK test """
@@ -151,34 +161,44 @@ class TestBiroV2(unittest.TestCase):
             sources=montblanc.sources(point=10, gaussian=10, sersic=10),
             dtype=Options.DTYPE_DOUBLE, pipeline=Pipeline([RimeEK()]))
 
-        with solver(slvr_cfg) as slvr:
-            self.EK_test_impl(slvr)
+        gpu_slvr, cpu_slvr = solvers(slvr_cfg)
 
-    def B_sum_test_impl(self, slvr, weight_vector=False, cmp=None):
+        with gpu_slvr, cpu_slvr:
+            self.EK_test_impl(gpu_slvr, cpu_slvr)
+
+    def B_sum_test_impl(self, gpu_slvr, cpu_slvr,
+        weight_vector=False, cmp=None):
         """ Type independent implementation of the B Sum test """
         if cmp is None:
             cmp = {}
 
         # This beam width produces reasonable values
         # for testing the E term
-        slvr.set_beam_width(65*1e5)
-        slvr.set_sigma_sqrd(np.random.random(1)[0])
+        cpu_slvr.set_beam_width(65*1e5)
+        cpu_slvr.set_sigma_sqrd(np.random.random(1)[0])
 
-        slvr_cpu = SolverCPU(slvr)
+        # Copy CPU solver data into the gpu solver
+        copy_solver(cpu_slvr, gpu_slvr)
 
         # Call the GPU solver
-        slvr.solve()
+        gpu_slvr.solve()
 
-        ebk_vis_cpu = slvr_cpu.compute_ebk_vis()
-        with slvr.context:
-            ebk_vis_gpu = slvr.vis_gpu.get()
+        ebk_vis_cpu = cpu_slvr.compute_ebk_vis()
+        ebk_vis_gpu = gpu_slvr.retrieve_vis()
 
         self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
 
-        chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(
+        chi_sqrd_result_cpu = cpu_slvr.compute_biro_chi_sqrd(
             weight_vector=weight_vector)
 
-        self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+        # So technically the chi squared should be living
+        # on the GPU array, but RimeGaussBSum places it
+        # in the X2 property
+        # chi_sqrd_result_gpu = gpu_slvr.retrieve_X2()
+        chi_sqrd_result_gpu = gpu_slvr.X2
+
+        self.assertTrue(np.allclose(chi_sqrd_result_cpu,
+            chi_sqrd_result_gpu, **cmp))
 
     def test_B_sum_float(self):
         """ Test the B sum float kernel """
@@ -186,9 +206,10 @@ class TestBiroV2(unittest.TestCase):
             dtype=Options.DTYPE_FLOAT)
 
         for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
-            wv = p_slvr_cfg[Options.WEIGHT_VECTOR] 
-            with solver(p_slvr_cfg) as slvr:
-                self.B_sum_test_impl(slvr, wv, {'rtol': 1e-2})
+            wv = p_slvr_cfg[Options.WEIGHT_VECTOR]
+            gpu_slvr, cpu_slvr = solvers(p_slvr_cfg)
+            with gpu_slvr, cpu_slvr:                
+                self.B_sum_test_impl(gpu_slvr, cpu_slvr, wv, {'rtol': 1e-2})
 
     def test_B_sum_double(self):
         """ Test the B sum double kernel """
@@ -197,8 +218,9 @@ class TestBiroV2(unittest.TestCase):
 
         for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
             wv = p_slvr_cfg[Options.WEIGHT_VECTOR] 
-            with solver(p_slvr_cfg) as slvr:
-                self.B_sum_test_impl(slvr, wv)
+            gpu_slvr, cpu_slvr = solvers(p_slvr_cfg)
+            with gpu_slvr, cpu_slvr:                
+                self.B_sum_test_impl(gpu_slvr, cpu_slvr, wv)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV2)
