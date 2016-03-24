@@ -3,10 +3,6 @@ import types
 
 from weakref import WeakKeyDictionary
 
-import pycuda
-import pycuda.driver as cuda
-import pycuda.gpuarray as gpuarray
-
 import montblanc
 import montblanc.util as mbu
 
@@ -34,6 +30,8 @@ class CUDASolver(RIMESolver):
     """ Solves the RIME using CUDA """
     def __init__(self, slvr_cfg):
         super(CUDASolver, self).__init__(slvr_cfg)
+
+        import pycuda.driver as cuda
 
         # Store the context, choosing the default if not specified
         ctx = slvr_cfg.get(Options.CONTEXT, None)
@@ -69,6 +67,10 @@ class CUDASolver(RIMESolver):
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         A = super(CUDASolver, self).register_array(
             name, shape, dtype, registrant, **kwargs)
+
+        import pycuda.driver as cuda
+        import pycuda.gpuarray as gpuarray
+
 
         # Attribute names
         gpu_name = mbu.gpu_name(A.name)
