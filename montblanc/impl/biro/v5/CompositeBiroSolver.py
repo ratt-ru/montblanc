@@ -90,6 +90,10 @@ class CompositeBiroSolver(NumpySolver):
             slvr_cfg[Options.E_BEAM_DEPTH],
             description='E Beam cube height in nu coords')
 
+        # Monkey patch v4 antenna pair functions into the object
+        from montblanc.impl.biro.v4.ant_pairs import monkey_patch_antenna_pairs
+        monkey_patch_antenna_pairs(self)
+
         # Copy the v4 arrays and properties and
         # modify them for use on this Composite Solver
         from montblanc.impl.biro.v4.config import (A, P)
@@ -911,11 +915,3 @@ class CompositeBiroSolver(NumpySolver):
             for slvr in self.solvers: slvr.was_transferred[name] = False
 
         return types.MethodType(transfer,self)
-
-    # Take these methods from the v2 BiroSolver
-    get_default_base_ant_pairs = \
-        BSV4mod.BiroSolver.__dict__['get_default_base_ant_pairs']
-    get_default_ant_pairs = \
-        BSV4mod.BiroSolver.__dict__['get_default_ant_pairs']
-    get_ap_idx = \
-        BSV4mod.BiroSolver.__dict__['get_ap_idx']
