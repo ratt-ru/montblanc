@@ -203,7 +203,7 @@ def rime_solver(slvr_cfg):
         return create_rime_solver_from_ms(BiroSolver, slvr_cfg)
     elif data_source == Options.DATA_SOURCE_TEST:
         return BiroSolver(slvr_cfg)
-    elif data_source == Options.DATA_SOURCE_DEFAULTS:
+    elif data_source == Options.DATA_SOURCE_DEFAULT:
         return BiroSolver(slvr_cfg)
     elif data_source == Options.DATA_SOURCE_EMPTY:
         return BiroSolver(slvr_cfg)

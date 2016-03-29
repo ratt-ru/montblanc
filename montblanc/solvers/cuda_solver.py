@@ -105,7 +105,7 @@ class CUDASolver(RIMESolver):
             pass
         else:
             self.init_array(name, cpu_ary,
-                kwargs.get(Options.DATA_SOURCE_DEFAULTS, None))               
+                kwargs.get(Options.DATA_SOURCE_DEFAULT, None))               
 
         # We don't use gpuarray.zeros, since it fails for
         # a zero-length array. This is kind of bad since

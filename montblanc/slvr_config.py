@@ -141,12 +141,12 @@ class SolverConfig(object):
 
     # Data Source. Defaults/A MeasurementSet/Random Test data
     DATA_SOURCE = 'data_source'
-    DATA_SOURCE_DEFAULTS = 'defaults'
+    DATA_SOURCE_DEFAULT = 'default'
     DATA_SOURCE_MS = 'ms'
     DATA_SOURCE_TEST = 'test'
     DATA_SOURCE_EMPTY = 'empty'
     DEFAULT_DATA_SOURCE = DATA_SOURCE_MS
-    VALID_DATA_SOURCES = [DATA_SOURCE_DEFAULTS, DATA_SOURCE_MS,
+    VALID_DATA_SOURCES = [DATA_SOURCE_DEFAULT, DATA_SOURCE_MS,
         DATA_SOURCE_TEST, DATA_SOURCE_EMPTY]
     DATA_SOURCE_DESCRIPTION = (
         "The data source for initialising data arrays. "
@@ -155,7 +155,7 @@ class SolverConfig(object):
         "If '{ms}', some data will be read from a MeasurementSet, "
         "and defaults will be used for the rest. "
         "If '{e}', the arrays will not be initialised").format(
-            d=DATA_SOURCE_DEFAULTS, ms=DATA_SOURCE_MS,
+            d=DATA_SOURCE_DEFAULT, ms=DATA_SOURCE_MS,
             t=DATA_SOURCE_TEST, e=DATA_SOURCE_EMPTY)
 
     # MeasurementSet file

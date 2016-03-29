@@ -120,7 +120,7 @@ class TestBiroV3(unittest.TestCase):
         wv = True
 
         slvr_cfg = montblanc.rime_solver_cfg(na=64, ntime=200, nchan=64,
-            data_source=Options.DATA_SOURCE_DEFAULTS, version=Options.VERSION_THREE,
+            data_source=Options.DATA_SOURCE_DEFAULT, version=Options.VERSION_THREE,
             sources=montblanc.sources(point=50, gaussian=50),
             dtype=Options.DTYPE_FLOAT,
             weight_vector=wv)

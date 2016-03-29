@@ -119,7 +119,7 @@ class NumpySolver(RIMESolver):
             pass
         else:
             self.init_array(name, cpu_ary,
-                kwargs.get(Options.DATA_SOURCE_DEFAULTS, None))
+                kwargs.get(Options.DATA_SOURCE_DEFAULT, None))
 
         # Create the attribute on the solver
         setattr(self, cpu_name, cpu_ary)

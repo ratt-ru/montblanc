@@ -459,7 +459,7 @@ class TestSolver(unittest.TestCase):
     def test_solver_factory(self):
         """ Test that the solver factory produces the correct types """
         slvr_cfg = montblanc.rime_solver_cfg(
-            data_source=Options.DATA_SOURCE_DEFAULTS, version=Options.VERSION_TWO)
+            data_source=Options.DATA_SOURCE_DEFAULT, version=Options.VERSION_TWO)
 
         with montblanc.factory.rime_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
@@ -493,7 +493,7 @@ class TestSolver(unittest.TestCase):
             # by these keyword arguments.
             D = {
                 Options.CFG_FILE: f.name,
-                Options.DATA_SOURCE: Options.DATA_SOURCE_DEFAULTS,
+                Options.DATA_SOURCE: Options.DATA_SOURCE_DEFAULT,
                 Options.VERSION: Options.VERSION_FOUR,
                 Options.NA: 14
             }
