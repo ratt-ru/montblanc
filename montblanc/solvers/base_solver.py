@@ -306,16 +306,16 @@ class BaseSolver(object):
 
         # Figure out the actual integer shape
         sshape = shape
-        shape = mbu.shape_from_str_tuple(sshape, T)
+        shape = self.shape_from_str_tuple(sshape, T)
 
         # Set up a member describing the shape
         if kwargs.get('shape_member', False) is True:
-            shape_name = mbu.shape_name(name)
+            shape_name = self.shape_name(name)
             setattr(self, shape_name, shape)
 
         # Set up a member describing the dtype
         if kwargs.get('dtype_member', False) is True:
-            dtype_name = mbu.dtype_name(name)
+            dtype_name = self.dtype_name(name)
             setattr(self, dtype_name, dtype)
 
         # Complain if array exists
@@ -384,7 +384,7 @@ class BaseSolver(object):
 
         # Should we create a setter for this property?
         setter = kwargs.get('setter_method', True)
-        setter_name = mbu.setter_name(name)
+        setter_name = self.setter_name(name)
 
         # Yes, create a default setter
         if isinstance(setter, types.BooleanType) and setter is True:
@@ -459,42 +459,106 @@ class BaseSolver(object):
             raise KeyError("Array '{n}' is not registered "
                 "on this solver".format(n=name))
 
+    def shape_name(self, name):
+        """ Constructs a name for the array shape member, based on the array name """
+        return name + '_shape'
+
+    def dtype_name(self, name):
+        """ Constructs a name for the array data-type member, based on the array name """
+        return name + '_dtype'
+
+    def setter_name(self, name):
+        """ Constructs a name for the property, based on the property name """
+        return 'set_' + name
+
+    def fmt_dimension_line(self, name, description, size):
+        return '%-*s%-*s%-*s' % (
+            20,name,
+            40,description,
+            20,size)
+
+    def fmt_array_line(self, name, size, dtype, created, shape):
+        """ Format array parameters on an 80 character width line """
+        return '%-*s%-*s%-*s%-*s%-*s' % (
+            20,name,
+            10,size,
+            15,dtype,
+            8,created,
+            20,shape)
+
+    def fmt_property_line(self, name, dtype, value, default):
+        return '%-*s%-*s%-*s%-*s' % (
+            20,name,
+            10,dtype,
+            20,value,
+            20,default)
+
+    def shape_from_str_tuple(self, sshape, variables, ignore=None):
+        """
+        Substitutes string values in the supplied shape parameter
+        with integer variables stored in a dictionary
+
+        Parameters
+        ----------
+        sshape : tuple/string composed of integers and strings.
+            The strings should related to integral properties
+            registered with this Solver object
+        variables : dictionary
+            Keys with associated integer values. Used to replace
+            string values within the tuple
+        ignore : list
+            A list of tuple strings to ignore
+
+        >>> print self.shape_from_str_tuple((4,'na','ntime'),ignore=['ntime'])
+        (4, 3)
+        """
+        if ignore is None:
+            ignore = []
+
+        if not isinstance(sshape, tuple) and not isinstance(sshape, list):
+            raise TypeError, 'sshape argument must be a tuple or list'
+
+        if not isinstance(ignore, list):
+            raise TypeError, 'ignore argument must be a list'
+
+        return tuple([variables[v] if isinstance(v, str) else int(v)
+            for v in sshape if v not in ignore])
+
     def gen_dimension_descriptions(self):
         """ Generator generating string describing each registered dimension """
         yield 'Registered Dimensions'
         yield '-'*80
-        yield mbu.fmt_dimension_line('Dimension Name', 'Description', 'Size')
+        yield self.fmt_dimension_line('Dimension Name', 'Description', 'Size')
         yield '-'*80
 
         for d in sorted(self._dims.itervalues(), key=lambda x: x.name.upper()):
-            yield mbu.fmt_dimension_line(
+            yield self.fmt_dimension_line(
                 d.name, d.description, d.local_size)
 
     def gen_array_descriptions(self):
         """ Generator generating strings describing each registered array """
         yield 'Registered Arrays'
         yield '-'*80
-        yield mbu.fmt_array_line('Array Name','Size','Type','CPU','GPU','Shape')
+        yield self.fmt_array_line('Array Name','Size','Type','Created','Shape')
         yield '-'*80
 
         for a in sorted(self._arrays.itervalues(), key=lambda x: x.name.upper()):
-            yield mbu.fmt_array_line(a.name,
-                mbu.fmt_bytes(mbu.array_bytes(a.shape, a.dtype)),
+            yield self.fmt_array_line(a.name,
+                self.fmt_bytes(self.array_bytes(a)),
                 np.dtype(a.dtype).name,
-                'Y' if a.cpu else 'N',
-                'Y' if a.gpu else 'N',
+                'Y',
                 a.sshape)
 
     def gen_property_descriptions(self):
         """ Generator generating string describing each registered property """
         yield 'Registered Properties'
         yield '-'*80
-        yield mbu.fmt_property_line('Property Name',
+        yield self.fmt_property_line('Property Name',
             'Type', 'Value', 'Default Value')
         yield '-'*80
 
         for p in sorted(self._properties.itervalues(), key=lambda x: x.name.upper()):
-            yield mbu.fmt_property_line(
+            yield self.fmt_property_line(
                 p.name, np.dtype(p.dtype).name,
                 getattr(self, p.name), p.default)
 

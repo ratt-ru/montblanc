@@ -33,8 +33,6 @@ def copy_solver(src_slvr, dest_slvr, safe=False):
     GPU Solvers in the test suites.
     """
 
-    import montblanc.util as mbu
-
     # CPU to CUDA case
     if isinstance(src_slvr, NumpySolver) and isinstance(dest_slvr, CUDASolver):
         sa, da = src_slvr.arrays(), dest_slvr.arrays()
@@ -44,9 +42,9 @@ def copy_solver(src_slvr, dest_slvr, safe=False):
             if safe and a.name not in da:
                 continue
 
-            cpu_name = mbu.cpu_name(a.name)
+            cpu_name = src_slvr.cpu_name(a.name)
             cpu_ary = getattr(src_slvr, cpu_name)
-            transfer_method_name = mbu.transfer_method_name(a.name)
+            transfer_method_name = dest_slvr.transfer_method_name(a.name)
             transfer_method = getattr(dest_slvr, transfer_method_name)
             transfer_method(cpu_ary)
 

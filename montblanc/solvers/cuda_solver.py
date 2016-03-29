@@ -73,7 +73,7 @@ class CUDASolver(RIMESolver):
 
 
         # Attribute names
-        gpu_name = mbu.gpu_name(A.name)
+        gpu_name = self.gpu_name(A.name)
 
         # Create descriptors on the class instance, even though members
         # may not necessarily be created on object instances. This is so
@@ -118,9 +118,9 @@ class CUDASolver(RIMESolver):
             montblanc.log.debug("Allocating GPU memory "
                 "of size {s} for array '{n}'. {f} free "
                 "{t} total on device.".format(n=name,
-                    s=mbu.fmt_bytes(mbu.array_bytes(A.shape, A.dtype)),
-                    f=mbu.fmt_bytes(free_mem),
-                    t=mbu.fmt_bytes(total_mem)))
+                    s=self.fmt_bytes(self.array_bytes(A)),
+                    f=self.fmt_bytes(free_mem),
+                    t=self.fmt_bytes(total_mem)))
 
             gpu_ary = gpuarray.empty(shape=A.shape, dtype=A.dtype)
 
@@ -151,7 +151,7 @@ class CUDASolver(RIMESolver):
                 'to an invalid type %s') % (type(transfer_method)))
 
         # Name the transfer method
-        transfer_method_name = mbu.transfer_method_name(name)
+        transfer_method_name = self.transfer_method_name(name)
         setattr(self,  transfer_method_name, transfer_method)
         # Create a docstring!
         getattr(transfer_method, '__func__').__doc__ = \
@@ -179,7 +179,7 @@ class CUDASolver(RIMESolver):
                 'to an invalid type %s') % (type(retrieve_method)))
 
         # Name the retrieve method
-        retrieve_method_name = mbu.retrieve_method_name(name)
+        retrieve_method_name = self.retrieve_method_name(name)
         setattr(self,  retrieve_method_name, retrieve_method)
         # Create a docstring!
         getattr(retrieve_method, '__func__').__doc__ = \
@@ -187,6 +187,18 @@ class CUDASolver(RIMESolver):
         Retrieve the npary numpy array to the %s gpuarray.
         npary and %s must be the same shape and type.
         """ % (gpu_name,gpu_name)
+
+    def gpu_name(self, name):
+        """ Constructs a name for the GPU version of the array """
+        return name + '_gpu'
+
+    def transfer_method_name(self, name):
+        """ Constructs a transfer method name, given the array name """
+        return 'transfer_' + name
+
+    def retrieve_method_name(self, name):
+        """ Constructs a transfer method name, given the array name """
+        return 'retrieve_' + name
 
     def solve(self):
         """ Solve the RIME """

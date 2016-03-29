@@ -22,7 +22,6 @@ import numpy as np
 from weakref import WeakKeyDictionary
 
 from rime_solver import RIMESolver
-import montblanc.util as mbu
 from montblanc.config import SolverConfig as Options
 
 class NumpyArrayDescriptor(object):
@@ -79,7 +78,7 @@ class NumpySolver(RIMESolver):
             name, shape, dtype, registrant, **kwargs)
 
        # Attribute names
-        cpu_name = mbu.cpu_name(A.name)
+        cpu_name = self.cpu_name(A.name)
 
         # Create descriptors on the class instance, even though members
         # may not necessarily be created on object instances. This is so
@@ -125,3 +124,8 @@ class NumpySolver(RIMESolver):
         setattr(self, cpu_name, cpu_ary)
 
         return A
+
+    def cpu_name(self, name):
+        """ Constructs a name for the CPU version of the array """
+        return name + '_cpu'
+        
