@@ -46,7 +46,7 @@ class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCo
                 solver.const_data().ndary())
 
     def post_execution(self, solver, stream=None):
-        super(RimeSumCoherencies, self).pre_execution(solver,stream)
+        super(RimeSumCoherencies, self).post_execution(solver,stream)
 
     def execute(self, solver, stream=None):
         slvr = solver

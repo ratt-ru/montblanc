@@ -43,7 +43,7 @@ class RimeBSqrt(montblanc.impl.biro.v4.gpu.RimeBSqrt.RimeBSqrt):
                 solver.const_data().ndary())
 
     def post_execution(self, solver, stream=None):
-        super(RimeBSqrt, self).pre_execution(solver,stream)
+        super(RimeBSqrt, self).post_execution(solver,stream)
 
     def execute(self, solver, stream=None):
         slvr = solver
