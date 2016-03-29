@@ -104,14 +104,14 @@ if __name__ == '__main__':
                 slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
 
         # Create a bayesian model and upload it to the GPU
-        bayes_data = mbu.random_like(slvr.bayes_data_gpu)
+        bayes_data = mbu.random_like(slvr.bayes_data)
         slvr.transfer_bayes_data(bayes_data)
 
         # Generate random antenna pointing errors
-        point_errors = mbu.random_like(slvr.point_errors_gpu)
+        point_errors = mbu.random_like(slvr.point_errors)
 
         # Generate and transfer a noise vector.
-        weight_vector = mbu.random_like(slvr.weight_vector_gpu)
+        weight_vector = mbu.random_like(slvr.weight_vector)
         slvr.transfer_weight_vector(weight_vector)
 
         # Execute the pipeline
@@ -131,7 +131,7 @@ if __name__ == '__main__':
 
             # Obtain the visibilities  (slow)
             #with slvr.context:
-            #    V = slvr.vis_gpu.get()
+            #    V = slvr.vis.get()
 
         # Print information about the simulation
         print slvr

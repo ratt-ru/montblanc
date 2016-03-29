@@ -51,11 +51,11 @@ if __name__ == '__main__':
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
         # Random point source coordinates in the l,m,n (brightness image) domain
-        lm = mbu.random_like(slvr.lm_gpu)*0.1
+        lm = mbu.random_like(slvr.lm)*0.1
 
         if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
             # Random brightness matrix for the point sources
-            brightness = mbu.random_like(slvr.brightness_gpu)
+            brightness = mbu.random_like(slvr.brightness)
         elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
             # Need a positive semi-definite brightness
             # matrix for v4 and v5
@@ -71,34 +71,34 @@ if __name__ == '__main__':
             I[:] = np.sqrt(Q**2 + U**2 + V**2 + noise)
             slvr.transfer_stokes(stokes)
 
-            alpha = mbu.random_like(slvr.alpha_gpu)
+            alpha = mbu.random_like(slvr.alpha)
             slvr.transfer_alpha(alpha)
 
         # E beam
         if args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-            E_beam = mbu.random_like(slvr.E_beam_gpu)
+            E_beam = mbu.random_like(slvr.E_beam)
             slvr.transfer_E_beam(E_beam)
 
         # G term
         if args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-            G_term = mbu.random_like(slvr.G_term_gpu)
+            G_term = mbu.random_like(slvr.G_term)
             slvr.transfer_G_term(G_term)
 
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
         if slvr.dim_global_size('ngsrc') > 0:
-            gauss_shape = mbu.random_like(slvr.gauss_shape_gpu)*0.1
+            gauss_shape = mbu.random_like(slvr.gauss_shape)*0.1
             slvr.transfer_gauss_shape(gauss_shape)
 
         # Create a bayesian model and upload it to the GPU
-        bayes_data = mbu.random_like(slvr.bayes_data_gpu)
+        bayes_data = mbu.random_like(slvr.bayes_data)
         slvr.transfer_bayes_data(bayes_data)
 
         # Generate random antenna pointing errors
-        point_errors = mbu.random_like(slvr.point_errors_gpu)
+        point_errors = mbu.random_like(slvr.point_errors)
 
         # Generate and transfer a noise vector.
-        weight_vector = mbu.random_like(slvr.weight_vector_gpu)
+        weight_vector = mbu.random_like(slvr.weight_vector)
         slvr.transfer_weight_vector(weight_vector)
 
         # Execute the pipeline
@@ -120,7 +120,7 @@ if __name__ == '__main__':
             print 'Chi Squared Value', slvr.X2
 
             # Obtain the visibilities  (slow)
-            #V = slvr.vis_gpu.get()
+            #V = slvr.vis.get()
 
         # Print information about the simulation
         print slvr

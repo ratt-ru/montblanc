@@ -40,12 +40,12 @@ class RimeGaussBSum(montblanc.impl.biro.v2.gpu.RimeGaussBSum.RimeGaussBSum):
         # The gaussian shape array can be empty if
         # no gaussian sources were specified.
         gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
-            else slvr.gauss_shape_gpu
+            else slvr.gauss_shape
         sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
-            else slvr.sersic_shape_gpu
+            else slvr.sersic_shape
 
-        self.kernel(slvr.uvw_gpu, slvr.brightness_gpu, gauss, sersic,
-            slvr.wavelength_gpu, slvr.ant_pairs_gpu, slvr.jones_scalar_gpu,
-            slvr.weight_vector_gpu, slvr.vis_gpu, slvr.bayes_data_gpu,
-            slvr.chi_sqrd_result_gpu,
+        self.kernel(slvr.uvw, slvr.brightness, gauss, sersic,
+            slvr.wavelength, slvr.ant_pairs, slvr.jones_scalar,
+            slvr.weight_vector, slvr.vis, slvr.bayes_data,
+            slvr.chi_sqrd_result,
             stream=stream, **self.get_kernel_params(slvr))

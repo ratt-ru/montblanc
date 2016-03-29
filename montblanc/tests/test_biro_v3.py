@@ -72,13 +72,13 @@ class TestBiroV3(unittest.TestCase):
                 slvr.solve()
 
                 # Compare CPU and GPU results
-                slvr_cpu = SolverCPU(slvr)
-                chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(weight_vector=wv)
-                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp),
+                slvr = SolverCPU(slvr)
+                chi_sqrd_result = slvr.compute_biro_chi_sqrd(weight_vector=wv)
+                self.assertTrue(np.allclose(chi_sqrd_result, slvr.X2, **cmp),
                     ('CPU (%s) and GPU (%s) '
                     'chi-squared value differ. '
                     'Failed for weight_vector=%s') %
-                        (chi_sqrd_result_cpu, slvr.X2, wv))
+                        (chi_sqrd_result, slvr.X2, wv))
 
     def test_budget(self):
         """
@@ -99,19 +99,19 @@ class TestBiroV3(unittest.TestCase):
                 slvr.solve()
 
                 # Check that CPU and GPU results agree
-                slvr_cpu = SolverCPU(slvr)
-                chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(weight_vector=wv)
-                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+                slvr = SolverCPU(slvr)
+                chi_sqrd_result = slvr.compute_biro_chi_sqrd(weight_vector=wv)
+                self.assertTrue(np.allclose(chi_sqrd_result, slvr.X2, **cmp))
 
                 slvr.X2 = 0.0
 
                 # Test that solving the RIME a second time produces
                 # the same solution
                 slvr.solve()
-                self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp),
+                self.assertTrue(np.allclose(chi_sqrd_result, slvr.X2, **cmp),
                     ('CPU (%s) and GPU (%s) '
                     'chi-squared values differ. ') %
-                        (chi_sqrd_result_cpu, slvr.X2))
+                        (chi_sqrd_result, slvr.X2))
 
     #@unittest.skip('Skip timing test')
     def test_time(self):
@@ -127,10 +127,10 @@ class TestBiroV3(unittest.TestCase):
 
         with montblanc.factory.rime_solver(slvr_cfg) as slvr:
 
-            slvr.transfer_lm(slvr.lm_cpu)
-            slvr.transfer_brightness(slvr.brightness_cpu)
-            slvr.transfer_weight_vector(slvr.weight_vector_cpu)
-            slvr.transfer_bayes_data(slvr.bayes_data_cpu)
+            slvr.transfer_lm(slvr.lm)
+            slvr.transfer_brightness(slvr.brightness)
+            slvr.transfer_weight_vector(slvr.weight_vector)
+            slvr.transfer_bayes_data(slvr.bayes_data)
             slvr.solve()
 
 if __name__ == '__main__':

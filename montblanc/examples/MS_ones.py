@@ -74,5 +74,5 @@ if __name__ == '__main__':
         slvr.solve()
 
         with slvr.context as ctx:
-            print slvr.vis_gpu.get()
+            print slvr.vis.get()
         print slvr

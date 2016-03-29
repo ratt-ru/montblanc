@@ -224,8 +224,8 @@ class CompositeBiroSolver(NumpySolver):
                 # key, so that transfer_data can handle
                 # the first and second antenna index
                 if bl_diff == 1:
-                    ant0 = self.ant_pairs_cpu[0, t, bl]
-                    ant1 = self.ant_pairs_cpu[1, t, bl]
+                    ant0 = self.ant_pairs[0, t, bl]
+                    ant1 = self.ant_pairs[1, t, bl]
                     cpu_slice[Options.NA] = slice(ant0, ant0 + 1, 1)
                     cpu_slice[NA_EXTRA] = slice(ant1, ant1 + 1, 1)
                     gpu_slice[Options.NA] = slice(0, 1, 1)

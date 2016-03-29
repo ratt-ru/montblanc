@@ -68,20 +68,20 @@ class CPUSolver(NumpySolver):
         ap = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
-        u = self.uvw_cpu[:,:,0][ap]
+        u = self.uvw[:,:,0][ap]
         u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
         # Calculate per baseline v from per antenna v
-        v = self.uvw_cpu[:,:,1][ap]
+        v = self.uvw[:,:,1][ap]
         v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
         # Calculate per baseline w from per antenna w
-        w = self.uvw_cpu[:,:,2][ap]
+        w = self.uvw[:,:,2][ap]
         w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
-        el = self.gauss_shape_cpu[0]
-        em = self.gauss_shape_cpu[1]
-        R = self.gauss_shape_cpu[2]
+        el = self.gauss_shape[0]
+        em = self.gauss_shape[1]
+        R = self.gauss_shape[2]
 
         # OK, try obtain the same results with the fwhm factored out!
         # u1 = u*em - v*el
@@ -93,7 +93,7 @@ class CPUSolver(NumpySolver):
             'u_el' : np.outer(el, u), 'v_em' : np.outer(em, v)})\
             .reshape(ngsrc, ntime,nbl)
 
-        scale_uv = (self.gauss_scale*self.frequency_cpu)\
+        scale_uv = (self.gauss_scale*self.frequency)\
             [np.newaxis,np.newaxis,np.newaxis,:]
 
         return ne.evaluate('exp(-((u1*scale_uv*R)**2 + (v1*scale_uv)**2))',
@@ -116,20 +116,20 @@ class CPUSolver(NumpySolver):
         ap = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
-        u = self.uvw_cpu[:,:,0][ap]
+        u = self.uvw[:,:,0][ap]
         u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
         # Calculate per baseline v from per antenna v
-        v = self.uvw_cpu[:,:,1][ap]
+        v = self.uvw[:,:,1][ap]
         v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
         # Calculate per baseline w from per antenna w
-        w = self.uvw_cpu[:,:,2][ap]
+        w = self.uvw[:,:,2][ap]
         w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
-        e1 = self.sersic_shape_cpu[0]
-        e2 = self.sersic_shape_cpu[1]
-        R = self.sersic_shape_cpu[2]
+        e1 = self.sersic_shape[0]
+        e2 = self.sersic_shape[1]
+        R = self.sersic_shape[2]
 
         # OK, try obtain the same results with the fwhm factored out!
         # u1 = u*(1+e1) - v*e2
@@ -145,7 +145,7 @@ class CPUSolver(NumpySolver):
         assert u1.shape == (nssrc, ntime, nbl)
         assert v1.shape == (nssrc, ntime, nbl)
 
-        scale_uv = (self.two_pi_over_c * self.frequency_cpu)\
+        scale_uv = (self.two_pi_over_c * self.frequency)\
             [np.newaxis, np.newaxis, np.newaxis, :]
 
         den = ne.evaluate('1 + (u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
@@ -170,10 +170,10 @@ class CPUSolver(NumpySolver):
         
         nsrc, ntime, na, nchan = self.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
-        freq = self.frequency_cpu
+        freq = self.frequency
 
-        u, v, w = self.uvw_cpu[:,:,0], self.uvw_cpu[:,:,1], self.uvw_cpu[:,:,2]
-        l, m = self.lm_cpu[:,0], self.lm_cpu[:,1]
+        u, v, w = self.uvw[:,:,0], self.uvw[:,:,1], self.uvw[:,:,2]
+        l, m = self.lm[:,0], self.lm[:,1]
 
         # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
         n = ne.evaluate('sqrt(1. - l**2 - m**2) - 1.',
@@ -244,7 +244,7 @@ class CPUSolver(NumpySolver):
 
         try:
             B = np.empty(shape=(nsrc, ntime, 4), dtype=self.ct)
-            S = self.stokes_cpu
+            S = self.stokes
             # Create the brightness matrix from the stokes parameters
             # Dimension (nsrc, ntime, 4)
             B[:,:,0] = S[:,:,0] + S[:,:,1]    # I+Q
@@ -256,8 +256,8 @@ class CPUSolver(NumpySolver):
             B_power = ne.evaluate('B*((f/rf)**a)', {
                  'rf': self.ref_freq,
                  'B': B[:,:,np.newaxis,:],
-                 'f': self.frequency_cpu[np.newaxis, np.newaxis, :, np.newaxis],
-                 'a': self.alpha_cpu[:, :, np.newaxis, np.newaxis] })
+                 'f': self.frequency[np.newaxis, np.newaxis, :, np.newaxis],
+                 'a': self.alpha[:, :, np.newaxis, np.newaxis] })
 
             assert B_power.shape == (nsrc, ntime, nchan, 4)
 
@@ -350,7 +350,7 @@ class CPUSolver(NumpySolver):
         m_idx = gm.astype(np.int32)
         ch_idx = gchan.astype(np.int32)[np.newaxis,np.newaxis,np.newaxis,:]
 
-        beam_pols = self.E_beam_cpu[l_idx,m_idx,ch_idx]
+        beam_pols = self.E_beam[l_idx,m_idx,ch_idx]
         assert beam_pols.shape == (nsrc, ntime, na, nchan, 4)
 
         sum += weight[:,:,:,:,np.newaxis]*beam_pols
@@ -381,21 +381,21 @@ class CPUSolver(NumpySolver):
         assert sint.shape == (ntime,)
         assert cost.shape == (ntime,)
 
-        l0, m0 = self.lm_cpu[:,0], self.lm_cpu[:,1]
+        l0, m0 = self.lm[:,0], self.lm[:,1]
         l = l0[:,np.newaxis]*cost[np.newaxis,:] - m0[:,np.newaxis]*sint[np.newaxis,:]
         m = l0[:,np.newaxis]*sint[np.newaxis,:] + m0[:,np.newaxis]*cost[np.newaxis,:]
 
         assert l.shape == (nsrc, ntime)
         assert m.shape == (nsrc, ntime)
 
-        ld, md = self.point_errors_cpu[:,:,:,0], self.point_errors_cpu[:,:,:,1]
+        ld, md = self.point_errors[:,:,:,0], self.point_errors[:,:,:,1]
         l = l[:,:,np.newaxis,np.newaxis] + ld[np.newaxis,:,:,:]
         m = m[:,:,np.newaxis,np.newaxis] + md[np.newaxis,:,:,:]
 
         assert l.shape == (nsrc, ntime, na, nchan)
         assert m.shape == (nsrc, ntime, na, nchan)
 
-        a, b = self.antenna_scaling_cpu[:,:,0], self.antenna_scaling_cpu[:,:,1]
+        a, b = self.antenna_scaling[:,:,0], self.antenna_scaling[:,:,1]
         l *= a[np.newaxis, np.newaxis, :, :]
         m *= b[np.newaxis, np.newaxis, :, :]
 
@@ -436,7 +436,7 @@ class CPUSolver(NumpySolver):
         chd[:,:,:,fiddle] = 1
 
         # Initialise the sum to zero
-        sum = np.zeros_like(self.jones_cpu)
+        sum = np.zeros_like(self.jones)
         abs_sum = np.zeros(shape=sum.shape, dtype=self.ft)
 
         # A simplified bilinear weighting is used here. Given
@@ -633,7 +633,7 @@ class CPUSolver(NumpySolver):
             (want_shape, ekb_vis.shape)
 
         ap = self.ap_idx(chan=True)
-        g_term = self.G_term_cpu[ap]
+        g_term = self.G_term[ap]
 
         assert g_term.shape == (2, ntime, nbl, nchan, 4)
 
@@ -644,7 +644,7 @@ class CPUSolver(NumpySolver):
             .reshape(ntime, nbl, nchan, 4))
 
         # Zero any flagged visibilities
-        result[self.flag_cpu > 0] = 0
+        result[self.flag > 0] = 0
 
         return result
 
@@ -663,14 +663,14 @@ class CPUSolver(NumpySolver):
         # (nbl,nchan,ntime,4)
         d = ne.evaluate('vis - (bayes*where(flag > 0, 0, 1))', {
             'vis': vis,
-            'bayes': self.bayes_data_cpu,
-            'flag' : self.flag_cpu })
+            'bayes': self.bayes_data,
+            'flag' : self.flag })
         assert d.shape == (ntime, nbl, nchan, 4)
 
         # Square of the real and imaginary components
         re = ne.evaluate('re**2', {'re': d.real})
         im = ne.evaluate('im**2', {'im': d.imag})
-        wv = self.weight_vector_cpu
+        wv = self.weight_vector
 
         # Multiply by the weight vector if required
         if self.use_weight_vector() is True:
@@ -709,11 +709,11 @@ class CPUSolver(NumpySolver):
     def solve(self):
         """ Solve the RIME """
 
-        self.jones_cpu[:] = self.compute_ekb_sqrt_jones_per_ant()
+        self.jones[:] = self.compute_ekb_sqrt_jones_per_ant()
         
-        self.vis_cpu[:] = self.compute_gekb_vis()
+        self.vis[:] = self.compute_gekb_vis()
         
-        self.chi_sqrd_result_cpu[:] = self.compute_chi_sqrd_sum_terms(
-            self.vis_cpu)
+        self.chi_sqrd_result[:] = self.compute_chi_sqrd_sum_terms(
+            self.vis)
         
-        self.set_X2(self.compute_chi_sqrd(self.chi_sqrd_result_cpu))
+        self.set_X2(self.compute_chi_sqrd(self.chi_sqrd_result))

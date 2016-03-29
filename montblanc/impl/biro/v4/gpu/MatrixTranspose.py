@@ -158,10 +158,10 @@ class MatrixTranspose(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        ny, nx = slvr.matrix_in_gpu.shape
+        ny, nx = slvr.matrix_in.shape
         params = self.get_kernel_params(slvr, nx, ny)
 
-        self.kernel(slvr.matrix_in_gpu, slvr.matrix_out_gpu,
+        self.kernel(slvr.matrix_in, slvr.matrix_out,
             np.int32(nx), np.int32(ny), **params)
 
     def post_execution(self, solver, stream=None):

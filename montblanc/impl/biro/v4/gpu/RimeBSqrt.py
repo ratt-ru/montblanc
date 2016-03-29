@@ -178,7 +178,7 @@ class RimeBSqrt(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
-        self.rime_const_data_gpu = self.mod.get_global('C')
+        self.rime_const_data = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
         self.launch_params = self.get_launch_params(slvr, D)
 
@@ -208,16 +208,16 @@ class RimeBSqrt(Node):
 
         if stream is not None:
             cuda.memcpy_htod_async(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 slvr.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 slvr.const_data().ndary())
 
-        self.kernel(slvr.stokes_gpu, slvr.alpha_gpu,
-            slvr.frequency_gpu, slvr.B_sqrt_gpu,
+        self.kernel(slvr.stokes, slvr.alpha,
+            slvr.frequency, slvr.B_sqrt,
             slvr.ref_freq,
             stream=stream, **self.launch_params)
 

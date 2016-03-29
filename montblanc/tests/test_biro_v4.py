@@ -151,14 +151,14 @@ class TestBiroV4(unittest.TestCase):
         # Call the GPU solver
         gpu_slvr.solve()
 
-        ekb_cpu = cpu_slvr.compute_ekb_sqrt_jones_per_ant()
-        ekb_gpu = gpu_slvr.retrieve_jones()
+        ekb = cpu_slvr.compute_ekb_sqrt_jones_per_ant()
+        ekb = gpu_slvr.retrieve_jones()
 
         # Some proportion of values will be out due to
         # discrepancies on the CPU and GPU when computing
         # the E beam (See E_beam_test_impl below)
         proportion_acceptable = 1e-2
-        d = np.invert(np.isclose(ekb_cpu, ekb_gpu, **cmp))
+        d = np.invert(np.isclose(ekb, ekb, **cmp))
         incorrect = d.sum()
         proportion_incorrect = incorrect / float(d.size)
         self.assertTrue(proportion_incorrect < proportion_acceptable,
@@ -172,8 +172,8 @@ class TestBiroV4(unittest.TestCase):
 
         # Test that at a decent proportion of
         # the calculated EKB terms are non-zero
-        non_zero = np.count_nonzero(ekb_cpu)
-        non_zero_ratio = non_zero / float(ekb_cpu.size)
+        non_zero = np.count_nonzero(ekb)
+        non_zero_ratio = non_zero / float(ekb.size)
         self.assertTrue(non_zero_ratio > 0.85,
             'Non-zero EKB ratio is %f.' % non_zero)
 
@@ -216,7 +216,7 @@ class TestBiroV4(unittest.TestCase):
         # create the jones terms. Create some
         # random terms and transfer them to the GPU
         sh, dt = cpu_slvr.jones_shape, cpu_slvr.jones_dtype
-        cpu_slvr.jones_cpu[:] = (
+        cpu_slvr.jones[:] = (
             np.random.random(size=sh).astype(dt) + 
             1j*np.random.random(size=sh).astype(dt))
 
@@ -227,23 +227,23 @@ class TestBiroV4(unittest.TestCase):
 
         # Check that the CPU and GPU visibilities
         # match each other
-        ekb_per_bl = cpu_slvr.compute_ekb_jones_per_bl(cpu_slvr.jones_cpu)
-        ekb_vis_cpu = cpu_slvr.compute_ekb_vis(ekb_per_bl)
-        gekb_vis_cpu = cpu_slvr.compute_gekb_vis(ekb_vis_cpu)
-        gekb_vis_gpu = gpu_slvr.retrieve_vis()
-        self.assertTrue(np.allclose(gekb_vis_cpu, gekb_vis_gpu, **cmp))
+        ekb_per_bl = cpu_slvr.compute_ekb_jones_per_bl(cpu_slvr.jones)
+        ekb_vis = cpu_slvr.compute_ekb_vis(ekb_per_bl)
+        gekb_vis = cpu_slvr.compute_gekb_vis(ekb_vis)
+        gekb_vis = gpu_slvr.retrieve_vis()
+        self.assertTrue(np.allclose(gekb_vis, gekb_vis, **cmp))
 
         # Check that the chi squared sum terms
         # match each other
-        chi_sqrd_sum_terms_cpu = cpu_slvr.compute_chi_sqrd_sum_terms(
-            vis=gekb_vis_cpu)
-        chi_sqrd_sum_terms_gpu = gpu_slvr.retrieve_chi_sqrd_result()
-        self.assertTrue(np.allclose(chi_sqrd_sum_terms_cpu,
-            chi_sqrd_sum_terms_gpu, **cmp))
+        chi_sqrd_sum_terms = cpu_slvr.compute_chi_sqrd_sum_terms(
+            vis=gekb_vis)
+        chi_sqrd_sum_terms = gpu_slvr.retrieve_chi_sqrd_result()
+        self.assertTrue(np.allclose(chi_sqrd_sum_terms,
+            chi_sqrd_sum_terms, **cmp))
 
-        chi_sqrd_result_cpu = cpu_slvr.compute_chi_sqrd(
-            chi_sqrd_terms=chi_sqrd_sum_terms_cpu)
-        self.assertTrue(np.allclose(chi_sqrd_result_cpu, gpu_slvr.X2, **cmp))
+        chi_sqrd_result = cpu_slvr.compute_chi_sqrd(
+            chi_sqrd_terms=chi_sqrd_sum_terms)
+        self.assertTrue(np.allclose(chi_sqrd_result, gpu_slvr.X2, **cmp))
 
     def test_sum_coherencies_float(self):
         """ Test the coherency sum float kernel """
@@ -281,14 +281,14 @@ class TestBiroV4(unittest.TestCase):
         copy_solver(cpu_slvr, gpu_slvr)
 
         # Calculate CPU version of the B sqrt matrix
-        b_sqrt_cpu = cpu_slvr.compute_b_sqrt_jones()
+        b_sqrt = cpu_slvr.compute_b_sqrt_jones()
 
         # Call the GPU solver
         gpu_slvr.solve()
         # Get the GPU version of the B sqrt matrix
-        b_sqrt_gpu = gpu_slvr.retrieve_B_sqrt()
+        b_sqrt = gpu_slvr.retrieve_B_sqrt()
 
-        self.assertTrue(np.allclose(b_sqrt_cpu, b_sqrt_gpu, **cmp))
+        self.assertTrue(np.allclose(b_sqrt, b_sqrt, **cmp))
 
         # TODO: Replace with np.einsum
         # Pick 16 random points in the same and
@@ -299,15 +299,15 @@ class TestBiroV4(unittest.TestCase):
         rand_t = [random.randrange(0, ntime) for i in range(N)]
         rand_ch = [random.randrange(0, nchan) for i in range(N)]
 
-        b_cpu = cpu_slvr.compute_b_jones()
+        b = cpu_slvr.compute_b_jones()
 
         # Test that the square root of B
         # multiplied by itself yields B.
         # Also tests that the square root of B
         # is the Hermitian of the square root of B
         for src, t, ch in zip(rand_srcs, rand_t, rand_ch):
-            B_sqrt = b_sqrt_cpu[src,t,ch].reshape(2,2)
-            B = b_cpu[src,t,ch].reshape(2,2)
+            B_sqrt = b_sqrt[src,t,ch].reshape(2,2)
+            B = b[src,t,ch].reshape(2,2)
             self.assertTrue(np.allclose(B, np.dot(B_sqrt, B_sqrt)))
             self.assertTrue(np.all(B_sqrt == B_sqrt.conj().T))
 
@@ -356,12 +356,12 @@ class TestBiroV4(unittest.TestCase):
         # Set it to 1 degree so that our
         # sources rotate through the cube.
         cpu_slvr.set_parallactic_angle(np.deg2rad(1))
-        E_term_cpu = cpu_slvr.compute_E_beam()
+        E_term = cpu_slvr.compute_E_beam()
 
         copy_solver(cpu_slvr, gpu_slvr)
 
         gpu_slvr.solve()
-        E_term_gpu = gpu_slvr.retrieve_jones()
+        E_term = gpu_slvr.retrieve_jones()
 
         # After extensive debugging and attempts get a nice
         # solution, it has to be accepted that a certain
@@ -378,7 +378,7 @@ class TestBiroV4(unittest.TestCase):
 
         # Hence, we choose a very low ratio of unnacceptable values
         proportion_acceptable = 1e-4
-        d = np.invert(np.isclose(E_term_cpu, E_term_gpu, **cmp))
+        d = np.invert(np.isclose(E_term, E_term, **cmp))
         incorrect = d.sum()
         proportion_incorrect = incorrect / float(d.size)
         self.assertTrue(proportion_incorrect < proportion_acceptable,
@@ -392,8 +392,8 @@ class TestBiroV4(unittest.TestCase):
 
         # Test that at a decent proportion of
         # the calculated E terms are non-zero
-        non_zero_E = np.count_nonzero(E_term_cpu)
-        non_zero_E_ratio = non_zero_E / float(E_term_cpu.size)
+        non_zero_E = np.count_nonzero(E_term)
+        non_zero_E_ratio = non_zero_E / float(E_term.size)
         self.assertTrue(non_zero_E_ratio > 0.85,
             'Non-zero E-term ratio is {r}.'.format(r=non_zero_E_ratio))
 
@@ -465,8 +465,8 @@ class TestBiroV4(unittest.TestCase):
             # Get the brightness matrix
             B = cpu_slvr.compute_b_jones()
 
-            # Fill in the jones_cpu matrix with random values
-            cpu_slvr.jones_cpu[:] = np.random.random(
+            # Fill in the jones matrix with random values
+            cpu_slvr.jones[:] = np.random.random(
                     size=cpu_slvr.jones_shape).astype(cpu_slvr.jones_dtype) + \
                 np.random.random(
                     size=cpu_slvr.jones_shape).astype(cpu_slvr.jones_dtype)
@@ -476,7 +476,7 @@ class TestBiroV4(unittest.TestCase):
 
             # Get per baseline jones matrices from
             # the per antenna jones matrices
-            J2, J1 = cpu_slvr.jones_cpu[idx]
+            J2, J1 = cpu_slvr.jones[idx]
             assert J1.shape == (nsrc, ntime, nbl, nchan, 4)
             assert J2.shape == (nsrc, ntime, nbl, nchan, 4)
 
@@ -505,7 +505,7 @@ class TestBiroV4(unittest.TestCase):
 
             # Multiply the square root of the brightness matrix
             # into the per antenna jones terms
-            J = (cpu_slvr.jones_multiply(cpu_slvr.jones_cpu, JBsqrt)
+            J = (cpu_slvr.jones_multiply(cpu_slvr.jones, JBsqrt)
                 .reshape(nsrc, ntime, na, nchan, 4))
 
             # Get per baseline jones matrices from

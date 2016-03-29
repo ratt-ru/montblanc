@@ -74,7 +74,7 @@ class CUDASolver(RIMESolver):
         # created, we have control over it, if at some later point they wish
         # to do a
         #
-        # slvr.blah_cpu = ...
+        # slvr.blah = ...
         #
 
         # TODO, there's probably a better way of figuring out if a descriptor

@@ -274,7 +274,7 @@ class CompositeBiroSolver(BaseSolver):
                 # Get the reduction kernel
                 # loaded in and hot
                 pycuda.gpuarray.sum(
-                    self.solvers[0].chi_sqrd_result_gpu,
+                    self.solvers[0].chi_sqrd_result,
                     stream=self.stream[0])
 
             self.initialised = True

@@ -370,7 +370,7 @@ class RimeEBeam(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
-        self.rime_const_data_gpu = self.mod.get_global('C')
+        self.rime_const_data = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
         self.launch_params = self.get_launch_params(slvr, D)
 
@@ -400,17 +400,17 @@ class RimeEBeam(Node):
 
         if stream is not None:
             cuda.memcpy_htod_async(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 slvr.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 slvr.const_data().ndary())
 
-        self.kernel(slvr.lm_gpu,
-            slvr.point_errors_gpu, slvr.antenna_scaling_gpu,
-            slvr.E_beam_gpu, slvr.jones_gpu,
+        self.kernel(slvr.lm,
+            slvr.point_errors, slvr.antenna_scaling,
+            slvr.E_beam, slvr.jones,
             slvr.parallactic_angle,
             slvr.beam_ll, slvr.beam_lm,
             slvr.beam_ul, slvr.beam_um,

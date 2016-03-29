@@ -34,12 +34,12 @@ class RimeEBeam(montblanc.impl.biro.v4.gpu.RimeEBeam.RimeEBeam):
 
         if stream is not None:
             cuda.memcpy_htod_async(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 solver.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 solver.const_data().ndary())
 
     def post_execution(self, solver, stream=None):
@@ -48,9 +48,9 @@ class RimeEBeam(montblanc.impl.biro.v4.gpu.RimeEBeam.RimeEBeam):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.lm_gpu,
-            slvr.point_errors_gpu, slvr.antenna_scaling_gpu,
-            slvr.E_beam_gpu, slvr.jones_gpu,
+        self.kernel(slvr.lm,
+            slvr.point_errors, slvr.antenna_scaling,
+            slvr.E_beam, slvr.jones,
             slvr.parallactic_angle,
             slvr.beam_ll, slvr.beam_lm,
             slvr.beam_ul, slvr.beam_um,

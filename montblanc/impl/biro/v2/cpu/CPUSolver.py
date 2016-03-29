@@ -51,20 +51,20 @@ class CPUSolver(NumpySolver):
         ap = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
-        u = self.uvw_cpu[0][ap]
+        u = self.uvw[0][ap]
         u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
         # Calculate per baseline v from per antenna v
-        v = self.uvw_cpu[1][ap]
+        v = self.uvw[1][ap]
         v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
         # Calculate per baseline w from per antenna w
-        w = self.uvw_cpu[2][ap]
+        w = self.uvw[2][ap]
         w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
-        el = self.gauss_shape_cpu[0]
-        em = self.gauss_shape_cpu[1]
-        R = self.gauss_shape_cpu[2]
+        el = self.gauss_shape[0]
+        em = self.gauss_shape[1]
+        R = self.gauss_shape[2]
 
         # OK, try obtain the same results with the fwhm factored out!
         # u1 = u*em - v*el
@@ -85,7 +85,7 @@ class CPUSolver(NumpySolver):
                 'u1':u1[:,:,:,np.newaxis],
                 'v1':v1[:,:,:,np.newaxis],
                 'scale_uv':(self.gauss_scale/
-                    self.wavelength_cpu)[np.newaxis,np.newaxis,np.newaxis,:],
+                    self.wavelength)[np.newaxis,np.newaxis,np.newaxis,:],
                 'R':R[np.newaxis,np.newaxis,:,np.newaxis]})
 
     def compute_sersic_shape(self):
@@ -99,20 +99,20 @@ class CPUSolver(NumpySolver):
         ap = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
-        u = self.uvw_cpu[0][ap]
+        u = self.uvw[0][ap]
         u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
         # Calculate per baseline v from per antenna v
-        v = self.uvw_cpu[1][ap]
+        v = self.uvw[1][ap]
         v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
         # Calculate per baseline w from per antenna w
-        w = self.uvw_cpu[2][ap]
+        w = self.uvw[2][ap]
         w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
-        e1 = self.sersic_shape_cpu[0]
-        e2 = self.sersic_shape_cpu[1]
-        R = self.sersic_shape_cpu[2]
+        e1 = self.sersic_shape[0]
+        e2 = self.sersic_shape[1]
+        R = self.sersic_shape[2]
 
         # OK, try obtain the same results with the fwhm factored out!
         # u1 = u*(1+e1) - v*e2
@@ -132,7 +132,7 @@ class CPUSolver(NumpySolver):
             local_dict={
                 'u1': u1[:, :, :, np.newaxis],
                 'v1': v1[:, :, :, np.newaxis],
-                'scale_uv': (self.two_pi / self.wavelength_cpu)
+                'scale_uv': (self.two_pi / self.wavelength)
                     [np.newaxis, np.newaxis, np.newaxis, :],
                 'R': (R / (1 - e1 * e1 - e2 * e2))
                     [np.newaxis,np.newaxis,:,np.newaxis]})\
@@ -149,11 +149,11 @@ class CPUSolver(NumpySolver):
         """        
         nsrc, ntime, na, nchan = self.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
-        wave = self.wavelength_cpu
+        wave = self.wavelength
 
-        u, v, w = self.uvw_cpu[0], self.uvw_cpu[1], self.uvw_cpu[2]
-        l, m = self.lm_cpu[0], self.lm_cpu[1]
-        alpha = self.brightness_cpu[4]
+        u, v, w = self.uvw[0], self.uvw[1], self.uvw[2]
+        l, m = self.lm[0], self.lm[1]
+        alpha = self.brightness[4]
 
         # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
         n = ne.evaluate('sqrt(1. - l**2 - m**2) - 1.',
@@ -236,9 +236,9 @@ class CPUSolver(NumpySolver):
         # Compute the offsets for different antenna
         # Broadcasting here produces, ntime x na x  nsrc
         E_p = ne.evaluate('sqrt((l - lp)**2 + (m - mp)**2)', {
-            'l': self.lm_cpu[0], 'm': self.lm_cpu[1],
-            'lp': self.point_errors_cpu[0, :, :, np.newaxis],
-            'mp': self.point_errors_cpu[1, :, :, np.newaxis]
+            'l': self.lm[0], 'm': self.lm[1],
+            'lp': self.point_errors[0, :, :, np.newaxis],
+            'mp': self.point_errors[1, :, :, np.newaxis]
         })
 
         assert E_p.shape == (ntime, na, nsrc)
@@ -246,7 +246,7 @@ class CPUSolver(NumpySolver):
         # Broadcasting here produces, ntime x nbl x nsrc x nchan
         E_p = ne.evaluate('E*bw*1e-9*wl', {
             'E': E_p[:, :, :, np.newaxis], 'bw': self.beam_width,
-            'wl': self.wavelength_cpu[np.newaxis, np.newaxis, np.newaxis, :]
+            'wl': self.wavelength[np.newaxis, np.newaxis, np.newaxis, :]
         })
 
         # Clip the beam
@@ -302,13 +302,13 @@ class CPUSolver(NumpySolver):
         # Create the brightness matrix. Dim 4 x ntime x nsrcs
         B = self.ct([
             # fI+fQ + 0j
-            self.brightness_cpu[0]+self.brightness_cpu[1] + 0j,
+            self.brightness[0]+self.brightness[1] + 0j,
             # fU + fV*1j
-            self.brightness_cpu[2] + 1j*self.brightness_cpu[3],
+            self.brightness[2] + 1j*self.brightness[3],
             # fU - fV*1j
-            self.brightness_cpu[2] - 1j*self.brightness_cpu[3],
+            self.brightness[2] - 1j*self.brightness[3],
             # fI-fQ + 0j
-            self.brightness_cpu[0]-self.brightness_cpu[1] + 0j])
+            self.brightness[0]-self.brightness[1] + 0j])
         assert B.shape == (4, ntime, nsrc)
 
         return B
@@ -374,7 +374,7 @@ class CPUSolver(NumpySolver):
         assert vis.shape == (4, ntime, nbl, nchan)
 
         # Zero any flagged visibilities
-        vis[self.flag_cpu > 0] = 0
+        vis[self.flag > 0] = 0
 
         return vis
 
@@ -409,8 +409,8 @@ class CPUSolver(NumpySolver):
         # (4,nbl,nchan,ntime)
         d = ne.evaluate('vis - (bayes*where(flag > 0, 0, 1))', {
             'vis': vis,
-            'bayes': self.bayes_data_cpu,
-            'flag': self.flag_cpu})
+            'bayes': self.bayes_data,
+            'flag': self.flag})
         assert d.shape == (4, ntime, nbl, nchan)
 
         # Square of the real and imaginary components
@@ -419,7 +419,7 @@ class CPUSolver(NumpySolver):
 
         # Multiply by the weight vector if required
         if self.use_weight_vector() is True:
-            wv = self.weight_vector_cpu
+            wv = self.weight_vector
             ne.evaluate('re*wv', {'re': re, 'wv': wv}, out=re)
             ne.evaluate('im*wv', {'im': im, 'wv': wv}, out=im)
 
@@ -454,12 +454,12 @@ class CPUSolver(NumpySolver):
     def solve(self):
         """ Solve the RIME """
 
-        self.jones_scalar_cpu[:] = self.compute_ek_jones_scalar_per_ant()
+        self.jones_scalar[:] = self.compute_ek_jones_scalar_per_ant()
         
-        self.vis_cpu[:] = self.compute_ebk_vis()
+        self.vis[:] = self.compute_ebk_vis()
         
-        self.chi_sqrd_result_cpu[:] = self.compute_chi_sqrd_sum_terms(
-            self.vis_cpu)
+        self.chi_sqrd_result[:] = self.compute_chi_sqrd_sum_terms(
+            self.vis)
         
         self.set_X2(self.compute_chi_sqrd(
-            self.chi_sqrd_result_cpu))
+            self.chi_sqrd_result))

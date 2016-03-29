@@ -243,8 +243,8 @@ class RimeEK(Node):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.uvw_gpu, slvr.lm_gpu, slvr.brightness_gpu,
-            slvr.wavelength_gpu, slvr.point_errors_gpu, slvr.jones_scalar_gpu,
+        self.kernel(slvr.uvw, slvr.lm, slvr.brightness,
+            slvr.wavelength, slvr.point_errors, slvr.jones_scalar,
             slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
             stream=stream, **self.get_kernel_params(slvr))
 

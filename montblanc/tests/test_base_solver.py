@@ -93,13 +93,13 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(hasattr(slvr, gpu_name))
             self.assertTrue(hasattr(slvr, cpu_name))
 
-            # uvw_gpu should be an gpuarray,
-            # while uvw_cpu should only have a descriptor backing it
+            # uvw should be an gpuarray,
+            # while uvw should only have a descriptor backing it
             # at this stage with no concrete NumPy array
             self.assertTrue(isinstance(getattr(slvr, gpu_name), gpuarray.GPUArray))
             self.assertTrue(getattr(slvr, cpu_name, None) is None)
 
-    def test_register_array_create_cpu(self):
+    def test_register_array_create(self):
         """ Test array registration requiring the creation of a CPU array """
         slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=montblanc.sources(point=10, gaussian=10))
@@ -131,12 +131,12 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(not hasattr(slvr, shape_name))
             self.assertTrue(not hasattr(slvr, dtype_name))
 
-            # uvw_gpu should return a gpuarray,
-            # uvw_cpu should return an ndarray.
+            # uvw should return a gpuarray,
+            # uvw should return an ndarray.
             self.assertTrue(isinstance(getattr(slvr, gpu_name), gpuarray.GPUArray))
             self.assertTrue(isinstance(getattr(slvr, cpu_name), np.ndarray))
 
-    def test_register_array_create_cpu_not_gpu(self):
+    def test_register_array_create_cpu_not(self):
         """  Test array registration requiring a CPU array, but not a GPU array """
         slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
             sources=montblanc.sources(point=10, gaussian=10))
@@ -169,8 +169,8 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(not hasattr(slvr, shape_name))
             self.assertTrue(not hasattr(slvr, dtype_name))
 
-            # uvw_gpu should return a gpuarray,
-            # uvw_cpu should return an ndarray.
+            # uvw should return a gpuarray,
+            # uvw should return an ndarray.
             self.assertTrue(getattr(slvr, gpu_name) is None)
             self.assertTrue(isinstance(getattr(slvr, cpu_name), np.ndarray))
 
@@ -210,8 +210,8 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(hasattr(slvr, shape_name))
             self.assertTrue(hasattr(slvr, dtype_name))
 
-            # uvw_gpu should return a gpuarray,
-            # uvw_cpu should return an ndarray.
+            # uvw should return a gpuarray,
+            # uvw should return an ndarray.
             self.assertTrue(isinstance(getattr(slvr, gpu_name), gpuarray.GPUArray))
             self.assertTrue(getattr(slvr, cpu_name) is None)
             self.assertTrue(getattr(slvr, shape_name) == shape)

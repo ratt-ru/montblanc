@@ -136,12 +136,12 @@ class TestBiroV2(unittest.TestCase):
         # Call the GPU solver
         gpu_slvr.solve()
 
-        ek_cpu = cpu_slvr.compute_ek_jones_scalar_per_ant()
-        ek_gpu = gpu_slvr.retrieve_jones_scalar()
+        ek = cpu_slvr.compute_ek_jones_scalar_per_ant()
+        ek = gpu_slvr.retrieve_jones_scalar()
 
         # Test that the jones CPU calculation matches
         # that of the GPU calculation
-        self.assertTrue(np.allclose(ek_cpu, ek_gpu, **cmp))
+        self.assertTrue(np.allclose(ek, ek, **cmp))
 
     def test_EK_float(self):
         """ Single precision EK test  """
@@ -184,20 +184,20 @@ class TestBiroV2(unittest.TestCase):
         gpu_slvr.solve()
         cpu_slvr.solve()
 
-        ebk_vis_cpu = cpu_slvr.vis_cpu
-        ebk_vis_gpu = gpu_slvr.retrieve_vis()
+        ebk_vis = cpu_slvr.vis
+        ebk_vis = gpu_slvr.retrieve_vis()
 
-        self.assertTrue(np.allclose(ebk_vis_cpu, ebk_vis_gpu, **cmp))
+        self.assertTrue(np.allclose(ebk_vis, ebk_vis, **cmp))
 
         # So technically the chi squared should be living
         # on the GPU array, but RimeGaussBSum places it
         # in the X2 property
-        # chi_sqrd_result_gpu = gpu_slvr.retrieve_X2()
-        chi_sqrd_result_cpu = cpu_slvr.X2
-        chi_sqrd_result_gpu = gpu_slvr.X2
+        # chi_sqrd_result = gpu_slvr.retrieve_X2()
+        chi_sqrd_result = cpu_slvr.X2
+        chi_sqrd_result = gpu_slvr.X2
 
-        self.assertTrue(np.allclose(chi_sqrd_result_cpu,
-            chi_sqrd_result_gpu, **cmp))
+        self.assertTrue(np.allclose(chi_sqrd_result,
+            chi_sqrd_result, **cmp))
 
     def test_B_sum_float(self):
         """ Test the B sum float kernel """

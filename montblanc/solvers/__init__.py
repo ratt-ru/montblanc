@@ -42,8 +42,7 @@ def copy_solver(src_slvr, dest_slvr, safe=False):
             if safe and a.name not in da:
                 continue
 
-            cpu_name = src_slvr.cpu_name(a.name)
-            cpu_ary = getattr(src_slvr, cpu_name)
+            cpu_ary = getattr(src_slvr, a.name)
             transfer_method_name = dest_slvr.transfer_method_name(a.name)
             transfer_method = getattr(dest_slvr, transfer_method_name)
             transfer_method(cpu_ary)

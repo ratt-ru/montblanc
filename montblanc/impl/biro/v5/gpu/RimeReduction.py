@@ -35,7 +35,7 @@ class RimeReduction(Node):
         slvr = solver
 
         # Run the kernel once so that its cached for use
-        tmp_X2 = gpuarray.sum(slvr.chi_sqrd_result_gpu,
+        tmp_X2 = gpuarray.sum(slvr.chi_sqrd_result,
             stream=stream, allocator=slvr.dev_mem_pool.allocate)
 
         # Return the result's memory to the pool
@@ -59,7 +59,7 @@ class RimeReduction(Node):
         # Note the returned result is a gpuarray
         # allocated with the supplied device memory pool
         self.X2_gpu_ary = gpuarray.sum(
-            slvr.chi_sqrd_result_gpu[0:C.ntime.extents[1],
+            slvr.chi_sqrd_result[0:C.ntime.extents[1],
                 0:C.nbl.extents[1], 0:C.nchan.extents[1]],
             stream=stream, allocator=slvr.dev_mem_pool.allocate)
 

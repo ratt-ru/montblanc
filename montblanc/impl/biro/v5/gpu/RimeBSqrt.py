@@ -34,12 +34,12 @@ class RimeBSqrt(montblanc.impl.biro.v4.gpu.RimeBSqrt.RimeBSqrt):
 
         if stream is not None:
             cuda.memcpy_htod_async(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 solver.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 solver.const_data().ndary())
 
     def post_execution(self, solver, stream=None):
@@ -48,7 +48,7 @@ class RimeBSqrt(montblanc.impl.biro.v4.gpu.RimeBSqrt.RimeBSqrt):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.stokes_gpu, slvr.alpha_gpu,
-            slvr.frequency_gpu, slvr.B_sqrt_gpu,
+        self.kernel(slvr.stokes, slvr.alpha,
+            slvr.frequency, slvr.B_sqrt,
             slvr.ref_freq,
             stream=stream, **self.launch_params)

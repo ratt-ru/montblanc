@@ -410,7 +410,7 @@ class RimeSumCoherencies(Node):
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
 
-        self.rime_const_data_gpu = self.mod.get_global('C')
+        self.rime_const_data = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
         self.launch_params = self.get_launch_params(slvr, D)
 
@@ -440,34 +440,34 @@ class RimeSumCoherencies(Node):
 
         if stream is not None:
             cuda.memcpy_htod_async(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 slvr.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 slvr.const_data().ndary())
 
         # The gaussian shape array can be empty if
         # no gaussian sources were specified.
         gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
-            else slvr.gauss_shape_gpu
+            else slvr.gauss_shape
 
         sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
-            else slvr.sersic_shape_gpu
+            else slvr.sersic_shape
 
-        self.kernel(slvr.uvw_gpu, gauss, sersic,
-            slvr.frequency_gpu, slvr.ant_pairs_gpu,
-            slvr.jones_gpu, slvr.flag_gpu, slvr.weight_vector_gpu,
-            slvr.bayes_data_gpu, slvr.G_term_gpu,
-            slvr.vis_gpu, slvr.chi_sqrd_result_gpu,
+        self.kernel(slvr.uvw, gauss, sersic,
+            slvr.frequency, slvr.ant_pairs,
+            slvr.jones, slvr.flag, slvr.weight_vector,
+            slvr.bayes_data, slvr.G_term,
+            slvr.vis, slvr.chi_sqrd_result,
             stream=stream, **self.launch_params)
 
         # Call the pycuda reduction kernel.
         # Divide by the single sigma squared value if a weight vector
         # is not required. Otherwise the kernel will incorporate the
         # individual sigma squared values into the sum
-        gpu_sum = gpuarray.sum(slvr.chi_sqrd_result_gpu).get()
+        gpu_sum = gpuarray.sum(slvr.chi_sqrd_result).get()
 
         if not slvr.use_weight_vector():
             slvr.set_X2(gpu_sum/slvr.sigma_sqrd)

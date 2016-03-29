@@ -216,14 +216,14 @@ class RimeMultiply(Node):
              1j*np.random.random(jsize)) \
             .astype(np.complex128).reshape(slvr.jones_shape)
 
-        jones_lhs_gpu = slvr.jones_gpu
-        jones_rhs_gpu = gpuarray.to_gpu(jones_rhs)
-        jones_output_gpu = gpuarray.empty(shape=slvr.jones_shape, dtype=np.complex128)
+        jones_lhs = slvr.jones
+        jones_rhs = gpuarray.to(jones_rhs)
+        jones_output = gpuarray.empty(shape=slvr.jones_shape, dtype=np.complex128)
 
-        self.kernel(jones_lhs_gpu, jones_rhs_gpu, jones_output_gpu, \
+        self.kernel(jones_lhs, jones_rhs, jones_output, \
             **self.get_kernel_params(slvr))
 
-        slvr.jones_gpu = jones_output_gpu
+        slvr.jones = jones_output
 
     def post_execution(self, solver):
         pass

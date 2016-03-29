@@ -289,10 +289,10 @@ class BaseSolver(object):
                 True by default. If True, a default 'transfer_name' member is
                 created, otherwise the supplied function is used instead
             page_locked : boolean
-                True if the 'name_cpu' ndarray should be allocated as
+                True if the 'name' ndarray should be allocated as
                 a page-locked array.
             aligned : boolean
-                True if the 'name_cpu' ndarray should be allocated as
+                True if the 'name' ndarray should be allocated as
                 an page-aligned array.
             replace : boolean
                 True if existing arrays should be replaced.

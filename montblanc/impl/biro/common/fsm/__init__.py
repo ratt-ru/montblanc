@@ -221,16 +221,16 @@ class FsmSolver(Machine):
         slvr, i = self.comp_slvr, self.current_slvr
         subslvr, t_diff = self.comp_slvr.solvers[i], self.current_time_diff
         # Swap the allocators for the reduction, since it uses
-        # chi_sqrd_result_gpu's allocator internally
-        tmp_alloc = subslvr.chi_sqrd_result_gpu.allocator
-        subslvr.chi_sqrd_result_gpu.allocator = slvr.dev_mem_pool.allocate
+        # chi_sqrd_result's allocator internally
+        tmp_alloc = subslvr.chi_sqrd_result.allocator
+        subslvr.chi_sqrd_result.allocator = slvr.dev_mem_pool.allocate
         # OK, perform the reduction over the appropriate timestep section
         # of the chi squared terms.
         self.X2_gpu_arys[i] = pycuda.gpuarray.sum(
-            subslvr.chi_sqrd_result_gpu[:t_diff,:,:],
+            subslvr.chi_sqrd_result[:t_diff,:,:],
             stream=slvr.stream[i])
         # Repair the allocator
-        subslvr.chi_sqrd_result_gpu.allocator = tmp_alloc
+        subslvr.chi_sqrd_result.allocator = tmp_alloc
 
     def do_transfer_X2(self):
         # Execute the transfer of the Chi-Squared value to the CPU

@@ -63,10 +63,10 @@ class NumpySolver(RIMESolver):
         Keyword Arguments
         -----------------
             page_locked : boolean
-                True if the 'name_cpu' ndarray should be allocated as
+                True if the 'name' ndarray should be allocated as
                 a page-locked array.
             aligned : boolean
-                True if the 'name_cpu' ndarray should be allocated as
+                True if the 'name' ndarray should be allocated as
                 an page-aligned array.
 
         Returns
@@ -83,7 +83,7 @@ class NumpySolver(RIMESolver):
         # created, we have control over it, if at some later point they wish
         # to do a
         #
-        # slvr.blah_cpu = ...
+        # slvr.blah = ...
         #
 
         # TODO, there's probably a better way of figuring out if a descriptor
