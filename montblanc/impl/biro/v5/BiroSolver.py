@@ -71,6 +71,9 @@ class BiroSolver(CUDASolver):
         self.rime_sum = RimeSumCoherencies(weight_vector=wv)
         self.rime_reduce = RimeReduction()
 
+        from montblanc.impl.biro.v4.ant_pairs import monkey_patch_antenna_pairs
+        monkey_patch_antenna_pairs(self)
+
         # Create
         # (1) A stream that this solver will asynchronously
         #     operate on
@@ -116,6 +119,14 @@ class BiroSolver(CUDASolver):
             self.rime_sum.initialise(self)
             self.rime_reduce.initialise(self)
 
+    def solve(self):
+        with self.context:
+            self.rime_e_beam.execute(self)
+            self.rime_b_sqrt.execute(self)
+            self.rime_ekb_sqrt.execute(self)
+            self.rime_sum.execute(self)
+            self.rime_reduce.execute(self)
+
     def shutdown(self):
         with self.context:
             self.rime_e_beam.shutdown(self)
@@ -123,11 +134,3 @@ class BiroSolver(CUDASolver):
             self.rime_ekb_sqrt.shutdown(self)
             self.rime_sum.shutdown(self)
             self.rime_reduce.shutdown(self)
-
-    # Take these methods from the v4 BiroSolver
-    get_default_base_ant_pairs = \
-        BiroSolverV4.__dict__['get_default_base_ant_pairs']
-    get_default_ant_pairs = \
-        BiroSolverV4.__dict__['get_default_ant_pairs']
-    get_ap_idx = \
-        BiroSolverV4.__dict__['get_ap_idx']
