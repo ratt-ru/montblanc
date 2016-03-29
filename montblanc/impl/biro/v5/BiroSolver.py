@@ -63,12 +63,11 @@ class BiroSolver(CUDASolver):
         self.register_dimension(Options.E_BEAM_DEPTH,
             slvr_cfg[Options.E_BEAM_DEPTH],
             description='E Beam cube height in nu coords')
-        wv = slvr_cfg[Options.WEIGHT_VECTOR]
 
         self.rime_e_beam = RimeEBeam()
         self.rime_b_sqrt = RimeBSqrt()
         self.rime_ekb_sqrt = RimeEKBSqrt()
-        self.rime_sum = RimeSumCoherencies(weight_vector=wv)
+        self.rime_sum = RimeSumCoherencies()
         self.rime_reduce = RimeReduction()
 
         from montblanc.impl.biro.v4.ant_pairs import monkey_patch_antenna_pairs
