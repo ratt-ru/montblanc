@@ -22,6 +22,7 @@ import copy
 import functools
 import numpy as np
 import types
+import sys
 
 import concurrent.futures as cf
 import threading
@@ -795,7 +796,7 @@ class CompositeBiroSolver(BaseSolver):
     def __rm_future_cb(f, Q):
         # Raise any possible exceptions
         if f.exception() is not None:
-            raise f.exception()
+            raise f.exception(), None, sys.exc_info()[2]
 
         Q.remove(f)
 
