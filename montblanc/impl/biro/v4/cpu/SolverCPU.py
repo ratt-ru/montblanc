@@ -23,10 +23,49 @@ import numpy as np
 
 import montblanc
 import montblanc.util as mbu
+from montblanc.solvers import NumpySolver
+from montblanc.config import BiroSolverConfig as Options
 
-class SolverCPU(object):
-    def __init__(self, solver):
-        self.solver = solver
+
+class SolverCPU(NumpySolver):
+    def __init__(self, slvr_cfg):
+        super(SolverCPU, self).__init__(slvr_cfg)
+
+        # Monkey patch these functions onto the object
+        # TODO: Remove this when deprecating v2.
+        import types
+        from montblanc.impl.biro.v4.ant_pairs import (get_default_base_ant_pairs,
+            get_default_ant_pairs,
+            get_ap_idx)
+
+        self.get_default_base_ant_pairs = types.MethodType(
+            get_default_base_ant_pairs, self)
+
+        self.get_default_ant_pairs = types.MethodType(
+            get_default_ant_pairs, self)
+
+        self.get_ap_idx = types.MethodType(
+            get_ap_idx, self)        
+
+        from montblanc.impl.biro.v4.config import (A, P)
+
+        self.register_default_dimensions()
+
+        # Configure the dimensions of the beam cube
+        self.register_dimension('beam_lw',
+            slvr_cfg[Options.E_BEAM_WIDTH],
+            description='E Beam cube width in l coords')
+
+        self.register_dimension('beam_mh',
+            slvr_cfg[Options.E_BEAM_HEIGHT],
+            description='E Beam cube height in m coords')
+
+        self.register_dimension('beam_nud',
+            slvr_cfg[Options.E_BEAM_DEPTH],
+            description='E Beam cube height in nu coords')
+
+        self.register_properties(P)
+        self.register_arrays(A)
 
     def compute_gaussian_shape(self):
         """
@@ -35,50 +74,45 @@ class SolverCPU(object):
         Returns a (ngsrc, ntime, nbl, nchan) matrix of floating point scalars.
         """
 
-        slvr = self.solver
-        ntime, nbl, ngsrc = slvr.dim_local_size('ntime', 'nbl', 'ngsrc')
+        ntime, nbl, ngsrc = self.dim_local_size('ntime', 'nbl', 'ngsrc')
 
-        try:
-            ap = slvr.get_ap_idx()
+        ap = self.get_ap_idx()
 
-            # Calculate per baseline u from per antenna u
-            u = slvr.uvw_cpu[:,:,0][ap]
-            u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
+        # Calculate per baseline u from per antenna u
+        u = self.uvw_cpu[:,:,0][ap]
+        u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
-            # Calculate per baseline v from per antenna v
-            v = slvr.uvw_cpu[:,:,1][ap]
-            v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
+        # Calculate per baseline v from per antenna v
+        v = self.uvw_cpu[:,:,1][ap]
+        v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
-            # Calculate per baseline w from per antenna w
-            w = slvr.uvw_cpu[:,:,2][ap]
-            w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
+        # Calculate per baseline w from per antenna w
+        w = self.uvw_cpu[:,:,2][ap]
+        w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
-            el = slvr.gauss_shape_cpu[0]
-            em = slvr.gauss_shape_cpu[1]
-            R = slvr.gauss_shape_cpu[2]
+        el = self.gauss_shape_cpu[0]
+        em = self.gauss_shape_cpu[1]
+        R = self.gauss_shape_cpu[2]
 
-            # OK, try obtain the same results with the fwhm factored out!
-            # u1 = u*em - v*el
-            # v1 = u*el + v*em
-            u1 = ne.evaluate('u_em - v_el',
-                {'u_em': np.outer(em, u), 'v_el': np.outer(el, v)})\
-                .reshape(ngsrc, ntime,nbl)
-            v1 = ne.evaluate('u_el + v_em', {
-                'u_el' : np.outer(el, u), 'v_em' : np.outer(em, v)})\
-                .reshape(ngsrc, ntime,nbl)
+        # OK, try obtain the same results with the fwhm factored out!
+        # u1 = u*em - v*el
+        # v1 = u*el + v*em
+        u1 = ne.evaluate('u_em - v_el',
+            {'u_em': np.outer(em, u), 'v_el': np.outer(el, v)})\
+            .reshape(ngsrc, ntime,nbl)
+        v1 = ne.evaluate('u_el + v_em', {
+            'u_el' : np.outer(el, u), 'v_em' : np.outer(em, v)})\
+            .reshape(ngsrc, ntime,nbl)
 
-            scale_uv = (slvr.gauss_scale*slvr.frequency_cpu)\
-                [np.newaxis,np.newaxis,np.newaxis,:]
+        scale_uv = (self.gauss_scale*self.frequency_cpu)\
+            [np.newaxis,np.newaxis,np.newaxis,:]
 
-            return ne.evaluate('exp(-((u1*scale_uv*R)**2 + (v1*scale_uv)**2))',
-                local_dict={
-                    'u1':u1[:,:,:,np.newaxis],
-                    'v1':v1[:,:,:,np.newaxis],
-                    'scale_uv': scale_uv,
-                    'R':R[:,np.newaxis,np.newaxis,np.newaxis]})
-
-        except AttributeError as e:
-            mbu.rethrow_attribute_exception(e)
+        return ne.evaluate('exp(-((u1*scale_uv*R)**2 + (v1*scale_uv)**2))',
+            local_dict={
+                'u1':u1[:,:,:,np.newaxis],
+                'v1':v1[:,:,:,np.newaxis],
+                'scale_uv': scale_uv,
+                'R':R[:,np.newaxis,np.newaxis,np.newaxis]})
 
     def compute_sersic_shape(self):
         """
@@ -87,60 +121,56 @@ class SolverCPU(object):
         Returns a (nssrc, ntime, nbl, nchan) matrix of floating point scalars.
         """
 
-        slvr = self.solver
-        nssrc, ntime, nbl, nchan  = slvr.dim_local_size('nssrc', 'ntime', 'nbl', 'nchan')
+        
+        nssrc, ntime, nbl, nchan  = self.dim_local_size('nssrc', 'ntime', 'nbl', 'nchan')
 
-        try:
-            ap = slvr.get_ap_idx()
+        ap = self.get_ap_idx()
 
-            # Calculate per baseline u from per antenna u
-            u = slvr.uvw_cpu[:,:,0][ap]
-            u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
+        # Calculate per baseline u from per antenna u
+        u = self.uvw_cpu[:,:,0][ap]
+        u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
 
-            # Calculate per baseline v from per antenna v
-            v = slvr.uvw_cpu[:,:,1][ap]
-            v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
+        # Calculate per baseline v from per antenna v
+        v = self.uvw_cpu[:,:,1][ap]
+        v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
 
-            # Calculate per baseline w from per antenna w
-            w = slvr.uvw_cpu[:,:,2][ap]
-            w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
+        # Calculate per baseline w from per antenna w
+        w = self.uvw_cpu[:,:,2][ap]
+        w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
 
-            e1 = slvr.sersic_shape_cpu[0]
-            e2 = slvr.sersic_shape_cpu[1]
-            R = slvr.sersic_shape_cpu[2]
+        e1 = self.sersic_shape_cpu[0]
+        e2 = self.sersic_shape_cpu[1]
+        R = self.sersic_shape_cpu[2]
 
-            # OK, try obtain the same results with the fwhm factored out!
-            # u1 = u*(1+e1) - v*e2
-            # v1 = u*e2 + v*(1-e1)
-            u1 = ne.evaluate('u_1_e1 + v_e2',
-                {'u_1_e1': np.outer(np.ones(nssrc)+e1, u), 'v_e2' : np.outer(e2, v)})\
-                .reshape(nssrc, ntime,nbl)
-            v1 = ne.evaluate('u_e2 + v_1_e1', {
-                'u_e2' : np.outer(e2, u), 'v_1_e1' : np.outer(np.ones(nssrc)-e1,v)})\
-                .reshape(nssrc, ntime,nbl)
+        # OK, try obtain the same results with the fwhm factored out!
+        # u1 = u*(1+e1) - v*e2
+        # v1 = u*e2 + v*(1-e1)
+        u1 = ne.evaluate('u_1_e1 + v_e2',
+            {'u_1_e1': np.outer(np.ones(nssrc)+e1, u), 'v_e2' : np.outer(e2, v)})\
+            .reshape(nssrc, ntime,nbl)
+        v1 = ne.evaluate('u_e2 + v_1_e1', {
+            'u_e2' : np.outer(e2, u), 'v_1_e1' : np.outer(np.ones(nssrc)-e1,v)})\
+            .reshape(nssrc, ntime,nbl)
 
-            # Obvious given the above reshape
-            assert u1.shape == (nssrc, ntime, nbl)
-            assert v1.shape == (nssrc, ntime, nbl)
+        # Obvious given the above reshape
+        assert u1.shape == (nssrc, ntime, nbl)
+        assert v1.shape == (nssrc, ntime, nbl)
 
-            scale_uv = (slvr.two_pi_over_c * slvr.frequency_cpu)\
-                [np.newaxis, np.newaxis, np.newaxis, :]
+        scale_uv = (self.two_pi_over_c * self.frequency_cpu)\
+            [np.newaxis, np.newaxis, np.newaxis, :]
 
-            den = ne.evaluate('1 + (u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
-                local_dict={
-                    'u1': u1[:, :, :, np.newaxis],
-                    'v1': v1[:, :, :, np.newaxis],
-                    'scale_uv': scale_uv,
-                    'R': (R / (1 - e1 * e1 - e2 * e2))
-                        [:,np.newaxis,np.newaxis,np.newaxis]})
+        den = ne.evaluate('1 + (u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
+            local_dict={
+                'u1': u1[:, :, :, np.newaxis],
+                'v1': v1[:, :, :, np.newaxis],
+                'scale_uv': scale_uv,
+                'R': (R / (1 - e1 * e1 - e2 * e2))
+                    [:,np.newaxis,np.newaxis,np.newaxis]})
 
-            assert den.shape == (nssrc, ntime, nbl, nchan)
+        assert den.shape == (nssrc, ntime, nbl, nchan)
 
-            return ne.evaluate('1/(den*sqrt(den))',
-                { 'den' : den[:, :, :, :] })
-
-        except AttributeError as e:
-            mbu.rethrow_attribute_exception(e)
+        return ne.evaluate('1/(den*sqrt(den))',
+            { 'den' : den[:, :, :, :] })
 
     def compute_k_jones_scalar_per_ant(self):
         """
@@ -148,38 +178,34 @@ class SolverCPU(object):
 
         Returns a (nsrc,ntime,na,nchan) matrix of complex scalars.
         """
-        slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
+        
+        nsrc, ntime, na, nchan = self.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
-        try:
-            freq = slvr.frequency_cpu
+        freq = self.frequency_cpu
 
-            u, v, w = slvr.uvw_cpu[:,:,0], slvr.uvw_cpu[:,:,1], slvr.uvw_cpu[:,:,2]
-            l, m = slvr.lm_cpu[:,0], slvr.lm_cpu[:,1]
+        u, v, w = self.uvw_cpu[:,:,0], self.uvw_cpu[:,:,1], self.uvw_cpu[:,:,2]
+        l, m = self.lm_cpu[:,0], self.lm_cpu[:,1]
 
-            # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
-            n = ne.evaluate('sqrt(1. - l**2 - m**2) - 1.',
-                {'l': l, 'm': m})
+        # n = sqrt(1 - l^2 - m^2) - 1. Dim 1 x na.
+        n = ne.evaluate('sqrt(1. - l**2 - m**2) - 1.',
+            {'l': l, 'm': m})
 
-            # w*n+v*m+u*l. Outer product creates array of dim nsrcs x ntime x na
-            phase = (np.outer(n, w) + np.outer(m, v) + np.outer(l, u)) \
-                    .reshape(nsrc, ntime, na)
+        # w*n+v*m+u*l. Outer product creates array of dim nsrcs x ntime x na
+        phase = (np.outer(n, w) + np.outer(m, v) + np.outer(l, u)) \
+                .reshape(nsrc, ntime, na)
 
-            # e^(2*pi*sqrt(u*l+v*m+w*n)*frequency/C).
-            # Dim. ntime x na x nchan x nsrcs
-            cplx_phase = ne.evaluate('exp(-2*pi*1j*p*f/C)', {
-                'p': phase[:, :, :, np.newaxis],
-                'f': freq[np.newaxis, np.newaxis, np.newaxis, :],
-                'C': montblanc.constants.C,
-                'pi': np.pi
-            })
+        # e^(2*pi*sqrt(u*l+v*m+w*n)*frequency/C).
+        # Dim. ntime x na x nchan x nsrcs
+        cplx_phase = ne.evaluate('exp(-2*pi*1j*p*f/C)', {
+            'p': phase[:, :, :, np.newaxis],
+            'f': freq[np.newaxis, np.newaxis, np.newaxis, :],
+            'C': montblanc.constants.C,
+            'pi': np.pi
+        })
 
-            assert cplx_phase.shape == (nsrc, ntime, na, nchan)
+        assert cplx_phase.shape == (nsrc, ntime, na, nchan)
 
-            return cplx_phase
-
-        except AttributeError as e:
-            mbu.rethrow_attribute_exception(e)
+        return cplx_phase
 
     def compute_kb_jones_per_ant(self):
         """
@@ -189,8 +215,7 @@ class SolverCPU(object):
         Returns a (4,nsrc,ntime,na,nchan) matrix of complex scalars.
         """
 
-        slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
+        nsrc, ntime, na, nchan = self.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
         k_jones = self.compute_k_jones_scalar_per_ant()
         assert k_jones.shape == (nsrc, ntime, na, nchan)
@@ -210,8 +235,7 @@ class SolverCPU(object):
         Returns a (nsrc,ntime,na,nchan,4) matrix of complex scalars.
         """
 
-        slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
+        nsrc, ntime, na, nchan = self.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
         k_jones = self.compute_k_jones_scalar_per_ant()
         b_sqrt_jones = self.compute_b_sqrt_jones()
@@ -227,12 +251,11 @@ class SolverCPU(object):
 
         Returns a (4,nsrc,ntime,nchan) matrix of complex scalars.
         """
-        slvr = self.solver
-        nsrc, ntime, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nchan')
+        nsrc, ntime, nchan = self.dim_local_size('nsrc', 'ntime', 'nchan')
 
         try:
-            B = np.empty(shape=(nsrc, ntime, 4), dtype=slvr.ct)
-            S = slvr.stokes_cpu
+            B = np.empty(shape=(nsrc, ntime, 4), dtype=self.ct)
+            S = self.stokes_cpu
             # Create the brightness matrix from the stokes parameters
             # Dimension (nsrc, ntime, 4)
             B[:,:,0] = S[:,:,0] + S[:,:,1]    # I+Q
@@ -242,10 +265,10 @@ class SolverCPU(object):
 
             # Multiply the scalar power term into the matrix
             B_power = ne.evaluate('B*((f/rf)**a)', {
-                 'rf': slvr.ref_freq,
+                 'rf': self.ref_freq,
                  'B': B[:,:,np.newaxis,:],
-                 'f': slvr.frequency_cpu[np.newaxis, np.newaxis, :, np.newaxis],
-                 'a': slvr.alpha_cpu[:, :, np.newaxis, np.newaxis] })
+                 'f': self.frequency_cpu[np.newaxis, np.newaxis, :, np.newaxis],
+                 'a': self.alpha_cpu[:, :, np.newaxis, np.newaxis] })
 
             assert B_power.shape == (nsrc, ntime, nchan, 4)
 
@@ -260,8 +283,7 @@ class SolverCPU(object):
 
         Returns a (4,nsrc,ntime,nchan) matrix of complex scalars.
         """
-        slvr = self.solver
-        nsrc, ntime, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nchan')
+        nsrc, ntime, nchan = self.dim_local_size('nsrc', 'ntime', 'nchan')
 
         try:
             # See
@@ -317,9 +339,8 @@ class SolverCPU(object):
         weight it with the distance from the original grid position,
         and add it to the sum and abs_sum arguments.
         """
-        slvr = self.solver
         nsrc, ntime, na, nchan, beam_lw, beam_mh, beam_nud = (
-            slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan',
+            self.dim_local_size('nsrc', 'ntime', 'na', 'nchan',
                 'beam_lw', 'beam_mh', 'beam_nud'))
 
         # Does the source lie within the beam cube?
@@ -340,7 +361,7 @@ class SolverCPU(object):
         m_idx = gm.astype(np.int32)
         ch_idx = gchan.astype(np.int32)[np.newaxis,np.newaxis,np.newaxis,:]
 
-        beam_pols = slvr.E_beam_cpu[l_idx,m_idx,ch_idx]
+        beam_pols = self.E_beam_cpu[l_idx,m_idx,ch_idx]
         assert beam_pols.shape == (nsrc, ntime, na, nchan, 4)
 
         sum += weight[:,:,:,:,np.newaxis]*beam_pols
@@ -361,43 +382,42 @@ class SolverCPU(object):
 
         Returns a (nsrc,ntime,na,nchan,4) matrix of complex scalars.
         """
-        slvr = self.solver
         nsrc, ntime, na, nchan, beam_lw, beam_mh, beam_nud = (
-            slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan',
+            self.dim_local_size('nsrc', 'ntime', 'na', 'nchan',
                 'beam_lw', 'beam_mh', 'beam_nud'))
 
-        sint = np.sin(slvr.parallactic_angle*np.arange(ntime))
-        cost = np.cos(slvr.parallactic_angle*np.arange(ntime))
+        sint = np.sin(self.parallactic_angle*np.arange(ntime))
+        cost = np.cos(self.parallactic_angle*np.arange(ntime))
 
         assert sint.shape == (ntime,)
         assert cost.shape == (ntime,)
 
-        l0, m0 = slvr.lm_cpu[:,0], slvr.lm_cpu[:,1]
+        l0, m0 = self.lm_cpu[:,0], self.lm_cpu[:,1]
         l = l0[:,np.newaxis]*cost[np.newaxis,:] - m0[:,np.newaxis]*sint[np.newaxis,:]
         m = l0[:,np.newaxis]*sint[np.newaxis,:] + m0[:,np.newaxis]*cost[np.newaxis,:]
 
         assert l.shape == (nsrc, ntime)
         assert m.shape == (nsrc, ntime)
 
-        ld, md = slvr.point_errors_cpu[:,:,:,0], slvr.point_errors_cpu[:,:,:,1]
+        ld, md = self.point_errors_cpu[:,:,:,0], self.point_errors_cpu[:,:,:,1]
         l = l[:,:,np.newaxis,np.newaxis] + ld[np.newaxis,:,:,:]
         m = m[:,:,np.newaxis,np.newaxis] + md[np.newaxis,:,:,:]
 
         assert l.shape == (nsrc, ntime, na, nchan)
         assert m.shape == (nsrc, ntime, na, nchan)
 
-        a, b = slvr.antenna_scaling_cpu[:,:,0], slvr.antenna_scaling_cpu[:,:,1]
+        a, b = self.antenna_scaling_cpu[:,:,0], self.antenna_scaling_cpu[:,:,1]
         l *= a[np.newaxis, np.newaxis, :, :]
         m *= b[np.newaxis, np.newaxis, :, :]
 
         # Compute grid position and difference from
         # actual position for the source at each channel
-        l = (beam_lw-1) * (l-slvr.beam_ll) / (slvr.beam_ul-slvr.beam_ll)
+        l = (beam_lw-1) * (l-self.beam_ll) / (self.beam_ul-self.beam_ll)
         assert l.shape == (nsrc, ntime, na, nchan)
         gl = np.floor(l)
         ld = l - gl
 
-        m = (beam_mh-1) * (m-slvr.beam_lm) / (slvr.beam_um-slvr.beam_lm)
+        m = (beam_mh-1) * (m-self.beam_lm) / (self.beam_um-self.beam_lm)
         assert m.shape == (nsrc, ntime, na, nchan)
         gm = np.floor(m)
         md = m - gm
@@ -406,13 +426,13 @@ class SolverCPU(object):
         # the position in the global channel space.
         # Get our problem extents and the global size of
         # the channel dimension
-        chan_low, chan_high = slvr.dim_extents('nchan')
-        nchan_global = slvr.dim_global_size('nchan')
+        chan_low, chan_high = self.dim_extents('nchan')
+        nchan_global = self.dim_global_size('nchan')
 
         # Global channel size is divisor, but handle one channel case
-        div = slvr.ft(nchan_global-1) if nchan_global > 1 else 1.0
+        div = self.ft(nchan_global-1) if nchan_global > 1 else 1.0
         # Create the channel range from the extents
-        chan_range = np.arange(chan_low, chan_high).astype(slvr.ft)
+        chan_range = np.arange(chan_low, chan_high).astype(self.ft)
         # Divide channel range by global size and multiply
         # to obtain position in the beam cube
         chan = (beam_nud-1)*chan_range / div
@@ -427,8 +447,8 @@ class SolverCPU(object):
         chd[:,:,:,fiddle] = 1
 
         # Initialise the sum to zero
-        sum = np.zeros_like(slvr.jones_cpu)
-        abs_sum = np.zeros(shape=sum.shape, dtype=slvr.ft)
+        sum = np.zeros_like(self.jones_cpu)
+        abs_sum = np.zeros(shape=sum.shape, dtype=self.ft)
 
         # A simplified bilinear weighting is used here. Given
         # point x between points x1 and x2, with function f
@@ -522,9 +542,7 @@ class SolverCPU(object):
 
         Returns a (nsrc,ntime,na,nchan,4) matrix of complex scalars.
         """
-
-        slvr = self.solver
-        nsrc, ntime, na, nchan = slvr.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
+        nsrc, ntime, na, nchan = self.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
         N = nsrc*ntime*na*nchan
 
         E_beam = self.compute_E_beam()
@@ -543,16 +561,14 @@ class SolverCPU(object):
 
         Returns a (nsrc,ntime,nbl,nchan,4) matrix of complex scalars.
         """
-
-        slvr = self.solver
-        nsrc, npsrc, ngsrc, nssrc, ntime, nbl, nchan = slvr.dim_local_size(
+        nsrc, npsrc, ngsrc, nssrc, ntime, nbl, nchan = self.dim_local_size(
             'nsrc', 'npsrc', 'ngsrc', 'nssrc', 'ntime', 'nbl', 'nchan')
 
         try:
             if ekb_sqrt is None:
                 ekb_sqrt = self.compute_ekb_sqrt_jones_per_ant()
 
-            ap = slvr.get_ap_idx(src=True, chan=True)
+            ap = self.get_ap_idx(src=True, chan=True)
             ekb_sqrt_idx = ekb_sqrt[ap]
             assert ekb_sqrt_idx.shape == (2, nsrc, ntime, nbl, nchan, 4)
 
@@ -585,9 +601,7 @@ class SolverCPU(object):
 
         Returns a (ntime,nbl,nchan,4) matrix of complex scalars.
         """
-
-        slvr = self.solver
-        nsrc, ntime, nbl, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
+        nsrc, ntime, nbl, nchan = self.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         if ekb_jones is None:
             ekb_jones = self.compute_ekb_jones_per_bl()
@@ -606,7 +620,7 @@ class SolverCPU(object):
         else:
             vis = ne.evaluate('sum(ebk,0)',
                 {'ebk': ekb_jones }) \
-                .astype(slvr.ct)
+                .astype(self.ct)
 
         assert vis.shape == (ntime, nbl, nchan, 4)
 
@@ -619,23 +633,21 @@ class SolverCPU(object):
 
         Returns a (ntime,nbl,nchan,4) matrix of complex scalars.
         """
-
-        slvr = self.solver
-        nsrc, ntime, nbl, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
+        nsrc, ntime, nbl, nchan = self.dim_local_size('nsrc', 'ntime', 'nbl', 'nchan')
 
         if ekb_vis is None:
             ekb_vis = self.compute_ekb_vis()
 
         if flag is None:
-            flag = slvr.flag_cpu
+            flag = self.flag_cpu
 
         want_shape = (ntime, nbl, nchan, 4)
         assert ekb_vis.shape == want_shape, \
             'Expected shape %s. Got %s instead.' % \
             (want_shape, ekb_vis.shape)
 
-        ap = slvr.get_ap_idx(chan=True)
-        g_term = slvr.G_term_cpu[ap]
+        ap = self.get_ap_idx(chan=True)
+        g_term = self.G_term_cpu[ap]
 
         assert g_term.shape == (2, ntime, nbl, nchan, 4)
 
@@ -663,52 +675,47 @@ class SolverCPU(object):
 
         Returns a (ntime,nbl,nchan) matrix of floating point scalars.
         """
-        slvr = self.solver
-        ntime, nbl, nchan = slvr.dim_local_size('ntime', 'nbl', 'nchan')
+        ntime, nbl, nchan = self.dim_local_size('ntime', 'nbl', 'nchan')
 
-        try:
-            if vis is None: vis = self.compute_gekb_vis()
-            if bayes_data is None: bayes_data = slvr.bayes_data_cpu
-            if flag is None: flag = slvr.flag_cpu
+        if vis is None: vis = self.compute_gekb_vis()
+        if bayes_data is None: bayes_data = self.bayes_data_cpu
+        if flag is None: flag = self.flag_cpu
 
-            # Copy technically needed here so that flagging
-            # doesn't corrupt original array
-            bayes_data = bayes_data.copy()
-            bayes_data[flag > 0] = 0
+        # Copy technically needed here so that flagging
+        # doesn't corrupt original array
+        bayes_data = bayes_data.copy()
+        bayes_data[flag > 0] = 0
 
-            # Take the difference between the visibilities and the model
-            # (nbl,nchan,ntime,4)
-            d = ne.evaluate('vis - bayes', {
-                'vis': vis,
-                'bayes': bayes_data })
-            assert d.shape == (ntime, nbl, nchan, 4)
+        # Take the difference between the visibilities and the model
+        # (nbl,nchan,ntime,4)
+        d = ne.evaluate('vis - bayes', {
+            'vis': vis,
+            'bayes': bayes_data })
+        assert d.shape == (ntime, nbl, nchan, 4)
 
-            # Square of the real and imaginary components
-            re = ne.evaluate('re**2', {'re': d.real})
-            im = ne.evaluate('im**2', {'im': d.imag})
-            wv = slvr.weight_vector_cpu
+        # Square of the real and imaginary components
+        re = ne.evaluate('re**2', {'re': d.real})
+        im = ne.evaluate('im**2', {'im': d.imag})
+        wv = self.weight_vector_cpu
 
-            # Multiply by the weight vector if required
-            if weight_vector is True:
-                ne.evaluate('re*wv', {'re': re, 'wv': wv}, out=re)
-                ne.evaluate('im*wv', {'im': im, 'wv': wv}, out=im)
+        # Multiply by the weight vector if required
+        if weight_vector is True:
+            ne.evaluate('re*wv', {'re': re, 'wv': wv}, out=re)
+            ne.evaluate('im*wv', {'im': im, 'wv': wv}, out=im)
 
-            # Reduces a dimension so that we have (nbl,nchan,ntime)
-            # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) +
-            # ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
+        # Reduces a dimension so that we have (nbl,nchan,ntime)
+        # (XX.real^2 + XY.real^2 + YX.real^2 + YY.real^2) +
+        # ((XX.imag^2 + XY.imag^2 + YX.imag^2 + YY.imag^2))
 
-            # Sum the real and imaginary terms together
-            # for the final result.
-            re_sum = ne.evaluate('sum(re,3)', {'re': re})
-            im_sum = ne.evaluate('sum(im,3)', {'im': im})
-            chi_sqrd_terms = ne.evaluate('re_sum + im_sum',
-                {'re_sum': re_sum, 'im_sum': im_sum})
-            assert chi_sqrd_terms.shape == (ntime, nbl, nchan)
+        # Sum the real and imaginary terms together
+        # for the final result.
+        re_sum = ne.evaluate('sum(re,3)', {'re': re})
+        im_sum = ne.evaluate('sum(im,3)', {'im': im})
+        chi_sqrd_terms = ne.evaluate('re_sum + im_sum',
+            {'re_sum': re_sum, 'im_sum': im_sum})
+        assert chi_sqrd_terms.shape == (ntime, nbl, nchan)
 
-            return chi_sqrd_terms
-
-        except AttributeError as e:
-            mbu.rethrow_attribute_exception(e)
+        return chi_sqrd_terms
 
     def compute_chi_sqrd(self, vis=None, bayes_data=None, weight_vector=False):
         """ Computes the chi squared value.
@@ -720,29 +727,22 @@ class SolverCPU(object):
 
         Returns a floating point scalar values
         """
-        slvr = self.solver
-
         # Do the chi squared sum on the CPU.
         # If we're not using the weight vector, sum and
         # divide by the sigma squared.
         # Otherwise, simply return the sum
-        try:
-            if vis is None: vis = self.compute_ekb_vis()
-            if bayes_data is None: bayes_data = slvr.bayes_data_cpu
+        if vis is None: vis = self.compute_ekb_vis()
+        if bayes_data is None: bayes_data = self.bayes_data_cpu
 
-            chi_sqrd_terms = self.compute_chi_sqrd_sum_terms(
-                vis=vis, bayes_data=bayes_data, weight_vector=weight_vector)
-            term_sum = ne.evaluate('sum(terms)', {'terms': chi_sqrd_terms})
-            return term_sum if weight_vector is True \
-                else term_sum / slvr.sigma_sqrd
-        except AttributeError as e:
-            mbu.rethrow_attribute_exception(e)
+        chi_sqrd_terms = self.compute_chi_sqrd_sum_terms(
+            vis=vis, bayes_data=bayes_data, weight_vector=weight_vector)
+        term_sum = ne.evaluate('sum(terms)', {'terms': chi_sqrd_terms})
+        return term_sum if weight_vector is True \
+            else term_sum / self.sigma_sqrd
 
     def compute_biro_chi_sqrd(self, vis=None, bayes_data=None, weight_vector=False):
-        slvr = self.solver
-
         if vis is None: vis = self.compute_ekb_vis()
-        if bayes_data is None: bayes_data = slvr.bayes_data_cpu
+        if bayes_data is None: bayes_data = self.bayes_data_cpu
 
         return self.compute_chi_sqrd(vis=vis, bayes_data=bayes_data,
             weight_vector=weight_vector)
