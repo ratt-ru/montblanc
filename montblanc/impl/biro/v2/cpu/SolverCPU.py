@@ -25,9 +25,9 @@ import numpy as np
 
 from montblanc.solvers import NumpySolver
 
-class SolverCPU(NumpySolver):
+class CPUSolver(NumpySolver):
     def __init__(self, slvr_cfg):
-        super(SolverCPU, self).__init__(slvr_cfg)
+        super(CPUSolver, self).__init__(slvr_cfg)
 
         # Monkey patch these functions onto the object
         # TODO: Remove this when deprecating v2.

@@ -30,7 +30,7 @@ import montblanc.factory
 from montblanc.solvers import copy_solver
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
 
-from montblanc.impl.biro.v2.cpu.SolverCPU import SolverCPU
+from montblanc.impl.biro.v2.cpu.CPUSolver import CPUSolver
 from montblanc.pipeline import Pipeline
 
 from montblanc.config import BiroSolverConfig as Options
@@ -47,7 +47,7 @@ def solvers(slvr_cfg, **kwargs):
     gpu_slvr_cfg[Options.VERSION] = Options.VERSION_TWO
     gpu_slvr_cfg.update(kwargs)
 
-    return montblanc.factory.rime_solver(gpu_slvr_cfg), SolverCPU(cpu_slvr_cfg)
+    return montblanc.factory.rime_solver(gpu_slvr_cfg), CPUSolver(cpu_slvr_cfg)
 
 def src_perms(slvr_cfg, permute_weights=False):
     """
