@@ -615,7 +615,7 @@ class CPUSolver(NumpySolver):
 
         return vis
 
-    def compute_gekb_vis(self, ekb_vis=None, flag=None):
+    def compute_gekb_vis(self, ekb_vis=None):
         """
         Computes the complex visibilities based on the
         scalar EK term and the 2x2 B term.
@@ -626,9 +626,6 @@ class CPUSolver(NumpySolver):
 
         if ekb_vis is None:
             ekb_vis = self.compute_ekb_vis()
-
-        if flag is None:
-            flag = self.flag_cpu
 
         want_shape = (ntime, nbl, nchan, 4)
         assert ekb_vis.shape == want_shape, \
@@ -647,39 +644,27 @@ class CPUSolver(NumpySolver):
             .reshape(ntime, nbl, nchan, 4))
 
         # Zero any flagged visibilities
-        result[flag > 0] = 0
+        result[self.flag_cpu > 0] = 0
 
         return result
 
-    def compute_chi_sqrd_sum_terms(self, vis=None,
-        bayes_data=None, weight_vector=False, flag=None):
+    def compute_chi_sqrd_sum_terms(self, vis=None):
         """
         Computes the terms of the chi squared sum,
         but does not perform the sum itself.
-
-        Parameters:
-            weight_vector : boolean
-                True if the chi squared test terms
-                should be computed with a noise vector
 
         Returns a (ntime,nbl,nchan) matrix of floating point scalars.
         """
         ntime, nbl, nchan = self.dim_local_size('ntime', 'nbl', 'nchan')
 
         if vis is None: vis = self.compute_gekb_vis()
-        if bayes_data is None: bayes_data = self.bayes_data_cpu
-        if flag is None: flag = self.flag_cpu
-
-        # Copy technically needed here so that flagging
-        # doesn't corrupt original array
-        bayes_data = bayes_data.copy()
-        bayes_data[flag > 0] = 0
 
         # Take the difference between the visibilities and the model
         # (nbl,nchan,ntime,4)
-        d = ne.evaluate('vis - bayes', {
+        d = ne.evaluate('vis - (bayes*where(flag > 0, 0, 1))', {
             'vis': vis,
-            'bayes': bayes_data })
+            'bayes': self.bayes_data_cpu,
+            'flag' : self.flag_cpu })
         assert d.shape == (ntime, nbl, nchan, 4)
 
         # Square of the real and imaginary components
@@ -688,7 +673,7 @@ class CPUSolver(NumpySolver):
         wv = self.weight_vector_cpu
 
         # Multiply by the weight vector if required
-        if weight_vector is True:
+        if self.use_weight_vector() is True:
             ne.evaluate('re*wv', {'re': re, 'wv': wv}, out=re)
             ne.evaluate('im*wv', {'im': im, 'wv': wv}, out=im)
 
@@ -706,32 +691,29 @@ class CPUSolver(NumpySolver):
 
         return chi_sqrd_terms
 
-    def compute_chi_sqrd(self, vis=None, bayes_data=None, weight_vector=False):
-        """ Computes the chi squared value.
+    def compute_chi_sqrd(self, chi_sqrd_terms=None):
+        """ Computes the floating point chi squared value. """
 
-        Parameters:
-            weight_vector : boolean
-                True if the chi squared test
-                should be computed with a noise vector
+        if chi_sqrd_terms is None:
+            chi_sqrd_terms = self.compute_chi_sqrd_sum_terms()
 
-        Returns a floating point scalar values
-        """
         # Do the chi squared sum on the CPU.
         # If we're not using the weight vector, sum and
         # divide by the sigma squared.
         # Otherwise, simply return the sum
-        if vis is None: vis = self.compute_ekb_vis()
-        if bayes_data is None: bayes_data = self.bayes_data_cpu
 
-        chi_sqrd_terms = self.compute_chi_sqrd_sum_terms(
-            vis=vis, bayes_data=bayes_data, weight_vector=weight_vector)
         term_sum = ne.evaluate('sum(terms)', {'terms': chi_sqrd_terms})
-        return term_sum if weight_vector is True \
-            else term_sum / self.sigma_sqrd
+        return (term_sum if self.use_weight_vector() is True
+            else term_sum / self.sigma_sqrd)
 
-    def compute_biro_chi_sqrd(self, vis=None, bayes_data=None, weight_vector=False):
-        if vis is None: vis = self.compute_ekb_vis()
-        if bayes_data is None: bayes_data = self.bayes_data_cpu
+    def solve(self):
+        """ Solve the RIME """
 
-        return self.compute_chi_sqrd(vis=vis, bayes_data=bayes_data,
-            weight_vector=weight_vector)
+        self.jones_cpu[:] = self.compute_ekb_sqrt_jones_per_ant()
+        
+        self.vis_cpu[:] = self.compute_gekb_vis()
+        
+        self.chi_sqrd_result_cpu[:] = self.compute_chi_sqrd_sum_terms(
+            self.vis_cpu)
+        
+        self.set_X2(self.compute_chi_sqrd(self.chi_sqrd_result_cpu))

@@ -204,7 +204,7 @@ class TestBiroV4(unittest.TestCase):
             self.EKBSqrt_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-5})
 
     def sum_coherencies_test_impl(self, gpu_slvr,
-        cpu_slvr, weight_vector=False, cmp=None):
+        cpu_slvr, cmp=None):
         """ Type independent implementation of the coherency sum test """
         if cmp is None:
             cmp = {}
@@ -236,13 +236,13 @@ class TestBiroV4(unittest.TestCase):
         # Check that the chi squared sum terms
         # match each other
         chi_sqrd_sum_terms_cpu = cpu_slvr.compute_chi_sqrd_sum_terms(
-            vis=gekb_vis_cpu, weight_vector=weight_vector)
+            vis=gekb_vis_cpu)
         chi_sqrd_sum_terms_gpu = gpu_slvr.retrieve_chi_sqrd_result()
         self.assertTrue(np.allclose(chi_sqrd_sum_terms_cpu,
             chi_sqrd_sum_terms_gpu, **cmp))
 
-        chi_sqrd_result_cpu = cpu_slvr.compute_biro_chi_sqrd(
-            vis=gekb_vis_cpu, weight_vector=weight_vector)
+        chi_sqrd_result_cpu = cpu_slvr.compute_chi_sqrd(
+            chi_sqrd_terms=chi_sqrd_sum_terms_cpu)
         self.assertTrue(np.allclose(chi_sqrd_result_cpu, gpu_slvr.X2, **cmp))
 
     def test_sum_coherencies_float(self):
@@ -251,15 +251,13 @@ class TestBiroV4(unittest.TestCase):
             dtype=Options.DTYPE_FLOAT)
 
         for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
-            wv = p_slvr_cfg[Options.WEIGHT_VECTOR]
-            p_slvr_cfg['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
+            p_slvr_cfg['pipeline'] = Pipeline([RimeSumCoherencies()])
 
             gpu_slvr, cpu_slvr = solvers(p_slvr_cfg)
 
             with gpu_slvr, cpu_slvr:
                 self.sum_coherencies_test_impl(gpu_slvr, cpu_slvr,
-                    cmp={'rtol': 1e-3},
-                    weight_vector=wv)
+                    cmp={'rtol': 1e-3})
 
     def test_sum_coherencies_double(self):
         """ Test the coherency sum double kernel """
@@ -268,13 +266,12 @@ class TestBiroV4(unittest.TestCase):
 
         for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
             wv = p_slvr_cfg[Options.WEIGHT_VECTOR]
-            p_slvr_cfg['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
+            p_slvr_cfg['pipeline'] = Pipeline([RimeSumCoherencies()])
 
             gpu_slvr, cpu_slvr = solvers(p_slvr_cfg)
 
             with gpu_slvr, cpu_slvr:
-                self.sum_coherencies_test_impl(gpu_slvr, cpu_slvr,
-                    weight_vector=wv)
+                self.sum_coherencies_test_impl(gpu_slvr, cpu_slvr)
 
     def B_sqrt_test_impl(self, gpu_slvr, cpu_slvr, cmp=None):
         """ Type independent implementation of the B square root test """

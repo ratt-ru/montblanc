@@ -34,11 +34,10 @@ from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
 from montblanc.pipeline import Pipeline
 
 def get_pipeline(slvr_cfg):
-    wv = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
     return Pipeline([RimeBSqrt(),
         RimeEBeam(),
         RimeEKBSqrt(),
-        RimeSumCoherencies(weight_vector=wv)])
+        RimeSumCoherencies()])
 
 class BiroSolver(CUDASolver):
     """ BIRO Solver Implementation """

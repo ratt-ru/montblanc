@@ -379,9 +379,8 @@ stamp_sum_coherencies_fn(double, double2, double3, true, w)
 """)
 
 class RimeSumCoherencies(Node):
-    def __init__(self, weight_vector=False):
+    def __init__(self):
         super(RimeSumCoherencies, self).__init__()
-        self.weight_vector = weight_vector
 
     def initialise(self, solver, stream=None):
         slvr = solver
@@ -402,7 +401,7 @@ class RimeSumCoherencies(Node):
             if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
 
         kname = 'rime_sum_coherencies_' + \
-            ('w' if self.weight_vector else 'u') + 'chi_' + \
+            ('w' if slvr.use_weight_vector() else 'u') + 'chi_' + \
             ('float' if slvr.is_float() is True else 'double')
 
         self.mod = SourceModule(
@@ -470,7 +469,7 @@ class RimeSumCoherencies(Node):
         # individual sigma squared values into the sum
         gpu_sum = gpuarray.sum(slvr.chi_sqrd_result_gpu).get()
 
-        if not self.weight_vector:
+        if not slvr.use_weight_vector():
             slvr.set_X2(gpu_sum/slvr.sigma_sqrd)
         else:
             slvr.set_X2(gpu_sum)
