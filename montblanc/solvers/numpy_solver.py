@@ -77,9 +77,6 @@ class NumpySolver(RIMESolver):
         A = super(NumpySolver, self).register_array(
             name, shape, dtype, registrant, **kwargs)
 
-       # Attribute names
-        cpu_name = self.cpu_name(A.name)
-
         # Create descriptors on the class instance, even though members
         # may not necessarily be created on object instances. This is so
         # that if someone registers an array but doesn't ask for it to be
@@ -91,9 +88,9 @@ class NumpySolver(RIMESolver):
 
         # TODO, there's probably a better way of figuring out if a descriptor
         # is set on the class
-        #if not hasattr(NumpySolver, cpu_name):
-        if cpu_name not in NumpySolver.__dict__:
-            setattr(NumpySolver, cpu_name,
+        #if not hasattr(NumpySolver, A.name):
+        if A.name not in NumpySolver.__dict__:
+            setattr(NumpySolver, A.name,
                 NumpyArrayDescriptor(record_key=A.name))
 
         page_locked = kwargs.get('page_locked', False)
@@ -121,11 +118,7 @@ class NumpySolver(RIMESolver):
                 kwargs.get(Options.DATA_SOURCE_DEFAULT, None))
 
         # Create the attribute on the solver
-        setattr(self, cpu_name, cpu_ary)
+        setattr(self, A.name, cpu_ary)
 
         return A
-
-    def cpu_name(self, name):
-        """ Constructs a name for the CPU version of the array """
-        return name + '_cpu'
         

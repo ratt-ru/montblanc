@@ -68,10 +68,6 @@ class CUDASolver(RIMESolver):
         import pycuda.driver as cuda
         import pycuda.gpuarray as gpuarray
 
-
-        # Attribute names
-        gpu_name = self.gpu_name(A.name)
-
         # Create descriptors on the class instance, even though members
         # may not necessarily be created on object instances. This is so
         # that if someone registers an array but doesn't ask for it to be
@@ -83,9 +79,9 @@ class CUDASolver(RIMESolver):
 
         # TODO, there's probably a better way of figuring out if a descriptor
         # is set on the class
-        #if not hasattr(CUDASolver, gpu_name):
-        if gpu_name not in CUDASolver.__dict__:
-            setattr(CUDASolver, gpu_name, CUDAArrayDescriptor(record_key=A.name))
+        #if not hasattr(CUDASolver, A.name):
+        if A.name not in CUDASolver.__dict__:
+            setattr(CUDASolver, A.name, CUDAArrayDescriptor(record_key=A.name))
 
         # Create an empty array
         cpu_ary = np.empty(shape=A.shape, dtype=A.dtype)                
@@ -126,7 +122,7 @@ class CUDASolver(RIMESolver):
                 np.product(A.shape) > 0):
                 gpu_ary.set(cpu_ary)
             
-            setattr(self, gpu_name, gpu_ary)
+            setattr(self, A.name, gpu_ary)
 
         # Should we create a setter for this property?
         transfer_method = kwargs.get('transfer_method', True)
@@ -137,7 +133,7 @@ class CUDASolver(RIMESolver):
             def transfer(self, npary):
                 self.check_array(A.name, npary)
                 with self.context:
-                    getattr(self,gpu_name).set(npary)
+                    getattr(self,A.name).set(npary)
 
             transfer_method = types.MethodType(transfer,self)
         # Otherwise, we can just use the supplied kwarg
@@ -155,7 +151,7 @@ class CUDASolver(RIMESolver):
         """
         Transfers the npary numpy array to the %s gpuarray.
         npary and %s must be the same shape and type.
-        """ % (gpu_name,gpu_name)
+        """ % (A.name,A.name)
 
         # Should we create a getter for this property?
         retrieve_method = kwargs.get('retrieve_method', True)
@@ -165,7 +161,7 @@ class CUDASolver(RIMESolver):
             # Create the retrieve method
             def retrieve(self):
                 with self.context:
-                    return getattr(self,gpu_name).get()
+                    return getattr(self,A.name).get()
 
             retrieve_method = types.MethodType(retrieve,self)
         # Otherwise, we can just use the supplied kwarg
@@ -183,11 +179,7 @@ class CUDASolver(RIMESolver):
         """
         Retrieve the npary numpy array to the %s gpuarray.
         npary and %s must be the same shape and type.
-        """ % (gpu_name,gpu_name)
-
-    def gpu_name(self, name):
-        """ Constructs a name for the GPU version of the array """
-        return name + '_gpu'
+        """ % (A.name,A.name)
 
     def transfer_method_name(self, name):
         """ Constructs a transfer method name, given the array name """
