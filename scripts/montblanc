@@ -38,8 +38,9 @@ def repeat_brightness_over_time(slvr, parser):
     # this in a sky model text file, so we replicate these
     # values across the time dimension
     ntime = slvr.dim_global_size('ntime')
+    arrays = slvr.arrays()
 
-    stokes_record = slvr.get_array_record('stokes')
+    stokes_record = arrays['stokes']
     time_dim = stokes_record.sshape.index('ntime')
     no_time_shape = tuple([d if i != time_dim else 1
         for i, d in enumerate(stokes_record.shape)])
@@ -49,7 +50,7 @@ def repeat_brightness_over_time(slvr, parser):
     stokes = (np.repeat(stokes, ntime, time_dim)
         .reshape(stokes_record.shape))
 
-    alpha_record = slvr.get_array_record('alpha')
+    alpha_record = arrays['alpha']
     time_dim = alpha_record.sshape.index('ntime')
     no_time_shape = tuple([d if i != time_dim else 1
         for i, d in enumerate(alpha_record.shape)])
