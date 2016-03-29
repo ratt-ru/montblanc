@@ -161,8 +161,6 @@ class MatrixTranspose(Node):
         ny, nx = slvr.matrix_in_gpu.shape
         params = self.get_kernel_params(slvr, nx, ny)
 
-        print 'Transposing'
-
         self.kernel(slvr.matrix_in_gpu, slvr.matrix_out_gpu,
             np.int32(nx), np.int32(ny), **params)
 
