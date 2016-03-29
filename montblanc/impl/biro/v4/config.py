@@ -23,14 +23,12 @@ import numpy as np
 import montblanc
 from montblanc.util import random_like as rary
 
-def ary_dict(name,shape,dtype,cpu=True,gpu=True, **kwargs):
+def ary_dict(name, shape, dtype, **kwargs):
     D = {
         'name' : name,
         'shape' : shape,
         'dtype' : dtype,
         'registrant' : 'BiroSolver',
-        'gpu' : gpu,
-        'cpu' : cpu,
         'shape_member' : True,
         'dtype_member' : True
     }
@@ -185,8 +183,8 @@ A = [
         test=lambda slvr, ary: rary(ary)),
 
     # Result arrays
-    ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', cpu=False),
-    ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct', cpu=False),
-    ary_dict('vis', ('ntime','nbl','nchan',4), 'ct', cpu=False),
-    ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
+    ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct'),
+    ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct'),
+    ary_dict('vis', ('ntime','nbl','nchan',4), 'ct'),
+    ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft'),
 ]
