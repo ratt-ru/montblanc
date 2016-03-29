@@ -197,6 +197,7 @@ setup(name='montblanc',
     version=get_version(),
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
+    scripts=['scripts/montblanc'],
     url='http://github.com/ska-sa/montblanc',
     classifiers=[
         "Development Status :: 3 - Alpha",
