@@ -88,7 +88,7 @@ if __name__ == '__main__':
 
     slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
         sources=sources, init_weights=None, weight_vector=False,
-        store_cpu=False, version=args.version)
+        version=args.version)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
         # Get the lm coordinates

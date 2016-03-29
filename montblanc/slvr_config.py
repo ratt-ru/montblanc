@@ -173,18 +173,6 @@ class SolverConfig(object):
         "If '{o}', assume baseline x time ordering").format(
             c=DATA_ORDER_CASA, o=DATA_ORDER_OTHER)
 
-    # Should we store CPU versions when
-    # transferring data to the GPU?
-    STORE_CPU = 'store_cpu'
-    DEFAULT_STORE_CPU = False
-    VALID_STORE_CPU = [True, False]
-    STORE_CPU_DESCRIPTION = (
-        'Governs whether array transfers to the GPU '
-        'will be stored in CPU arrays on the solver. '
-        'This flag is used for testing purposes only '
-        'and is not generally supported')
-
-
     CONTEXT = 'context'
     CONTEXT_DESCRIPTION = ('PyCUDA context(s) '
         'available for this solver to use. '
@@ -271,12 +259,6 @@ class SolverConfig(object):
             DEFAULT: DEFAULT_SOLVER_TYPE,
             REQUIRED: True
         },
-
-        STORE_CPU: {
-            DESCRIPTION: STORE_CPU_DESCRIPTION,
-            DEFAULT: DEFAULT_STORE_CPU,
-            VALID: VALID_STORE_CPU
-        },
     }
 
     def parser(self):
@@ -361,13 +343,6 @@ class SolverConfig(object):
             choices=self.VALID_DATA_ORDER,
             help=self.DATA_ORDER_DESCRIPTION,
             default=self.DEFAULT_DATA_ORDER)
-
-        p.add_argument('--{v}'.format(v=self.STORE_CPU),
-            required=False,
-            type=bool,
-            choices=self.VALID_STORE_CPU,
-            help=self.STORE_CPU_DESCRIPTION,
-            default=self.DEFAULT_STORE_CPU)
 
         p.add_argument('--{v}'.format(v=self.CONTEXT),
             required=False,

@@ -101,17 +101,6 @@ def random_like(ary=None, shape=None, dtype=None):
     else:
         return np.random.random(size=shape).astype(dtype)
 
-def rethrow_attribute_exception(e):
-    """
-    Rethrows an attribute exception with more informative text.
-    Used in CPU code for cases when the solver doesn't have
-    the desired arrays configured.
-    """
-    raise AttributeError('%s. The appropriate numpy array has not '
-        'been set on the solver object. You need to set '
-        'store_cpu=True on your solver object '
-        'as well as call the transfer_* method for this to work.' % e)
-
 def flatten(nested):
     """ Return a flatten version of the nested argument """
     flat_return = list()

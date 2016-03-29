@@ -136,46 +136,6 @@ class TestSolver(unittest.TestCase):
             self.assertTrue(isinstance(getattr(slvr, gpu_name), gpuarray.GPUArray))
             self.assertTrue(isinstance(getattr(slvr, cpu_name), np.ndarray))
 
-    def test_register_array_store_cpu(self):
-        """ Test array registration deferring to BaseSolver """
-
-        slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,
-            sources=montblanc.sources(point=10, gaussian=10),
-            store_cpu=True)
-
-        with test_solver(slvr_cfg) as slvr:
-
-            name='uvw'
-            ntime, nbl = slvr.dim_global_size('ntime', 'nbl')
-            shape=(3, nbl, ntime)
-            gpu_name = mbu.gpu_name(name)
-            cpu_name = mbu.cpu_name(name)
-            shape_name = mbu.shape_name(name)
-            dtype_name = mbu.dtype_name(name)
-
-            # Before registration, descriptors may not have been created
-            # on the BaseSolver class. If they have, check that
-            # attributes associated with the slvr instance are None
-            if hasattr(BaseSolver, cpu_name):
-                self.assertTrue(getattr(slvr, cpu_name) is None)
-            if hasattr(BaseSolver, gpu_name):
-                self.assertTrue(getattr(slvr, gpu_name) is None)
-
-            # Register the array
-            slvr.register_array(name=name, shape=shape,
-                dtype=np.float32, registrant='BaseSolver')
-
-            # OK, The attributes should now exist
-            self.assertTrue(hasattr(slvr, gpu_name))
-            self.assertTrue(hasattr(slvr, cpu_name))
-            self.assertTrue(not hasattr(slvr, shape_name))
-            self.assertTrue(not hasattr(slvr, dtype_name))
-
-            # uvw_gpu should return a gpuarray,
-            # uvw_cpu should return an ndarray.
-            self.assertTrue(isinstance(getattr(slvr, gpu_name), gpuarray.GPUArray))
-            self.assertTrue(isinstance(getattr(slvr, cpu_name), np.ndarray))
-
     def test_register_array_create_cpu_not_gpu(self):
         """  Test array registration requiring a CPU array, but not a GPU array """
         slvr_cfg = montblanc.rime_solver_cfg(na=3, ntime=10, nchan=32,

@@ -54,9 +54,6 @@ class CUDASolver(RIMESolver):
         # np.dot((3,5), (100,10)) = 3*100 + 5*10 = 350 for Kepler
         self.cc = np.int32(np.dot(cc_tuple, (100,10)))
 
-        # Should we store CPU versions of the GPU arrays
-        self.store_cpu = slvr_cfg.get(Options.STORE_CPU, False)
-
         # Configure our solver pipeline
         pipeline = slvr_cfg.get('pipeline', None)
 
