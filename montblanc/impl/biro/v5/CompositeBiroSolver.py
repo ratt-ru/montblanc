@@ -33,7 +33,7 @@ import pycuda.tools
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.base_solver import BaseSolver
+from montblanc.solvers import NumpySolver
 from montblanc.config import BiroSolverConfig as Options
 
 from montblanc.enums import DIMDATA
@@ -55,7 +55,7 @@ ORDERING_CONSTRAINTS.update({ 'nsrc' : 1,
 ORDERING_RANK = [' or '.join(['nsrc'] + mbu.source_nr_vars()),
     'ntime', ' or '.join(['nbl', 'na']), 'nchan']
 
-class CompositeBiroSolver(BaseSolver):
+class CompositeBiroSolver(NumpySolver):
     """
     Composite solver implementation for BIRO.
 
@@ -91,17 +91,18 @@ class CompositeBiroSolver(BaseSolver):
             description='E Beam cube height in nu coords')
 
         # Copy the v4 arrays and properties and
-        # modify them for use on this
-        # Composite Solver
+        # modify them for use on this Composite Solver
+        from montblanc.impl.biro.v4.config import (A, P)
+
         A_main, P_main = self.__twiddle_v4_arys_and_props(
-            copy.deepcopy(BSV4mod.A), copy.deepcopy(BSV4mod.P))
+            copy.deepcopy(A), copy.deepcopy(P))
 
         self.register_properties(P_main)
         self.register_arrays(A_main)
 
-        props = self.template_dict()
-        A_sub = copy.deepcopy(BSV4mod.A)
-        P_sub = copy.deepcopy(BSV4mod.P)
+        T = self.template_dict()
+        A_sub = copy.deepcopy(A)
+        P_sub = copy.deepcopy(P)
 
         nsolvers = slvr_cfg.get('nsolvers', 2)
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
@@ -131,7 +132,7 @@ class CompositeBiroSolver(BaseSolver):
         # Find the budget with the lowest memory usage
         # Work with the device with the lowest memory
         budgets = sorted([ex.submit(C.__thread_budget, self,
-                            slvr_cfg, A_sub, props).result()
+                            slvr_cfg, A_sub, T).result()
                         for ex in executors],
                     key=lambda T: T[1])
 
@@ -139,7 +140,7 @@ class CompositeBiroSolver(BaseSolver):
 
         # Log some information about the memory budget
         # and dimension reduction
-        changes = ['%s: %s => %s' % (k, props[k], v)
+        changes = ['%s: %s => %s' % (k, T[k], v)
             for k, v in M.iteritems()]
 
         montblanc.log.info(('Selecting a solver memory budget of %s '
