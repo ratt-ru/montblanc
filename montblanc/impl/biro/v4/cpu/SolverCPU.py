@@ -27,9 +27,9 @@ from montblanc.solvers import NumpySolver
 from montblanc.config import BiroSolverConfig as Options
 
 
-class SolverCPU(NumpySolver):
+class CPUSolver(NumpySolver):
     def __init__(self, slvr_cfg):
-        super(SolverCPU, self).__init__(slvr_cfg)
+        super(CPUSolver, self).__init__(slvr_cfg)
 
         # Monkey patch these functions onto the object
         # TODO: Remove this when deprecating v2.
@@ -540,7 +540,7 @@ class SolverCPU(NumpySolver):
         assert E_beam.shape == (nsrc, ntime, na, nchan, 4)
         assert kb_sqrt.shape == (nsrc, ntime, na, nchan, 4)
 
-        result = SolverCPU.jones_multiply(E_beam, kb_sqrt)
+        result = CPUSolver.jones_multiply(E_beam, kb_sqrt)
         return result.reshape(nsrc, ntime, na, nchan, 4)
 
     def compute_ekb_jones_per_bl(self, ekb_sqrt=None):

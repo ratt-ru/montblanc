@@ -35,7 +35,7 @@ from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
 from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
-from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
+from montblanc.impl.biro.v4.cpu.CPUSolver import CPUSolver
 
 from montblanc.solvers import copy_solver
 from montblanc.pipeline import Pipeline
@@ -104,7 +104,7 @@ def solvers(slvr_cfg, **kwargs):
     gpu_slvr_cfg[Options.VERSION] = Options.VERSION_FOUR
     gpu_slvr_cfg.update(kwargs)
 
-    return montblanc.factory.rime_solver(gpu_slvr_cfg), SolverCPU(cpu_slvr_cfg)
+    return montblanc.factory.rime_solver(gpu_slvr_cfg), CPUSolver(cpu_slvr_cfg)
 
 class TestBiroV4(unittest.TestCase):
     """
@@ -458,7 +458,7 @@ class TestBiroV4(unittest.TestCase):
             dtype=Options.DTYPE_DOUBLE,
             pipeline=Pipeline([]))
 
-        with SolverCPU(slvr_cfg) as cpu_slvr:
+        with CPUSolver(slvr_cfg) as cpu_slvr:
             nsrc, ntime, na, nbl, nchan = cpu_slvr.dim_global_size(
                 'nsrc', 'ntime', 'na', 'nbl', 'nchan')
 
@@ -542,12 +542,12 @@ class TestBiroV4(unittest.TestCase):
         AM = [np.matrix(A[i,:,:]) for i in range(N)]
         BM = [np.matrix(B[i,:,:]) for i in range(N)]
 
-        C = SolverCPU.jones_multiply(A, B, jones_shape='2x2')
+        C = CPUSolver.jones_multiply(A, B, jones_shape='2x2')
 
         for Am, Bm, Cm in zip(AM, BM, C):
             assert np.allclose(Am*Bm, Cm)
 
-        C = SolverCPU.jones_multiply(A, B, hermitian=True, jones_shape='2x2')
+        C = CPUSolver.jones_multiply(A, B, hermitian=True, jones_shape='2x2')
 
         for Am, Bm, Cm in zip(AM, BM, C):
             assert np.allclose(Am*Bm.H, Cm)
