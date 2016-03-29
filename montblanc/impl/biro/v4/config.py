@@ -189,6 +189,4 @@ A = [
     ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct', cpu=False),
     ary_dict('vis', ('ntime','nbl','nchan',4), 'ct', cpu=False),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
-
-    ary_dict('X2', (1, ), 'ft', cpu=False, gpu=False),
 ]

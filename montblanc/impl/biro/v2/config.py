@@ -155,6 +155,4 @@ A = [
     ary_dict('jones_scalar', ('ntime','na','nsrc','nchan'), 'ct'),
     ary_dict('vis', (4,'ntime','nbl','nchan'), 'ct'),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft'),
-
-    ary_dict('X2', (1, ), 'ft'),
 ]
