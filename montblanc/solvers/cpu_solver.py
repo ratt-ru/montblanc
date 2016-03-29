@@ -25,7 +25,7 @@ from rime_solver import RIMESolver
 import montblanc.util as mbu
 from montblanc.config import SolverConfig as Options
 
-class CPUArrayDescriptor(object):
+class NumpyArrayDescriptor(object):
     """ Descriptor class for NumPy ndarrays arrays on the CPU """
     def __init__(self, record_key, default=None):
         self.default = default
@@ -42,9 +42,9 @@ class CPUArrayDescriptor(object):
     def __delete__(self, instance):
         del self.data[instance]
 
-class CPUSolver(RIMESolver):
+class NumpySolver(RIMESolver):
     def __init__(self, slvr_cfg):
-        super(CPUSolver, self).__init__(slvr_cfg)    
+        super(NumpySolver, self).__init__(slvr_cfg)    
 
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         """
@@ -75,7 +75,7 @@ class CPUSolver(RIMESolver):
             A dictionary describing this array.
         """
 
-        A = super(CPUSolver, self).register_array(
+        A = super(NumpySolver, self).register_array(
             name, shape, dtype, registrant, **kwargs)
 
        # Attribute names
@@ -92,10 +92,10 @@ class CPUSolver(RIMESolver):
 
         # TODO, there's probably a better way of figuring out if a descriptor
         # is set on the class
-        #if not hasattr(CPUSolver, cpu_name):
-        if cpu_name not in CPUSolver.__dict__:
-            setattr(CPUSolver, cpu_name,
-                CPUArrayDescriptor(record_key=A.name))
+        #if not hasattr(NumpySolver, cpu_name):
+        if cpu_name not in NumpySolver.__dict__:
+            setattr(NumpySolver, cpu_name,
+                NumpyArrayDescriptor(record_key=A.name))
 
         page_locked = kwargs.get('page_locked', False)
         aligned = kwargs.get('aligned', False)

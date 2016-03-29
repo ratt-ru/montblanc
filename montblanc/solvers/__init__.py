@@ -20,7 +20,7 @@
 
 from montblanc.solvers.base_solver import BaseSolver
 from montblanc.solvers.rime_solver import RIMESolver
-from montblanc.solvers.cpu_solver import CPUSolver
+from montblanc.solvers.numpy_solver import NumpySolver
 from montblanc.solvers.cuda_solver import CUDASolver
 
 def copy_solver(src_slvr, dest_slvr, safe=False):
@@ -36,7 +36,7 @@ def copy_solver(src_slvr, dest_slvr, safe=False):
     import montblanc.util as mbu
 
     # CPU to CUDA case
-    if isinstance(src_slvr, CPUSolver) and isinstance(dest_slvr, CUDASolver):
+    if isinstance(src_slvr, NumpySolver) and isinstance(dest_slvr, CUDASolver):
         sa, da = src_slvr.arrays(), dest_slvr.arrays()
 
         # Transfer CPU arrays to the GPU
