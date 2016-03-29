@@ -25,6 +25,7 @@ import numpy as np
 import random
 import time
 
+import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
@@ -35,6 +36,8 @@ from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
 from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
 
 from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
+
+from montblanc.solvers import copy_solver
 from montblanc.pipeline import Pipeline
 from montblanc.config import BiroSolverConfig as Options
 
@@ -89,12 +92,19 @@ def src_perms(slvr_cfg, permute_weights=False):
 
             yield params
 
-def solver(slvr_cfg, **kwargs):
-    slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
-    slvr_cfg[Options.VERSION] = Options.VERSION_FOUR
-    slvr_cfg.update(kwargs)
+def solvers(slvr_cfg, **kwargs):
+    """ Returns CPU and GPU solvers for computing the RIME """
+    cpu_slvr_cfg = slvr_cfg.copy()
+    cpu_slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
+    cpu_slvr_cfg[Options.VERSION] = Options.VERSION_FOUR
+    cpu_slvr_cfg.update(kwargs)
 
-    return montblanc.factory.rime_solver(slvr_cfg)
+    gpu_slvr_cfg = slvr_cfg.copy()
+    gpu_slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_EMPTY
+    gpu_slvr_cfg[Options.VERSION] = Options.VERSION_FOUR
+    gpu_slvr_cfg.update(kwargs)
+
+    return montblanc.factory.rime_solver(gpu_slvr_cfg), SolverCPU(cpu_slvr_cfg)
 
 class TestBiroV4(unittest.TestCase):
     """
@@ -116,7 +126,7 @@ class TestBiroV4(unittest.TestCase):
         """ Tear down each test case """
         pass
 
-    def EKBSqrt_test_impl(self, slvr, cmp=None):
+    def EKBSqrt_test_impl(self, gpu_slvr, cpu_slvr, cmp=None):
         """ Type independent implementation of the EKBSqrt test """
         if cmp is None:
             cmp = {}
@@ -126,25 +136,23 @@ class TestBiroV4(unittest.TestCase):
         # specified in BiroSolver.py
         S = 1
 
-        slvr.set_beam_ll(-S)
-        slvr.set_beam_lm(-S)
-        slvr.set_beam_ul(S)
-        slvr.set_beam_um(S)
+        cpu_slvr.set_beam_ll(-S)
+        cpu_slvr.set_beam_lm(-S)
+        cpu_slvr.set_beam_ul(S)
+        cpu_slvr.set_beam_um(S)
 
         # Default parallactic angle is 0
         # Set it to 1 degree so that our
         # sources rotate through the cube.
-        slvr.set_parallactic_angle(np.deg2rad(1))
+        cpu_slvr.set_parallactic_angle(np.deg2rad(1))
 
-        slvr_cpu = SolverCPU(slvr)
+        copy_solver(cpu_slvr, gpu_slvr)
 
         # Call the GPU solver
-        slvr.solve()
+        gpu_slvr.solve()
 
-        ekb_cpu = slvr_cpu.compute_ekb_sqrt_jones_per_ant()
-
-        with slvr.context:
-            ekb_gpu = slvr.jones_gpu.get()
+        ekb_cpu = cpu_slvr.compute_ekb_sqrt_jones_per_ant()
+        ekb_gpu = gpu_slvr.retrieve_jones()
 
         # Some proportion of values will be out due to
         # discrepancies on the CPU and GPU when computing
@@ -177,8 +185,10 @@ class TestBiroV4(unittest.TestCase):
             dtype=Options.DTYPE_FLOAT,
             pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]))
 
-        with solver(slvr_cfg) as slvr:
-            self.EKBSqrt_test_impl(slvr, cmp={'rtol': 1e-4})
+        gpu_slvr, cpu_slvr = solvers(slvr_cfg)
+
+        with gpu_slvr, cpu_slvr:
+            self.EKBSqrt_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-4})
 
     def test_EKBSqrt_double(self):
         """ Double precision EKBSqrt test """
@@ -188,55 +198,52 @@ class TestBiroV4(unittest.TestCase):
             dtype=Options.DTYPE_DOUBLE,
             pipeline=Pipeline([RimeEBeam(), RimeBSqrt(), RimeEKBSqrt()]))
 
-        with solver(slvr_cfg) as slvr:
-            self.EKBSqrt_test_impl(slvr, cmp={'rtol': 1e-5})
+        gpu_slvr, cpu_slvr = solvers(slvr_cfg)
 
-    def sum_coherencies_test_impl(self, slvr, weight_vector=False, cmp=None):
+        with gpu_slvr, cpu_slvr:
+            self.EKBSqrt_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-5})
+
+    def sum_coherencies_test_impl(self, gpu_slvr,
+        cpu_slvr, weight_vector=False, cmp=None):
         """ Type independent implementation of the coherency sum test """
         if cmp is None:
             cmp = {}
 
-        slvr.set_sigma_sqrd(np.random.random(1)[0])
+        # Randomise the sigma squared
+        cpu_slvr.set_sigma_sqrd(np.random.random(1)[0])
 
         # The pipeline for this test case doesn't
         # create the jones terms. Create some
         # random terms and transfer them to the GPU
-        sh, dt = slvr.jones_shape, slvr.jones_dtype
-        D = {'size': slvr.jones_shape}
-        ekb_jones = np.random.random(size=sh).astype(dt) + \
-            1j*np.random.random(size=sh).astype(dt)
-        slvr.transfer_jones(ekb_jones)
+        sh, dt = cpu_slvr.jones_shape, cpu_slvr.jones_dtype
+        cpu_slvr.jones_cpu[:] = (
+            np.random.random(size=sh).astype(dt) + 
+            1j*np.random.random(size=sh).astype(dt))
 
-        slvr_cpu = SolverCPU(slvr)
+        copy_solver(cpu_slvr, gpu_slvr)
 
         # Call the GPU solver
-        slvr.solve()
+        gpu_slvr.solve()
 
         # Check that the CPU and GPU visibilities
         # match each other
-        ekb_per_bl = slvr_cpu.compute_ekb_jones_per_bl(ekb_jones)
-        ekb_vis_cpu = slvr_cpu.compute_ekb_vis(ekb_per_bl)
-        gekb_vis_cpu = slvr_cpu.compute_gekb_vis(ekb_vis_cpu)
-        with slvr.context:
-            gekb_vis_gpu = slvr.vis_gpu.get()
-
+        ekb_per_bl = cpu_slvr.compute_ekb_jones_per_bl(cpu_slvr.jones_cpu)
+        ekb_vis_cpu = cpu_slvr.compute_ekb_vis(ekb_per_bl)
+        gekb_vis_cpu = cpu_slvr.compute_gekb_vis(ekb_vis_cpu)
+        gekb_vis_gpu = gpu_slvr.retrieve_vis()
         self.assertTrue(np.allclose(gekb_vis_cpu, gekb_vis_gpu, **cmp))
 
         # Check that the chi squared sum terms
         # match each other
-        chi_sqrd_sum_terms_cpu = slvr_cpu.compute_chi_sqrd_sum_terms(
+        chi_sqrd_sum_terms_cpu = cpu_slvr.compute_chi_sqrd_sum_terms(
             vis=gekb_vis_cpu, weight_vector=weight_vector)
-
-        with slvr.context:
-            chi_sqrd_sum_terms_gpu = slvr.chi_sqrd_result_gpu.get()
-
+        chi_sqrd_sum_terms_gpu = gpu_slvr.retrieve_chi_sqrd_result()
         self.assertTrue(np.allclose(chi_sqrd_sum_terms_cpu,
             chi_sqrd_sum_terms_gpu, **cmp))
 
-        chi_sqrd_result_cpu = slvr_cpu.compute_biro_chi_sqrd(
+        chi_sqrd_result_cpu = cpu_slvr.compute_biro_chi_sqrd(
             vis=gekb_vis_cpu, weight_vector=weight_vector)
-
-        self.assertTrue(np.allclose(chi_sqrd_result_cpu, slvr.X2, **cmp))
+        self.assertTrue(np.allclose(chi_sqrd_result_cpu, gpu_slvr.X2, **cmp))
 
     def test_sum_coherencies_float(self):
         """ Test the coherency sum float kernel """
@@ -246,9 +253,11 @@ class TestBiroV4(unittest.TestCase):
         for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
             wv = p_slvr_cfg[Options.WEIGHT_VECTOR]
             p_slvr_cfg['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
-            with solver(p_slvr_cfg) as slvr:
 
-                self.sum_coherencies_test_impl(slvr,
+            gpu_slvr, cpu_slvr = solvers(p_slvr_cfg)
+
+            with gpu_slvr, cpu_slvr:
+                self.sum_coherencies_test_impl(gpu_slvr, cpu_slvr,
                     cmp={'rtol': 1e-3},
                     weight_vector=wv)
 
@@ -260,39 +269,40 @@ class TestBiroV4(unittest.TestCase):
         for p_slvr_cfg in src_perms(slvr_cfg, permute_weights=True):
             wv = p_slvr_cfg[Options.WEIGHT_VECTOR]
             p_slvr_cfg['pipeline'] = Pipeline([RimeSumCoherencies(wv)])
-            with solver(p_slvr_cfg) as slvr:
 
-                self.sum_coherencies_test_impl(slvr,
+            gpu_slvr, cpu_slvr = solvers(p_slvr_cfg)
+
+            with gpu_slvr, cpu_slvr:
+                self.sum_coherencies_test_impl(gpu_slvr, cpu_slvr,
                     weight_vector=wv)
 
-    def B_sqrt_test_impl(self, slvr, cmp=None):
+    def B_sqrt_test_impl(self, gpu_slvr, cpu_slvr, cmp=None):
         """ Type independent implementation of the B square root test """
         if cmp is None:
             cmp = {}
 
-        # Call the GPU solver
-        slvr.solve()
+        copy_solver(cpu_slvr, gpu_slvr)
 
         # Calculate CPU version of the B sqrt matrix
-        slvr_cpu = SolverCPU(slvr)
-        b_sqrt_cpu = slvr_cpu.compute_b_sqrt_jones()
+        b_sqrt_cpu = cpu_slvr.compute_b_sqrt_jones()
 
-        # Calculate the GPU version of the B sqrt matrix
-        with slvr.context:
-            b_sqrt_gpu = slvr.B_sqrt_gpu.get()
+        # Call the GPU solver
+        gpu_slvr.solve()
+        # Get the GPU version of the B sqrt matrix
+        b_sqrt_gpu = gpu_slvr.retrieve_B_sqrt()
 
         self.assertTrue(np.allclose(b_sqrt_cpu, b_sqrt_gpu, **cmp))
 
         # TODO: Replace with np.einsum
         # Pick 16 random points in the same and
         # check our square roots are OK for that
-        nsrc, ntime, nchan = slvr.dim_global_size('nsrc', 'ntime', 'nchan')
+        nsrc, ntime, nchan = cpu_slvr.dim_global_size('nsrc', 'ntime', 'nchan')
         N = 16
         rand_srcs = [random.randrange(0, nsrc) for i in range(N)]
         rand_t = [random.randrange(0, ntime) for i in range(N)]
         rand_ch = [random.randrange(0, nchan) for i in range(N)]
 
-        b_cpu = slvr_cpu.compute_b_jones()
+        b_cpu = cpu_slvr.compute_b_jones()
 
         # Test that the square root of B
         # multiplied by itself yields B.
@@ -312,10 +322,11 @@ class TestBiroV4(unittest.TestCase):
             dtype=Options.DTYPE_FLOAT,
             pipeline=Pipeline([RimeBSqrt()]))
 
-        with solver(slvr_cfg) as slvr:
+        gpu_slvr, cpu_slvr = solvers(slvr_cfg)
 
+        with gpu_slvr, cpu_slvr:
             # This fails more often with an rtol of 1e-4
-            self.B_sqrt_test_impl(slvr, cmp={'rtol': 1e-3})
+            self.B_sqrt_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-3})
 
     def test_B_sqrt_double(self):
         """ Test the B sqrt double kernel """
@@ -325,11 +336,12 @@ class TestBiroV4(unittest.TestCase):
             dtype=Options.DTYPE_DOUBLE,
             pipeline=Pipeline([RimeBSqrt()]))
 
-        with solver(slvr_cfg) as slvr:
+        gpu_slvr, cpu_slvr = solvers(slvr_cfg)
 
-            self.B_sqrt_test_impl(slvr)
+        with gpu_slvr, cpu_slvr:
+            self.B_sqrt_test_impl(gpu_slvr, cpu_slvr)
 
-    def E_beam_test_impl(self, slvr, cmp=None):
+    def E_beam_test_impl(self, gpu_slvr, cpu_slvr, cmp=None):
         if cmp is None:
             cmp = {}
 
@@ -338,23 +350,21 @@ class TestBiroV4(unittest.TestCase):
         # specified in BiroSolver.py
         S = 1
 
-        slvr.set_beam_ll(-S)
-        slvr.set_beam_lm(-S)
-        slvr.set_beam_ul(S)
-        slvr.set_beam_um(S)
+        cpu_slvr.set_beam_ll(-S)
+        cpu_slvr.set_beam_lm(-S)
+        cpu_slvr.set_beam_ul(S)
+        cpu_slvr.set_beam_um(S)
 
         # Default parallactic angle is 0
         # Set it to 1 degree so that our
         # sources rotate through the cube.
-        slvr.set_parallactic_angle(np.deg2rad(1))
+        cpu_slvr.set_parallactic_angle(np.deg2rad(1))
+        E_term_cpu = cpu_slvr.compute_E_beam()
 
-        slvr_cpu = SolverCPU(slvr)
-        E_term_cpu = slvr_cpu.compute_E_beam()
+        copy_solver(cpu_slvr, gpu_slvr)
 
-        slvr.solve()
-
-        with slvr.context:
-            E_term_gpu = slvr.jones_gpu.get()
+        gpu_slvr.solve()
+        E_term_gpu = gpu_slvr.retrieve_jones()
 
         # After extensive debugging and attempts get a nice
         # solution, it has to be accepted that a certain
@@ -397,13 +407,15 @@ class TestBiroV4(unittest.TestCase):
             dtype=dtype,
             pipeline=Pipeline([RimeEBeam()]))
 
-        with solver(slvr_cfg) as slvr:
+        gpu_slvr, cpu_slvr = solvers(slvr_cfg)
+
+        with gpu_slvr, cpu_slvr:
             # Check that the beam cube dimensions are
             # correctly configured
-            self.assertTrue(slvr.E_beam_shape == 
+            self.assertTrue(cpu_slvr.E_beam_shape == 
                 (beam_lw, beam_mh, beam_nud, 4))
 
-            self.E_beam_test_impl(slvr, cmp={'rtol': 1e-4})
+            self.E_beam_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-4})
 
     def test_E_beam_float(self):
         """ Test the E Beam float kernel """
@@ -446,30 +458,28 @@ class TestBiroV4(unittest.TestCase):
             dtype=Options.DTYPE_DOUBLE,
             pipeline=Pipeline([]))
 
-        with solver(slvr_cfg) as slvr:
-
-            slvr_cpu = SolverCPU(slvr)
-            nsrc, ntime, na, nbl, nchan = slvr.dim_global_size(
+        with SolverCPU(slvr_cfg) as cpu_slvr:
+            nsrc, ntime, na, nbl, nchan = cpu_slvr.dim_global_size(
                 'nsrc', 'ntime', 'na', 'nbl', 'nchan')
 
             # Calculate per baseline antenna pair indexes
-            idx = slvr.get_ap_idx(src=True, chan=True)
+            idx = cpu_slvr.get_ap_idx(src=True, chan=True)
 
             # Get the brightness matrix
-            B = slvr_cpu.compute_b_jones()
+            B = cpu_slvr.compute_b_jones()
 
             # Fill in the jones_cpu matrix with random values
-            slvr.jones_cpu[:] = np.random.random(
-                    size=slvr.jones_shape).astype(slvr.jones_dtype) + \
+            cpu_slvr.jones_cpu[:] = np.random.random(
+                    size=cpu_slvr.jones_shape).astype(cpu_slvr.jones_dtype) + \
                 np.random.random(
-                    size=slvr.jones_shape).astype(slvr.jones_dtype)
+                    size=cpu_slvr.jones_shape).astype(cpu_slvr.jones_dtype)
 
             # Superfluous really, but makes below readable
-            assert slvr.jones_shape == (nsrc, ntime, na, nchan, 4)
+            assert cpu_slvr.jones_shape == (nsrc, ntime, na, nchan, 4)
 
             # Get per baseline jones matrices from
             # the per antenna jones matrices
-            J2, J1 = slvr.jones_cpu[idx]
+            J2, J1 = cpu_slvr.jones_cpu[idx]
             assert J1.shape == (nsrc, ntime, nbl, nchan, 4)
             assert J2.shape == (nsrc, ntime, nbl, nchan, 4)
 
@@ -481,12 +491,12 @@ class TestBiroV4(unittest.TestCase):
 
             # Calculate the first result using the classic equation
             # J2.B.J1^H
-            res_one = SolverCPU.jones_multiply(J2, JB)
-            res_one = SolverCPU.jones_multiply(res_one, J1, hermitian=True)
+            res_one = cpu_slvr.jones_multiply(J2, JB)
+            res_one = cpu_slvr.jones_multiply(res_one, J1, hermitian=True)
 
             # Compute the square root of the
             # brightness matrix
-            B_sqrt = slvr_cpu.compute_b_sqrt_jones(B)
+            B_sqrt = cpu_slvr.compute_b_sqrt_jones(B)
 
             # Tile the brightness square root term over
             # the antenna dimension and transpose so that
@@ -498,7 +508,7 @@ class TestBiroV4(unittest.TestCase):
 
             # Multiply the square root of the brightness matrix
             # into the per antenna jones terms
-            J = (SolverCPU.jones_multiply(slvr.jones_cpu, JBsqrt)
+            J = (cpu_slvr.jones_multiply(cpu_slvr.jones_cpu, JBsqrt)
                 .reshape(nsrc, ntime, na, nchan, 4))
 
             # Get per baseline jones matrices from
@@ -511,7 +521,7 @@ class TestBiroV4(unittest.TestCase):
             # (J2.sqrt(B)).(J1.sqrt(B))^H == J2.sqrt(B).sqrt(B)^H.J1^H
             # == J2.sqrt(B).sqrt(B).J1^H
             # == J2.B.J1^H
-            res_two = SolverCPU.jones_multiply(J2, J1, hermitian=True)
+            res_two = cpu_slvr.jones_multiply(J2, J1, hermitian=True)
 
             # Results from two different methods should be the same
             self.assertTrue(np.allclose(res_one, res_two))
@@ -546,35 +556,33 @@ class TestBiroV4(unittest.TestCase):
         slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=10, nchan=16,
             sources=montblanc.sources(point=10, gaussian=10),
             weight_vector=True,
-            pipeline=Pipeline([MatrixTranspose()]))
+            pipeline=Pipeline([MatrixTranspose()]),
+            data_source=Options.DATA_SOURCE_TEST,
+            version=Options.VERSION_FOUR)
 
+        with montblanc.factory.rime_solver(slvr_cfg) as gpu_slvr:
+            nsrc, nchan = gpu_slvr.dim_global_size('nsrc', 'nchan')
 
-        with solver(slvr_cfg) as slvr:
-            nsrc, nchan = slvr.dim_global_size('nsrc', 'nchan')
-
-            slvr.register_array(
+            gpu_slvr.register_array(
                 name='matrix_in',
                 shape=('nsrc', 'nchan'),
                 dtype='ft',
                 registrant='test_biro_v4')
 
-            slvr.register_array(
+            gpu_slvr.register_array(
                 name='matrix_out',
                 shape=('nchan', 'nsrc'),
                 dtype='ft',
                 registrant='test_biro_v4')
 
             matrix = np.random.random(
-                size=(nsrc, nchan)).astype(slvr.ft)
+                size=(nsrc, nchan)).astype(gpu_slvr.ft)
 
-            slvr.transfer_matrix_in(matrix)
+            gpu_slvr.transfer_matrix_in(matrix)
+            gpu_slvr.solve()
+            transposed_matrix = gpu_slvr.retrieve_matrix_out()
 
-            slvr.solve()
-
-            with slvr.context:
-                slvr.matrix_out_cpu = slvr.matrix_out_gpu.get()
-
-            assert np.all(slvr.matrix_in_cpu == slvr.matrix_out_cpu.T)
+            assert np.all(matrix == transposed_matrix.T)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV4)
