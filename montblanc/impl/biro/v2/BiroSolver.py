@@ -50,19 +50,8 @@ class BiroSolver(CUDASolver):
 
         # Monkey patch these functions onto the object
         # TODO: Remove this when deprecating v2.
-        import types
-        from ant_pairs import (get_default_base_ant_pairs,
-            get_default_ant_pairs,
-            get_ap_idx)
-
-        self.get_default_base_ant_pairs = types.MethodType(
-            get_default_base_ant_pairs, self)
-
-        self.get_default_ant_pairs = types.MethodType(
-            get_default_ant_pairs, self)
-
-        self.get_ap_idx = types.MethodType(
-            get_ap_idx, self)        
+        from ant_pairs import monkey_patch_antenna_pairs
+        monkey_patch_antenna_pairs(self)
 
         from montblanc.impl.biro.v2.config import (A, P)
 

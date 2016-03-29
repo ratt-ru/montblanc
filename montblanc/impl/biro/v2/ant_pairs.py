@@ -100,3 +100,16 @@ def get_ap_idx(self, default_ap=None, src=False, chan=False):
         idx.append(np.arange(nchan)[chan_slice])
 
     return tuple(idx)
+
+def monkey_patch_antenna_pairs(slvr):
+    # Monkey patch these functions onto the solver object
+    import types
+
+    slvr.get_default_base_ant_pairs = types.MethodType(
+        get_default_base_ant_pairs, slvr)
+
+    slvr.get_default_ant_pairs = types.MethodType(
+        get_default_ant_pairs, slvr)
+
+    slvr.get_ap_idx = types.MethodType(
+        get_ap_idx, slvr)
