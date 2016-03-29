@@ -79,13 +79,12 @@ if __name__ == '__main__':
 
         slvr.solve()
 
-        with slvr.context:
-            if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
-                vis = slvr.vis_gpu.get().transpose(1, 2, 3, 0)
-            elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-                vis = slvr.vis_gpu.get()
+        if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
+            vis = slvr.retrieve_vis().transpose(1, 2, 3, 0)
+        elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+            vis = slvr.retrieve_vis()
 
-            print vis
-            print vis.shape
+        print vis
+        print vis.shape
 
         print slvr.X2
