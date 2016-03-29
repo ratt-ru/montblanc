@@ -48,7 +48,7 @@ class CPUSolver(NumpySolver):
         """
         ntime, nbl, ngsrc = self.dim_local_size('ntime', 'nbl', 'ngsrc')
 
-        ap = self.get_ap_idx()
+        ap = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
         u = self.uvw_cpu[0][ap]
@@ -96,7 +96,7 @@ class CPUSolver(NumpySolver):
         """        
         ntime, nbl, nchan, nssrc = self.dim_local_size('ntime', 'nbl', 'nchan', 'nssrc')
 
-        ap = self.get_ap_idx()
+        ap = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
         u = self.uvw_cpu[0][ap]
@@ -198,7 +198,7 @@ class CPUSolver(NumpySolver):
         npsrc, ngsrc, nssrc = self.dim_local_size('npsrc', 'ngsrc', 'nssrc')
 
         # Re-arrange per antenna terms into per baseline antenna pair values
-        ap = self.get_ap_idx(src=True, chan=True)
+        ap = self.ap_idx(src=True, chan=True)
         k_jones = self.compute_k_jones_scalar_per_ant()[ap]
 
         k_jones_per_bl = k_jones[0]*k_jones[1].conj()
@@ -266,7 +266,7 @@ class CPUSolver(NumpySolver):
         """        
 
         # Re-arrange per antenna terms into per baseline antenna pair values
-        ap = self.get_ap_idx(src=True, chan=True)
+        ap = self.ap_idx(src=True, chan=True)
         e_jones = self.compute_e_jones_scalar_per_ant()[ap]
 
         return e_jones[0]*e_jones[1].conj()

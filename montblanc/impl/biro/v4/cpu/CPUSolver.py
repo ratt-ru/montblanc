@@ -65,7 +65,7 @@ class CPUSolver(NumpySolver):
 
         ntime, nbl, ngsrc = self.dim_local_size('ntime', 'nbl', 'ngsrc')
 
-        ap = self.get_ap_idx()
+        ap = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
         u = self.uvw_cpu[:,:,0][ap]
@@ -113,7 +113,7 @@ class CPUSolver(NumpySolver):
         
         nssrc, ntime, nbl, nchan  = self.dim_local_size('nssrc', 'ntime', 'nbl', 'nchan')
 
-        ap = self.get_ap_idx()
+        ap = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
         u = self.uvw_cpu[:,:,0][ap]
@@ -557,7 +557,7 @@ class CPUSolver(NumpySolver):
             if ekb_sqrt is None:
                 ekb_sqrt = self.compute_ekb_sqrt_jones_per_ant()
 
-            ap = self.get_ap_idx(src=True, chan=True)
+            ap = self.ap_idx(src=True, chan=True)
             ekb_sqrt_idx = ekb_sqrt[ap]
             assert ekb_sqrt_idx.shape == (2, nsrc, ntime, nbl, nchan, 4)
 
@@ -632,7 +632,7 @@ class CPUSolver(NumpySolver):
             'Expected shape %s. Got %s instead.' % \
             (want_shape, ekb_vis.shape)
 
-        ap = self.get_ap_idx(chan=True)
+        ap = self.ap_idx(chan=True)
         g_term = self.G_term_cpu[ap]
 
         assert g_term.shape == (2, ntime, nbl, nchan, 4)

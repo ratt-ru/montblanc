@@ -20,15 +20,7 @@
 
 import numpy as np
 
-def get_default_base_ant_pairs(self):
-    """
-    Return an np.array(shape=(2, nbl), dtype=np.int32]) containing the
-    default antenna pairs for each baseline.
-    """
-    na = self.dim_local_size('na')
-    return np.int32(np.triu_indices(na, 1))
-
-def get_default_ant_pairs(self):
+def default_ant_pairs(self):
     """
     Return an np.array(shape=(2, ntime, nbl), dtype=np.int32])
     containing the default antenna pairs for each timestep
@@ -37,10 +29,10 @@ def get_default_ant_pairs(self):
     # Create the antenna pair mapping, from upper triangle indices
     # based on the number of antenna.
     ntime, nbl = self.dim_local_size('ntime', 'nbl')
-    return np.tile(self.get_default_base_ant_pairs(), ntime) \
+    return np.tile(self.default_base_ant_pairs(), ntime) \
         .reshape(2, ntime, nbl)
 
-def get_ap_idx(self, default_ap=None, src=False, chan=False):
+def ap_idx(self, default_ap=None, src=False, chan=False):
     """
     This method produces an index
     which arranges per antenna values into a
@@ -62,14 +54,14 @@ def get_ap_idx(self, default_ap=None, src=False, chan=False):
     The values for the first antenna are in position 0, while
     those for the second are in position 1.
 
-    >>> ap = slvr.get_ap_idx()
+    >>> ap = slvr.ap_idx()
     >>> u_ant = np.random.random(size=(ntime,na))
     >>> u_bl = u_ant[ap][1] - u_ant[ap][0]
     >>> assert u_bl.shape == (2, ntime, nbl)
     """
 
     if default_ap is None:
-        default_ap = self.get_default_base_ant_pairs()
+        default_ap = self.default_base_ant_pairs()
 
     newdim = lambda d: [np.newaxis for n in range(d)]
     nsrc, ntime, nchan = self.dim_local_size('nsrc', 'ntime', 'nchan')
@@ -105,11 +97,8 @@ def monkey_patch_antenna_pairs(slvr):
     # Monkey patch these functions onto the solver object
     import types
 
-    slvr.get_default_base_ant_pairs = types.MethodType(
-        get_default_base_ant_pairs, slvr)
+    slvr.default_ant_pairs = types.MethodType(
+        default_ant_pairs, slvr)
 
-    slvr.get_default_ant_pairs = types.MethodType(
-        get_default_ant_pairs, slvr)
-
-    slvr.get_ap_idx = types.MethodType(
-        get_ap_idx, slvr)
+    slvr.ap_idx = types.MethodType(
+        ap_idx, slvr)

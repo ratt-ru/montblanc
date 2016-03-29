@@ -335,9 +335,9 @@ class CompositeBiroSolver(BaseSolver):
         return types.MethodType(transfer,self)
 
     # Take these methods from the v2 BiroSolver
-    get_default_base_ant_pairs = \
-        BSV2mod.BiroSolver.__dict__['get_default_base_ant_pairs']
-    get_default_ant_pairs = \
-        BSV2mod.BiroSolver.__dict__['get_default_ant_pairs']
-    get_ap_idx = \
-        BSV2mod.BiroSolver.__dict__['get_ap_idx']
+    default_base_ant_pairs = \
+        BSV2mod.BiroSolver.__dict__['default_base_ant_pairs']
+    default_ant_pairs = \
+        BSV2mod.BiroSolver.__dict__['default_ant_pairs']
+    ap_idx = \
+        BSV2mod.BiroSolver.__dict__['ap_idx']

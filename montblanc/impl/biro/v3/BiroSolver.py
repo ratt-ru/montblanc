@@ -57,9 +57,9 @@ class BiroSolver(BaseSolver):
             self.rime_b_sum.shutdown(self)
 
     # Take these methods from the v2 BiroSolver
-    get_default_base_ant_pairs = \
-        BiroSolverV2.__dict__['get_default_base_ant_pairs']
-    get_default_ant_pairs = \
-        BiroSolverV2.__dict__['get_default_ant_pairs']
-    get_ap_idx = \
-        BiroSolverV2.__dict__['get_ap_idx']
+    default_base_ant_pairs = \
+        BiroSolverV2.__dict__['default_base_ant_pairs']
+    default_ant_pairs = \
+        BiroSolverV2.__dict__['default_ant_pairs']
+    ap_idx = \
+        BiroSolverV2.__dict__['ap_idx']

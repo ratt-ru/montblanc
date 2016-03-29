@@ -122,8 +122,8 @@ A = [
         test=rand_uvw),
 
     ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32,
-        default=lambda slvr, ary: slvr.get_default_ant_pairs(),
-        test=lambda slvr, ary: slvr.get_default_ant_pairs()),
+        default=lambda slvr, ary: slvr.default_ant_pairs(),
+        test=lambda slvr, ary: slvr.default_ant_pairs()),
 
     # Source Definitions
     ary_dict('lm', ('nsrc',2), 'ft',

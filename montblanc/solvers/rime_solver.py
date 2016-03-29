@@ -64,6 +64,9 @@ class RIMESolver(BaseSolver):
         # Should we use the weight vector when computing the X2?
         self._use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR)
 
+        # Is this solver handling auto-correlations
+        self._is_auto_correlated = slvr_cfg.get(Options.AUTO_CORRELATIONS)
+
     def is_float(self):
         return self.ft == np.float32
 
@@ -77,6 +80,18 @@ class RIMESolver(BaseSolver):
         """ Is this a master solver """
         return self._is_master == Options.SOLVER_TYPE_MASTER
 
+    def is_autocorrelated(self):
+        """ Does this solver handle autocorrelations? """
+        return self._is_auto_correlated == True
+
+    def default_base_ant_pairs(self):
+        """
+        Return an np.array(shape=(2, nbl), dtype=np.int32]) containing the
+        default antenna pairs for each baseline.
+        """
+        na = self.dim_local_size('na')
+        k = 0 if self.is_autocorrelated() else 1
+        return np.int32(np.triu_indices(na, k))
 
     def register_default_dimensions(self):
         """ Register the default dimensions for a RIME solver """ 

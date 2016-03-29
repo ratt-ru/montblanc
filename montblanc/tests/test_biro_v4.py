@@ -460,7 +460,7 @@ class TestBiroV4(unittest.TestCase):
                 'nsrc', 'ntime', 'na', 'nbl', 'nchan')
 
             # Calculate per baseline antenna pair indexes
-            idx = cpu_slvr.get_ap_idx(src=True, chan=True)
+            idx = cpu_slvr.ap_idx(src=True, chan=True)
 
             # Get the brightness matrix
             B = cpu_slvr.compute_b_jones()
