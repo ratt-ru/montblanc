@@ -421,20 +421,12 @@ class CompositeBiroSolver(NumpySolver):
 
         two_ant_case = (na == 2)
 
-        for r in self._arrays.itervalues():
-            # Is there anything to transfer for this array?
-            if not r.cpu:
-                #print '%s has no CPU array' % r.name
-                continue
-
-            cpu_name = mbu.cpu_name(r.name)
-            gpu_name = mbu.gpu_name(r.name)
-
+        for r in self.arrays().itervalues():
             # Get the CPU array on the composite solver
             # and the CPU array and the GPU array
             # on the sub-solver
-            cpu_ary = getattr(self,cpu_name)
-            gpu_ary = getattr(subslvr,gpu_name)
+            cpu_ary = getattr(self, r.name)
+            gpu_ary = getattr(subslvr, r.name)
 
             if cpu_ary is None or gpu_ary is None:
                 #print 'Skipping %s' % r.name
@@ -900,12 +892,12 @@ class CompositeBiroSolver(NumpySolver):
         on the CompositeBiroSolver and indicates that it hasn't been transferred
         to the sub-solver
         """
-        cpu_name = mbu.cpu_name(name)
         def transfer(self, npary):
             self.check_array(name, npary)
-            setattr(self, cpu_name, npary)
+            setattr(self, name, npary)
             # Indicate that this data has not been transferred to
             # the sub-solvers
-            for slvr in self.solvers: slvr.was_transferred[name] = False
+            for slvr in self.solvers:
+                slvr.was_transferred[name] = False
 
         return types.MethodType(transfer,self)
