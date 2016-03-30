@@ -867,6 +867,12 @@ class CompositeBiroSolver(NumpySolver):
 
         self.initialised = False
 
+    def _thread_property_setter(self, name, value):
+        for subslvr in self.thread_local.solvers:
+            setter_method_name = self.setter_name(name)
+            setter_method = getattr(subslvr, setter_method_name)
+            setter_method(value)
+
     def __get_setter_method(self,name):
         """
         Setter method for CompositeBiroSolver properties. Sets the property
@@ -874,11 +880,14 @@ class CompositeBiroSolver(NumpySolver):
         """
 
         def setter(self, value):
+            # Set the property on the current
             setattr(self, name, value)
-            for slvr in self.solvers:
-                setter_method_name = mbu.setter_name(name)
-                setter_method = getattr(slvr,setter_method_name)
-                setter_method(value)
+
+            # Then set the property on solver's associated with each
+            # executor
+            for ex in self.executors:
+                ex.submit(CompositeBiroSolver._thread_property_setter,
+                    self, name, value)
 
         return types.MethodType(setter,self)
 
