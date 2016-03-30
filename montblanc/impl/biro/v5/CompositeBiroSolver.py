@@ -18,7 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import copy
 import functools
 import numpy as np
 import types
@@ -98,20 +97,13 @@ class CompositeBiroSolver(NumpySolver):
         # modify them for use on this Composite Solver
         from montblanc.impl.biro.v4.config import (A, P)
 
-        A_main, P_main = self.__twiddle_v4_arys_and_props(
-            copy.deepcopy(A), copy.deepcopy(P))
+        A_main, P_main = self._cfg_comp_slvr_arys_and_props(A, P)
 
         self.register_properties(P_main)
         self.register_arrays(A_main)
 
-        T = self.template_dict()
-        A_sub = copy.deepcopy(A)
-        P_sub = copy.deepcopy(P)
-
         nsolvers = slvr_cfg.get('nsolvers', 2)
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
-
-        self.__validate_arrays(A_sub)
 
         # Massage the contexts for each device into a list
         if not isinstance(self.dev_ctxs, list):
@@ -132,6 +124,12 @@ class CompositeBiroSolver(NumpySolver):
             ex.submit(C.__thread_init, self, ctx).result()
 
         montblanc.log.info('Threads Initialised')
+
+        # Get a template dictionary
+        T = self.template_dict()
+
+        A_sub, P_sub = self._cfg_sub_slvr_arys_and_props(A, P)
+        self.__validate_arrays(A_sub)
 
         # Find the budget with the lowest memory usage
         # Work with the device with the lowest memory
@@ -175,8 +173,6 @@ class CompositeBiroSolver(NumpySolver):
                 self, subslvr_cfg, P, nsolvers).result()
 
         montblanc.log.info('Solvers Created')
-
-        A_sub, P_sub = self.__twiddle_v4_subarys_and_props(A_sub, P_sub)
 
         # Register arrays and properties on each thread's solvers
         for ex in executors:
@@ -329,47 +325,45 @@ class CompositeBiroSolver(NumpySolver):
         return subslvr_cfg
 
 
-    def __twiddle_v4_arys_and_props(self, arys, props):
-        # Add a custom transfer method for transferring
-        # arrays to the sub-solver. Also, in general,
-        # only maintain CPU arrays on the main solver,
-        # but not GPU arrays, which will exist on the sub-solvers
+    def _cfg_comp_slvr_arys_and_props(self, arys, props):
+        """
+        Configure arrays and properties for the main
+        Composite Solver (self)
+        """
+        
+        # Don't store intermediate arrays
+        ary = [a.copy() for a in arys if a['name'] not in
+            ['vis', 'B_sqrt', 'jones', 'chi_sqrd_result']]
+
         for ary in arys:
             ary['transfer_method'] = self.__get_transfer_method(ary['name'])
-            ary['gpu'] = False
-            ary['cpu'] = True
+
+        # Copy properties
+        props = [p.copy() for p in props]
 
         # Add custom property setter method
         for prop in props:
-            prop['setter_method'] = self.__get_setter_method(ary['name'])
-
-        # Do not create CPU versions of scratch arrays
-        for ary in [a for a in arys if a['name'] in
-                ['vis', 'B_sqrt', 'jones', 'chi_sqrd_result']]:
-            ary['cpu'] = False
+            prop['setter_method'] = self.__get_setter_method(prop['name'])
 
         return arys, props
 
-    def __twiddle_v4_subarys_and_props(self, arys, props):
-        # Modify the array configuration for the sub-solvers
-        # Don't create CPU arrays since we'll be copying them
-        # from CPU arrays on the Composite Solver.
-        # Do create GPU arrays, used for solving each sub-section
-        # of the RIME.
+    def _cfg_sub_slvr_arys_and_props(self, arys, props):
+        """
+        Modify the array configuration for the sub-solvers
+        Add transfer methods and null out any default and test
+        data sources since we'll expect this solver to initialise them.
+        """
+
+        arys = [a.copy() for a in arys]
+        props = [p.copy() for p in props]
+
         for ary in arys:
             # Add a transfer method
             ary['transfer_method'] = self.__get_sub_transfer_method(ary['name'])
-            ary['cpu'] = False
-            ary['gpu'] = True
             # Don't initialise arrays on the sub-solvers,
             # it'll all get copied on anyway
             ary['default'] = None
             ary['test'] = None
-
-        # We'll use memory pools for the X2 values
-        for ary in [a for a in arys if a['name'] in ['X2']]:
-            ary['cpu'] = False
-            ary['gpu'] = False
 
         return arys, props
 
@@ -887,7 +881,7 @@ class CompositeBiroSolver(NumpySolver):
         """
 
         def setter(self, value):
-            setattr(self,name,value)
+            setattr(self, name, value)
             for slvr in self.solvers:
                 setter_method_name = mbu.setter_name(name)
                 setter_method = getattr(slvr,setter_method_name)
