@@ -689,7 +689,7 @@ class CompositeBiroSolver(NumpySolver):
         if tl.prev_iteration[i]:
             # Get an array from the pinned memory pool
             sub_X2 = subslvr.pinned_mem_pool.allocate(
-                shape=self.X2_shape, dtype=self.X2_dtype)
+                shape=self.X2.shape, dtype=self.X2.dtype)
             
             # Copy the X2 value off the GPU onto the CPU
             subslvr.rime_reduce.X2_gpu_ary.get_async(
@@ -757,7 +757,7 @@ class CompositeBiroSolver(NumpySolver):
 
             # Get an array from the pinned memory pool
             sub_X2 = subslvr.pinned_mem_pool.allocate(
-                shape=self.X2_shape, dtype=self.X2_dtype)
+                shape=self.X2.shape, dtype=self.X2.dtype)
             
             # Copy the X2 value off the GPU onto the CPU
             subslvr.rime_reduce.X2_gpu_ary.get_async(
@@ -850,8 +850,9 @@ class CompositeBiroSolver(NumpySolver):
 
         # For each executor (thread), request the final X2 result
         # as a future, sum them together to produce the final X2
-        self.X2_cpu = np.sum([ex.submit(C.__thread_solve_sub_final, self).result() for
-            ex in self.executors]).reshape(self.X2_shape)
+        self.set_X2(np.sum([
+            ex.submit(C.__thread_solve_sub_final, self).result() for
+            ex in self.executors]))
 
     def shutdown(self):
         """ Shutdown the solver """
