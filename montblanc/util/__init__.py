@@ -235,7 +235,7 @@ def viable_dim_config(bytes_available, arrays, template,
         try:
             dims = dim_ord.pop(0)
             montblanc.log.debug('Applying reduction {s}. '
-                'Bytes available {a} used {u}'.format(
+                'Bytes available: {a} used: {u}'.format(
                     s=dims,
                     a=fmt_bytes(bytes_available),
                     u=fmt_bytes(bytes_used)))

@@ -109,7 +109,8 @@ class CompositeBiroSolver(NumpySolver):
         if not isinstance(self.dev_ctxs, list):
             self.dev_ctxs = [self.dev_ctxs]
 
-        montblanc.log.info('Using %d solver(s) per device', nsolvers)
+        montblanc.log.info('Using {d} solver(s) per device.'.format(
+            d=nsolvers))
 
         # Shorten the type name
         C = CompositeBiroSolver
@@ -118,12 +119,12 @@ class CompositeBiroSolver(NumpySolver):
         # i.e. a thread per device
         executors = [cf.ThreadPoolExecutor(1) for ctx in self.dev_ctxs]
 
-        montblanc.log.info('Executors Created')
+        montblanc.log.info('Created {d} executor(s).'.format(d=len(executors)))
 
         for ex, ctx in zip(executors, self.dev_ctxs):
             ex.submit(C.__thread_init, self, ctx).result()
 
-        montblanc.log.info('Threads Initialised')
+        montblanc.log.info('Initialised {d} thread(s).'.format(d=len(executors)))
 
         # Get a template dictionary
         T = self.template_dict()
@@ -142,13 +143,15 @@ class CompositeBiroSolver(NumpySolver):
 
         # Log some information about the memory budget
         # and dimension reduction
-        changes = ['%s: %s => %s' % (k, T[k], v)
-            for k, v in M.iteritems()]
+        montblanc.log.info(('Selected a solver memory budget of {b} '
+            'for {d} solvers.').format(b=mbu.fmt_bytes(mem), d=nsolvers))
 
-        montblanc.log.info(('Selecting a solver memory budget of %s '
-            'for %d solvers. The following dimension '
-            'reductions have been applied: %s.'),
-                mbu.fmt_bytes(mem), nsolvers, ', '.join(changes))
+        montblanc.log.info(('The following dimension reductions '
+            'have been applied:'))
+
+        for k, v in M.iteritems():
+            montblanc.log.info('{p}{d}: {id} => {rd}'.format
+                (p=' '*4, d=k, id=T[k], rd=v))
 
         # Create the sub solver configuration
         subslvr_cfg = slvr_cfg.copy()
@@ -165,7 +168,8 @@ class CompositeBiroSolver(NumpySolver):
         self.bl_diff = P[Options.NBL]
         self.chan_diff = P[Options.NCHAN]
 
-        montblanc.log.info('Creating Solvers')
+        montblanc.log.info('Creating {s} solver(s) on {d} device(s).'
+            .format(s=nsolvers, d=len(executors)))
 
         # Now create the solvers on each thread
         for ex in executors:
@@ -531,8 +535,10 @@ class CompositeBiroSolver(NumpySolver):
         # Query free memory on this context
         (free_mem,total_mem) = cuda.mem_get_info()
 
-        montblanc.log.info('CUDA free {f} total {t}'.format(
-            f=mbu.fmt_bytes(free_mem), t=mbu.fmt_bytes(total_mem)))
+        device = self.thread_local.context.get_device()
+
+        montblanc.log.info('{d}: {t} total {f} free.'.format(
+           d=device.name(), f=mbu.fmt_bytes(free_mem), t=mbu.fmt_bytes(total_mem)))
 
         # Work with a supplied memory budget, otherwise use
         # free memory less an amount equal to the upper size

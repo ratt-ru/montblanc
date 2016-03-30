@@ -99,7 +99,8 @@ def get_contexts_per_device():
         montblanc.log.info('Montblanc will use the following devices:')
 
         for i, d in enumerate(__devices):
-            montblanc.log.info('Device #%d: %s', i, d.name())
+            montblanc.log.info('{p}{d}: {n}'.format(
+                p=' '*4, d=i, n=d.name()))
 
         # Create contexts for each device
         try:
