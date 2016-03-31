@@ -23,9 +23,9 @@ import montblanc.util as mbu
 import numexpr as ne
 import numpy as np
 
-from montblanc.solvers import NumpySolver
+from montblanc.solvers import MontblancNumpySolver
 
-class CPUSolver(NumpySolver):
+class CPUSolver(MontblancNumpySolver):
     def __init__(self, slvr_cfg):
         super(CPUSolver, self).__init__(slvr_cfg)
 

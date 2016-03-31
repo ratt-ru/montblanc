@@ -23,7 +23,7 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.solvers import CUDASolver
+from montblanc.solvers import MontblancCUDASolver
 from montblanc.config import BiroSolverConfig as Options
 
 from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
@@ -39,7 +39,7 @@ def get_pipeline(slvr_cfg):
         RimeEKBSqrt(),
         RimeSumCoherencies()])
 
-class BiroSolver(CUDASolver):
+class BiroSolver(MontblancCUDASolver):
     """ BIRO Solver Implementation """
 
     def __init__(self, slvr_cfg):

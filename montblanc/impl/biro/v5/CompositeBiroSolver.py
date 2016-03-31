@@ -32,7 +32,7 @@ import pycuda.tools
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.solvers import NumpySolver
+from montblanc.solvers import MontblancNumpySolver
 from montblanc.config import BiroSolverConfig as Options
 
 from montblanc.dims import DIMDATA
@@ -54,7 +54,7 @@ ORDERING_CONSTRAINTS.update({ 'nsrc' : 1,
 ORDERING_RANK = [' or '.join(['nsrc'] + mbu.source_nr_vars()),
     'ntime', ' or '.join(['nbl', 'na']), 'nchan']
 
-class CompositeBiroSolver(NumpySolver):
+class CompositeBiroSolver(MontblancNumpySolver):
     """
     Composite solver implementation for BIRO.
 
@@ -69,7 +69,7 @@ class CompositeBiroSolver(NumpySolver):
             slvr_cfg : SolverConfiguration
                 Solver Configuration variables
         """
-        super(CompositeBiroSolver, self).__init__(slvr_cfg)
+        super(CompositeBiroSolver, self).__init__(slvr_cfg=slvr_cfg)
 
         # Create thread local storage
         self.thread_local = threading.local()

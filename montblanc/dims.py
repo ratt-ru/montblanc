@@ -21,8 +21,6 @@
 from attrdict import AttrDict
 import numpy as np
 
-from montblanc.src_types import SOURCE_VAR_TYPES
-
 DEFAULT_DESCRIPTION = 'The FOURTH dimension!'
 
 class DIMDATA(object):

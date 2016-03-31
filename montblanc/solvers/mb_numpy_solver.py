@@ -18,28 +18,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import numpy as np
-from weakref import WeakKeyDictionary
+from numpy_solver import NumpySolver
+from rime_solver import RIMESolver
+from montblanc.config import SolverConfig as Options
 
-from base_solver import BaseSolver
+class MontblancNumpySolver(RIMESolver, NumpySolver):
+    def __init__(self, slvr_cfg):
+        super(MontblancNumpySolver, self).__init__(slvr_cfg=slvr_cfg)
 
-class NumpyArrayDescriptor(object):
-    """ Descriptor class for NumPy ndarrays arrays on the CPU """
-    def __init__(self, record_key, default=None):
-        self.default = default
-        self.record_key = record_key
-        self.data = WeakKeyDictionary()
-
-    def __get__(self, instance, owner):
-        return self.data.get(instance,self.default)
-
-    def __set__(self, instance, value):
-        self.data[instance] = value
-
-    def __delete__(self, instance):
-        del self.data[instance]
-
-class NumpySolver(BaseSolver):
     def register_array(self, name, shape, dtype, registrant, **kwargs):
         """
         Register an array with this Solver object.
@@ -69,27 +55,24 @@ class NumpySolver(BaseSolver):
             A dictionary describing this array.
         """
 
-        A = super(NumpySolver, self).register_array(
+        A = super(MontblancNumpySolver, self).register_array(
             name, shape, dtype, registrant, **kwargs)
 
-        # Create descriptors on the class instance, even though members
-        # may not necessarily be created on object instances. This is so
-        # that if someone registers an array but doesn't ask for it to be
-        # created, we have control over it, if at some later point they wish
-        # to do a
-        #
-        # slvr.blah = ...
-        #
+        # Our parent will create this
+        cpu_ary = getattr(self, name)
+        data_source = self._slvr_cfg[Options.DATA_SOURCE]
 
-        # TODO, there's probably a better way of figuring out if a descriptor
-        # is set on the class
-        #if not hasattr(NumpySolver, A.name):
-        if A.name not in NumpySolver.__dict__:
-            setattr(NumpySolver, A.name,
-                NumpyArrayDescriptor(record_key=A.name))
-
-        # Create the attribute on the solver
-        setattr(self, A.name, np.empty(shape=A.shape, dtype=A.dtype))
+        # If we're creating test data, initialise the array with
+        # data from the test key, don't initialise if we've been
+        # explicitly told the array should be empty, otherwise
+        # set the defaults
+        if data_source == Options.DATA_SOURCE_TEST:
+            self.init_array(name, cpu_ary,
+                kwargs.get(Options.DATA_SOURCE_TEST, None))
+        elif data_source == Options.DATA_SOURCE_EMPTY:
+            pass
+        else:
+            self.init_array(name, cpu_ary,
+                kwargs.get(Options.DATA_SOURCE_DEFAULT, None))
 
         return A
-        

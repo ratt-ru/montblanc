@@ -22,7 +22,7 @@ import numpy as np
 
 import montblanc
 
-from montblanc.solvers import CUDASolver
+from montblanc.solvers import MontblancCUDASolver
 from montblanc.config import BiroSolverConfig as Options
 
 from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
@@ -33,7 +33,7 @@ def get_pipeline(slvr_cfg):
     wv = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
     return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
 
-class BiroSolver(CUDASolver):
+class BiroSolver(MontblancCUDASolver):
     """ Solver implementation for BIRO """
     def __init__(self, slvr_cfg):
         """
@@ -57,5 +57,20 @@ class BiroSolver(CUDASolver):
 
         self.register_default_dimensions()
         self.register_properties(P)
-        self.register_arrays(A)
+        self.register_arrays(A)  
+
+    def solve(self):
+        """ Solve the RIME """
+        with self.context as ctx:
+            self.pipeline.execute(self)
+
+    def initialise(self):
+        with self.context as ctx:
+            self.pipeline.initialise(self)
+
+    def shutdown(self):
+        """ Stop the RIME solver """
+        with self.context as ctx:
+            self.pipeline.shutdown(self)        
+
 

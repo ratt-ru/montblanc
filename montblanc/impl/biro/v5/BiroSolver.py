@@ -24,7 +24,7 @@ import pycuda.driver as cuda
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.solvers import CUDASolver
+from montblanc.solvers import MontblancCUDASolver
 
 from montblanc.impl.biro.v5.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v5.gpu.RimeBSqrt import RimeBSqrt
@@ -36,7 +36,7 @@ from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
 
 from montblanc.config import BiroSolverConfig as Options
 
-class BiroSolver(CUDASolver):
+class BiroSolver(MontblancCUDASolver):
     """ BIRO Solver Implementation """
     def __init__(self, slvr_cfg):
         """

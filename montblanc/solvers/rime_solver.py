@@ -33,20 +33,23 @@ from montblanc.config import BiroSolverConfig as Options
 import montblanc.util as mbu
 
 class RIMESolver(BaseSolver):
-    def __init__(self, slvr_cfg):
+    def __init__(self, *args, **kwargs):
         """
         RIMESolver Constructor
 
-        Arguments
+        Keyword Arguments
         ---------
             slvr_cfg : dictionary
                 Contains configuration options for this solver
         """
 
-
-        super(RIMESolver, self).__init__()
+        super(RIMESolver, self).__init__(*args, **kwargs)
         # Store the solver configuration
-        self._slvr_cfg = slvr_cfg
+
+        self._slvr_cfg = slvr_cfg = kwargs.get('slvr_cfg', None)
+
+        if slvr_cfg is None:
+            raise ValueError("Expected a 'slvr_cfg' keyword.")
 
         # Configure our floating point and complex types
         if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:

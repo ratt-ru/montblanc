@@ -454,19 +454,3 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
         blockdimz = dimz
 
     return blockdimx, blockdimy, blockdimz
-
-import pycuda.driver as cuda
-
-class ContextWrapper(object):
-    """ Context Manager Wrapper for CUDA Contexts! """
-    def __init__(self, context):
-        self.context = context
-
-    def __enter__(self):
-        """ Pushed the wrapped context onto the stack """
-        self.context.push()
-        return self
-
-    def __exit__(self,type,value,traceback):
-        """ Pop when we're done """
-        cuda.Context.pop()

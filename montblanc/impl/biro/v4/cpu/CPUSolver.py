@@ -23,11 +23,10 @@ import numpy as np
 
 import montblanc
 import montblanc.util as mbu
-from montblanc.solvers import NumpySolver
+from montblanc.solvers import MontblancNumpySolver
 from montblanc.config import BiroSolverConfig as Options
 
-
-class CPUSolver(NumpySolver):
+class CPUSolver(MontblancNumpySolver):
     def __init__(self, slvr_cfg):
         super(CPUSolver, self).__init__(slvr_cfg)
 

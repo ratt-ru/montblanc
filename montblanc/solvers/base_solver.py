@@ -18,9 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import collections
-import copy
-
 import numpy as np
 import types
 
@@ -28,10 +25,7 @@ from weakref import WeakKeyDictionary
 from attrdict import AttrDict
 from collections import OrderedDict
 
-import montblanc
-import montblanc.util as mbu
-
-from montblanc.dims import DIMDATA
+from montblanc.dims import DIMDATA, create_dim_data
 
 class PropertyDescriptor(object):
     """ Descriptor class for properties """
@@ -53,7 +47,7 @@ class PropertyDescriptor(object):
 class BaseSolver(object):
     """ Base class for solving the RIME. """
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         """
         BaseSolver Constructor
         """
@@ -116,7 +110,6 @@ class BaseSolver(object):
         -------
         A dictionary describing this dimension
         """
-        from montblanc.dims import DIMDATA
 
         if name in self._dims:
             raise AttributeError((
@@ -126,7 +119,7 @@ class BaseSolver(object):
                 "a different name!").format(n=name))
 
         # Create the dimension dictionary
-        D = self._dims[name] = mbu.create_dim_data(name, dim_data, **kwargs)
+        D = self._dims[name] = create_dim_data(name, dim_data, **kwargs)
 
         return D
 
