@@ -35,7 +35,7 @@ import montblanc.util as mbu
 from montblanc.solvers import NumpySolver
 from montblanc.config import BiroSolverConfig as Options
 
-from montblanc.enums import DIMDATA
+from montblanc.dims import DIMDATA
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 

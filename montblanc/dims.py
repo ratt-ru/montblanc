@@ -22,9 +22,20 @@ from attrdict import AttrDict
 import numpy as np
 
 from montblanc.src_types import SOURCE_VAR_TYPES
-from montblanc.enums import DIMDATA
 
 DEFAULT_DESCRIPTION = 'The FOURTH dimension!'
+
+class DIMDATA(object):
+    NAME = 'name'
+    DESCRIPTION = 'description'
+    GLOBAL_SIZE = 'global_size'
+    LOCAL_SIZE = 'local_size'
+    EXTENTS = 'extents'
+    SAFETY = 'safety'
+    ZERO_VALID = 'zero_valid'
+
+    ALL = frozenset([NAME, DESCRIPTION, GLOBAL_SIZE, LOCAL_SIZE,
+        EXTENTS, SAFETY, ZERO_VALID])
 
 def create_dim_data(name, dim_data, **kwargs):
     return Dimension(name, dim_data, **kwargs)

@@ -22,7 +22,7 @@ import numpy as np
 
 from cffi import FFI
 
-from montblanc.enums import (
+from montblanc.dims import (
     DIMDATA)
 
 from montblanc.src_types import (

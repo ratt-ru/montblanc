@@ -31,7 +31,7 @@ from collections import OrderedDict
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.enums import DIMDATA
+from montblanc.dims import DIMDATA
 
 class PropertyDescriptor(object):
     """ Descriptor class for properties """
@@ -116,7 +116,7 @@ class BaseSolver(object):
         -------
         A dictionary describing this dimension
         """
-        from montblanc.enums import DIMDATA
+        from montblanc.dims import DIMDATA
 
         if name in self._dims:
             raise AttributeError((
