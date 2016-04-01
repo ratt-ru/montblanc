@@ -125,7 +125,7 @@ class RimeConstStruct(object):
         """
         # Iterate through our dimension data, setting
         # any relevant attributes on cdata
-        for name, dim in slvr.dimensions().iteritems():
+        for name, dim in slvr.dimensions(reify=True).iteritems():
             cdim = getattr(self._cdata, name)
 
             setattr(cdim, DIMDATA.LOCAL_SIZE,

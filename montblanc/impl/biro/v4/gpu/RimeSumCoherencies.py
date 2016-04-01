@@ -50,17 +50,6 @@ KERNEL_TEMPLATE = string.Template("""
 #include <montblanc/include/abstraction.cuh>
 #include <montblanc/include/jones.cuh>
 
-#define NA ${na}
-#define NBL ${nbl}
-#define NCHAN ${nchan}
-#define NTIME ${ntime}
-#define NPSRC ${npsrc}
-#define NGSRC ${ngsrc}
-#define NSSRC ${nssrc}
-#define NSRC ${nsrc}
-#define NPOL (4)
-#define NPOLCHAN (NPOL*NCHAN)
-
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
 #define BLOCKDIMZ ${BLOCKDIMZ}
@@ -94,6 +83,17 @@ __constant__ rime_const_data C;
 #define LEXT(name) C.name.extents[0]
 #define UEXT(name) C.name.extents[1]
 #define DEXT(name) (C.name.extents[1] - C.name.extents[0])
+
+#define NA (C.na.local_size)
+#define NBL (C.nbl.local_size)
+#define NCHAN (C.nchan.local_size)
+#define NTIME (C.ntime.local_size)
+#define NPSRC (C.npsrc.local_size)
+#define NGSRC (C.ngsrc.local_size)
+#define NSSRC (C.nssrc.local_size)
+#define NSRC (C.nnsrc.local_size)
+#define NPOL (C.npol.local_size)
+#define NPOLCHAN (C.npolchan.local_size)
 
 template <
     typename T,

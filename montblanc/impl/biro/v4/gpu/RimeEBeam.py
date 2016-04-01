@@ -47,14 +47,6 @@ KERNEL_TEMPLATE = string.Template("""
 #include <montblanc/include/abstraction.cuh>
 #include <montblanc/include/brightness.cuh>
 
-#define NA (${na})
-#define NBL (${nbl})
-#define NCHAN (${nchan})
-#define NTIME (${ntime})
-#define NSRC (${nsrc})
-#define NPOL (4)
-#define NPOLCHAN (NPOL*NCHAN)
-
 #define BEAM_LW (${beam_lw})
 #define BEAM_MH (${beam_mh})
 #define BEAM_NUD (${beam_nud})
@@ -75,6 +67,17 @@ __constant__ rime_const_data C;
 #define UEXT(name) C.name.extents[1]
 #define DEXT(name) (C.name.extents[1] - C.name.extents[0])
 #define GLOBAL(name) C.name.global_size
+
+#define NA (C.na.local_size)
+#define NBL (C.nbl.local_size)
+#define NCHAN (C.nchan.local_size)
+#define NTIME (C.ntime.local_size)
+#define NPSRC (C.npsrc.local_size)
+#define NGSRC (C.ngsrc.local_size)
+#define NSSRC (C.nssrc.local_size)
+#define NSRC (C.nnsrc.local_size)
+#define NPOL (C.npol.local_size)
+#define NPOLCHAN (C.npolchan.local_size)
 
 template <
     typename T,

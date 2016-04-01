@@ -116,23 +116,19 @@ class RIMESolver(HyperCube):
         self.register_dimension(Options.NPOL, npol,
             description=Options.NPOL_DESCRIPTION)
 
-        size_func = (self.dim_global_size if self.is_master()
-            else self.dim_local_size)
-
         # Now get the size of the registered dimensions
-        ntime, na, nchan, npol = size_func('ntime', 'na', 'nchan', 'npol')
+        ntime, na, nchan, npol = self.dim_local_size(
+            'ntime', 'na', 'nchan', 'npol')
         
-        nbl = self._slvr_cfg.get(Options.NBL,
-            mbu.nr_of_baselines(na, autocor))
+        nbl_expr = 'na*(na+1)//2' if autocor else 'na*(na-1)//2'
+        nbl = self._slvr_cfg.get(Options.NBL, nbl_expr)
 
         self.register_dimension('nbl', nbl,
             description=Options.NBL_DESCRIPTION)
 
-        nbl = size_func('nbl')
-
-        self.register_dimension('npolchan', nchan*npol,
-            description='Channels x Polarisations')
-        self.register_dimension('nvis', ntime*nbl*nchan,
+        self.register_dimension('npolchan', 'nchan*npol',
+            description='Polarised channels')
+        self.register_dimension('nvis', 'ntime*nbl*nchan',
             description='Visibilities')
 
         # Convert the source types, and their numbers
