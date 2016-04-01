@@ -27,12 +27,12 @@ except ImportError:
     from funcsigs import signature
 
 import montblanc
-from montblanc.solvers import BaseSolver
+from hypercube import HyperCube
 from montblanc.config import BiroSolverConfig as Options
 
 import montblanc.util as mbu
 
-class RIMESolver(BaseSolver):
+class RIMESolver(HyperCube):
     def __init__(self, *args, **kwargs):
         """
         RIMESolver Constructor
@@ -131,9 +131,9 @@ class RIMESolver(BaseSolver):
         nbl = size_func('nbl')
 
         self.register_dimension('npolchan', nchan*npol,
-            description='Number of channels x polarisations')
+            description='Channels x Polarisations')
         self.register_dimension('nvis', ntime*nbl*nchan,
-            description='Number of visibilities')
+            description='Visibilities')
 
         # Convert the source types, and their numbers
         # to their number variables and numbers
@@ -142,14 +142,14 @@ class RIMESolver(BaseSolver):
         src_nr_vars = mbu.sources_to_nr_vars(src_cfg)
         # Sum to get the total number of sources
         self.register_dimension('nsrc', sum(src_nr_vars.itervalues()),
-            description='Number of sources (total)')
+            description=Options.NSRC_DESCRIPTION)
 
         # Register the individual source types
         for src_type, (nr_var, nr_of_src) in zip(
             src_cfg.iterkeys(), src_nr_vars.iteritems()):
 
             self.register_dimension(nr_var, nr_of_src, 
-                description='Number of {t} sources'.format(t=src_type),
+                description='{t} sources'.format(t=src_type),
                 zero_valid=True)   
 
     def type_dict(self):
@@ -186,7 +186,7 @@ class RIMESolver(BaseSolver):
 
         return D
 
-    def register_array(self, name, shape, dtype, registrant, **kwargs):
+    def register_array(self, name, shape, dtype, **kwargs):
         """
         Register an array with this Solver object.
 
@@ -198,8 +198,6 @@ class RIMESolver(BaseSolver):
                 Shape of the array.
             dtype : data-type
                 The data-type for the array.
-            registrant : string
-                Name of the entity registering this array.
 
         Returns
         -------
@@ -209,9 +207,9 @@ class RIMESolver(BaseSolver):
         # Substitute any string types when calling the parent
         return super(RIMESolver, self).register_array(name, shape,
             mbu.dtype_from_str(dtype, self.type_dict()),
-            registrant, **kwargs)
+            **kwargs)
 
-    def register_property(self, name, dtype, default, registrant, **kwargs):
+    def register_property(self, name, dtype, default, **kwargs):
         """
         Registers a property with this Solver object
 
@@ -223,8 +221,6 @@ class RIMESolver(BaseSolver):
                 The data-type of this property
             default :
                 Default value for the property.
-            registrant : string
-                Name of the entity registering the property.
 
         Returns
         -------
@@ -235,7 +231,7 @@ class RIMESolver(BaseSolver):
         # Substitute any string types when calling the parent
         return super(RIMESolver, self).register_property(name,
             mbu.dtype_from_str(dtype, self.type_dict()),
-            default, registrant, **kwargs)
+            default, **kwargs)
 
     def init_array(self, name, ary, value):
         # No defaults are supplied

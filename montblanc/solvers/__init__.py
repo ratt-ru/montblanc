@@ -18,10 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from montblanc.solvers.base_solver import BaseSolver
-from montblanc.solvers.rime_solver import RIMESolver
-from montblanc.solvers.numpy_solver import NumpySolver
-from montblanc.solvers.cuda_solver import CUDASolver
 from montblanc.solvers.mb_numpy_solver import MontblancNumpySolver
 from montblanc.solvers.mb_cuda_solver import MontblancCUDASolver
 

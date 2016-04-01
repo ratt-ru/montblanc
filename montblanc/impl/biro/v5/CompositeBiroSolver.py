@@ -77,17 +77,17 @@ class CompositeBiroSolver(MontblancNumpySolver):
         self.register_default_dimensions()
 
         # Configure the dimensions of the beam cube
-        self.register_dimension(Options.E_BEAM_WIDTH,
+        self.register_dimension('beam_lw',
             slvr_cfg[Options.E_BEAM_WIDTH],
-            description='E Beam cube width in l coords')
+            description='E cube l width')
 
-        self.register_dimension(Options.E_BEAM_HEIGHT,
+        self.register_dimension('beam_mh',
             slvr_cfg[Options.E_BEAM_HEIGHT],
-            description='E Beam cube height in m coords')
+            description='E cube m height')
 
-        self.register_dimension(Options.E_BEAM_DEPTH,
+        self.register_dimension('beam_nud',
             slvr_cfg[Options.E_BEAM_DEPTH],
-            description='E Beam cube height in nu coords')
+            description='E cube nu depth')
 
         # Monkey patch v4 antenna pair functions into the object
         from montblanc.impl.biro.v4.ant_pairs import monkey_patch_antenna_pairs

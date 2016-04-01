@@ -61,15 +61,15 @@ class BiroSolver(MontblancCUDASolver):
         # Configure the dimensions of the beam cube
         self.register_dimension('beam_lw',
             slvr_cfg[Options.E_BEAM_WIDTH],
-            description='E Beam cube width in l coords')
+            description='E Beam cube l width')
 
         self.register_dimension('beam_mh',
             slvr_cfg[Options.E_BEAM_HEIGHT],
-            description='E Beam cube height in m coords')
+            description='E Beam cube m height')
 
         self.register_dimension('beam_nud',
             slvr_cfg[Options.E_BEAM_DEPTH],
-            description='E Beam cube height in nu coords')
+            description='E Beam cube nu depth')
 
         # Monkey patch these functions onto the object
         # TODO: Remove this when deprecating v2.

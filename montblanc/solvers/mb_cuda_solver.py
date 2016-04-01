@@ -20,20 +20,20 @@
 import numpy as np
 import types
 
-from cuda_solver import CUDASolver
+from hypercube import CUDAHyperCube
 from rime_solver import RIMESolver
 from montblanc.config import SolverConfig as Options
 
-class MontblancCUDASolver(RIMESolver, CUDASolver):
+class MontblancCUDASolver(RIMESolver, CUDAHyperCube):
     """ Solves the RIME using CUDA """
     def __init__(self, slvr_cfg):
         super(MontblancCUDASolver, self).__init__(slvr_cfg=slvr_cfg,
             context=slvr_cfg.get(Options.CONTEXT, None))
         self.pipeline = slvr_cfg.get('pipeline')
 
-    def register_array(self, name, shape, dtype, registrant, **kwargs):
+    def register_array(self, name, shape, dtype, **kwargs):
         A = super(MontblancCUDASolver, self).register_array(
-            name, shape, dtype, registrant, **kwargs)
+            name, shape, dtype, **kwargs)
 
         import pycuda.driver as cuda
         import pycuda.gpuarray as gpuarray
@@ -73,7 +73,6 @@ class MontblancCUDASolver(RIMESolver, CUDASolver):
         if isinstance(transfer_method, types.BooleanType) and transfer_method is True:
             # Create the transfer method
             def transfer(self, npary):
-                self.check_array(A.name, npary)
                 with self.context:
                     getattr(self,A.name).set(npary)
 

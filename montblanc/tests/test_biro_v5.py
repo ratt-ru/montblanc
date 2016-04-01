@@ -27,7 +27,7 @@ import time
 import montblanc.factory
 import montblanc.util as mbu
 
-from montblanc.impl.biro.v4.cpu.SolverCPU import SolverCPU
+from montblanc.impl.biro.v4.cpu.CPUSolver import CPUSolver
 
 from montblanc.config import BiroSolverConfig as Options
 

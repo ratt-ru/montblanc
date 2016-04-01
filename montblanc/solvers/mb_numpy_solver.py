@@ -18,15 +18,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from numpy_solver import NumpySolver
+from hypercube import NumpyHyperCube
 from rime_solver import RIMESolver
 from montblanc.config import SolverConfig as Options
 
-class MontblancNumpySolver(RIMESolver, NumpySolver):
+class MontblancNumpySolver(RIMESolver, NumpyHyperCube):
     def __init__(self, slvr_cfg):
         super(MontblancNumpySolver, self).__init__(slvr_cfg=slvr_cfg)
 
-    def register_array(self, name, shape, dtype, registrant, **kwargs):
+    def register_array(self, name, shape, dtype, **kwargs):
         """
         Register an array with this Solver object.
 
@@ -38,8 +38,6 @@ class MontblancNumpySolver(RIMESolver, NumpySolver):
                 Shape of the array.
             dtype : data-type
                 The data-type for the array.
-            registrant : string
-                Name of the entity registering this array.
 
         Keyword Arguments
         -----------------
@@ -56,7 +54,7 @@ class MontblancNumpySolver(RIMESolver, NumpySolver):
         """
 
         A = super(MontblancNumpySolver, self).register_array(
-            name, shape, dtype, registrant, **kwargs)
+            name, shape, dtype, **kwargs)
 
         # Our parent will create this
         cpu_ary = getattr(self, name)

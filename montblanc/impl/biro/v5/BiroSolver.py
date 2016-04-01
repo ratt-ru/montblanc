@@ -52,17 +52,17 @@ class BiroSolver(MontblancCUDASolver):
         self.register_default_dimensions()
 
         # Configure the dimensions of the beam cube
-        self.register_dimension(Options.E_BEAM_WIDTH,
+        self.register_dimension('beam_lw',
             slvr_cfg[Options.E_BEAM_WIDTH],
-            description='E Beam cube width in l coords')
+            description='E cube l width')
 
-        self.register_dimension(Options.E_BEAM_HEIGHT,
+        self.register_dimension('beam_mh',
             slvr_cfg[Options.E_BEAM_HEIGHT],
-            description='E Beam cube height in m coords')
+            description='E cube m height')
 
-        self.register_dimension(Options.E_BEAM_DEPTH,
+        self.register_dimension('beam_nud',
             slvr_cfg[Options.E_BEAM_DEPTH],
-            description='E Beam cube height in nu coords')
+            description='E cube nu depth')
 
         self.rime_e_beam = RimeEBeam()
         self.rime_b_sqrt = RimeBSqrt()
@@ -92,14 +92,14 @@ class BiroSolver(MontblancCUDASolver):
     def const_data(self):
         return self._const_data
 
-    def update_dimension(self, dim_data):
+    def update_dimension(self, **update_dict):
         """
-        Override update_dimension on BaseSolver.py to also
+        Override update_dimension on HyperCube to also
         update rime_const_data.
         """
 
         # Defer to parent method on the base solver
-        super(BiroSolver, self).update_dimension(dim_data)
+        super(BiroSolver, self).update_dimension(**update_dict)
 
         # Update constant data, updating nsrc with sum of source counts
         self._const_data.update(self, sum_nsrc=True)

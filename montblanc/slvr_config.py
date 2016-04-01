@@ -83,30 +83,30 @@ class SolverConfig(object):
     # Number of timesteps
     NTIME = 'ntime'
     DEFAULT_NTIME = 10
-    NTIME_DESCRIPTION = 'Number of timesteps'
+    NTIME_DESCRIPTION = 'Timesteps'
 
     # Number of antenna
     NA = 'na'
     DEFAULT_NA = 7
-    NA_DESCRIPTION = 'Number of antenna'
+    NA_DESCRIPTION = 'Antenna'
 
     # Number of baselines
     NBL = 'nbl'
-    NBL_DESCRIPTION = 'Number of baselines'
+    NBL_DESCRIPTION = 'Baselines'
 
     # Number of channels
     NCHAN = 'nchan'
     DEFAULT_NCHAN = 16
-    NCHAN_DESCRIPTION = 'Number of channels'
+    NCHAN_DESCRIPTION = 'Channels'
 
     # Number of polarisations
     NPOL = 'npol'
     DEFAULT_NPOL = 4
-    NPOL_DESCRIPTION = 'Number of Polarisations'
+    NPOL_DESCRIPTION = 'Polarisations'
 
     # Number of sources
     NSRC = 'nsrc'
-    NSRC_DESCRIPTION = 'Number of sources (total)'
+    NSRC_DESCRIPTION = 'Sources (total)'
 
     # Master solver
     SOLVER_TYPE = 'solver_type'
