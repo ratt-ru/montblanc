@@ -83,6 +83,7 @@ __constant__ rime_const_data C;
 #define LEXT(name) C.name.extents[0]
 #define UEXT(name) C.name.extents[1]
 #define DEXT(name) (C.name.extents[1] - C.name.extents[0])
+#define GLOBAL(name) (C.name.global_size)
 
 #define NA (C.na.local_size)
 #define NBL (C.nbl.local_size)
@@ -168,12 +169,24 @@ void rime_sum_coherencies_impl(
     if(threadIdx.y == 0 && threadIdx.z == 0)
         { shared.freq[threadIdx.x] = frequency[POLCHAN >> 2]; }
 
-    // Complex Number containing the sum
-    // for this polarisation
+    // We process sources in batches, accumulating visibility values.
+    // Visibilities are read in and written out at the start and end
+    // of each batch respectively.
+
+    // Initialise polarisation to zero if this is the first batch.
+    // Otherwise, read in the visibilities from the previous batch.
     typename Tr::ct polsum = Po::make_ct(0.0, 0.0);
+    if(LEXT(nsrc) > 0)
+    {
+        i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
+        polsum = visibilities[i];
+    }
+
+    int SRC = 0;
+    int SRC_STOP = DEXT(npsrc);
 
     // Point Sources
-    for(int SRC=0; SRC < DEXT(npsrc); ++SRC)
+    for(; SRC < SRC_STOP; ++SRC)
     {
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
@@ -188,8 +201,10 @@ void rime_sum_coherencies_impl(
         polsum.y += ant_one.y;
     }
 
+    SRC_STOP += DEXT(ngsrc);
+
     // Gaussian sources
-    for(int SRC = DEXT(npsrc); SRC < DEXT(npsrc) + DEXT(ngsrc); ++SRC)
+    for(; SRC < SRC_STOP; ++SRC)
     {
         // gaussian shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
@@ -233,8 +248,10 @@ void rime_sum_coherencies_impl(
         __syncthreads();
     }
 
+    SRC_STOP += DEXT(nssrc);
+
     // Sersic Sources
-    for(int SRC = DEXT(npsrc) + DEXT(ngsrc); SRC < DEXT(npsrc) + DEXT(ngsrc) + DEXT(nssrc); ++SRC)
+    for(; SRC < SRC_STOP; ++SRC)
     {
         // sersic shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
@@ -277,6 +294,19 @@ void rime_sum_coherencies_impl(
         polsum.x += ant_one.x;
         polsum.y += ant_one.y;
     }
+
+    // If the upper extent of this source batch is less than
+    // the global number of sources, then we've still got more
+    // batches to evaluate. Write visibilities out to global memory
+    // and return
+    if(UEXT(nsrc) < GLOBAL(nsrc))
+    {
+        i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
+        visibilities[i] = polsum;
+        return;
+    }
+
+    // Otherwise, apply G terms and calculate chi-squared terms
 
     // Multiply the visibility by antenna 1's g term
     i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
