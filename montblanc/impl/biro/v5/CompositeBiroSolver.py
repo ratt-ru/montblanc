@@ -35,6 +35,11 @@ import montblanc.util as mbu
 from montblanc.solvers import MontblancNumpySolver
 from montblanc.config import BiroSolverConfig as Options
 
+from montblanc.impl.biro.v4.config import (
+    A as v4Arrays,
+    P as v4Props,
+    Classifier)
+
 from montblanc.dims import DIMDATA
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
@@ -95,9 +100,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # Copy the v4 arrays and properties and
         # modify them for use on this Composite Solver
-        from montblanc.impl.biro.v4.config import (A, P)
-
-        A_main, P_main = self._cfg_comp_slvr_arys_and_props(A, P)
+        A_main, P_main = self._cfg_comp_slvr_arys_and_props(v4Arrays, v4Props)
 
         self.register_properties(P_main)
         self.register_arrays(A_main)
@@ -129,7 +132,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # Get a template dictionary
         T = self.template_dict()
 
-        A_sub, P_sub = self._cfg_sub_slvr_arys_and_props(A, P)
+        A_sub, P_sub = self._cfg_sub_slvr_arys_and_props(v4Arrays, v4Props)
         self.__validate_arrays(A_sub)
 
         # Find the budget with the lowest memory usage
@@ -336,8 +339,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         """
         
         # Don't store intermediate arrays
-        ary = [a.copy() for a in arys if a['name'] not in
-            ['vis', 'B_sqrt', 'jones', 'chi_sqrd_result']]
+        ary = [a.copy() for a in arys if Classifier.GPU_SCRATCH not in a['classifiers']]
 
         for ary in arys:
             ary['transfer_method'] = self.__get_transfer_method(ary['name'])
@@ -389,7 +391,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         gpu_ary.set_async(staged_ary, stream=subslvr.stream)
 
     def __transfer_arrays(self, sub_solver_idx,
-        cpu_slice_map, gpu_slice_map):
+        cpu_slice_map, gpu_slice_map, classifiers=None):
         """
         Transfer CPU arrays on the CompositeBiroSolver over to the
         BIRO sub-solvers asynchronously.
@@ -425,7 +427,18 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         two_ant_case = (na == 2)
 
+        if classifiers is None:
+            classifiers = frozenset()
+        elif isinstance(classifiers, list):
+            classifiers = frozenset(classifiers)
+        elif isinstance(classifiers, Classifier):
+            classifiers = frozenset((classifiers,))
+
         for r in self.arrays().itervalues():
+            # Ignore this array if we don't get matching classifiers
+            if len(classifiers.intersection(r['classifiers'])) == 0:
+                continue
+
             # Get the CPU array on the composite solver
             # and the CPU array and the GPU array
             # on the sub-solver
@@ -712,8 +725,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
             { DIMDATA.NAME: dim, DIMDATA.EXTENTS: [S.start, S.stop] }
             for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
 
-        # Transfer arrays
-        self.__transfer_arrays(i, cpu_slice_map, gpu_slice_map)
+        # Transfer our chi-squared and telescope input arrays
+        self.__transfer_arrays(i, cpu_slice_map, gpu_slice_map,
+            classifiers=[Classifier.X2_INPUT, Classifier.TELESCOPE_INPUT])
 
         # Pre-execution (async copy constant data to the GPU)
         subslvr.rime_e_beam.pre_execution(subslvr, subslvr.stream)

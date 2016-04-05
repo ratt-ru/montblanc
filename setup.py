@@ -220,6 +220,7 @@ setup(name='montblanc',
     install_requires=[
         'attrdict >= 2.0.0',
         'cffi >= 1.1.2',
+        'enum34 >= 1.1.2',
         'funcsigs >= 0.4',
         'futures >= 3.0.3',
         'hypercube >= 0.2.0a1',
