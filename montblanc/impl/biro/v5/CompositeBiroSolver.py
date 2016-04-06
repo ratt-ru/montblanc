@@ -189,13 +189,34 @@ class CompositeBiroSolver(MontblancNumpySolver):
         self.executors = executors
         self.initialised = False
 
-    def __gen_rime_slices(self):
+    def __gen_source_slices(self):
         src_nr_var_counts = mbu.sources_to_nr_vars(
             self._slvr_cfg[Options.SOURCES])
         src_nr_vars = mbu.source_nr_vars()
 
-        ntime, nbl, na, nchan, nsrc = self.dim_local_size(
-            'ntime', 'nbl', 'na', 'nchan', 'nsrc')
+        nsrc = self.dim_local_size(Options.NSRC)
+
+        # Set up source slicing
+        for src in xrange(0, nsrc, self.src_diff):
+            src_end = min(src + self.src_diff, nsrc)
+            src_diff = src_end - src
+            cpu_slice[Options.NSRC] = slice(src, src_end, 1)
+            gpu_slice[Options.NSRC] = slice(0, src_diff, 1)
+
+            # Set up the CPU source range slices
+            cpu_slice.update(mbu.source_range_slices(
+                src, src_end, src_nr_var_counts))
+
+            # and configure the same for GPU slices
+            for s in src_nr_vars:
+                cpu_var = cpu_slice[s]
+                gpu_slice[s] = slice(0, cpu_var.stop - cpu_var.start, 1)
+
+            yield (cpu_slice.copy(), gpu_slice.copy())
+
+    def __gen_vis_slices(self):
+        ntime, nbl, na, nchan = self.dim_local_size(
+            'ntime', 'nbl', 'na', 'nchan')
 
         # Create the slice dictionaries, which we use to index
         # dimensions of the CPU and GPU array.
@@ -248,23 +269,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                     cpu_slice[Options.NCHAN] = slice(ch, ch_end, 1)
                     gpu_slice[Options.NCHAN] = slice(0, ch_diff, 1)
 
-                    # Set up source slicing
-                    for src in xrange(0, nsrc, self.src_diff):
-                        src_end = min(src + self.src_diff, nsrc)
-                        src_diff = src_end - src
-                        cpu_slice[Options.NSRC] = slice(src, src_end, 1)
-                        gpu_slice[Options.NSRC] = slice(0, src_diff, 1)
-
-                        # Set up the CPU source range slices
-                        cpu_slice.update(mbu.source_range_slices(
-                            src, src_end, src_nr_var_counts))
-
-                        # and configure the same for GPU slices
-                        for s in src_nr_vars:
-                            cpu_var = cpu_slice[s]
-                            gpu_slice[s] = slice(0, cpu_var.stop - cpu_var.start, 1)
-
-                        yield (cpu_slice.copy(), gpu_slice.copy())
+                    yield (cpu_slice.copy(), gpu_slice.copy())
 
     def __thread_gen_sub_solvers(self):
         # Loop infinitely over the sub-solvers.
@@ -561,7 +566,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         nsolvers = slvr_cfg.get('nsolvers', 2)
         na = slvr_cfg.get(Options.NA)
         nsrc = 400
-        src_str_list = ['nsrc'] + mbu.source_nr_vars()
+        src_str_list = [Options.NSRC] + mbu.source_nr_vars()
         src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
             for nr_var in src_str_list])
 
@@ -828,8 +833,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
         rm_fut_cb = [functools.partial(C.__rm_future_cb, Q=future_Q[i])
             for i in range(nr_ex)]
 
-        # Iterate over the RIME space, i.e. slices over the CPU and GPU
-        for cpu_slice_map, gpu_slice_map in self.__gen_rime_slices():
+        # Iterate over the visibility space, i.e. slices over the CPU and GPU
+        for cpu_slice_map, gpu_slice_map in self.__gen_vis_slices():
             # Attempt to submit work to an executor
             submitted = False
 
@@ -839,15 +844,16 @@ class CompositeBiroSolver(MontblancNumpySolver):
                     if len(future_Q[i]) > 2:
                         continue
 
-                    # Submit work to the thread, solve this portion of the RIME
+                    # Submit work to the thread, solve
+                    # this visibility chunk of the RIME
                     f = ex.submit(C.__thread_solve_sub, self,
                         cpu_slice_map, gpu_slice_map, first=first[i])
 
                     # Add the future to the queue
                     future_Q[i].append(f)
 
-                    # Add a callback removing the future from the appropriate queue
-                    # once it completes                    
+                    # Add a callback removing the future from
+                    # the appropriate queue once it completes
                     f.add_done_callback(rm_fut_cb[i])
 
                     # This section of work has been submitted,
