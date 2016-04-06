@@ -121,10 +121,14 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # Create a one thread executor for each device context,
         # i.e. a thread per device
         executors = [cf.ThreadPoolExecutor(1) for ctx in self.dev_ctxs]
+        sync_executors = [cf.ThreadPoolExecutor(1) for ex in executors]
 
         montblanc.log.info('Created {d} executor(s).'.format(d=len(executors)))
 
         for ex, ctx in zip(executors, self.dev_ctxs):
+            ex.submit(C.__thread_init, self, ctx).result()
+
+        for ex, ctx in zip(sync_executors, self.dev_ctxs):
             ex.submit(C.__thread_init, self, ctx).result()
 
         montblanc.log.info('Initialised {d} thread(s).'.format(d=len(executors)))
@@ -187,6 +191,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 self, A_sub, P_sub).result()
 
         self.executors = executors
+        self.sync_executors = sync_executors
         self.initialised = False
 
     def __gen_source_slices(self):
@@ -890,6 +895,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         for ex in self.executors:
             ex.submit(__shutdown_func).result()
+
+        for ex in self.sync_executors:
+            ex.submit(lambda: self.__thread_shutdown()).result()
 
         self.initialised = False
 
