@@ -118,92 +118,102 @@ from enum import Enum
 
 # String constants for classifying arrays
 class Classifier(Enum):
-    TELESCOPE_INPUT = 'telescope_input'
     X2_INPUT = 'X2_input'
-    SOURCE_INPUT = 'source_input'
     GPU_SCRATCH = 'gpu_scratch'
     SIMULATOR_OUTPUT = 'simulator_output'
+
+    B_SQRT_INPUT = 'b_sqrt_input'
+    E_BEAM_INPUT = 'e_beam_input'
+    EKB_SQRT_INPUT = 'ekb_sqrt_input'
+    COHERENCIES_INPUT = 'coherencies_input'
 
 # List of arrays
 A = [
     # Input Arrays
     ary_dict('uvw', ('ntime','na', 3), 'ft',
-        classifiers=frozenset([Classifier.TELESCOPE_INPUT]),
+        classifiers=frozenset([Classifier.EKB_SQRT_INPUT,
+            Classifier.COHERENCIES_INPUT]),
         default=0,
         test=rand_uvw),
 
     ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32,
-        classifiers=frozenset([Classifier.TELESCOPE_INPUT]),
+        classifiers=frozenset([Classifier.COHERENCIES_INPUT]),
         default=lambda slvr, ary: slvr.default_ant_pairs(),
         test=lambda slvr, ary: slvr.default_ant_pairs()),
 
     ary_dict('frequency', ('nchan',), 'ft',
-        classifiers=frozenset([Classifier.TELESCOPE_INPUT]),
+        classifiers=frozenset([Classifier.B_SQRT_INPUT,
+            Classifier.EKB_SQRT_INPUT,
+            Classifier.COHERENCIES_INPUT]),
         default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan')),
         test=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan'))),
 
     # Holographic Beam
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',
-        classifiers=frozenset([Classifier.TELESCOPE_INPUT]),
+        classifiers=frozenset([Classifier.E_BEAM_INPUT]),
         default=0,
         test=lambda slvr, ary: (rary(ary) - 0.5)*1e-2),
 
     ary_dict('antenna_scaling', ('na','nchan',2), 'ft',
-        classifiers=frozenset([Classifier.TELESCOPE_INPUT]),
+        classifiers=frozenset([Classifier.E_BEAM_INPUT]),
         default=1,
         test=lambda slvr, ary: rary(ary)),
 
     ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
-        classifiers=frozenset([Classifier.TELESCOPE_INPUT]),
+        classifiers=frozenset([Classifier.E_BEAM_INPUT]),
         default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:],
         test=lambda slvr, ary: rary(ary)),
 
     # Direction-Independent Effects
     ary_dict('G_term', ('ntime', 'na', 'nchan', 4), 'ct',
-        classifiers=frozenset([Classifier.TELESCOPE_INPUT]),
+        classifiers=frozenset([Classifier.COHERENCIES_INPUT]),
         default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:],
         test=lambda slvr, ary: rary(ary)),
 
     # Source Definitions
     ary_dict('lm', ('nsrc',2), 'ft',
-        classifiers=frozenset([Classifier.SOURCE_INPUT]),
+        classifiers=frozenset([Classifier.E_BEAM_INPUT,
+            Classifier.EKB_SQRT_INPUT]),
         default=0,
         test=lambda slvr, ary: (rary(ary)-0.5) * 1e-1),
 
     ary_dict('stokes', ('nsrc','ntime', 4), 'ft',
-        classifiers=frozenset([Classifier.SOURCE_INPUT]),
+        classifiers=frozenset([Classifier.B_SQRT_INPUT]),
         default=np.array([1,0,0,0])[np.newaxis,np.newaxis,:],
         test=rand_stokes),
 
     ary_dict('alpha', ('nsrc','ntime'), 'ft',
-        classifiers=frozenset([Classifier.SOURCE_INPUT]),
+        classifiers=frozenset([Classifier.B_SQRT_INPUT]),
         default=0.8,
         test=lambda slvr, ary: rary(ary)*0.1),
 
     ary_dict('gauss_shape', (3, 'ngsrc'), 'ft',
-        classifiers=frozenset([Classifier.SOURCE_INPUT]),
+        classifiers=frozenset([Classifier.COHERENCIES_INPUT]),
         default=np.array([0,0,1])[:,np.newaxis],
         test=rand_gauss_shape),
     
     ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
-        classifiers=frozenset([Classifier.SOURCE_INPUT]),
+        classifiers=frozenset([Classifier.COHERENCIES_INPUT]),
         default=np.array([0,0,0])[:,np.newaxis],
         test=rand_sersic_shape),
 
     # Visibility flagging arrays
     ary_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
-        classifiers=frozenset([Classifier.X2_INPUT]),
+        classifiers=frozenset([Classifier.X2_INPUT,
+            Classifier.COHERENCIES_INPUT]),
         default=0,
         test=lambda slvr, ary: np.random.random_integers(
             0, 1, size=ary.shape)),
 
     # Bayesian Data
     ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft',
-        classifiers=frozenset([Classifier.X2_INPUT]),
+        classifiers=frozenset([Classifier.X2_INPUT,
+            Classifier.COHERENCIES_INPUT]),
         default=1,
         test=lambda slvr, ary: rary(ary)),
     ary_dict('bayes_data', ('ntime','nbl','nchan',4), 'ct',
-        classifiers=frozenset([Classifier.X2_INPUT]),
+        classifiers=frozenset([Classifier.X2_INPUT,
+            Classifier.COHERENCIES_INPUT]),
         default=0,
         test=lambda slvr, ary: rary(ary)),
 
