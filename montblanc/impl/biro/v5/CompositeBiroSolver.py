@@ -357,10 +357,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
         """
         
         # Don't store intermediate arrays
-        ary = [a.copy() for a in arys if Classifier.GPU_SCRATCH not in a['classifiers']]
-
-        for ary in arys:
-            ary['transfer_method'] = self._get_transfer_method(ary['name'])
+        ary = [a.copy() for a in arys if
+            Classifier.GPU_SCRATCH not in a['classifiers']]
 
         # Copy properties
         props = [p.copy() for p in props]
@@ -938,19 +936,3 @@ class CompositeBiroSolver(MontblancNumpySolver):
         def f(self, npary):
             raise Exception, 'Its illegal to call set methods on the sub-solvers'
         return types.MethodType(f,self)
-
-    def _get_transfer_method(self, name):
-        """
-        Transfer method for CompositeBiroSolver arrays. Sets the cpu array
-        on the CompositeBiroSolver and indicates that it hasn't been transferred
-        to the sub-solver
-        """
-        def transfer(self, npary):
-            self.check_array(name, npary)
-            setattr(self, name, npary)
-            # Indicate that this data has not been transferred to
-            # the sub-solvers
-            for slvr in self.solvers:
-                slvr.was_transferred[name] = False
-
-        return types.MethodType(transfer,self)
