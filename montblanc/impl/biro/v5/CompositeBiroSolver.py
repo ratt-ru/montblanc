@@ -52,6 +52,9 @@ ONE_KB = 1024
 ONE_MB = ONE_KB**2
 ONE_GB = ONE_KB**3
 
+ALL_SLICE = slice(None,None,1)
+EMPTY_SLICE = slice(0,0,1)
+
 ORDERING_CONSTRAINTS = { nr_var : 1 for nr_var in mbu.source_nr_vars() }
 ORDERING_CONSTRAINTS.update({ 'nsrc' : 1,
     'ntime': 2, 'nbl': 3, 'na': 3, 'nchan': 4 })
@@ -430,8 +433,6 @@ class CompositeBiroSolver(MontblancNumpySolver):
         is not affected since it is never transferred.
         """
         subslvr = self.thread_local.solvers[sub_solver_idx]
-        all_slice = slice(None,None,1)
-        empty_slice = slice(0,0,1)
 
         na = subslvr.dim_local_size('na')
 
@@ -467,15 +468,15 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # to the slice arguments, otherwise,
             # just take everything in the dimension
             cpu_idx = [cpu_slice_map[s]
-                if s in cpu_slice_map else all_slice
+                if s in cpu_slice_map else ALL_SLICE
                 for s in r.sshape]
 
             gpu_idx = [gpu_slice_map[s]
-                if s in gpu_slice_map else all_slice
+                if s in gpu_slice_map else ALL_SLICE
                 for s in r.sshape]
 
             # Bail if there's an empty slice in the index
-            if gpu_idx.count(empty_slice) > 0:
+            if gpu_idx.count(EMPTY_SLICE) > 0:
                 #print '%s has an empty slice, skipping' % r.name
                 continue
 
@@ -495,7 +496,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # hard code the antenna indices on the GPU
             # to 0 and 1
             if two_ant_case and r.name == 'ant_pairs':
-                cpu_idx = [all_slice for s in r.shape]
+                cpu_idx = [ALL_SLICE for s in r.shape]
                 cpu_ary = np.array([0,1]).reshape(subslvr.ant_pairs_shape)
 
             self.__transfer_slice(r, subslvr,
