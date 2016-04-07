@@ -19,6 +19,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import functools
+import itertools
 import numpy as np
 import types
 import sys
@@ -129,10 +130,10 @@ class CompositeBiroSolver(MontblancNumpySolver):
         montblanc.log.info('Created {d} executor(s).'.format(d=len(executors)))
 
         for ex, ctx in zip(executors, self.dev_ctxs):
-            ex.submit(C.__thread_init, self, ctx).result()
+            ex.submit(C._thread_init, self, ctx).result()
 
         for ex, ctx in zip(sync_executors, self.dev_ctxs):
-            ex.submit(C.__thread_init, self, ctx).result()
+            ex.submit(C._thread_init, self, ctx).result()
 
         montblanc.log.info('Initialised {d} thread(s).'.format(d=len(executors)))
 
@@ -140,11 +141,11 @@ class CompositeBiroSolver(MontblancNumpySolver):
         T = self.template_dict()
 
         A_sub, P_sub = self._cfg_sub_slvr_arys_and_props(v4Arrays, v4Props)
-        self.__validate_arrays(A_sub)
+        self._validate_arrays(A_sub)
 
         # Find the budget with the lowest memory usage
         # Work with the device with the lowest memory
-        budgets = sorted([ex.submit(C.__thread_budget, self,
+        budgets = sorted([ex.submit(C._thread_budget, self,
                             slvr_cfg, A_sub, T).result()
                         for ex in executors],
                     key=lambda T: T[1])
@@ -169,7 +170,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         subslvr_cfg[Options.CONTEXT] = ctx
         subslvr_cfg[Options.SOLVER_TYPE] = Options.SOLVER_TYPE_SLAVE
 
-        subslvr_cfg = self.__cfg_subslvr_dims(subslvr_cfg, P)
+        subslvr_cfg = self._cfg_subslvr_dims(subslvr_cfg, P)
 
         # Extract the dimension differences
         self.src_diff = P[Options.NSRC]
@@ -183,26 +184,35 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # Now create the solvers on each thread
         for ex in executors:
-            ex.submit(C.__thread_create_solvers,
+            ex.submit(C._thread_create_solvers,
                 self, subslvr_cfg, P, nsolvers).result()
 
         montblanc.log.info('Solvers Created')
 
         # Register arrays and properties on each thread's solvers
         for ex in executors:
-            ex.submit(C.__thread_reg_sub_arys_and_props,
+            ex.submit(C._thread_reg_sub_arys_and_props,
                 self, A_sub, P_sub).result()
 
         self.executors = executors
         self.sync_executors = sync_executors
         self.initialised = False
 
-    def __gen_source_slices(self):
+    def _gen_source_slices(self):
+        """
+        Iterate over the visibility space in chunks, returning a
+        dictionary of slices keyed on the following dimensions:
+            nsrc, npsrc, ngsrc, nssrc, ...
+        """
         src_nr_var_counts = mbu.sources_to_nr_vars(
             self._slvr_cfg[Options.SOURCES])
         src_nr_vars = mbu.source_nr_vars()
 
         nsrc = self.dim_local_size(Options.NSRC)
+
+        # Create the slice dictionaries, which we use to index
+        # dimensions of the CPU and GPU array.
+        cpu_slice, gpu_slice = {}, {}
 
         # Set up source slicing
         for src in xrange(0, nsrc, self.src_diff):
@@ -222,14 +232,19 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
             yield (cpu_slice.copy(), gpu_slice.copy())
 
-    def __gen_vis_slices(self):
+    def _gen_vis_slices(self):
+        """
+        Iterate over the visibility space in chunks, returning a
+        dictionary of slices keyed on the following dimensions:
+            ntime, nbl, na, na1, nchan
+        """
+
         ntime, nbl, na, nchan = self.dim_local_size(
             'ntime', 'nbl', 'na', 'nchan')
 
         # Create the slice dictionaries, which we use to index
         # dimensions of the CPU and GPU array.
-        cpu_slice = {}
-        gpu_slice = {}
+        cpu_slice, gpu_slice = {}, {}
 
         montblanc.log.info('Generating RIME slices')
 
@@ -279,23 +294,13 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
                     yield (cpu_slice.copy(), gpu_slice.copy())
 
-    def __thread_gen_sub_solvers(self):
+    def _thread_gen_sub_solvers(self):
         # Loop infinitely over the sub-solvers.
         while True:
             for i, subslvr in enumerate(self.thread_local.solvers):
                 yield (i, subslvr)
 
-    def __gen_executors(self):
-        # Loop indefinitely over executors
-        first = True
-
-        while True:
-            for i, ex in enumerate(self.executors):
-                yield(i, first, ex)
-
-            first = False
-
-    def __validate_arrays(self, arrays):
+    def _validate_arrays(self, arrays):
         """
         Check that arrays are correctly configured
         """
@@ -328,7 +333,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                         A['name'], A['shape'],
                         nr_src_vars, nr_vis_vars))
 
-    def __cfg_subslvr_dims(self, subslvr_cfg, P):
+    def _cfg_subslvr_dims(self, subslvr_cfg, P):
         for dim in self._dims.itervalues():
             name = dim[DIMDATA.NAME]
             if name in P:
@@ -355,14 +360,14 @@ class CompositeBiroSolver(MontblancNumpySolver):
         ary = [a.copy() for a in arys if Classifier.GPU_SCRATCH not in a['classifiers']]
 
         for ary in arys:
-            ary['transfer_method'] = self.__get_transfer_method(ary['name'])
+            ary['transfer_method'] = self._get_transfer_method(ary['name'])
 
         # Copy properties
         props = [p.copy() for p in props]
 
         # Add custom property setter method
         for prop in props:
-            prop['setter_method'] = self.__get_setter_method(prop['name'])
+            prop['setter_method'] = self._get_setter_method(prop['name'])
 
         return arys, props
 
@@ -378,7 +383,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         for ary in arys:
             # Add a transfer method
-            ary['transfer_method'] = self.__get_sub_transfer_method(ary['name'])
+            ary['transfer_method'] = self._get_sub_transfer_method(ary['name'])
             # Don't initialise arrays on the sub-solvers,
             # it'll all get copied on anyway
             ary['default'] = None
@@ -386,8 +391,12 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         return arys, props
 
-    def __transfer_slice(self, r, subslvr,
+    def _enqueue_array_slice_htod(self, r, subslvr,
         cpu_ary, cpu_idx, gpu_ary, gpu_idx):
+        """
+        Copies a slice of the CPU array into a slice of the GPU array.
+        """
+
         cpu_slice = cpu_ary[cpu_idx].squeeze()
         gpu_ary = gpu_ary[gpu_idx].squeeze()
 
@@ -456,12 +465,10 @@ class CompositeBiroSolver(MontblancNumpySolver):
             cpu_ary = getattr(self, r.name)
             gpu_ary = getattr(subslvr, r.name)
 
-            if cpu_ary is None or gpu_ary is None:
-                #print 'Skipping %s' % r.name
-                continue
-            else:
-                #print 'Handling %s' % r.name
-                pass
+            # if cpu_ary is None or gpu_ary is None:
+            #     continue
+            # else:
+            #     print 'Transferring {n}'.format(n=r.name)
 
             # Set up the slicing of the main CPU array.
             # Map dimensions in cpu_slice_map
@@ -499,7 +506,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 cpu_idx = [ALL_SLICE for s in r.shape]
                 cpu_ary = np.array([0,1]).reshape(subslvr.ant_pairs_shape)
 
-            self.__transfer_slice(r, subslvr,
+            self._enqueue_array_slice_htod(r, subslvr,
                 cpu_ary, cpu_idx,
                 gpu_ary, tuple(gpu_idx))
 
@@ -510,7 +517,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 gpu_idx[na_idx] = 1
                 cpu_idx[na_idx] = cpu_slice_map[NA_EXTRA]
 
-                self.__transfer_slice(r, subslvr,
+                self._enqueue_array_slice_htod(r, subslvr,
                     cpu_ary, cpu_idx,
                     gpu_ary, tuple(gpu_idx))
 
@@ -529,7 +536,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         """
         self.shutdown()
 
-    def __thread_init(self, context):
+    def _thread_init(self, context):
         """
         Initialise the current thread, by associating
         a CUDA context with it, and pushing the context.
@@ -539,7 +546,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         context.push()
         self.thread_local.context = context
 
-    def __thread_shutdown(self):
+    def _thread_shutdown(self):
         """
         Shutdown the current thread,
         by popping the associated CUDA context
@@ -548,7 +555,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             threading.current_thread())
         self.thread_local.context.pop()
 
-    def __thread_budget(self, slvr_cfg, A_sub, props):
+    def _thread_budget(self, slvr_cfg, A_sub, props):
         """
         Get memory budget and dimension reduction
         information from the CUDA device associated
@@ -622,7 +629,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         return P, modded_dims, required_mem
 
-    def __thread_create_solvers(self, subslvr_cfg, P, nsolvers):
+    def _thread_create_solvers(self, subslvr_cfg, P, nsolvers):
         """
         Create solvers on the thread local data
         """
@@ -649,12 +656,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
         self.thread_local.nsolvers = nsolvers
         # List of solvers used by this thread
         self.thread_local.solvers = [False for s in range(nsolvers)]
-        # Has there been a previous iteration on this solver
-        self.thread_local.prev_iteration = [False for s in range(nsolvers)]
-        # Initialise the X2 sum to zero
-        self.thread_local.X2 = self.ft(0.0)
         # Initialise the subsolver generator
-        self.thread_local.subslvr_gen = self.__thread_gen_sub_solvers()
+        self.thread_local.subslvr_gen = self._thread_gen_sub_solvers()
 
         # Set the CUDA context in the configuration to
         # the one associated with this thread
@@ -668,7 +671,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Change the local size of each source dim so that there is
             # enough space in the associated arrays for NSRC sources.
             # Initially, configure the extents to be [0, NSRC], although
-            # this will be setup properly in __thread_solve_sub
+            # this will be setup properly in _thread_solve_sub
             nsrc = P[Options.NSRC]
 
             U = [{
@@ -684,7 +687,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             subslvr.set_pinned_mem_pool(pinned_mem_pool)
             self.thread_local.solvers[i] = subslvr
 
-    def __thread_reg_sub_arys_and_props(self, A_sub, P_sub):
+    def _thread_reg_sub_arys_and_props(self, A_sub, P_sub):
         """
         Register arrays and properties on
         the thread local solvers
@@ -696,209 +699,214 @@ class CompositeBiroSolver(MontblancNumpySolver):
             subslvr.register_properties(P_sub)
             subslvr.register_arrays(A_sub)
 
-    def __thread_solve_sub(self, cpu_slice_map, gpu_slice_map, first=False):
+    def _thread_enqueue_solve_batch(self, cpu_slice_map, gpu_slice_map, **kwargs):
         """
-        Solve a portion of the RIME, specified by the cpu_slice_map and
-        gpu_slice_map dictionaries.
+        Enqueue CUDA memory transfer and kernel execution operations on a CUDA stream.
+
+        CPU and GPU arrays are sliced given the dimension:slice mapping specified in
+        cpu_slice_map and gpu_slice_map.
+
+        Returns a (event, X2) tuple, where event is a CUDA event recorded at the
+        end of this sequence of operations and X2 is a pinned memory array that
+        will hold the result of the chi-squared operation.
         """
+
         tl = self.thread_local
-
-        # If this is flagged as the first iteration, reset variables
-        if first is True:
-            # There has been no previous iteration on this solver
-            tl.prev_iteration = [False for s in range(tl.nsolvers)]
-            # Initialise the X2 sum to zero
-            tl.X2 = self.ft(0.0)
-            # Initialise the subsolver generator
-            tl.subslvr_gen = self.__thread_gen_sub_solvers()
-
         i, subslvr = tl.subslvr_gen.next()
 
-        # If the solver iterated previously, there's
-        # a X2 that needs to be extracted
-        if tl.prev_iteration[i]:
-            # Get an array from the pinned memory pool
-            sub_X2 = subslvr.pinned_mem_pool.allocate(
-                shape=self.X2.shape, dtype=self.X2.dtype)
-            
-            # Copy the X2 value off the GPU onto the CPU
-            subslvr.rime_reduce.X2_gpu_ary.get_async(
-                ary=sub_X2, stream=subslvr.stream)
+        # TODO: Classifer.X2_INPUT and Classifier.TELESCOPE_INPUT arrays
+        # really only need to be transferred once for each visibility chunk
 
-            # Synchronise before extracting the X2 value
-            subslvr.stream.synchronize()
+        # Now, iterate over our source chunks
+        for src_cpu_slice_map, src_gpu_slice_map in self._gen_source_slices():
+            # Update our maps with source slice information
+            cpu_slice_map.update(src_cpu_slice_map)
+            gpu_slice_map.update(src_gpu_slice_map)
 
-            # Add to the running total on the local thread
-            tl.X2 += sub_X2
+            # Configure dimension extents on the sub-solver
+            subslvr.update_dimensions([
+                { DIMDATA.NAME: dim, DIMDATA.EXTENTS: [S.start, S.stop] }
+                for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
 
-        # Configure dimension extents on the sub-solver
-        subslvr.update_dimensions([
-            { DIMDATA.NAME: dim, DIMDATA.EXTENTS: [S.start, S.stop] }
-            for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
+            # Enqueue E Beam
+            self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
+                classifiers=[Classifier.E_BEAM_INPUT])
 
-        # Transfer our chi-squared and telescope input arrays
-        self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
-            classifiers=[Classifier.X2_INPUT, Classifier.TELESCOPE_INPUT])
+            subslvr.rime_e_beam.pre_execution(subslvr, subslvr.stream)
+            subslvr.rime_e_beam.execute(subslvr, subslvr.stream)
 
-        # Pre-execution (async copy constant data to the GPU)
-        subslvr.rime_e_beam.pre_execution(subslvr, subslvr.stream)
-        subslvr.rime_b_sqrt.pre_execution(subslvr, subslvr.stream)
-        subslvr.rime_ekb_sqrt.pre_execution(subslvr, subslvr.stream)
-        subslvr.rime_sum.pre_execution(subslvr, subslvr.stream)
-        subslvr.rime_reduce.pre_execution(subslvr, subslvr.stream)
+            # Enqueue B Sqrt
+            self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
+                classifiers=[Classifier.B_SQRT_INPUT])
 
-        prev_i = (i-1) % len(tl.prev_iteration)
+            subslvr.rime_b_sqrt.pre_execution(subslvr, subslvr.stream)
+            subslvr.rime_b_sqrt.execute(subslvr, subslvr.stream)
 
-        # Wait for previous kernel execution to finish
-        # on the previous solver (stream) before launching new
-        # kernels on the current stream
-        if tl.prev_iteration[prev_i]:
-            prev_slvr = tl.solvers[prev_i]
-            subslvr.stream.wait_for_event(prev_slvr.kernels_done)
+            # Enqueue EKB Sqrt
+            self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
+                classifiers=[Classifier.EKB_SQRT_INPUT])
 
-        # Execute the kernels
-        subslvr.rime_e_beam.execute(subslvr, subslvr.stream)
-        subslvr.rime_b_sqrt.execute(subslvr, subslvr.stream)
-        subslvr.rime_ekb_sqrt.execute(subslvr, subslvr.stream)
-        subslvr.rime_sum.execute(subslvr, subslvr.stream)
-        subslvr.rime_reduce.execute(subslvr, subslvr.stream)
+            subslvr.rime_ekb_sqrt.pre_execution(subslvr, subslvr.stream)
+            subslvr.rime_ekb_sqrt.execute(subslvr, subslvr.stream)
 
-        # Record kernel completion
-        subslvr.kernels_done.record(subslvr.stream)
+            # Enqueue Sum Coherencies
+            self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
+                classifiers=[Classifier.COHERENCIES_INPUT])
 
-        # Indicate that this solver has executed and
-        # that a X2 is waiting for extraction
-        tl.prev_iteration[i] = True
+            subslvr.rime_sum.pre_execution(subslvr, subslvr.stream)
+            subslvr.rime_sum.execute(subslvr, subslvr.stream)
 
-    def __thread_solve_sub_final(self):
-        """
-        Retrieve any final X2 values from the solvers and
-        return the total X2 sum for this thread.
-        """
-        montblanc.log.debug('Retrieve final X2 in thread %s', threading.current_thread())
-        tl = self.thread_local
+            # Enqueue chi-squared term reduction
+            subslvr.rime_reduce.pre_execution(subslvr, subslvr.stream)
+            subslvr.rime_reduce.execute(subslvr, subslvr.stream)
 
-        # Retrieve final X2 values
-        for j in range(tl.nsolvers):
-            i, subslvr = tl.subslvr_gen.next()
+        # Get pinned memory to hold the chi-squared result
+        sub_X2 = subslvr.pinned_mem_pool.allocate(
+            shape=self.X2.shape, dtype=self.X2.dtype)
+        
+        # Enqueue chi-squared copy off the GPU onto the CPU
+        subslvr.rime_reduce.X2_gpu_ary.get_async(
+            ary=sub_X2, stream=subslvr.stream)
 
-            # If the solver hasn't executed, no X2 is available
-            if not tl.prev_iteration[i]:
-                continue
+        # Create and record an event directly after the chi-squared copy
+        # We'll synchronise on this thread in our synchronisation
+        # executor
+        sync_event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
+        sync_event.record(subslvr.stream)
 
-            # Get an array from the pinned memory pool
-            sub_X2 = subslvr.pinned_mem_pool.allocate(
-                shape=self.X2.shape, dtype=self.X2.dtype)
-            
-            # Copy the X2 value off the GPU onto the CPU
-            subslvr.rime_reduce.X2_gpu_ary.get_async(
-                ary=sub_X2, stream=subslvr.stream)
-
-            # Synchronise before extracting the X2 value
-            subslvr.stream.synchronize()
-
-            tl.X2 += sub_X2
-
-        return tl.X2
+        return (sync_event, sub_X2)
 
     def initialise(self):
         """ Initialise the sub-solver """
 
-        def __init_func():
+        def _init_func():
             for i, subslvr in enumerate(self.thread_local.solvers):
                 subslvr.initialise()
 
         if not self.initialised:
             for ex in self.executors:
-                ex.submit(__init_func).result()
+                ex.submit(_init_func).result()
 
             self.initialised = True
-
-    @staticmethod
-    def __rm_future_cb(f, Q):
-        # Raise any possible exceptions
-        if f.exception() is not None:
-            raise f.exception(), None, sys.exc_info()[2]
-
-        Q.remove(f)
 
     def solve(self):
         """ Solve the RIME """
         if not self.initialised:
             self.initialise()
 
+        def _sync_wait(future):
+            """
+            Return a copy of the pinned chi-squared after
+            synchronizing on the cuda_event
+            """
+            cuda_event, pinned_X2 = future.result()
+            cuda_event.synchronize()
+            return pinned_X2.copy()
+
         # For easier typing
         C = CompositeBiroSolver
-        # Is this the first iteration of this executor?
-        first = [True for ex in self.executors]
-        # Queue of futures for each executor
-        future_Q = [[] for ex in self.executors]
-        # Callbacks for removing futures from the above Q,
-        # for each executor
-        nr_ex = len(self.executors)
-        rm_fut_cb = [functools.partial(C.__rm_future_cb, Q=future_Q[i])
-            for i in range(nr_ex)]
+        zipped_ex = zip(self.executors, self.sync_executors)
 
-        # Iterate over the visibility space, i.e. slices over the CPU and GPU
-        for cpu_slice_map, gpu_slice_map in self.__gen_vis_slices():
+        # Running sum of the chi-squared values returned in futures
+        X2_sum = self.ft(0.0)
+
+        # Sets of return value futures for each executor
+        value_futures = [set() for ex in self.executors]
+
+        # Maximum number of incomplete futures for each executor
+        throttle_factor = 4
+
+        # Iterate over the visibility space, i.e. slices over
+        # the CPU and GPU arrays
+        for cpu_slice_map, gpu_slice_map in self._gen_vis_slices():
             # Attempt to submit work to an executor
+            # Poor man's load balancer
             submitted = False
+            values_waiting = 0
 
             while not submitted:
-                for i, ex in enumerate(self.executors):
-                    # Try another executor if there's too much work on this queue
-                    if len(future_Q[i]) > 2:
+                for i, (enq_ex, sync_ex) in enumerate(zipped_ex):
+                    nvalues = len(value_futures[i])
+                    values_waiting += nvalues
+                    # Too much work on this queue, try another executor
+                    if nvalues > throttle_factor:
                         continue
 
-                    # Submit work to the thread, solve
-                    # this visibility chunk of the RIME
-                    f = ex.submit(C.__thread_solve_sub, self,
-                        cpu_slice_map, gpu_slice_map, first=first[i])
+                    # Enqueue CUDA operations for solving
+                    # this visibility chunk. Future contains:
+                    #
+                    # (1) A CUDA event which fires after all CUDA operations
+                    #     are complete
+                    # (2) a pinned memory array that will hold the
+                    #     chi-squared total for the chunk after the
+                    #     event has fired
+                    enqueue_future = enq_ex.submit(
+                        C._thread_enqueue_solve_batch,
+                        self, cpu_slice_map, gpu_slice_map)
 
-                    # Add the future to the queue
-                    future_Q[i].append(f)
+                    # In a synchronisation thread, wait on the
+                    # CUDA event and return the array now holding
+                    # the chi-squared value.
+                    value_future = sync_ex.submit(_sync_wait,
+                        enqueue_future)
 
-                    # Add a callback removing the future from
-                    # the appropriate queue once it completes
-                    f.add_done_callback(rm_fut_cb[i])
+                    # Throw our futures on the set
+                    value_futures[i].add(value_future)
 
                     # This section of work has been submitted,
                     # break out of the for loop
                     submitted = True
-                    first[i] = False
                     break
 
-                # OK, all our executors are really busy,
-                # wait for one of their oldest tasks to finish
+                # If submission failed, then there are many values
+                # still waiting to be computed. Wait for some
+                # to finish before attempting work submission
                 if not submitted:
-                    try:
-                        wait_f = [future_Q[i][0] for i in range(len(future_Q))]
-                        cf.wait(wait_f, return_when=cf.FIRST_COMPLETED)
-                    # This case happens when future_Q[i][0] is attempted,
-                    # but the future callback has removed it from the queue
-                    # Have another go at the executors
-                    except IndexError as e:
-                        pass
+                    # Wait for 2/3's of the values
+                    threshold = throttle_factor*len(self.executors)*2/3.0
+                    future_list = [f for f in itertools.chain(*value_futures)]
 
-        # For each executor (thread), request the final X2 result
-        # as a future, sum them together to produce the final X2
-        self.set_X2(np.sum([
-            ex.submit(C.__thread_solve_sub_final, self).result() for
-            ex in self.executors]))
+                    for i, f in enumerate(cf.as_completed(future_list)):
+                        # Remove the future from waiting future sets
+                        for s in value_futures:
+                            s.remove(f)
+
+                        # Add future result to running X2 squared sum
+                        X2_sum += f.result()
+
+                        # Break out if we've removed the prescribed
+                        # number of futures
+                        if i > threshold:
+                            break
+
+        # Wait for any remaining values                            
+        done, not_done = cf.wait(
+            [f for f in itertools.chain(*value_futures)],
+            return_when=cf.ALL_COMPLETED)
+
+        # Sum them
+        X2_sum += sum(f.result() for f in done)
+
+        # Set the chi-squared value possibly
+        # taking the weight vector into account
+        if self.use_weight_vector():
+            self.set_X2(X2_sum)
+        else:
+            self.set_X2(X2_sum)/self.sigma_sqrd
 
     def shutdown(self):
         """ Shutdown the solver """
-        def __shutdown_func():
+        def _shutdown_func():
             for i, subslvr in enumerate(self.thread_local.solvers):
                 subslvr.shutdown()
 
-            self.__thread_shutdown()
+            self._thread_shutdown()
 
         for ex in self.executors:
-            ex.submit(__shutdown_func).result()
+            ex.submit(_shutdown_func).result()
 
         for ex in self.sync_executors:
-            ex.submit(lambda: self.__thread_shutdown()).result()
+            ex.submit(lambda: self._thread_shutdown()).result()
 
         self.initialised = False
 
@@ -908,7 +916,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             setter_method = getattr(subslvr, setter_method_name)
             setter_method(value)
 
-    def __get_setter_method(self,name):
+    def _get_setter_method(self,name):
         """
         Setter method for CompositeBiroSolver properties. Sets the property
         on sub-solvers.
@@ -926,12 +934,12 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         return types.MethodType(setter,self)
 
-    def __get_sub_transfer_method(self,name):
+    def _get_sub_transfer_method(self,name):
         def f(self, npary):
             raise Exception, 'Its illegal to call set methods on the sub-solvers'
         return types.MethodType(f,self)
 
-    def __get_transfer_method(self, name):
+    def _get_transfer_method(self, name):
         """
         Transfer method for CompositeBiroSolver arrays. Sets the cpu array
         on the CompositeBiroSolver and indicates that it hasn't been transferred
