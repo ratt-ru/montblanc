@@ -400,11 +400,12 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         gpu_ary.set_async(staged_ary, stream=subslvr.stream)
 
-    def __transfer_arrays(self, sub_solver_idx,
+    def _enqueue_array_htod(self, sub_solver_idx,
         cpu_slice_map, gpu_slice_map, classifiers=None):
         """
-        Transfer CPU arrays on the CompositeBiroSolver over to the
-        BIRO sub-solvers asynchronously.
+        Enqueue asynchronous copies from CPU arrays on the
+        CompositeBiroSolver to GPU arrays on the BIRO sub-solvers
+        on the CUDA stream associated with a sub-solver.
 
         While it aims for generality, it generally depends on arrays
         having a ['nsrc', 'ntime', 'nbl'|'na', 'nchan'] ordering
@@ -428,8 +429,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         The jones array is an example of a GPU only array that
         is not affected since it is never transferred.
         """
-        i = sub_solver_idx
-        subslvr = self.thread_local.solvers[i]
+        subslvr = self.thread_local.solvers[sub_solver_idx]
         all_slice = slice(None,None,1)
         empty_slice = slice(0,0,1)
 
@@ -736,7 +736,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
 
         # Transfer our chi-squared and telescope input arrays
-        self.__transfer_arrays(i, cpu_slice_map, gpu_slice_map,
+        self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
             classifiers=[Classifier.X2_INPUT, Classifier.TELESCOPE_INPUT])
 
         # Pre-execution (async copy constant data to the GPU)
