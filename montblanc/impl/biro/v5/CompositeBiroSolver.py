@@ -357,7 +357,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         """
         
         # Don't store intermediate arrays
-        ary = [a.copy() for a in arys if
+        arys = [a.copy() for a in arys if
             Classifier.GPU_SCRATCH not in a['classifiers']]
 
         # Copy properties
