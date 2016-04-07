@@ -166,7 +166,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # Create the sub solver configuration
         subslvr_cfg = slvr_cfg.copy()
-        subslvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_DEFAULT
+        subslvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_EMPTY
         subslvr_cfg[Options.CONTEXT] = ctx
         subslvr_cfg[Options.SOLVER_TYPE] = Options.SOLVER_TYPE_SLAVE
 
