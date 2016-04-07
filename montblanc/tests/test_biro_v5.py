@@ -126,7 +126,7 @@ class TestBiroV5(unittest.TestCase):
 
         slvr_cfg = montblanc.rime_solver_cfg(na=27, ntime=100, nchan=64,
             sources=montblanc.sources(point=100, gaussian=100, sersic=100),
-            beam_lw=1, beam_mh=1, beam_nud=1,
+            beam_lw=50, beam_mh=50, beam_nud=50,
             weight_vector=wv, nsolvers=3,
             dtype=Options.DTYPE_DOUBLE)
 
