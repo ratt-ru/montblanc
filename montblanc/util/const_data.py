@@ -22,7 +22,7 @@ import numpy as np
 
 from cffi import FFI
 
-from montblanc.dims import (
+from hypercube.dims import (
     DIMDATA)
 
 from montblanc.src_types import (

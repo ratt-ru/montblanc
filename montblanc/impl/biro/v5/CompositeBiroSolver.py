@@ -41,7 +41,7 @@ from montblanc.impl.biro.v4.config import (
     P as v4Props,
     Classifier)
 
-from montblanc.dims import DIMDATA
+from hypercube.dims import DIMDATA
 
 import montblanc.impl.biro.v4.BiroSolver as BSV4mod
 

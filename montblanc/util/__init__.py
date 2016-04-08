@@ -39,7 +39,7 @@ from montblanc.src_types import (
     source_range_tuple,
     source_range_slices)
 
-from montblanc.dims import (
+from hypercube.dims import (
     create_dim_data)
 
 def nr_of_baselines(na, auto_correlations=False):
