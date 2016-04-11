@@ -409,6 +409,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
         cuda.memcpy_htod_async(device_ptr, pinned_ary,
             stream=subslvr.stream)
 
+        return pinned_ary
+
     def _enqueue_array_slice_htod(self, r, subslvr,
         cpu_ary, cpu_idx, gpu_ary, gpu_idx):
         """
@@ -429,6 +431,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
         #    r.name, mbu.fmt_bytes(staged_ary.nbytes), staged_ary.shape, gpu_ary.shape)
 
         gpu_ary.set_async(pinned_ary, stream=subslvr.stream)
+
+        return pinned_ary
 
     def _enqueue_array_htod(self, sub_solver_idx,
         cpu_slice_map, gpu_slice_map, classifiers=None):
@@ -460,6 +464,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
         is not affected since it is never transferred.
         """
         subslvr = self.thread_local.solvers[sub_solver_idx]
+
+        pool_refs = []
 
         na = subslvr.dim_local_size('na')
 
@@ -524,9 +530,10 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 cpu_idx = [ALL_SLICE for s in r.shape]
                 cpu_ary = np.array([0,1]).reshape(subslvr.ant_pairs_shape)
 
-            self._enqueue_array_slice_htod(r, subslvr,
+            pinned_ary = self._enqueue_array_slice_htod(r, subslvr,
                 cpu_ary, cpu_idx,
                 gpu_ary, tuple(gpu_idx))
+            pool_refs.append(pinned_ary)
 
             # Right, handle transfer of the second antenna's data
             if two_ant_case and na_idx > 0:
@@ -535,9 +542,12 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 gpu_idx[na_idx] = 1
                 cpu_idx[na_idx] = cpu_slice_map[NA_EXTRA]
 
-                self._enqueue_array_slice_htod(r, subslvr,
+                pinned_ary = self._enqueue_array_slice_htod(r, subslvr,
                     cpu_ary, cpu_idx,
                     gpu_ary, tuple(gpu_idx))
+                pool_refs.append(pinned_ary)
+
+        return pool_refs
 
     def __enter__(self):
         """
@@ -734,6 +744,13 @@ class CompositeBiroSolver(MontblancNumpySolver):
         tl = self.thread_local
         i, subslvr = tl.subslvr_gen.next()
 
+        # A list of references to memory pool allocated objects
+        # ensuring that said objects remained allocated until
+        # after compute has been performed. Returned from
+        # this function, this object should be discarded when
+        # reading the result of the enqueued operations.
+        pool_refs = []
+
         # TODO: Classifer.X2_INPUT and Classifier.TELESCOPE_INPUT arrays
         # really only need to be transferred once for each visibility chunk
 
@@ -750,50 +767,65 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
             # Enqueue E Beam
             kernel = subslvr.rime_e_beam
-            self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
-                classifiers=[Classifier.E_BEAM_INPUT])
-            self._enqueue_const_data_htod(subslvr, kernel.rime_const_data[0])
+            pool_refs.extend(self._enqueue_array_htod(
+                i, cpu_slice_map, gpu_slice_map,
+                classifiers=[Classifier.E_BEAM_INPUT]))
+            pool_refs.append(self._enqueue_const_data_htod(
+                subslvr, kernel.rime_const_data[0]))
             kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue B Sqrt
             kernel = subslvr.rime_b_sqrt
-            self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
-                classifiers=[Classifier.B_SQRT_INPUT])
-            self._enqueue_const_data_htod(subslvr, kernel.rime_const_data[0])
+            pool_refs.extend(self._enqueue_array_htod(
+                i, cpu_slice_map, gpu_slice_map,
+                classifiers=[Classifier.B_SQRT_INPUT]))
+            pool_refs.append(self._enqueue_const_data_htod(
+                subslvr, kernel.rime_const_data[0]))
             kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue EKB Sqrt
             kernel = subslvr.rime_ekb_sqrt
-            self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
-                classifiers=[Classifier.EKB_SQRT_INPUT])
-            self._enqueue_const_data_htod(subslvr, kernel.rime_const_data[0])
+            pool_refs.extend(self._enqueue_array_htod(
+                i, cpu_slice_map, gpu_slice_map,
+                classifiers=[Classifier.EKB_SQRT_INPUT]))
+            pool_refs.append(self._enqueue_const_data_htod(
+                subslvr, kernel.rime_const_data[0]))
             kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue Sum Coherencies
             kernel = subslvr.rime_sum
-            self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
-                classifiers=[Classifier.COHERENCIES_INPUT])
-            self._enqueue_const_data_htod(subslvr, kernel.rime_const_data[0])
+            pool_refs.extend(self._enqueue_array_htod(
+                i, cpu_slice_map, gpu_slice_map,
+                classifiers=[Classifier.COHERENCIES_INPUT]))
+            pool_refs.append(self._enqueue_const_data_htod(
+                subslvr, kernel.rime_const_data[0]))
             kernel.execute(subslvr, subslvr.stream)
 
-            # Enqueue chi-squared term reduction
-            subslvr.rime_reduce.execute(subslvr, subslvr.stream)
+        # Enqueue chi-squared term reduction and return the
+        # GPU array allocated to it
+        X2_gpu_ary = subslvr.rime_reduce.execute(subslvr, subslvr.stream)
 
         # Get pinned memory to hold the chi-squared result
         sub_X2 = subslvr.pinned_mem_pool.allocate(
             shape=self.X2.shape, dtype=self.X2.dtype)
         
         # Enqueue chi-squared copy off the GPU onto the CPU
-        subslvr.rime_reduce.X2_gpu_ary.get_async(
-            ary=sub_X2, stream=subslvr.stream)
+        X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
 
         # Create and record an event directly after the chi-squared copy
-        # We'll synchronise on this thread in our synchronisation
-        # executor
+        # We'll synchronise on this thread in our synchronisation executor
         sync_event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
         sync_event.record(subslvr.stream)
 
-        return (sync_event, sub_X2, cpu_slice_map.copy(), gpu_slice_map.copy())
+        # Retain references to CPU pinned  and GPU device memory
+        # until the above enqueued operations have been performed.
+        pool_refs.append(X2_gpu_ary)
+        pool_refs.append(sub_X2)
+
+        return (sync_event, sub_X2,
+            pool_refs,
+            cpu_slice_map.copy(),
+            gpu_slice_map.copy())
 
     def initialise(self):
         """ Initialise the sub-solver """
@@ -818,7 +850,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             Return a copy of the pinned chi-squared after
             synchronizing on the cuda_event
             """
-            cuda_event, pinned_X2, cpu, gpu = future.result()
+            cuda_event, pinned_X2, pool_refs, cpu, gpu = future.result()
 
             for k, s in cpu.iteritems():
                 cpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)

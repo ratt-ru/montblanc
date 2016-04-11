@@ -27,10 +27,6 @@ class RimeReduction(Node):
     def __init__(self):
         super(RimeReduction, self).__init__()
 
-        # PyCUDA gpuarray holding the
-        # chi-squared result
-        self.X2_gpu_ary = None
-
     def initialise(self, solver, stream=None):
         slvr = solver
 
@@ -58,10 +54,12 @@ class RimeReduction(Node):
         # rime_const_data structure.
         # Note the returned result is a gpuarray
         # allocated with the supplied device memory pool
-        self.X2_gpu_ary = gpuarray.sum(
+        X2_gpu_ary = gpuarray.sum(
             slvr.chi_sqrd_result[0:C.ntime.extents[1],
                 0:C.nbl.extents[1], 0:C.nchan.extents[1]],
             stream=stream, allocator=slvr.dev_mem_pool.allocate)
+
+        return X2_gpu_ary
 
     def post_execution(self, solver, stream=None):
         pass
