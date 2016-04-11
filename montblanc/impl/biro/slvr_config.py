@@ -78,6 +78,11 @@ class BiroSolverConfig(SolverConfig):
         "If '{w}', initialised from the WEIGHT column.").format(
             s=INIT_WEIGHTS_SIGMA, w=INIT_WEIGHTS_WEIGHT)
 
+    SOURCE_BATCH_SIZE = 'source_batch_size'
+    DEFAULT_SOURCE_BATCH_SIZE = 500
+    SOURCE_BATCH_SIZE_DESCRIPTION = (
+        "Minimum source batch size used when computing the RIME")
+
     # BIRO version
     VERSION = 'version'
     VERSION_ONE = 'v1'
@@ -101,6 +106,12 @@ class BiroSolverConfig(SolverConfig):
             SolverConfig.DESCRIPTION: INIT_WEIGHTS_DESCRIPTION,
             SolverConfig.VALID: VALID_INIT_WEIGHTS,
             SolverConfig.DEFAULT: DEFAULT_INIT_WEIGHTS,
+            SolverConfig.REQUIRED: True
+        },
+
+        SOURCE_BATCH_SIZE: {
+            SolverConfig.DESCRIPTION: SOURCE_BATCH_SIZE_DESCRIPTION,
+            SolverConfig.DEFAULT: DEFAULT_SOURCE_BATCH_SIZE,
             SolverConfig.REQUIRED: True
         },
 
@@ -164,6 +175,12 @@ class BiroSolverConfig(SolverConfig):
             choices=self.VALID_INIT_WEIGHTS,
             help=self.INIT_WEIGHTS_DESCRIPTION,
             default=self.DEFAULT_INIT_WEIGHTS)
+
+        p.add_argument('--{v}'.format(v=self.SOURCE_BATCH_SIZE),
+            required=False,
+            type=int,
+            help=self.SOURCE_BATCH_SIZE_DESCRIPTION,
+            default=self.DEFAULT_SOURCE_BATCH_SIZE)
 
         p.add_argument('--{v}'.format(v=self.VERSION),
             required=False,

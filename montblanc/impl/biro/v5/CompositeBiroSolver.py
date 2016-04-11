@@ -606,7 +606,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         nsolvers = slvr_cfg.get('nsolvers', 2)
         na = slvr_cfg.get(Options.NA)
-        nsrc = 25
+        nsrc = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
         src_str_list = [Options.NSRC] + mbu.source_nr_vars()
         src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
             for nr_var in src_str_list])

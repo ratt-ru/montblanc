@@ -128,6 +128,7 @@ class TestBiroV5(unittest.TestCase):
             sources=montblanc.sources(point=100, gaussian=100, sersic=100),
             beam_lw=50, beam_mh=50, beam_nud=50,
             weight_vector=wv, nsolvers=3,
+            source_batch_size=25,
             dtype=Options.DTYPE_DOUBLE)
 
         with solver(slvr_cfg) as slvr:
