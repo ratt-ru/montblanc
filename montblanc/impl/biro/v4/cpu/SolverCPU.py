@@ -619,7 +619,7 @@ class SolverCPU(object):
         return vis
 
 
-        def compute_sersic_derivatives(self):
+    def compute_sersic_derivatives(self):
         """
         Compute the partial derivative values for the sersic (exponential) sources.
         Returns a (nssrc, ntime, nbl, nchan) matrix of floating point scalars.
@@ -651,10 +651,10 @@ class SolverCPU(object):
             # u1 = u*(1+e1) - v*e2
             # v1 = u*e2 + v*(1-e1)
             u1 = ne.evaluate('u_1_e1 + v_e2',
-                {'u_1_e1': np.outer(np.ones(nssrc)+e1, u), 'v_e2' : np.outer(e2, v)})\
+                {'u_1_e1': np.outer(1+e1, u), 'v_e2' : np.outer(e2, v)})\
                 .reshape(nssrc, ntime,nbl)
             v1 = ne.evaluate('u_e2 + v_1_e1', {
-                'u_e2' : np.outer(e2, u), 'v_1_e1' : np.outer(np.ones(nssrc)-e1,v)})\
+                'u_e2' : np.outer(e2, u), 'v_1_e1' : np.outer(1-e1,v)})\
                 .reshape(nssrc, ntime,nbl)
 
             # Obvious given the above reshape
@@ -663,6 +663,7 @@ class SolverCPU(object):
 
             scale_uv = (slvr.two_pi_over_c * slvr.frequency_cpu)\
                 [np.newaxis, np.newaxis, np.newaxis, :]
+            e12 = (1 / (1 - e1 * e1 - e2 * e2))**3
 
             den1 = ne.evaluate('(u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
                 local_dict={
@@ -674,58 +675,63 @@ class SolverCPU(object):
 
             assert den1.shape == (nssrc, ntime, nbl, nchan)
 
-            # partial derivatives with respect to scalelength
-            slvr.vis_dR = ne.evaluate('den1/(R*(1+den1*sqrt(den1)))',
-                {  
-                  'R' : R,
-                  'den1' : den1 }) 
+            den = (1+den1)*np.sqrt(1+den1)
+
+            sersic_deriv = np.empty((3,nssrc,ntime,nbl,nchan))
 
             # partial derivative with respect to e1
-            num = ne.evaluate('(u1*(u_ex+v_2e1e2)+v1*(u_2e1e2+v_ex))*R**3'),
+            num = ne.evaluate('(u1*(u_ex+v_2e1e2)+v1*(u_2e1e2+v_ex))*e12', 
                 local_dict={
-                    'u1': u1,
-                    'v1': v1,
-                    'u_ex': np.outer(np.ones(nssrc)+(e1*e1-e_2*e_2+2*e_1), u),
-                    'v_2e1e2': np.outer(np.ones(nssrc)*2*e1*e2, v),
-                    'u_2e1e2': np.outer(np.ones(nssrc)*2*e1*e2, u),
-                    'v_ex': np.outer((e2*e2-e_1*e_1+2*e_1)-np.ones(nssrc), v),
-                    'R': (1 / (1 - e1 * e1 - e2 * e2))
-                        [:,np.newaxis,np.newaxis,np.newaxis]}).reshape(nssrc,ntime,nbl)
+                    'u1': u1[:, :, :],
+                    'v1': v1[:, :, :],
+                    'u_ex': np.outer(1 + e1*e1 - e2*e2 + 2*e1, u).reshape(nssrc,ntime,nbl),
+                    'v_2e1e2': np.outer(2*e1*e2, v).reshape(nssrc,ntime,nbl),
+                    'u_2e1e2': np.outer(2*e1*e2, u).reshape(nssrc,ntime,nbl),
+                    'v_ex': np.outer(e2*e2 - e1*e1 + 2*e1 - 1, v).reshape(nssrc,ntime,nbl),
+                    'e12': e12[:,np.newaxis,np.newaxis]})
 
-            slvr.vis_de1 = ne.evaluate('num*(scale_uv)**2/(1+den1*sqrt(den1))',
+
+            sersic_deriv[0] = ne.evaluate('num*(scaleR)**2/den',
                 { 
-                  'scale_uv': scale_uv*R,
+                  'scaleR': scale_uv*R[:,np.newaxis,np.newaxis,np.newaxis],
                   'num' : num[:,:,:,np.newaxis],
-                  'den1' : den1 }) 
+                  'den' : den }) 
 
             # partial derivative with respect to e2
-            num = ne.evaluate('(u1*(u_2e1e2+v_ex)+v1*(u_ex+v_2e1e2))*R**3'),
+            num = ne.evaluate('(u1*(u_2e1e2+v_ex)+v1*(u_ex+v_2e1e2))*e12', 
                 local_dict={
-                    'u1': u1,
-                    'v1': v1,
-                    'u_2e1e2': np.outer(np.ones(nssrc)*2*(e2+e1*e2),u),
-                    'v_ex': np.outer(np.ones(nssrc)-e1*e1+e2*e2),v),
-                    'v_2e1e2': np.outer(np.ones(nssrc)*2*(e2-e1*e2),v),
-                    'u_ex': np.outer(np.ones(nssrc)-e1*e1+e2*e2),u)
-                    'R': (1 / (1 - e1 * e1 - e2 * e2))
-                        [:,np.newaxis,np.newaxis,np.newaxis]}).reshape(nssrc,ntime,nbl)
+                    'u1': u1[:, :, :],
+                    'v1': v1[:, :, :],
+                    'u_2e1e2': np.outer(2*(e2+e1*e2),u).reshape(nssrc,ntime,nbl),
+                    'v_ex': np.outer(1 - e1*e1 + e2*e2,v).reshape(nssrc,ntime,nbl),
+                    'v_2e1e2': np.outer(2*(e2 - e1*e2),v).reshape(nssrc,ntime,nbl),
+                    'u_ex': np.outer(1 - e1*e1 + e2*e2,u).reshape(nssrc,ntime,nbl),
+                    'e12': e12[:,np.newaxis,np.newaxis]})
 
-            slvr.vis_de2 = ne.evaluate('num*(scale_uv)**2/(1+den1*sqrt(den1))',
+            sersic_deriv[1] = ne.evaluate('num*(scaleR)**2/den',
                 {
-                  'scale_uv': scale_uv*R,
+                  'scaleR' : scale_uv*R[:,np.newaxis,np.newaxis,np.newaxis],
                   'num' : num[:,:,:,np.newaxis],
-                  'den1' : den1 })
+                  'den' : den })
+
+            # partial derivatives with respect to scalelength
+            sersic_deriv[2] = ne.evaluate('den1/(R*den)',
+                {
+                  'R' : R[:,np.newaxis,np.newaxis,np.newaxis],
+                  'den1' : den1,
+                  'den' : den })
+
+            return sersic_deriv
 
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
 
 
-        def compute_ekb_vis_grad(self, ekb_jones=None):
+    def compute_ekb_vis_grad(self, ekb_jones=None):
         """
-        Computes the gradient of the complex visibilities with respect to the sersic parameters,
-        based on the scalar EK term and the 2x2 B term.
+        Computes the gradient of the complex visibilities with respect to the sersic parameters.
 
-        Returns a (nparams,nssrc,ntime,nbl,nchan,4) matrix of complex scalars.
+        Returns a (3,nssrc,ntime,nbl,nchan,4) matrix of complex scalars (nparams=3).
         """
 
         slvr = self.solver
@@ -739,11 +745,14 @@ class SolverCPU(object):
             'Expected shape %s. Got %s instead.' % \
             (want_shape, ekb_jones.shape)
 
-        start = nsrc - npsrc - ngsrc
-        vis_grad = np.zeros(3*nssrc*ntime*nbl*nchan).reshape(3,nssrc,ntime,nbl,nchan)
-        vis_grad[0] = ekb_jones[start:]*slvr.vis_de1
-        vis_grad[1] = ekb_jones[start:]*slvr.vis_de2
-        vis_grad[2] = ekb_jones[start:]*slvr.vis_dR
+        sersic_deriv = self.compute_sersic_derivatives()
+
+        src_beg = npsrc + ngsrc
+        src_end = npsrc + ngsrc + nssrc
+        vis_grad = np.empty((3,nssrc,ntime,nbl,nchan,4),dtype = np.complex)
+        vis_grad[0] = ekb_jones[src_beg:src_end]*sersic_deriv[0,:,:,:,:,np.newaxis]
+        vis_grad[1] = ekb_jones[src_beg:src_end]*sersic_deriv[1,:,:,:,:,np.newaxis]
+        vis_grad[2] = ekb_jones[src_beg:src_end]*sersic_deriv[2,:,:,:,:,np.newaxis]
 
         assert vis_grad.shape == (3, nssrc, ntime, nbl, nchan, 4)
 
@@ -907,7 +916,7 @@ class SolverCPU(object):
             for p in xrange(3):
                 for s in xrange(nssrc):
                     vis_grad[p,s].real = ne.evaluate('re*dre', {'re': re, 'dre': vis_grad[p,s].real})
-                    vis_grad[p,s].imag = ne.evaluate('re*dre', {'im': im, 'dim': vis_grad[p,s].imag})
+                    vis_grad[p,s].imag = ne.evaluate('im*dim', {'im': im, 'dim': vis_grad[p,s].imag})
 
             # Sum the real and imaginary terms together
             # for the final result.
@@ -917,11 +926,11 @@ class SolverCPU(object):
                 {'re_sum': re_sum, 'im_sum': im_sum})
             assert chi_sqrd_grad_terms.shape == (nparams,nssrc,ntime, nbl, nchan)
 
-            term_sum = -2*ne.evaluate('sum(terms,(2,3,4))', {'terms': chi_sqrd_grad_terms})
-            assert term_sum.shape == (nparams,nssrc)
+            term_sum = -2*np.sum(chi_sqrd_grad_terms,(2,3,4)).reshape(3*nssrc)
            
             return term_sum if weight_vector is True \
                 else term_sum / slvr.sigma_sqrd
+           
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
 
