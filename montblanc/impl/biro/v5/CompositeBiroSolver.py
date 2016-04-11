@@ -434,7 +434,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         return pinned_ary
 
-    def _enqueue_array_htod(self, sub_solver_idx,
+    def _enqueue_array_htod(self, subslvr,
         cpu_slice_map, gpu_slice_map, classifiers=None):
         """
         Enqueue asynchronous copies from CPU arrays on the
@@ -463,12 +463,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
         The jones array is an example of a GPU only array that
         is not affected since it is never transferred.
         """
-        subslvr = self.thread_local.solvers[sub_solver_idx]
-
         pool_refs = []
-
+        
         na = subslvr.dim_local_size('na')
-
         two_ant_case = (na == 2)
 
         if classifiers is None:
@@ -768,7 +765,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Enqueue E Beam
             kernel = subslvr.rime_e_beam
             pool_refs.extend(self._enqueue_array_htod(
-                i, cpu_slice_map, gpu_slice_map,
+                subslvr, cpu_slice_map, gpu_slice_map,
                 classifiers=[Classifier.E_BEAM_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
@@ -777,7 +774,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Enqueue B Sqrt
             kernel = subslvr.rime_b_sqrt
             pool_refs.extend(self._enqueue_array_htod(
-                i, cpu_slice_map, gpu_slice_map,
+                subslvr, cpu_slice_map, gpu_slice_map,
                 classifiers=[Classifier.B_SQRT_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
@@ -786,7 +783,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Enqueue EKB Sqrt
             kernel = subslvr.rime_ekb_sqrt
             pool_refs.extend(self._enqueue_array_htod(
-                i, cpu_slice_map, gpu_slice_map,
+                subslvr, cpu_slice_map, gpu_slice_map,
                 classifiers=[Classifier.EKB_SQRT_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
@@ -795,7 +792,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Enqueue Sum Coherencies
             kernel = subslvr.rime_sum
             pool_refs.extend(self._enqueue_array_htod(
-                i, cpu_slice_map, gpu_slice_map,
+                subslvr, cpu_slice_map, gpu_slice_map,
                 classifiers=[Classifier.COHERENCIES_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
