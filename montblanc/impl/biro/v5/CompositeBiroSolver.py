@@ -200,6 +200,12 @@ class CompositeBiroSolver(MontblancNumpySolver):
             ex.submit(C._thread_reg_sub_arys_and_props,
                 self, A_sub, P_sub).result()
 
+        montblanc.log.info('Priming Memory Pools')
+
+        # Prime the memory pools on each sub-solver
+        for ex in executors:
+            ex.submit(C._thread_prime_memory_pools, self).result()
+
         self.executors = executors
         self.sync_executors = sync_executors
         self.initialised = False
@@ -675,14 +681,11 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # allocating memory and stalling the
         # asynchronous pipeline.
         dev_mem_pool = pycuda.tools.DeviceMemoryPool()
-        dev_mem_pool.allocate(16*ONE_KB).free()
 
         # Pre-allocate a 16KB pinned memory pool
         # This is used to hold the results of PyCUDA
         # reduction kernels.
         pinned_mem_pool = pycuda.tools.PageLockedMemoryPool()
-        pinned_mem_pool.allocate(shape=(16*ONE_KB,),
-            dtype=np.int8).base.free()
 
         # Configure thread local storage
         # Number of solvers in this thread
@@ -731,6 +734,67 @@ class CompositeBiroSolver(MontblancNumpySolver):
         for i, subslvr in enumerate(self.thread_local.solvers):
             subslvr.register_properties(P_sub)
             subslvr.register_arrays(A_sub)
+
+    def _thread_prime_memory_pools(self):
+        """
+        We use memory pools to avoid allocating both CUDA
+        pinned host and device memory. This function fakes
+        allocations prior to running the solver so that
+        the memory pools are 'primed' with memory allocations
+        that can be re-used during actual execution of the solver
+        """
+
+        montblanc.log.debug('Priming memory pools in thread %s',
+            threading.current_thread())
+
+        nsrc = self.dim_local_size('nsrc')
+
+        # Retain references to pool allocations
+        pinned_pool_refs = []
+        device_pool_refs = []
+        pinned_allocated = 0
+
+        # Create the arrays on the sub solvers
+        for i, subslvr in enumerate(self.thread_local.solvers):
+            # Estimate which arrays we use for transfer
+            transfer_arrays = [a for a in subslvr.arrays().itervalues()
+                if Classifier.GPU_SCRATCH not in a.classifiers]
+
+            # For the maximum number of visibility chunks that can be enqueued
+            for T in range(self.throttle_factor):
+                # For each source batch within the visibility chunk
+                for source_batch in range(0, nsrc, self.src_diff):
+                    # Allocate pinned memory for transfer arrays
+                    # retaining references to them
+                    for a in transfer_arrays:
+                        pinned_ary = subslvr.pinned_mem_pool.allocate(
+                            shape=a.shape, dtype=a.dtype)
+                        pinned_pool_refs.append(pinned_ary)
+                        array_bytes = subslvr.array_bytes(a)
+                        pinned_allocated += array_bytes
+
+                        print 'T {T} SB {SB} Allocating {n} for {a}.'.format(
+                            T=T, SB=source_batch, a=a.name,
+                            n=subslvr.fmt_bytes(array_bytes))
+
+
+                    # Allocate device memory for arrays that need to be
+                    # allocated from a pool by PyCUDA's reduction kernels
+                    dev_ary = subslvr.dev_mem_pool.allocate(self.X2.nbytes)
+                    device_pool_refs.append(dev_ary)
+
+        device = self.thread_local.context.get_device()
+
+        montblanc.log.info('Primed pinned memory pool on '
+            'solver {d} with {n} bytes'.format(
+                d=device.name(), n=subslvr.fmt_bytes(pinned_allocated)))
+
+        # Now force return of memory to the pools
+        for a in pinned_pool_refs:
+            a.base.free()
+
+        for a in device_pool_refs:
+            a.free()
 
     def _thread_enqueue_solve_batch(self, cpu_slice_map, gpu_slice_map, **kwargs):
         """
