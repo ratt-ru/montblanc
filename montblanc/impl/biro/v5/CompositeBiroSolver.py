@@ -109,8 +109,14 @@ class CompositeBiroSolver(MontblancNumpySolver):
         self.register_properties(P_main)
         self.register_arrays(A_main)
 
-        nsolvers = slvr_cfg.get(Options.NSOLVERS)
+        # PyCUDA contexts for each GPU device   
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
+        # Number of GPU Solvers created for each device
+        nsolvers = slvr_cfg.get(Options.NSOLVERS)
+        # Maximum number of enqueued visibility chunks
+        # before throttling is applied
+        self.throttle_factor = slvr_cfg.get(
+            Options.VISIBILITY_THROTTLE_FACTOR)
 
         # Massage the contexts for each device into a list
         if not isinstance(self.dev_ctxs, list):
@@ -875,9 +881,6 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # Sets of return value futures for each executor
         value_futures = [set() for ex in self.executors]
 
-        # Maximum number of incomplete futures for each executor
-        throttle_factor = 4
-
         # Iterate over the visibility space, i.e. slices over
         # the CPU and GPU arrays
         for cpu_slice_map, gpu_slice_map in self._gen_vis_slices():
@@ -891,7 +894,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                     nvalues = len(value_futures[i])
                     values_waiting += nvalues
                     # Too much work on this queue, try another executor
-                    if nvalues > throttle_factor:
+                    if nvalues > self.throttle_factor:
                         continue
 
                     # Enqueue CUDA operations for solving
@@ -925,7 +928,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 # to finish before attempting work submission
                 if not submitted:
                     # Wait for 2/3's of the values
-                    threshold = throttle_factor*len(self.executors)*2/3.0
+                    threshold = self.throttle_factor*len(self.executors)*2/3.0
                     future_list = [f for f in itertools.chain(*value_futures)]
 
                     for i, f in enumerate(cf.as_completed(future_list)):

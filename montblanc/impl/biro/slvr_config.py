@@ -88,6 +88,12 @@ class BiroSolverConfig(SolverConfig):
     NSOLVERS_DESCRIPTION = (
         "Number of concurrent GPU solvers per device")
 
+    VISIBILITY_THROTTLE_FACTOR = 'visibility_throttle_factor'
+    DEFAULT_VISIBILITY_THROTTLE_FACTOR = 4
+    VISIBILITY_THROTTLE_FACTOR_DESCRIPTION = (
+        "Maximum number of visibility chunks that may be "
+        "enqueued on a solver before throttling is applied.")
+
     # BIRO version
     VERSION = 'version'
     VERSION_ONE = 'v1'
@@ -117,6 +123,12 @@ class BiroSolverConfig(SolverConfig):
         SOURCE_BATCH_SIZE: {
             SolverConfig.DESCRIPTION: SOURCE_BATCH_SIZE_DESCRIPTION,
             SolverConfig.DEFAULT: DEFAULT_SOURCE_BATCH_SIZE,
+            SolverConfig.REQUIRED: True
+        },
+
+        VISIBILITY_THROTTLE_FACTOR: {
+            SolverConfig.DESCRIPTION: VISIBILITY_THROTTLE_FACTOR_DESCRIPTION,
+            SolverConfig.DEFAULT: DEFAULT_VISIBILITY_THROTTLE_FACTOR,
             SolverConfig.REQUIRED: True
         },
 
@@ -198,6 +210,12 @@ class BiroSolverConfig(SolverConfig):
             type=int,
             help=self.NSOLVERS_DESCRIPTION,
             default=self.DEFAULT_NSOLVERS)
+
+        p.add_argument('--{v}'.format(v=self.VISIBILITY_THROTTLE_FACTOR),
+            required=False,
+            type=int,
+            help=self.VISIBILITY_THROTTLE_FACTOR_DESCRIPTION,
+            default=self.DEFAULT_VISIBILITY_THROTTLE_FACTOR)
 
         p.add_argument('--{v}'.format(v=self.VERSION),
             required=False,
