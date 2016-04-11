@@ -48,7 +48,7 @@ def get_pipeline(slvr_cfg):
         return Pipeline([RimeBSqrt(),
             RimeEBeam(),
             RimeEKBSqrt(),
-            RimeSumCoherenciesWithGradient()])
+            RimeSumCoherenciesWithGradient(weight_vector=wv)])
 
 def ary_dict(name,shape,dtype,cpu=True,gpu=True, **kwargs):
     D = {
@@ -209,9 +209,6 @@ A = [
     ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', cpu=False),
     ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct', cpu=False),
     ary_dict('vis', ('ntime','nbl','nchan',4), 'ct', cpu=False),
-    ary_dict('vis_dR', ('nssrc','ntime','nbl','nchan',4), 'ct', cpu=False),
-    ary_dict('vis_de1', ('nssrc','ntime','nbl','nchan',4), 'ct', cpu=False),
-    ary_dict('vis_de2', ('nssrc','ntime','nbl','nchan',4), 'ct', cpu=False),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
     ary_dict('chi_sqrd_result_grad',('nparams','ntime','nbl','nchan'),'ft', cpu=False),
 
@@ -255,7 +252,7 @@ class BiroSolver(BaseSolver):
         self.register_dimension('nparams',
             slvr_cfg[Options.NPARAMS],
             zero_valid=True,
-            description='X2 gradient dimension')
+            description='dimension of chi squared gradient')
 
         self.register_properties(P)
         self.register_arrays(A)
