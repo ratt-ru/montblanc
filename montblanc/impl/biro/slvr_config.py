@@ -83,6 +83,11 @@ class BiroSolverConfig(SolverConfig):
     SOURCE_BATCH_SIZE_DESCRIPTION = (
         "Minimum source batch size used when computing the RIME")
 
+    NSOLVERS = 'nsolvers'
+    DEFAULT_NSOLVERS = 2
+    NSOLVERS_DESCRIPTION = (
+        "Number of concurrent GPU solvers per device")
+
     # BIRO version
     VERSION = 'version'
     VERSION_ONE = 'v1'
@@ -112,6 +117,12 @@ class BiroSolverConfig(SolverConfig):
         SOURCE_BATCH_SIZE: {
             SolverConfig.DESCRIPTION: SOURCE_BATCH_SIZE_DESCRIPTION,
             SolverConfig.DEFAULT: DEFAULT_SOURCE_BATCH_SIZE,
+            SolverConfig.REQUIRED: True
+        },
+
+        NSOLVERS: {
+            SolverConfig.DESCRIPTION: NSOLVERS_DESCRIPTION,
+            SolverConfig.DEFAULT: DEFAULT_NSOLVERS,
             SolverConfig.REQUIRED: True
         },
 
@@ -181,6 +192,12 @@ class BiroSolverConfig(SolverConfig):
             type=int,
             help=self.SOURCE_BATCH_SIZE_DESCRIPTION,
             default=self.DEFAULT_SOURCE_BATCH_SIZE)
+
+        p.add_argument('--{v}'.format(v=self.NSOLVERS),
+            required=False,
+            type=int,
+            help=self.NSOLVERS_DESCRIPTION,
+            default=self.DEFAULT_NSOLVERS)
 
         p.add_argument('--{v}'.format(v=self.VERSION),
             required=False,

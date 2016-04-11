@@ -109,7 +109,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         self.register_properties(P_main)
         self.register_arrays(A_main)
 
-        nsolvers = slvr_cfg.get('nsolvers', 2)
+        nsolvers = slvr_cfg.get(Options.NSOLVERS)
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
 
         # Massage the contexts for each device into a list
@@ -604,7 +604,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # of an NVIDIA context
         mem_budget = slvr_cfg.get('mem_budget', free_mem - 200*ONE_MB)
 
-        nsolvers = slvr_cfg.get('nsolvers', 2)
+        nsolvers = slvr_cfg.get(Options.NSOLVERS)
         na = slvr_cfg.get(Options.NA)
         nsrc = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
         src_str_list = [Options.NSRC] + mbu.source_nr_vars()
