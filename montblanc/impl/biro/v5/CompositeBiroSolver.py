@@ -596,16 +596,18 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         nsolvers = slvr_cfg.get('nsolvers', 2)
         na = slvr_cfg.get(Options.NA)
-        nsrc = 400
+        nsrc = 25
         src_str_list = [Options.NSRC] + mbu.source_nr_vars()
         src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
             for nr_var in src_str_list])
+
+        ntime_split = 'ntime={n}'.format(n=100 // nsolvers)
 
         # Figure out a viable dimension configuration
         # given the total problem size 
         viable, modded_dims = mbu.viable_dim_config(
             mem_budget, A_sub, props,
-                [src_reduction_str, 'ntime',
+                [ntime_split, src_reduction_str, 'ntime',
                 'nbl=%s&na=%s' % (na, na)
                 ,'nbl=1&na=2',
                 'nchan=50%'],
@@ -791,7 +793,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         sync_event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
         sync_event.record(subslvr.stream)
 
-        return (sync_event, sub_X2)
+        return (sync_event, sub_X2, cpu_slice_map.copy(), gpu_slice_map.copy())
 
     def initialise(self):
         """ Initialise the sub-solver """
@@ -816,8 +818,22 @@ class CompositeBiroSolver(MontblancNumpySolver):
             Return a copy of the pinned chi-squared after
             synchronizing on the cuda_event
             """
-            cuda_event, pinned_X2 = future.result()
-            cuda_event.synchronize()
+            cuda_event, pinned_X2, cpu, gpu = future.result()
+
+            for k, s in cpu.iteritems():
+                cpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
+
+            for k, s in gpu.iteritems():
+                gpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
+
+            try:
+                cuda_event.synchronize()
+            except cuda.LogicError as e:
+                import json
+                print 'GPU', json.dumps(gpu, indent=2)
+                print 'CPU', json.dumps(cpu, indent=2)
+                raise e, None, sys.exc_info()[2]
+
             return pinned_X2.copy()
 
         # For easier typing
