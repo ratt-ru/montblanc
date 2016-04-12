@@ -182,11 +182,11 @@ void rime_sum_coherencies_impl(
         polsum = visibilities[i];
     }
 
-    int SRC = 0;
+    int SRC_START = 0;
     int SRC_STOP = DEXT(npsrc);
 
     // Point Sources
-    for(; SRC < SRC_STOP; ++SRC)
+    for(int SRC = SRC_START; SRC < SRC_STOP; ++SRC)
     {
         // Get the complex scalars for antenna two and multiply
         // in the exponent term
@@ -201,17 +201,18 @@ void rime_sum_coherencies_impl(
         polsum.y += ant_one.y;
     }
 
+    SRC_START = SRC_STOP;
     SRC_STOP += DEXT(ngsrc);
 
     // Gaussian sources
-    for(; SRC < SRC_STOP; ++SRC)
+    for(int SRC = SRC_START; SRC < SRC_STOP; ++SRC)
     {
         // gaussian shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC - DEXT(npsrc);  shared.el = gauss_shape[i];
+            i = SRC - SRC_START;  shared.el = gauss_shape[i];
             i += DEXT(ngsrc);       shared.em = gauss_shape[i];
             i += DEXT(ngsrc);       shared.eR = gauss_shape[i];
         }
@@ -248,17 +249,18 @@ void rime_sum_coherencies_impl(
         __syncthreads();
     }
 
+    SRC_START = SRC_STOP;
     SRC_STOP += DEXT(nssrc);
 
     // Sersic Sources
-    for(; SRC < SRC_STOP; ++SRC)
+    for(int SRC = SRC_START; SRC < SRC_STOP; ++SRC)
     {
         // sersic shape only varies by source. Shape parameters
         // thus apply to the entire block and we can load them with
         // only the first thread.
         if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC - DEXT(npsrc) - DEXT(ngsrc); shared.e1 = sersic_shape[i];
+            i = SRC - SRC_START;                shared.e1 = sersic_shape[i];
             i += DEXT(nssrc);                   shared.e2 = sersic_shape[i];
             i += DEXT(nssrc);                   shared.sersic_scale = sersic_shape[i];
         }
