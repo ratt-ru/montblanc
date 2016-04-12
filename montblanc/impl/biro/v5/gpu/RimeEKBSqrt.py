@@ -31,23 +31,10 @@ class RimeEKBSqrt(montblanc.impl.biro.v4.gpu.RimeEKBSqrt.RimeEKBSqrt):
         super(RimeEKBSqrt, self).shutdown(solver,stream)
     def pre_execution(self, solver, stream=None):
         super(RimeEKBSqrt, self).pre_execution(solver,stream)
-
-        if stream is not None:
-            cuda.memcpy_htod_async(
-                self.rime_const_data[0],
-                solver.const_data().ndary(),
-                stream=stream)
-        else:
-            cuda.memcpy_htod(
-                self.rime_const_data[0],
-                solver.const_data().ndary())
-
     def post_execution(self, solver, stream=None):
         super(RimeEKBSqrt, self).post_execution(solver,stream)
 
     def execute(self, solver, stream=None):
-        slvr = solver
-
-        self.kernel(slvr.uvw, slvr.lm, slvr.frequency,
-            slvr.B_sqrt, slvr.jones,
+        self.kernel(solver.uvw, solver.lm, solver.frequency,
+            solver.B_sqrt, solver.jones,
             stream=stream, **self.launch_params)

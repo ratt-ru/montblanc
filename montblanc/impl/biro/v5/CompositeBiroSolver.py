@@ -389,6 +389,26 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         return arys, props
 
+    def _enqueue_const_data_htod(self, subslvr, device_ptr):
+        """
+        Enqueue an async copy of the constant data array
+        from the sub-solver into the constant memory buffer
+        referenced by the device pointer.
+        """
+        # Get sub solver constant data array
+        host_ary = subslvr.const_data().ndary()
+
+        # Allocate pinned memory with same size
+        pinned_ary = subslvr.pinned_mem_pool.allocate(
+            shape=host_ary.shape, dtype=host_ary.dtype)
+
+        # Copy into pinned memory
+        pinned_ary[:] = host_ary
+
+        # Enqueue the asynchronous transfer
+        cuda.memcpy_htod_async(device_ptr, pinned_ary,
+            stream=subslvr.stream)
+
     def _enqueue_array_slice_htod(self, r, subslvr,
         cpu_ary, cpu_idx, gpu_ary, gpu_idx):
         """
@@ -399,16 +419,16 @@ class CompositeBiroSolver(MontblancNumpySolver):
         gpu_ary = gpu_ary[gpu_idx].squeeze()
 
         # Obtain some pinned memory from the memory pool
-        staged_ary = subslvr.pinned_mem_pool.allocate(
+        pinned_ary = subslvr.pinned_mem_pool.allocate(
             shape=gpu_ary.shape, dtype=gpu_ary.dtype)
 
-        # Copy data into staging area
-        staged_ary[:] = cpu_slice
+        # Copy data into pinned memory
+        pinned_ary[:] = cpu_slice
 
         #montblanc.log.info('Transferring %s with size %s shapes [%s vs %s]',
         #    r.name, mbu.fmt_bytes(staged_ary.nbytes), staged_ary.shape, gpu_ary.shape)
 
-        gpu_ary.set_async(staged_ary, stream=subslvr.stream)
+        gpu_ary.set_async(pinned_ary, stream=subslvr.stream)
 
     def _enqueue_array_htod(self, sub_solver_idx,
         cpu_slice_map, gpu_slice_map, classifiers=None):
@@ -727,35 +747,34 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
 
             # Enqueue E Beam
+            kernel = subslvr.rime_e_beam
             self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
                 classifiers=[Classifier.E_BEAM_INPUT])
-
-            subslvr.rime_e_beam.pre_execution(subslvr, subslvr.stream)
-            subslvr.rime_e_beam.execute(subslvr, subslvr.stream)
+            self._enqueue_const_data_htod(subslvr, kernel.rime_const_data[0])
+            kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue B Sqrt
+            kernel = subslvr.rime_b_sqrt
             self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
                 classifiers=[Classifier.B_SQRT_INPUT])
-
-            subslvr.rime_b_sqrt.pre_execution(subslvr, subslvr.stream)
-            subslvr.rime_b_sqrt.execute(subslvr, subslvr.stream)
+            self._enqueue_const_data_htod(subslvr, kernel.rime_const_data[0])
+            kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue EKB Sqrt
+            kernel = subslvr.rime_ekb_sqrt
             self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
                 classifiers=[Classifier.EKB_SQRT_INPUT])
-
-            subslvr.rime_ekb_sqrt.pre_execution(subslvr, subslvr.stream)
-            subslvr.rime_ekb_sqrt.execute(subslvr, subslvr.stream)
+            self._enqueue_const_data_htod(subslvr, kernel.rime_const_data[0])
+            kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue Sum Coherencies
+            kernel = subslvr.rime_sum
             self._enqueue_array_htod(i, cpu_slice_map, gpu_slice_map,
                 classifiers=[Classifier.COHERENCIES_INPUT])
-
-            subslvr.rime_sum.pre_execution(subslvr, subslvr.stream)
-            subslvr.rime_sum.execute(subslvr, subslvr.stream)
+            self._enqueue_const_data_htod(subslvr, kernel.rime_const_data[0])
+            kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue chi-squared term reduction
-            subslvr.rime_reduce.pre_execution(subslvr, subslvr.stream)
             subslvr.rime_reduce.execute(subslvr, subslvr.stream)
 
         # Get pinned memory to hold the chi-squared result

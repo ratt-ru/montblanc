@@ -160,18 +160,13 @@ class RimeConstStruct(object):
         """ Return the cdata object """
         return self._cdata
 
-def create_rime_const_data(slvr, context):
+def create_rime_const_data(slvr):
     """ Creates RIME constant data object """
-    import pycuda.driver as cuda
-
     # Create a structure definition
     struct_def = RimeConstDefinition(slvr)
 
-    # Allocate some page-locked memory within the
-    # given CUDA context
-    with context:
-        ndary = cuda.pagelocked_empty(shape=struct_def.struct_size(),
-            dtype=np.int8)
+    ndary = np.empty(shape=struct_def.struct_size(),
+        dtype=np.int8)
 
     # Construct the constant structure object from the
     # definition and the ndary. Update it with the

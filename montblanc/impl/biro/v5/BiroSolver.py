@@ -83,7 +83,7 @@ class BiroSolver(MontblancCUDASolver):
             self.kernels_done = cuda.Event()
 
         # Create constant data for transfer to GPU
-        self._const_data = mbu.create_rime_const_data(self, self.context)
+        self._const_data = mbu.create_rime_const_data(self)
 
         # Indicate these variables have not been set
         self.dev_mem_pool = None

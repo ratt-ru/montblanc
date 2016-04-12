@@ -81,7 +81,7 @@ class BiroSolver(MontblancCUDASolver):
         self.register_properties(P)
         self.register_arrays(A)
 
-        self._const_data = mbu.create_rime_const_data(self, self.context)
+        self._const_data = mbu.create_rime_const_data(self)
 
     def const_data(self):
         return self._const_data
