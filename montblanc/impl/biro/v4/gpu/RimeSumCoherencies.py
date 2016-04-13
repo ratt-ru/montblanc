@@ -492,7 +492,7 @@ class RimeSumCoherencies(Node):
             slvr.frequency, slvr.ant_pairs,
             slvr.jones, slvr.flag, slvr.weight_vector,
             slvr.bayes_data, slvr.G_term,
-            slvr.vis, slvr.chi_sqrd_result,
+            slvr.model_vis, slvr.chi_sqrd_result,
             stream=stream, **self.launch_params)
 
         # Call the pycuda reduction kernel.

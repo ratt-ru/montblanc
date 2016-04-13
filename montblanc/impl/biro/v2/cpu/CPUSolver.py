@@ -456,10 +456,10 @@ class CPUSolver(MontblancNumpySolver):
 
         self.jones_scalar[:] = self.compute_ek_jones_scalar_per_ant()
         
-        self.vis[:] = self.compute_ebk_vis()
+        self.model_vis[:] = self.compute_ebk_vis()
         
         self.chi_sqrd_result[:] = self.compute_chi_sqrd_sum_terms(
-            self.vis)
+            self.model_vis)
         
         self.set_X2(self.compute_chi_sqrd(
             self.chi_sqrd_result))

@@ -184,8 +184,8 @@ class TestBiroV2(unittest.TestCase):
         gpu_slvr.solve()
         cpu_slvr.solve()
 
-        ebk_vis = cpu_slvr.vis
-        ebk_vis = gpu_slvr.retrieve_vis()
+        ebk_vis = cpu_slvr.model_vis
+        ebk_vis = gpu_slvr.retrieve_model_vis()
 
         self.assertTrue(np.allclose(ebk_vis, ebk_vis, **cmp))
 

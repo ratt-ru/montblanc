@@ -153,6 +153,6 @@ A = [
 
     # Result arrays
     ary_dict('jones_scalar', ('ntime','na','nsrc','nchan'), 'ct'),
-    ary_dict('vis', (4,'ntime','nbl','nchan'), 'ct'),
+    ary_dict('model_vis', (4,'ntime','nbl','nchan'), 'ct'),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft'),
 ]

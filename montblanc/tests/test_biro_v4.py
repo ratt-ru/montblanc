@@ -230,7 +230,7 @@ class TestBiroV4(unittest.TestCase):
         ekb_per_bl = cpu_slvr.compute_ekb_jones_per_bl(cpu_slvr.jones)
         ekb_vis = cpu_slvr.compute_ekb_vis(ekb_per_bl)
         gekb_vis = cpu_slvr.compute_gekb_vis(ekb_vis)
-        gekb_vis = gpu_slvr.retrieve_vis()
+        gekb_vis = gpu_slvr.retrieve_model_vis()
         self.assertTrue(np.allclose(gekb_vis, gekb_vis, **cmp))
 
         # Check that the chi squared sum terms

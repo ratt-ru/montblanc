@@ -487,7 +487,7 @@ class RimeGaussBSum(Node):
         self.kernel(slvr.uvw, slvr.brightness, gauss, sersic,
             slvr.wavelength, slvr.ant_pairs, slvr.jones_scalar,
             slvr.flag, slvr.weight_vector,
-            slvr.vis, slvr.bayes_data, slvr.chi_sqrd_result,
+            slvr.model_vis, slvr.bayes_data, slvr.chi_sqrd_result,
             **self.get_kernel_params(slvr))
 
         # Call the pycuda reduction kernel.

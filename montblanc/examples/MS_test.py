@@ -80,9 +80,9 @@ if __name__ == '__main__':
         slvr.solve()
 
         if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
-            vis = slvr.retrieve_vis().transpose(1, 2, 3, 0)
+            vis = slvr.retrieve_model_vis().transpose(1, 2, 3, 0)
         elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-            vis = slvr.retrieve_vis()
+            vis = slvr.retrieve_model_vis()
 
         print vis
         print vis.shape
