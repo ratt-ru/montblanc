@@ -424,10 +424,25 @@ class CompositeBiroSolver(MontblancNumpySolver):
         return pinned_ary
 
     def _enqueue_array_slice_htod(self, r, subslvr,
-        cpu_ary, cpu_idx, gpu_ary, gpu_idx):
+        cpu_ary, cpu_idx, gpu_ary, gpu_idx, cache):
         """
         Copies a slice of the CPU array into a slice of the GPU array.
         """
+
+        # Check if this slice exists in the cache
+        # If so, it has already been transferred and
+        # we can ignore it
+        cache_idx = cache.get(r.name, None)
+
+        if cache_idx and cache_idx == cpu_idx:
+            montblanc.log.debug("Cache hit on {n} index {i} "
+                    .format(n=r.name, i=cpu_idx))
+
+            return
+
+        # No cache entry, or we're going to
+        # replace the existing entry.
+        cache[r.name] = cpu_idx
 
         cpu_slice = cpu_ary[cpu_idx].squeeze()
         gpu_ary = gpu_ary[gpu_idx].squeeze()
@@ -447,7 +462,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
         return pinned_ary
 
     def _enqueue_array_htod(self, subslvr,
-        cpu_slice_map, gpu_slice_map, classifiers=None):
+        cpu_slice_map, gpu_slice_map, cache,
+        classifiers=None):
         """
         Enqueue asynchronous copies from CPU arrays on the
         CompositeBiroSolver to GPU arrays on the BIRO sub-solvers
@@ -540,8 +556,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 cpu_ary = np.array([0,1]).reshape(subslvr.ant_pairs_shape)
 
             pinned_ary = self._enqueue_array_slice_htod(r, subslvr,
-                cpu_ary, cpu_idx,
-                gpu_ary, tuple(gpu_idx))
+                cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx), cache)
             pool_refs.append(pinned_ary)
 
             # Right, handle transfer of the second antenna's data
@@ -552,8 +567,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 cpu_idx[na_idx] = cpu_slice_map[NA_EXTRA]
 
                 pinned_ary = self._enqueue_array_slice_htod(r, subslvr,
-                    cpu_ary, cpu_idx,
-                    gpu_ary, tuple(gpu_idx))
+                    cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx), cache)
                 pool_refs.append(pinned_ary)
 
         return pool_refs
@@ -818,8 +832,10 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # reading the result of the enqueued operations.
         pool_refs = []
 
-        # TODO: Classifer.X2_INPUT and Classifier.TELESCOPE_INPUT arrays
-        # really only need to be transferred once for each visibility chunk
+        # Cache keyed by array names and contained indices
+        # This is used to determine if the array has already
+        # been transferred to the card on this batch
+        cache = {}
 
         # Now, iterate over our source chunks
         for src_cpu_slice_map, src_gpu_slice_map in self._gen_source_slices():
@@ -835,7 +851,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Enqueue E Beam
             kernel = subslvr.rime_e_beam
             pool_refs.extend(self._enqueue_array_htod(
-                subslvr, cpu_slice_map, gpu_slice_map,
+                subslvr, cpu_slice_map, gpu_slice_map, cache,
                 classifiers=[Classifier.E_BEAM_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
@@ -844,7 +860,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Enqueue B Sqrt
             kernel = subslvr.rime_b_sqrt
             pool_refs.extend(self._enqueue_array_htod(
-                subslvr, cpu_slice_map, gpu_slice_map,
+                subslvr, cpu_slice_map, gpu_slice_map, cache,
                 classifiers=[Classifier.B_SQRT_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
@@ -853,7 +869,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Enqueue EKB Sqrt
             kernel = subslvr.rime_ekb_sqrt
             pool_refs.extend(self._enqueue_array_htod(
-                subslvr, cpu_slice_map, gpu_slice_map,
+                subslvr, cpu_slice_map, gpu_slice_map, cache,
                 classifiers=[Classifier.EKB_SQRT_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
@@ -862,7 +878,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Enqueue Sum Coherencies
             kernel = subslvr.rime_sum
             pool_refs.extend(self._enqueue_array_htod(
-                subslvr, cpu_slice_map, gpu_slice_map,
+                subslvr, cpu_slice_map, gpu_slice_map, cache,
                 classifiers=[Classifier.COHERENCIES_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
