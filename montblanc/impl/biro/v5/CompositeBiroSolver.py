@@ -634,13 +634,14 @@ class CompositeBiroSolver(MontblancNumpySolver):
         src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
             for nr_var in src_str_list])
 
-        ntime_split = 'ntime={n}'.format(n=100 // nsolvers)
+        ntime_split = np.int32(np.ceil(100.0 / nsolvers))
+        ntime_split_str = 'ntime={n}'.format(n=ntime_split)
 
         # Figure out a viable dimension configuration
         # given the total problem size 
         viable, modded_dims = mbu.viable_dim_config(
             mem_budget, A_sub, props,
-                [ntime_split, src_reduction_str, 'ntime',
+                [ntime_split_str, src_reduction_str, 'ntime',
                 'nbl=%s&na=%s' % (na, na)
                 ,'nbl=1&na=2',
                 'nchan=50%'],

@@ -252,10 +252,11 @@ def viable_dim_config(bytes_available, arrays, template,
             match = re.match(__DIM_REDUCTION_RE, dim)
 
             if not match:
-                raise ValueError((
-                    "%s is an invalid dimension reduction string "
+                raise ValueError(
+                    "{d} is an invalid dimension reduction string "
                     "Valid strings are for e.g. "
-                    "'ntime', 'ntime=20' or 'ntime=20%'") % dim)
+                    "'ntime', 'ntime=20' or 'ntime=20%'"
+                        .format(d=dim))
 
             dim_name = match.group('name')
             dim_value = match.group('value')
