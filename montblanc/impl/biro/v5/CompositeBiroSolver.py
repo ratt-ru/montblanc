@@ -768,29 +768,44 @@ class CompositeBiroSolver(MontblancNumpySolver):
         device_pool_refs = []
         pinned_allocated = 0
 
-        # Create the arrays on the sub solvers
-        for i, subslvr in enumerate(self.thread_local.solvers):
-            # Estimate which arrays we use for transfer
-            transfer_arrays = [a for a in subslvr.arrays().itervalues()
-                if Classifier.GPU_SCRATCH not in a.classifiers]
+        # Class of arrays that are to be transferred
+        classifiers = [Classifier.E_BEAM_INPUT,
+            Classifier.B_SQRT_INPUT,
+            Classifier.EKB_SQRT_INPUT,
+            Classifier.COHERENCIES_INPUT]
 
+        # Estimate number of kernels for constant data
+        nkernels = len(classifiers)
+
+        # Get the first chunk of the visibility space
+        cpu_slice_map, gpu_slice_map = self._gen_vis_slices().next()
+
+        for i, subslvr in enumerate(self.thread_local.solvers):
             # For the maximum number of visibility chunks that can be enqueued
             for T in range(self.throttle_factor):
+                cache = {}
+
                 # For each source batch within the visibility chunk
-                for source_batch in range(0, nsrc, self.src_diff):
+                for cpu_src_slice_map, gpu_src_slice_map in self._gen_source_slices():
+                    cpu_slice_map.update(cpu_src_slice_map)
+                    gpu_slice_map.update(gpu_src_slice_map)
+
                     # Allocate pinned memory for transfer arrays
                     # retaining references to them
-                    for a in transfer_arrays:
-                        pinned_ary = subslvr.pinned_mem_pool.allocate(
-                            shape=a.shape, dtype=a.dtype)
-                        pinned_pool_refs.append(pinned_ary)
-                        array_bytes = subslvr.array_bytes(a)
-                        pinned_allocated += array_bytes
+                    refs = self._enqueue_array_htod(subslvr,
+                        cpu_slice_map, gpu_slice_map, cache,
+                        classifiers=classifiers)
+                    pinned_allocated += sum([r.nbytes for r in refs if r is not None])
+                    pinned_pool_refs.extend(refs)
 
-                        print 'T {T} SB {SB} Allocating {n} for {a}.'.format(
-                            T=T, SB=source_batch, a=a.name,
-                            n=subslvr.fmt_bytes(array_bytes))
+                    # Allocate pinned memory for constant memory transfers
+                    cdata = subslvr.const_data().ndary()
 
+                    for k in range(nkernels):
+                        ref = subslvr.pinned_mem_pool.allocate(
+                            shape=cdata.shape, dtype=cdata.dtype)
+                        pinned_allocated += ref.nbytes
+                        pinned_pool_refs.append(ref)
 
                     # Allocate device memory for arrays that need to be
                     # allocated from a pool by PyCUDA's reduction kernels
@@ -800,12 +815,13 @@ class CompositeBiroSolver(MontblancNumpySolver):
         device = self.thread_local.context.get_device()
 
         montblanc.log.info('Primed pinned memory pool on '
-            'solver {d} with {n} bytes'.format(
+            'of size {n} on device {d}.'.format(
                 d=device.name(), n=subslvr.fmt_bytes(pinned_allocated)))
 
         # Now force return of memory to the pools
         for a in pinned_pool_refs:
-            a.base.free()
+            if a is not None:
+                a.base.free()
 
         for a in device_pool_refs:
             a.free()
