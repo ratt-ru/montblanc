@@ -63,15 +63,16 @@ class SolverConfig(object):
     CFG_FILE_DESCRIPTION = 'Configuration File'
 
     MODE = 'mode'
-    MODE_X2 = 'X2'
+    MODE_CHI_SQUARED = 'chi-squared'
     MODE_SIMULATOR = 'simulator'
-    DEFAULT_MODE = MODE_X2
+    DEFAULT_MODE = MODE_CHI_SQUARED
     MODE_DESCRIPTION = (
         "Montblanc's execution mode. "
-        "If '{x2}', montblanc will compute model visibilities and "
+        "If '{chi}', montblanc will compute model visibilities and "
         "use them in conjunction with observed visibilities, "
         "flag data and weighting vectors to compute a chi-squared value. "
-        "If '{sim}', montblanc will compute model visibilities.")
+        "If '{sim}', montblanc will compute model visibilities.").format(
+            chi=MODE_CHI_SQUARED, sim=MODE_SIMULATOR)
 
     SOURCES = 'sources'
     DEFAULT_SOURCES = {k: v for k, v
