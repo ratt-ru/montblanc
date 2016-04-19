@@ -18,8 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import pyrap.tables as pt
 import os
+
+import numpy as np
+import pyrap.tables as pt
 
 import montblanc
 import montblanc.util as mbu
@@ -55,7 +57,7 @@ class MeasurementSetLoader(BaseLoader):
         # Determine the problem dimensions
         na = self.tables['ant'].nrows()
         nbl = mbu.nr_of_baselines(na, auto_correlations)
-        nchan = self.tables['freq'].getcol('CHAN_FREQ').size
+        nchan = np.asscalar(self.tables['freq'].getcol('NUM_CHAN'))
         ntime = self.tables['main'].nrows() // nbl
 
         return ntime, na, nchan
