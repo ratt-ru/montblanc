@@ -709,23 +709,18 @@ class CompositeBiroSolver(MontblancNumpySolver):
         montblanc.log.debug('Creating solvers in thread %s',
             threading.current_thread())
 
-        # Pre-allocate a 16KB GPU memory pool
-        # for each device, this is needed to
-        # prevent the PyCUDA reduction functions
-        # allocating memory and stalling the
-        # asynchronous pipeline.
+        # GPU Device memory pool, used in cases where PyCUDA
+        # needs GPU memory that we haven't been able to pre-allocate
         dev_mem_pool = pycuda.tools.DeviceMemoryPool()
 
-        # Pre-allocate a 16KB pinned memory pool
-        # This is used to hold the results of PyCUDA
-        # reduction kernels.
+        # CPU Pinned memory pool, used for array transfers
         pinned_mem_pool = pycuda.tools.PageLockedMemoryPool()
 
         # Configure thread local storage
         # Number of solvers in this thread
         self.thread_local.nsolvers = nsolvers
-        # List of solvers used by this thread
-        self.thread_local.solvers = [False for s in range(nsolvers)]
+        # List of solvers used by this thread, set below
+        self.thread_local.solvers = [None for s in range(nsolvers)]
         # Initialise the subsolver generator
         self.thread_local.subslvr_gen = self._thread_gen_sub_solvers()
 
@@ -753,6 +748,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
             subslvr.update_dimensions(U)
 
+            # Give sub solvers access to device and pinned memory pools
             subslvr.set_dev_mem_pool(dev_mem_pool)
             subslvr.set_pinned_mem_pool(pinned_mem_pool)
             self.thread_local.solvers[i] = subslvr
