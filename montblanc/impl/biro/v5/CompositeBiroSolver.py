@@ -946,7 +946,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # Create and record an event directly after the chi-squared copy
         # We'll synchronise on this thread in our synchronisation executor
-        sync_event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
+        sync_event = cuda.Event(cuda.event_flags.DISABLE_TIMING |
+            cuda.event_flags.BLOCKING_SYNC)
         sync_event.record(subslvr.stream)
 
         # Retain references to CPU pinned  and GPU device memory
