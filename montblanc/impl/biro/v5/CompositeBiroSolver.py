@@ -261,7 +261,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # dimensions of the CPU and GPU array.
         cpu_slice, gpu_slice = {}, {}
 
-        montblanc.log.info('Generating RIME slices')
+        montblanc.log.debug('Generating RIME slices')
 
         # Set up time slicing
         for t in xrange(0, ntime, self.time_diff):
@@ -836,8 +836,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         device = self.thread_local.context.get_device()
 
-        montblanc.log.info('Primed pinned memory pool on '
-            'of size {n} on device {d}.'.format(
+        montblanc.log.info('Primed pinned memory pool '
+            'of size {n} for device {d}.'.format(
                 d=device.name(), n=subslvr.fmt_bytes(pinned_allocated)))
 
         # Now force return of memory to the pools
