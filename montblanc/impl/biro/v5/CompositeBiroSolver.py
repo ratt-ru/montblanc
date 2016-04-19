@@ -932,7 +932,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # Get pinned memory to hold the chi-squared result
         sub_X2 = subslvr.pinned_mem_pool.allocate(
-            shape=self.X2.shape, dtype=self.X2.dtype)
+            shape=X2_gpu_ary.shape, dtype=X2_gpu_ary.dtype)
         
         # Enqueue chi-squared copy off the GPU onto the CPU
         X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
