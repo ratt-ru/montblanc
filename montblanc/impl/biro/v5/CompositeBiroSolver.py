@@ -937,6 +937,17 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # Enqueue chi-squared copy off the GPU onto the CPU
         X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
 
+        # Enqueue transfer of simulator output (model visibilities) to the CPU
+        refs = self._enqueue_array(subslvr, cpu_slice_map, gpu_slice_map,
+            direction=ASYNC_DTOH, dirty=dirty,
+            classifiers=[Classifier.SIMULATOR_OUTPUT])
+
+        # Should only be model visibilities
+        assert len(refs) == 1, ('Expected one array (model visibilities), '
+            'received {l} instead.'.format(l=len(refs)))
+
+        model_vis = refs[0]
+
         # Create and record an event directly after the chi-squared copy
         # We'll synchronise on this thread in our synchronisation executor
         sync_event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
@@ -946,8 +957,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # until the above enqueued operations have been performed.
         pool_refs.append(X2_gpu_ary)
         pool_refs.append(sub_X2)
+        pool_refs.append(model_vis)
 
-        return (sync_event, sub_X2,
+        return (sync_event, sub_X2, model_vis,
             pool_refs,
             cpu_slice_map.copy(),
             gpu_slice_map.copy())
@@ -970,28 +982,36 @@ class CompositeBiroSolver(MontblancNumpySolver):
         if not self.initialised:
             self.initialise()
 
+        model_vis_sshape = self.arrays()['model_vis']['sshape']
+
         def _sync_wait(future):
             """
-            Return a copy of the pinned chi-squared after
-            synchronizing on the cuda_event
+            Return a copy of the pinned chi-squared, pinned model visibilities
+            and index into the CPU array after synchronizing on the cuda_event
             """
-            cuda_event, pinned_X2, pool_refs, cpu, gpu = future.result()
-
-            for k, s in cpu.iteritems():
-                cpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
-
-            for k, s in gpu.iteritems():
-                gpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
+            cuda_event, pinned_X2, pinned_model_vis, pool_refs, cpu, gpu = \
+                future.result()
 
             try:
                 cuda_event.synchronize()
             except cuda.LogicError as e:
+                # Format the slices nicely
+                for k, s in cpu.iteritems():
+                    cpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
+
+                for k, s in gpu.iteritems():
+                    gpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
+
                 import json
                 print 'GPU', json.dumps(gpu, indent=2)
                 print 'CPU', json.dumps(cpu, indent=2)
                 raise e, None, sys.exc_info()[2]
 
-            return pinned_X2.copy()
+            # Work out the CPU view in the model visibilities
+            model_vis_idx = [cpu[s] if s in cpu else ALL_SLICE
+                for s in model_vis_sshape]
+
+            return pinned_X2, pinned_model_vis, model_vis_idx
 
         # For easier typing
         C = CompositeBiroSolver
@@ -1058,8 +1078,12 @@ class CompositeBiroSolver(MontblancNumpySolver):
                         for s in value_futures:
                             s.remove(f)
 
-                        # Add future result to running X2 squared sum
-                        X2_sum += f.result()
+                        # Get chi-squared and model visibilities
+                        X2, pinned_model_vis, model_vis_idx = f.result()
+                        # Sum X2
+                        X2_sum += X2
+                        # Write model visibilities to the numpy array
+                        self.model_vis[model_vis_idx] = pinned_model_vis[:]
 
                         # Break out if we've removed the prescribed
                         # number of futures
@@ -1071,8 +1095,14 @@ class CompositeBiroSolver(MontblancNumpySolver):
             [f for f in itertools.chain(*value_futures)],
             return_when=cf.ALL_COMPLETED)
 
-        # Sum them
-        X2_sum += sum(f.result() for f in done)
+        # Sum remaining chi-squared
+        for f in done:
+            # Get chi-squared and model visibilities
+            X2, pinned_model_vis, model_vis_idx = f.result()
+            # Sum X2
+            X2_sum += X2
+            # Write model visibilities to the numpy array
+            self.model_vis[model_vis_idx] = pinned_model_vis[:]
 
         # Set the chi-squared value possibly
         # taking the weight vector into account

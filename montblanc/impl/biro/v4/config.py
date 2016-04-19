@@ -223,7 +223,7 @@ A = [
     ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct',
         classifiers=frozenset([Classifier.GPU_SCRATCH])),
     ary_dict('model_vis', ('ntime','nbl','nchan',4), 'ct',
-        classifiers=frozenset([Classifier.GPU_SCRATCH, Classifier.SIMULATOR_OUTPUT])),
+        classifiers=frozenset([Classifier.SIMULATOR_OUTPUT])),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft',
         classifiers=frozenset([Classifier.GPU_SCRATCH])),
 ]
