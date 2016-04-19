@@ -166,8 +166,11 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
     else:
         raise ValueError('Incorrect version %s' % version)
 
-    with MeasurementSetLoader(slvr_cfg.get('msfile')) as loader:
-        ntime, na, nchan = loader.get_dims()
+    msfile = slvr_cfg.get(Options.MS_FILE)
+    autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS)
+
+    with MeasurementSetLoader(msfile, auto_correlations=autocor) as loader:
+        ntime, na, nchan = loader.get_dims(auto_correlations=autocor)
         slvr_cfg[Options.NTIME] = ntime 
         slvr_cfg[Options.NA] = na 
         slvr_cfg[Options.NCHAN] = nchan 

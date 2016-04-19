@@ -34,7 +34,7 @@ SPECTRAL_WINDOW = 'SPECTRAL_WINDOW'
 class MeasurementSetLoader(BaseLoader):
     LOG_PREFIX = 'LOADER:'
 
-    def __init__(self, msfile):
+    def __init__(self, msfile, auto_correlations=False):
         super(MeasurementSetLoader, self).__init__()
 
         self.tables = {}
@@ -45,8 +45,14 @@ class MeasurementSetLoader(BaseLoader):
         montblanc.log.info("{lp} Opening Measurement Set {ms}.".format(
             lp=self.LOG_PREFIX, ms=self.msfile))
 
-        self.tables['main'] = pt.table(self.msfile, ack=False) \
-            .query('ANTENNA1 != ANTENNA2')
+        main_table = pt.table(self.msfile, ack=False)
+
+        # If requested, use TAQL to ignore auto-correlations
+        if not auto_correlations:
+            self.tables['main'] = main_table.query('ANTENNA1 != ANTENNA2')
+        else:
+            self.tables['main'] = main_table
+
         self.tables['ant']  = pt.table(self.antfile, ack=False)
         self.tables['freq'] = pt.table(self.freqfile, ack=False)
 
