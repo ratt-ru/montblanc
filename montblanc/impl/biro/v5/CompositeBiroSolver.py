@@ -53,6 +53,9 @@ ONE_KB = 1024
 ONE_MB = ONE_KB**2
 ONE_GB = ONE_KB**3
 
+ASYNC_HTOD = 'htod'
+ASYNC_DTOH = 'dtoh'
+
 ALL_SLICE = slice(None,None,1)
 EMPTY_SLICE = slice(0,0,1)
 
@@ -423,8 +426,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         return pinned_ary
 
-    def _enqueue_array_slice_htod(self, r, subslvr,
-        cpu_ary, cpu_idx, gpu_ary, gpu_idx, dirty):
+    def _enqueue_array_slice(self, r, subslvr,
+        cpu_ary, cpu_idx, gpu_ary, gpu_idx, direction, dirty):
         """
         Copies a slice of the CPU array into a slice of the GPU array.
 
@@ -454,19 +457,21 @@ class CompositeBiroSolver(MontblancNumpySolver):
         pinned_ary = subslvr.pinned_mem_pool.allocate(
             shape=gpu_ary.shape, dtype=gpu_ary.dtype)
 
-        # Copy data into pinned memory
-        pinned_ary[:] = cpu_slice
-
-        #montblanc.log.info('Transferring %s with size %s shapes [%s vs %s]',
-        #    r.name, mbu.fmt_bytes(staged_ary.nbytes), staged_ary.shape, gpu_ary.shape)
-
-        gpu_ary.set_async(pinned_ary, stream=subslvr.stream)
+        if direction == ASYNC_HTOD:
+            # Copy data into pinned memory and enqueue the transfer.
+            pinned_ary[:] = cpu_slice
+            gpu_ary.set_async(pinned_ary, stream=subslvr.stream)
+        elif direction == ASYNC_DTOH:
+            # Enqueue transfer from device into pinned memory.
+            gpu_ary.get_async(ary=pinned_ary, stream=subslvr.stream)
+        else:
+            raise ValueError("Invalid direction '{d}'".format(d=direction))
 
         return pinned_ary
 
-    def _enqueue_array_htod(self, subslvr,
-        cpu_slice_map, gpu_slice_map, dirty,
-        classifiers=None):
+    def _enqueue_array(self, subslvr,
+        cpu_slice_map, gpu_slice_map,
+        direction=None, dirty=None, classifiers=None):
         """
         Enqueue asynchronous copies from CPU arrays on the
         CompositeBiroSolver to GPU arrays on the BIRO sub-solvers
@@ -498,6 +503,12 @@ class CompositeBiroSolver(MontblancNumpySolver):
         Entries in this list may be None.
         """
         pool_refs = []
+
+        if direction is None:
+            direction = ASYNC_HTOD
+
+        if dirty is None:
+            dirty = {}
         
         na = subslvr.dim_local_size('na')
         two_ant_case = (na == 2)
@@ -561,8 +572,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 cpu_idx = [ALL_SLICE for s in r.shape]
                 cpu_ary = np.array([0,1]).reshape(subslvr.ant_pairs_shape)
 
-            pinned_ary = self._enqueue_array_slice_htod(r, subslvr,
-                cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx), dirty)
+            pinned_ary = self._enqueue_array_slice(r, subslvr,
+                cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx),
+                direction, dirty)
             pool_refs.append(pinned_ary)
 
             # Right, handle transfer of the second antenna's data
@@ -572,8 +584,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 gpu_idx[na_idx] = 1
                 cpu_idx[na_idx] = cpu_slice_map[NA_EXTRA]
 
-                pinned_ary = self._enqueue_array_slice_htod(r, subslvr,
-                    cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx), dirty)
+                pinned_ary = self._enqueue_array_slice(r, subslvr,
+                    cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx),
+                    direction, dirty)
                 pool_refs.append(pinned_ary)
 
         return pool_refs
@@ -800,8 +813,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
                     # Allocate pinned memory for transfer arrays
                     # retaining references to them
-                    refs = self._enqueue_array_htod(subslvr,
-                        cpu_slice_map, gpu_slice_map, dirty,
+                    refs = self._enqueue_array(subslvr,
+                        cpu_slice_map, gpu_slice_map, 
+                        direction=ASYNC_HTOD, dirty=dirty,
                         classifiers=classifiers)
                     pinned_allocated += sum([r.nbytes for r in refs if r is not None])
                     pinned_pool_refs.extend(refs)
@@ -874,8 +888,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
             # Enqueue E Beam
             kernel = subslvr.rime_e_beam
-            pool_refs.extend(self._enqueue_array_htod(
-                subslvr, cpu_slice_map, gpu_slice_map, dirty,
+            pool_refs.extend(self._enqueue_array(
+                subslvr, cpu_slice_map, gpu_slice_map,
+                direction=ASYNC_HTOD, dirty=dirty,
                 classifiers=[Classifier.E_BEAM_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
@@ -883,8 +898,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
             # Enqueue B Sqrt
             kernel = subslvr.rime_b_sqrt
-            pool_refs.extend(self._enqueue_array_htod(
-                subslvr, cpu_slice_map, gpu_slice_map, dirty,
+            pool_refs.extend(self._enqueue_array(
+                subslvr, cpu_slice_map, gpu_slice_map,
+                direction=ASYNC_HTOD, dirty=dirty,
                 classifiers=[Classifier.B_SQRT_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
@@ -892,8 +908,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
             # Enqueue EKB Sqrt
             kernel = subslvr.rime_ekb_sqrt
-            pool_refs.extend(self._enqueue_array_htod(
-                subslvr, cpu_slice_map, gpu_slice_map, dirty,
+            pool_refs.extend(self._enqueue_array(
+                subslvr, cpu_slice_map, gpu_slice_map,
+                direction=ASYNC_HTOD, dirty=dirty,
                 classifiers=[Classifier.EKB_SQRT_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
@@ -901,8 +918,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
             # Enqueue Sum Coherencies
             kernel = subslvr.rime_sum
-            pool_refs.extend(self._enqueue_array_htod(
-                subslvr, cpu_slice_map, gpu_slice_map, dirty,
+            pool_refs.extend(self._enqueue_array(
+                subslvr, cpu_slice_map, gpu_slice_map,
+                direction=ASYNC_HTOD, dirty=dirty,
                 classifiers=[Classifier.COHERENCIES_INPUT]))
             pool_refs.append(self._enqueue_const_data_htod(
                 subslvr, kernel.rime_const_data[0]))
