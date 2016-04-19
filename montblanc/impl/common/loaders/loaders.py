@@ -37,8 +37,8 @@ class MeasurementSetLoader(BaseLoader):
 
         self.tables = {}
         self.msfile = msfile
-        self.antfile = os.path.join(self.msfile, ANTENNA_TABLE)
-        self.freqfile = os.path.join(self.msfile, SPECTRAL_WINDOW)
+        self.antfile = '::'.join([self.msfile, ANTENNA_TABLE])
+        self.freqfile = '::'.join([self.msfile, SPECTRAL_WINDOW])
 
         montblanc.log.info("{lp} Opening Measurement Set {ms}.".format(
             lp=self.LOG_PREFIX, ms=self.msfile))
