@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
     slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
         sources=montblanc.sources(point=args.npsrc, gaussian=args.ngsrc, sersic=args.nssrc),
-        init_weights=None, weight_vector=False,
+        init_weights='weight', weight_vector=False,
         dtype='double', version=args.version)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
