@@ -138,6 +138,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         montblanc.log.info('Created {d} executor(s).'.format(d=len(executors)))
 
+        # Initialise executor threads
         for ex, ctx in zip(executors, self.dev_ctxs):
             try:
                 ex.submit(C._thread_init, self, ctx).result()
@@ -767,8 +768,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
             subslvr.update_dimensions(U)
 
             # Give sub solvers access to device and pinned memory pools
-            subslvr.set_dev_mem_pool(dev_mem_pool)
-            subslvr.set_pinned_mem_pool(pinned_mem_pool)
+            subslvr.dev_mem_pool = dev_mem_pool
+            subslvr.pinned_mem_pool = pinned_mem_pool
             self.thread_local.solvers[i] = subslvr
 
     def _thread_reg_sub_arys_and_props(self, A_sub, P_sub):

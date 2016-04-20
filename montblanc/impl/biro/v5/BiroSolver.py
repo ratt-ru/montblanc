@@ -86,8 +86,9 @@ class BiroSolver(MontblancCUDASolver):
         self._const_data = mbu.create_rime_const_data(self)
 
         # Indicate these variables have not been set
-        self.dev_mem_pool = None
-        self.pinned_mem_pool = None
+        self._dev_mem_pool = None
+        self._pinned_mem_pool = None
+        self._pool_lock = None
 
     def const_data(self):
         return self._const_data
@@ -104,11 +105,29 @@ class BiroSolver(MontblancCUDASolver):
         # Update constant data, updating nsrc with sum of source counts
         self._const_data.update(self, sum_nsrc=True)
 
-    def set_dev_mem_pool(self, dev_mem_pool):
-        self.dev_mem_pool = dev_mem_pool
+    @property
+    def dev_mem_pool(self):
+        return self._dev_mem_pool
 
-    def set_pinned_mem_pool(self, pinned_mem_pool):
-        self.pinned_mem_pool = pinned_mem_pool
+    @dev_mem_pool.setter
+    def dev_mem_pool(self, pool):
+        self._dev_mem_pool = pool
+    
+    @property
+    def pinned_mem_pool(self):
+        return self._pinned_mem_pool
+
+    @pinned_mem_pool.setter
+    def pinned_mem_pool(self, pool):
+        self._pinned_mem_pool = pool
+
+    @property
+    def pool_lock(self):
+        return self._pool_lock
+
+    @pool_lock.setter
+    def pool_lock(self, lock):
+        self._pool_lock = lock
 
     def initialise(self):
         with self.context:
