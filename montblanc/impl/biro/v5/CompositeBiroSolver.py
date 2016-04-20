@@ -133,13 +133,13 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # Create a one thread executor for each device context,
         # i.e. a thread per device
-        executors = [cf.ThreadPoolExecutor(1) for ctx in self.dev_ctxs]
-        sync_executors = [cf.ThreadPoolExecutor(1) for ex in executors]
+        enqueue_executors = [cf.ThreadPoolExecutor(1) for ctx in self.dev_ctxs]
+        sync_executors = [cf.ThreadPoolExecutor(1) for ctx in self.dev_ctxs]
 
-        montblanc.log.info('Created {d} executor(s).'.format(d=len(executors)))
+        montblanc.log.info('Created {d} executor(s).'.format(d=len(enqueue_executors)))
 
         # Initialise executor threads
-        for ex, ctx in zip(executors, self.dev_ctxs):
+        for ex, ctx in zip(enqueue_executors, self.dev_ctxs):
             try:
                 ex.submit(C._thread_init, self, ctx).result()
             except Exception as e:
@@ -151,7 +151,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             except Exception as e:
                 raise e, None, sys.exc_info()[2]
 
-        montblanc.log.info('Initialised {d} thread(s).'.format(d=len(executors)))
+        montblanc.log.info('Initialised {d} thread(s).'.format(d=len(enqueue_executors)))
 
         # Get a template dictionary
         T = self.template_dict()
@@ -164,7 +164,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         try:
             budgets = sorted([ex.submit(C._thread_budget, self,
                                 slvr_cfg, A_sub, T).result()
-                            for ex in executors],
+                            for ex in enqueue_executors],
                         key=lambda T: T[1])
         except Exception as e:
             raise e, None, sys.exc_info()[2]
@@ -199,10 +199,10 @@ class CompositeBiroSolver(MontblancNumpySolver):
         self.chan_diff = P[Options.NCHAN]
 
         montblanc.log.info('Creating {s} solver(s) on {d} device(s).'
-            .format(s=nsolvers, d=len(executors)))
+            .format(s=nsolvers, d=len(enqueue_executors)))
 
         # Now create the solvers on each thread
-        for ex in executors:
+        for ex in enqueue_executors:
             try:
                 ex.submit(C._thread_create_solvers,
                     self, subslvr_cfg, P, nsolvers).result()
@@ -212,7 +212,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         montblanc.log.info('Solvers Created')
 
         # Register arrays and properties on each thread's solvers
-        for ex in executors:
+        for ex in enqueue_executors:
             try:
                 ex.submit(C._thread_reg_sub_arys_and_props,
                     self, A_sub, P_sub).result()
@@ -222,13 +222,13 @@ class CompositeBiroSolver(MontblancNumpySolver):
         montblanc.log.info('Priming Memory Pools')
 
         # Prime the memory pools on each sub-solver
-        for ex in executors:
+        for ex in enqueue_executors:
             try:
                 ex.submit(C._thread_prime_memory_pools, self).result()
             except Exception as e:
                 raise e, None, sys.exc_info()[2]
 
-        self.executors = executors
+        self.enqueue_executors = enqueue_executors
         self.sync_executors = sync_executors
         self.initialised = False
 
@@ -988,7 +988,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 subslvr.initialise()
 
         if not self.initialised:
-            for ex in self.executors:
+            for ex in self.enqueue_executors:
                 ex.submit(_init_func).result()
 
             self.initialised = True
@@ -1031,16 +1031,16 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # For easier typing
         C = CompositeBiroSolver
-        zipped_ex = zip(self.executors, self.sync_executors)
+        zipped_ex = zip(self.enqueue_executors, self.sync_executors)
 
         # Running sum of the chi-squared values returned in futures
         X2_sum = self.ft(0.0)
 
         # Sets of return value futures for each executor
-        value_futures = [set() for ex in self.executors]
+        value_futures = [set() for ex in self.enqueue_executors]
 
         # Wait for 2/3's of in-flight futures
-        threshold = self.throttle_factor*len(self.executors)*2/3.0
+        threshold = self.throttle_factor*len(self.enqueue_executors)*2/3.0
 
         # Iterate over the visibility space, i.e. slices over
         # the CPU and GPU arrays
@@ -1136,7 +1136,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
             self._thread_shutdown()
 
-        for ex in self.executors:
+        for ex in self.enqueue_executors:
             ex.submit(_shutdown_func).result()
 
         for ex in self.sync_executors:
@@ -1162,7 +1162,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
             # Then set the property on solver's associated with each
             # executor
-            for ex in self.executors:
+            for ex in self.enqueue_executors:
                 ex.submit(CompositeBiroSolver._thread_property_setter,
                     self, name, value)
 
