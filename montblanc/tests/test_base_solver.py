@@ -95,42 +95,6 @@ class TestSolver(unittest.TestCase):
         with montblanc.factory.rime_solver(slvr_cfg) as slvr:
             self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
 
-    def test_config_file(self):
-        """ Test config file """
-        import tempfile
-
-        key, value = 'frobulate', 'laksfjdsflk'
-
-        cfg_file_contents = (
-            "[montblanc]\n"
-            "na = 10\n"
-            "nchan = 64\n"
-            "{k} = {v}\n".format(k=key, v=value))
-
-        with tempfile.NamedTemporaryFile('w') as f:
-            f.write(cfg_file_contents)
-            f.flush()
-
-            # Create some keyword arguments used for
-            # generating the RIME solver configuration.
-            # We provide a configuration file that will
-            # provide some defaults which should be overwridden
-            # by these keyword arguments.
-            D = {
-                Options.CFG_FILE: f.name,
-                Options.DATA_SOURCE: Options.DATA_SOURCE_DEFAULT,
-                Options.VERSION: Options.VERSION_FOUR,
-                Options.NA: 14
-            }
-
-            slvr_cfg = montblanc.rime_solver_cfg(**D)
-
-            assert slvr_cfg[Options.NA] == 14
-            assert slvr_cfg[Options.NCHAN] == 64
-            assert slvr_cfg[Options.VERSION] == Options.VERSION_FOUR
-            assert slvr_cfg[key] == value
-
-
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSolver)
     unittest.TextTestRunner(verbosity=2).run(suite)
