@@ -735,6 +735,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # CPU Pinned memory pool, used for array transfers
         pinned_mem_pool = pycuda.tools.PageLockedMemoryPool()
 
+        # Mutex for guarding the memory pools
+        pool_lock = threading.Lock()
+
         # Configure thread local storage
         # Number of solvers in this thread
         self.thread_local.nsolvers = nsolvers
@@ -770,6 +773,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Give sub solvers access to device and pinned memory pools
             subslvr.dev_mem_pool = dev_mem_pool
             subslvr.pinned_mem_pool = pinned_mem_pool
+            subslvr.pool_lock = pool_lock
             self.thread_local.solvers[i] = subslvr
 
     def _thread_reg_sub_arys_and_props(self, A_sub, P_sub):
@@ -890,72 +894,75 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # been transferred to the card on this batch
         dirty = {}
 
-        # Now, iterate over our source chunks
-        for src_cpu_slice_map, src_gpu_slice_map in self._gen_source_slices():
-            # Update our maps with source slice information
-            cpu_slice_map.update(src_cpu_slice_map)
-            gpu_slice_map.update(src_gpu_slice_map)
+        # Guard pool allocations with a coarse-grained mutex
+        with subslvr.pool_lock:
+            # Now, iterate over our source chunks, enqueuing
+            # memory transfers and CUDA kernels
+            for src_cpu_slice_map, src_gpu_slice_map in self._gen_source_slices():
+                # Update our maps with source slice information
+                cpu_slice_map.update(src_cpu_slice_map)
+                gpu_slice_map.update(src_gpu_slice_map)
 
-            # Configure dimension extents on the sub-solver
-            subslvr.update_dimensions([
-                { DIMDATA.NAME: dim, DIMDATA.EXTENTS: [S.start, S.stop] }
-                for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
+                # Configure dimension extents on the sub-solver
+                subslvr.update_dimensions([
+                    { DIMDATA.NAME: dim, DIMDATA.EXTENTS: [S.start, S.stop] }
+                    for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
 
-            # Enqueue E Beam
-            kernel = subslvr.rime_e_beam
-            pool_refs.extend(self._enqueue_array(
-                subslvr, cpu_slice_map, gpu_slice_map,
-                direction=ASYNC_HTOD, dirty=dirty,
-                classifiers=[Classifier.E_BEAM_INPUT]))
-            pool_refs.append(self._enqueue_const_data_htod(
-                subslvr, kernel.rime_const_data[0]))
-            kernel.execute(subslvr, subslvr.stream)
+                # Enqueue E Beam
+                kernel = subslvr.rime_e_beam
+                pool_refs.extend(self._enqueue_array(
+                    subslvr, cpu_slice_map, gpu_slice_map,
+                    direction=ASYNC_HTOD, dirty=dirty,
+                    classifiers=[Classifier.E_BEAM_INPUT]))
+                pool_refs.append(self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0]))
+                kernel.execute(subslvr, subslvr.stream)
 
-            # Enqueue B Sqrt
-            kernel = subslvr.rime_b_sqrt
-            pool_refs.extend(self._enqueue_array(
-                subslvr, cpu_slice_map, gpu_slice_map,
-                direction=ASYNC_HTOD, dirty=dirty,
-                classifiers=[Classifier.B_SQRT_INPUT]))
-            pool_refs.append(self._enqueue_const_data_htod(
-                subslvr, kernel.rime_const_data[0]))
-            kernel.execute(subslvr, subslvr.stream)
+                # Enqueue B Sqrt
+                kernel = subslvr.rime_b_sqrt
+                pool_refs.extend(self._enqueue_array(
+                    subslvr, cpu_slice_map, gpu_slice_map,
+                    direction=ASYNC_HTOD, dirty=dirty,
+                    classifiers=[Classifier.B_SQRT_INPUT]))
+                pool_refs.append(self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0]))
+                kernel.execute(subslvr, subslvr.stream)
 
-            # Enqueue EKB Sqrt
-            kernel = subslvr.rime_ekb_sqrt
-            pool_refs.extend(self._enqueue_array(
-                subslvr, cpu_slice_map, gpu_slice_map,
-                direction=ASYNC_HTOD, dirty=dirty,
-                classifiers=[Classifier.EKB_SQRT_INPUT]))
-            pool_refs.append(self._enqueue_const_data_htod(
-                subslvr, kernel.rime_const_data[0]))
-            kernel.execute(subslvr, subslvr.stream)
+                # Enqueue EKB Sqrt
+                kernel = subslvr.rime_ekb_sqrt
+                pool_refs.extend(self._enqueue_array(
+                    subslvr, cpu_slice_map, gpu_slice_map,
+                    direction=ASYNC_HTOD, dirty=dirty,
+                    classifiers=[Classifier.EKB_SQRT_INPUT]))
+                pool_refs.append(self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0]))
+                kernel.execute(subslvr, subslvr.stream)
 
-            # Enqueue Sum Coherencies
-            kernel = subslvr.rime_sum
-            pool_refs.extend(self._enqueue_array(
-                subslvr, cpu_slice_map, gpu_slice_map,
-                direction=ASYNC_HTOD, dirty=dirty,
-                classifiers=[Classifier.COHERENCIES_INPUT]))
-            pool_refs.append(self._enqueue_const_data_htod(
-                subslvr, kernel.rime_const_data[0]))
-            kernel.execute(subslvr, subslvr.stream)
+                # Enqueue Sum Coherencies
+                kernel = subslvr.rime_sum
+                pool_refs.extend(self._enqueue_array(
+                    subslvr, cpu_slice_map, gpu_slice_map,
+                    direction=ASYNC_HTOD, dirty=dirty,
+                    classifiers=[Classifier.COHERENCIES_INPUT]))
+                pool_refs.append(self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0]))
+                kernel.execute(subslvr, subslvr.stream)
 
-        # Enqueue chi-squared term reduction and return the
-        # GPU array allocated to it
-        X2_gpu_ary = subslvr.rime_reduce.execute(subslvr, subslvr.stream)
+            # Enqueue chi-squared term reduction and return the
+            # GPU array allocated to it
+            X2_gpu_ary = subslvr.rime_reduce.execute(subslvr, subslvr.stream)
 
-        # Get pinned memory to hold the chi-squared result
-        sub_X2 = subslvr.pinned_mem_pool.allocate(
-            shape=X2_gpu_ary.shape, dtype=X2_gpu_ary.dtype)
+            # Get pinned memory to hold the chi-squared result
+            sub_X2 = subslvr.pinned_mem_pool.allocate(
+                shape=X2_gpu_ary.shape, dtype=X2_gpu_ary.dtype)
         
-        # Enqueue chi-squared copy off the GPU onto the CPU
-        X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
+            # Enqueue chi-squared copy off the GPU onto the CPU
+            X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
 
-        # Enqueue transfer of simulator output (model visibilities) to the CPU
-        refs = self._enqueue_array(subslvr, cpu_slice_map, gpu_slice_map,
-            direction=ASYNC_DTOH, dirty=dirty,
-            classifiers=[Classifier.SIMULATOR_OUTPUT])
+            # Enqueue transfer of simulator output (model visibilities) to the CPU
+            refs = self._enqueue_array(subslvr, cpu_slice_map, gpu_slice_map,
+                direction=ASYNC_DTOH, dirty=dirty,
+                classifiers=[Classifier.SIMULATOR_OUTPUT])
 
         # Should only be model visibilities
         assert len(refs) == 1, ('Expected one array (model visibilities), '
@@ -976,7 +983,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         pool_refs.append(model_vis)
 
         return (sync_event, sub_X2, model_vis,
-            pool_refs,
+            pool_refs, subslvr.pool_lock,
             cpu_slice_map.copy(),
             gpu_slice_map.copy())
 
@@ -1000,13 +1007,32 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         model_vis_sshape = self.arrays()['model_vis']['sshape']
 
+        def _free_pool_allocs(pool_refs, pool_lock):
+            """ Free pool-allocated objects in pool_refs, guarded by pool_lock """
+            import pycuda.driver as cuda
+            import pycuda.gpuarray as gpuarray
+
+            with pool_lock:
+                for ref in pool_refs:
+                    if ref is None:
+                        continue
+                    elif isinstance(ref, np.ndarray):
+                        ref.base.free()
+                    elif isinstance(ref, (cuda.PooledDeviceAllocation, cuda.PooledHostAllocation)):
+                        ref.free()
+                    elif isinstance(ref, gpuarray.GPUArray):
+                        ref.gpudata.free()
+                    else:
+                        raise TypeError("Unable to release pool allocated "
+                            "object of type {t}.".format(t=type(ref)))
+
         def _sync_wait(future):
             """
             Return a copy of the pinned chi-squared, pinned model visibilities
             and index into the CPU array after synchronizing on the cuda_event
             """
-            cuda_event, pinned_X2, pinned_model_vis, pool_refs, cpu, gpu = \
-                future.result()
+            cuda_event, pinned_X2, pinned_model_vis, \
+                pool_refs, pool_lock, cpu, gpu = future.result()
 
             try:
                 cuda_event.synchronize()
@@ -1027,7 +1053,12 @@ class CompositeBiroSolver(MontblancNumpySolver):
             model_vis_idx = [cpu[s] if s in cpu else ALL_SLICE
                 for s in model_vis_sshape]
 
-            return pinned_X2, pinned_model_vis, model_vis_idx
+            X2 = pinned_X2.copy()
+            model_vis = pinned_model_vis.copy()
+
+            _free_pool_allocs(pool_refs, pool_lock)
+
+            return X2, model_vis, model_vis_idx
 
         # For easier typing
         C = CompositeBiroSolver
