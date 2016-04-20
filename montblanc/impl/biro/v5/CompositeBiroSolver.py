@@ -139,10 +139,16 @@ class CompositeBiroSolver(MontblancNumpySolver):
         montblanc.log.info('Created {d} executor(s).'.format(d=len(executors)))
 
         for ex, ctx in zip(executors, self.dev_ctxs):
-            ex.submit(C._thread_init, self, ctx).result()
+            try:
+                ex.submit(C._thread_init, self, ctx).result()
+            except Exception as e:
+                raise e, None, sys.exc_info()[2]
 
         for ex, ctx in zip(sync_executors, self.dev_ctxs):
-            ex.submit(C._thread_init, self, ctx).result()
+            try:
+                ex.submit(C._thread_init, self, ctx).result()
+            except Exception as e:
+                raise e, None, sys.exc_info()[2]
 
         montblanc.log.info('Initialised {d} thread(s).'.format(d=len(executors)))
 
@@ -154,10 +160,13 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # Find the budget with the lowest memory usage
         # Work with the device with the lowest memory
-        budgets = sorted([ex.submit(C._thread_budget, self,
-                            slvr_cfg, A_sub, T).result()
-                        for ex in executors],
-                    key=lambda T: T[1])
+        try:
+            budgets = sorted([ex.submit(C._thread_budget, self,
+                                slvr_cfg, A_sub, T).result()
+                            for ex in executors],
+                        key=lambda T: T[1])
+        except Exception as e:
+            raise e, None, sys.exc_info()[2]
 
         P, M, mem = budgets[0]
 
@@ -193,21 +202,30 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # Now create the solvers on each thread
         for ex in executors:
-            ex.submit(C._thread_create_solvers,
-                self, subslvr_cfg, P, nsolvers).result()
+            try:
+                ex.submit(C._thread_create_solvers,
+                    self, subslvr_cfg, P, nsolvers).result()
+            except Exception as e:
+                raise e, None, sys.exc_info()[2]
 
         montblanc.log.info('Solvers Created')
 
         # Register arrays and properties on each thread's solvers
         for ex in executors:
-            ex.submit(C._thread_reg_sub_arys_and_props,
-                self, A_sub, P_sub).result()
+            try:
+                ex.submit(C._thread_reg_sub_arys_and_props,
+                    self, A_sub, P_sub).result()
+            except Exception as e:
+                raise e, None, sys.exc_info()[2]
 
         montblanc.log.info('Priming Memory Pools')
 
         # Prime the memory pools on each sub-solver
         for ex in executors:
-            ex.submit(C._thread_prime_memory_pools, self).result()
+            try:
+                ex.submit(C._thread_prime_memory_pools, self).result()
+            except Exception as e:
+                raise e, None, sys.exc_info()[2]
 
         self.executors = executors
         self.sync_executors = sync_executors
