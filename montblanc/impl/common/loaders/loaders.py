@@ -45,6 +45,7 @@ class MeasurementSetLoader(BaseLoader):
         montblanc.log.info("{lp} Opening Measurement Set {ms}.".format(
             lp=self.LOG_PREFIX, ms=self.msfile))
 
+        # Open the main table
         main_table = pt.table(self.msfile, ack=False)
 
         # If requested, use TAQL to ignore auto-correlations
@@ -53,6 +54,7 @@ class MeasurementSetLoader(BaseLoader):
         else:
             self.tables['main'] = main_table
 
+        # Open antenna and frequency tables
         self.tables['ant']  = pt.table(self.antfile, ack=False)
         self.tables['freq'] = pt.table(self.freqfile, ack=False)
 
@@ -67,6 +69,10 @@ class MeasurementSetLoader(BaseLoader):
         ntime = self.tables['main'].nrows() // nbl
 
         return ntime, na, nchan
+
+    def log(self, msg, *args, **kwargs):
+        montblanc.log.info('{lp} {m}'.format(lp=self.LOG_PREFIX, m=msg),
+            *args, **kwargs)
 
     def __enter__(self):
         return self
