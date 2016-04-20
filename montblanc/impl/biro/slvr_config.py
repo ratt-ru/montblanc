@@ -24,11 +24,11 @@ from montblanc.slvr_config import SolverConfig
 
 def _init_weights(s):
     """ Handle the None value in VALID_INIT_WEIGHTS """
-    if s not in VALID_INIT_WEIGHTS:
+    if s not in BiroSolverConfig.VALID_INIT_WEIGHTS:
         import configargparse
 
         raise configargparse.ArgumentTypeError("\'{iw}\'' must be one of {viw}"
-            .format(iw=INIT_WEIGHTS, viw=VALID_INIT_WEIGHTS))
+            .format(iw=INIT_WEIGHTS, viw=BiroSolverConfig.VALID_INIT_WEIGHTS))
 
     return s
 
