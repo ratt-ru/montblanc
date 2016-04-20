@@ -1020,6 +1020,9 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # Sets of return value futures for each executor
         value_futures = [set() for ex in self.executors]
 
+        # Wait for 2/3's of in-flight futures
+        threshold = self.throttle_factor*len(self.executors)*2/3.0
+
         # Iterate over the visibility space, i.e. slices over
         # the CPU and GPU arrays
         for cpu_slice_map, gpu_slice_map in self._gen_vis_slices():
@@ -1066,8 +1069,6 @@ class CompositeBiroSolver(MontblancNumpySolver):
                 # still waiting to be computed. Wait for some
                 # to finish before attempting work submission
                 if not submitted:
-                    # Wait for 2/3's of the values
-                    threshold = self.throttle_factor*len(self.executors)*2/3.0
                     future_list = [f for f in itertools.chain(*value_futures)]
 
                     for i, f in enumerate(cf.as_completed(future_list)):
