@@ -119,7 +119,7 @@ class OnesStrategy(AWeightVectorStrategy):
 
 class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
     def log_load(self, ms_name, slvr_name):
-        self.log("'{M}' will be loaded into '{S}'"
+        self.log("'{M}' will be loaded into '{S}'."
             .format(M=ms_name, S=slvr_name))
 
     def weight_vector_strategy(self, slvr, init_weights, column_names):
@@ -157,6 +157,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         msrows = tm.nrows()
         column_names = tm.colnames()
 
+        # Demand a ntime x nbl shape for MS rows
         if msrows != ntime*nbl:
             raise ValueError('MeasurementSet rows {msr} not equal to '
                 'ntime x nbl = {nt} x {nbl} = {t} ({ac})'
@@ -164,7 +165,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                         ac=('auto-correlated' if slvr.is_auto_correlated()
                             else 'no auto-correlations')))
 
-        # Work out our row increments in terms of a time increment
+        # Determine row increments in terms of a time increment
+        # This is required for calculating per antenna UVW coordinates below
         time_inc = 1
 
         while nbl*time_inc < 5000:
@@ -208,7 +210,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             t_start = start // nbl
             t_end = end // nbl
 
-            self.log('Loading rows {s} -- {e}'.format(
+            self.log('Loading rows {s} -- {e}.'.format(
                 s=start, e=end))
 
             # Read UVW coordinates into a buffer

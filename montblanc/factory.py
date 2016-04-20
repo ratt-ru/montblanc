@@ -161,8 +161,10 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
 
     if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
         from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
-    elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+    elif version == Options.VERSION_FOUR:
         from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
+    elif version == Options.VERSION_FIVE:
+        from montblanc.impl.biro.v5.loaders import MeasurementSetLoader
     else:
         raise ValueError('Incorrect version %s' % version)
 
