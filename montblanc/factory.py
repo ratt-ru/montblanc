@@ -159,7 +159,7 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
                 Options.DATA_SOURCE_MS,
                 Options.MS_FILE))
 
-    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
+    if version in [Options.VERSION_TWO]:
         from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
     elif version == Options.VERSION_FOUR:
         from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
@@ -193,9 +193,6 @@ def rime_solver(slvr_cfg):
     # Figure out which version of BIRO solver we're dealing with.
     if version == Options.VERSION_TWO:
         from montblanc.impl.biro.v2.BiroSolver import BiroSolver
-    elif version == Options.VERSION_THREE:
-        from montblanc.impl.biro.v3.CompositeBiroSolver \
-        import CompositeBiroSolver as BiroSolver
     elif version == Options.VERSION_FOUR:
         from montblanc.impl.biro.v4.BiroSolver import BiroSolver
     elif version == Options.VERSION_FIVE:

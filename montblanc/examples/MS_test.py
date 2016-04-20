@@ -30,7 +30,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='RIME MS test script')
     parser.add_argument('msfile', help='Measurement Set File')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v2','v3', 'v4'],
+    parser.add_argument('-v','--version',dest='version', type=str,
+        default=Options.VERSION_FOUR, choices=Options.VALID_VERSIONS,
         help='BIRO Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
@@ -41,7 +42,7 @@ if __name__ == '__main__':
         dtype='double', version=args.version)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
-        if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
+        if args.version in [Options.VERSION_TWO]:
             lm = np.empty(shape=slvr.lm_shape, dtype=slvr.lm_dtype)
             l, m = lm[0,:], lm[1,:]
             l[:] = 0.1
@@ -79,7 +80,7 @@ if __name__ == '__main__':
 
         slvr.solve()
 
-        if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
+        if args.version in [Options.VERSION_TWO]:
             vis = slvr.retrieve_model_vis().transpose(1, 2, 3, 0)
         elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
             vis = slvr.retrieve_model_vis()

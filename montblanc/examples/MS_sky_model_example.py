@@ -24,6 +24,9 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 
+from montblanc.config import (
+    BiroSolverConfig as Options)
+
 def repeat_brightness_over_time(slvr, parser):
     """
     Assuming our sky model file doesn't have
@@ -71,7 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('msfile', help='Measurement Set File')
     parser.add_argument('-s', '--sky-file', dest='sky_file', type=str, required=True, help='Sky Model File')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v4', choices=['v4'],
+    parser.add_argument('-v','--version',dest='version', type=str, default='v4', choices=[Options.VERSION_FOUR],
         help='BIRO Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])

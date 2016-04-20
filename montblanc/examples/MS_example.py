@@ -36,8 +36,8 @@ if __name__ == '__main__':
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')
     parser.add_argument('-ns','--nssrc',dest='nssrc', type=int, default=0, help='Number of Sersic Sources')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v2','v3','v4','v5'],
-        help='BIRO Pipeline Version.')
+    parser.add_argument('-v','--version',dest='version', type=str, default='v2',
+        choices=Options.VALID_VERSIONS, help='BIRO Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         # Random point source coordinates in the l,m,n (brightness image) domain
         lm = mbu.random_like(slvr.lm)*0.1
 
-        if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
+        if args.version in [Options.VERSION_TWO]:
             # Random brightness matrix for the point sources
             brightness = mbu.random_like(slvr.brightness)
         elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
@@ -105,7 +105,7 @@ if __name__ == '__main__':
         for i in range(args.count):
             # Set data on the solver object. Uploads to GPU
             slvr.transfer_lm(lm)
-            if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
+            if args.version in [Options.VERSION_TWO]:
                 slvr.transfer_brightness(brightness)
             elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
                 slvr.transfer_stokes(stokes)

@@ -58,7 +58,6 @@ def suite():
     from test_source_utils import TestSourceUtils
 
     from test_biro_v2 import TestBiroV2
-    from test_biro_v3 import TestBiroV3
     from test_biro_v4 import TestBiroV4
     from test_biro_v5 import TestBiroV5
 
@@ -73,7 +72,6 @@ def suite():
         # Test recent code first, as it will be more likely to fail
         #test_suite.addTest(unittest.makeSuite(TestBiroV5))
         test_suite.addTest(unittest.makeSuite(TestBiroV4))
-        #test_suite.addTest(unittest.makeSuite(TestBiroV3))
         test_suite.addTest(unittest.makeSuite(TestBiroV2))
 
     return test_suite
