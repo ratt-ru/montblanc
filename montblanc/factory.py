@@ -134,16 +134,16 @@ def get_empty_pipeline(slvr_cfg):
     """ Get an empty pipeline object """
     return Pipeline([])
 
-def get_base_solver(slvr_cfg):
+def get_rime_solver(slvr_cfg):
     """ Get a basic solver object """
 
     # Get the default cuda context if none is provided
     if slvr_cfg.get(Options.CONTEXT, None) is None:
         slvr_cfg[Options.CONTEXT]=get_default_context()
 
-    from montblanc.base_solver import BaseSolver
+    from montblanc.solvers.rime_solver import RIMESolver
 
-    return BaseSolver(slvr_cfg)
+    return RIMESolver(slvr_cfg=slvr_cfg)
 
 def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
     """ Initialise the supplied solver with measurement set data """
