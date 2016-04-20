@@ -191,7 +191,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Check for presence of visibilities
         if column_names.count(DATA) > 0:
             data_present = True
-            self.log_load(DATA, 'bayes_data')
+            self.log_load(DATA, 'observed_vis')
 
         # Check for the presence of flags
         if column_names.count(FLAG) > 0:
@@ -237,8 +237,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
             if data_present:
                 # Dump visibility data straight into the bayes data array
-                bayes_data_view = solver.bayes_data.reshape(ntime*nbl, nchan, npol)
-                tm.getcolnp(DATA, bayes_data_view[start:end,:,:],
+                observed_vis_view = solver.observed_vis.reshape(ntime*nbl, nchan, npol)
+                tm.getcolnp(DATA, observed_vis_view[start:end,:,:],
                     startrow=start, nrow=nrows)
 
             if flag_present:

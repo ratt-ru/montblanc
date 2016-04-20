@@ -62,6 +62,6 @@ class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCo
         self.kernel(slvr.uvw, gauss, sersic,
             slvr.frequency, slvr.ant_pairs,
             slvr.jones, slvr.flag, slvr.weight_vector,
-            slvr.bayes_data, slvr.G_term,
+            slvr.observed_vis, slvr.G_term,
             slvr.model_vis, slvr.chi_sqrd_result,
             stream=stream, **self.launch_params)

@@ -118,13 +118,13 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Load in visibility data, if it exists.
         if tm.colnames().count(DATA) > 0:
             montblanc.log.info('{lp} Loading visibilities '
-                'into the {bd} array'.format(
-                    lp=self.LOG_PREFIX, bd='bayes_data'))
+                'into the {ovis} array'.format(
+                    lp=self.LOG_PREFIX, ovis='observed_vis'))
             # Obtain visibilities stored in the DATA column
             # This comes in as (ntime*nbl,nchan,4)
             vis_data = tm.getcol('DATA').reshape(file_data_shape) \
                 .transpose(data_transpose).astype(solver.ct)
-            solver.transfer_bayes_data(np.ascontiguousarray(vis_data))
+            solver.transfer_observed_vis(np.ascontiguousarray(vis_data))
         else:
             montblanc.log.info('{lp} No visibilities found.'
                 .format(lp=self.LOG_PREFIX))

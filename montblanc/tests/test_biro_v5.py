@@ -204,7 +204,7 @@ class TestBiroV5(unittest.TestCase):
                 slvr.transfer_lm(slvr.lm)
                 slvr.transfer_brightness(slvr.brightness)
                 slvr.transfer_weight_vector(slvr.weight_vector)
-                slvr.transfer_bayes_data(slvr.bayes_data)
+                slvr.transfer_observed_vis(slvr.observed_vis)
                 slvr.solve()
 
 if __name__ == '__main__':

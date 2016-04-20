@@ -111,7 +111,7 @@ void rime_sum_coherencies_impl(
     typename Tr::ct * jones,
     uint8_t * flag,
     typename Tr::ft * weight_vector,
-    typename Tr::ct * bayes_data,
+    typename Tr::ct * observed_vis,
     typename Tr::ct * G_term,
     typename Tr::ct * visibilities,
     typename Tr::ft * chi_sqrd_result)
@@ -322,7 +322,7 @@ void rime_sum_coherencies_impl(
 
     // Compute the chi squared sum terms
     i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
-    typename Tr::ct delta = bayes_data[i];
+    typename Tr::ct delta = observed_vis[i];
 
     // Zero the polarisation if it is flagged
     if(flag[i] > 0)
@@ -391,14 +391,14 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ct * jones, \
     uint8_t * flag, \
     ft * weight_vector, \
-    ct * bayes_data, \
+    ct * observed_vis, \
     ct * G_term, \
     ct * visibilities, \
     ft * chi_sqrd_result) \
 { \
     rime_sum_coherencies_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
         frequency, ant_pairs, jones, flag, \
-        weight_vector, bayes_data, G_term, \
+        weight_vector, observed_vis, G_term, \
         visibilities, chi_sqrd_result); \
 }
 
@@ -491,7 +491,7 @@ class RimeSumCoherencies(Node):
         self.kernel(slvr.uvw, gauss, sersic,
             slvr.frequency, slvr.ant_pairs,
             slvr.jones, slvr.flag, slvr.weight_vector,
-            slvr.bayes_data, slvr.G_term,
+            slvr.observed_vis, slvr.G_term,
             slvr.model_vis, slvr.chi_sqrd_result,
             stream=stream, **self.launch_params)
 

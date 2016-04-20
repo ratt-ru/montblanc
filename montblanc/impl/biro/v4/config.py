@@ -211,7 +211,7 @@ A = [
             Classifier.COHERENCIES_INPUT]),
         default=1,
         test=lambda slvr, ary: rary(ary)),
-    ary_dict('bayes_data', ('ntime','nbl','nchan',4), 'ct',
+    ary_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
         classifiers=frozenset([Classifier.X2_INPUT,
             Classifier.COHERENCIES_INPUT]),
         default=0,

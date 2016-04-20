@@ -405,11 +405,11 @@ class CPUSolver(MontblancNumpySolver):
 
         if vis is None: vis = self.compute_ebk_vis()
 
-        # Take the difference between the visibilities and the model
+        # Take the difference between the observed and model visibilities
         # (4,nbl,nchan,ntime)
-        d = ne.evaluate('vis - (bayes*where(flag > 0, 0, 1))', {
-            'vis': vis,
-            'bayes': self.bayes_data,
+        d = ne.evaluate('mvis - (ovis*where(flag > 0, 0, 1))', {
+            'mvis': vis,
+            'ovis': self.observed_vis,
             'flag': self.flag})
         assert d.shape == (4, ntime, nbl, nchan)
 

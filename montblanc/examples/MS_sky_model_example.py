@@ -106,9 +106,9 @@ if __name__ == '__main__':
             gauss_shape = sky_parse.shape_arrays(['el','em','eR'],
                 slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
 
-        # Create a bayesian model and upload it to the GPU
-        bayes_data = mbu.random_like(slvr.bayes_data)
-        slvr.transfer_bayes_data(bayes_data)
+        # Create observed visibilities and upload them to the GPU
+        observed_vis = mbu.random_like(slvr.observed_vis)
+        slvr.transfer_observed_vis(observed_vis)
 
         # Generate random antenna pointing errors
         point_errors = mbu.random_like(slvr.point_errors)

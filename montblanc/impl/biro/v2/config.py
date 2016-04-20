@@ -147,7 +147,7 @@ A = [
         default=1,
         test=lambda slvr, ary: rary(ary)),
 
-    ary_dict('bayes_data', (4,'ntime','nbl','nchan'), 'ct',
+    ary_dict('observed_vis', (4,'ntime','nbl','nchan'), 'ct',
         default=0,
         test=lambda slvr, ary: rary(ary)),
 

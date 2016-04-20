@@ -660,9 +660,9 @@ class CPUSolver(MontblancNumpySolver):
 
         # Take the difference between the visibilities and the model
         # (nbl,nchan,ntime,4)
-        d = ne.evaluate('vis - (bayes*where(flag > 0, 0, 1))', {
-            'vis': vis,
-            'bayes': self.bayes_data,
+        d = ne.evaluate('mvis - (ovis*where(flag > 0, 0, 1))', {
+            'mvis': vis,
+            'ovis': self.observed_vis,
             'flag' : self.flag })
         assert d.shape == (ntime, nbl, nchan, 4)
 
