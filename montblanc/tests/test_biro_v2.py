@@ -110,12 +110,12 @@ class TestBiroV2(unittest.TestCase):
         """ Set up each test case """
         np.random.seed(int(time.time()) & 0xFFFFFFFF)
 
-        # Add a handler that outputs INFO level logging
+        # Add a handler that outputs INFO level logging to file
         fh = logging.FileHandler('test.log')
         fh.setLevel(logging.INFO)
 
-        montblanc.log.addHandler(fh)
         montblanc.log.setLevel(logging.INFO)
+        montblanc.log.handlers = [fh]
 
     def tearDown(self):
         """ Tear down each test case """

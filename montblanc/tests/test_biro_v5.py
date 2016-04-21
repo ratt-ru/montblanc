@@ -49,77 +49,16 @@ class TestBiroV5(unittest.TestCase):
         """ Set up each test case """
         np.random.seed(int(time.time()) & 0xFFFFFFFF)
 
-        # Add a handler that outputs INFO level logging
+        # Add a handler that outputs INFO level logging to file
         fh = logging.FileHandler('test.log')
         fh.setLevel(logging.INFO)
 
-        montblanc.log.addHandler(fh)
         montblanc.log.setLevel(logging.INFO)
+        montblanc.log.handlers = [fh]
 
     def tearDown(self):
         """ Tear down each test case """
         pass
-
-    def test_basic(self):
-        """ Basic Test """
-        cmp = { 'rtol' : 1e-4}
-
-        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=27, nchan=32,
-            sources=montblanc.sources(point=50, gaussian=50),
-            dtype=Options.DTYPE_DOUBLE)
-
-        for wv in [True, False]:
-            slvr_cfg[Options.WEIGHT_VECTOR] = wv
-            with solver(slvr_cfg) as slvr:
-
-                # Solve the RIME
-                slvr.solve()
-
-                # Compare CPU and GPU results
-                slvr = SolverCPU(slvr)
-                chi_sqrd_result = slvr.compute_biro_chi_sqrd(weight_vector=wv)
-                self.assertTrue(np.allclose(chi_sqrd_result, slvr.X2, **cmp),
-                    ('CPU (%s) and GPU (%s) '
-                    'chi-squared value differ. '
-                    'Failed for weight_vector=%s') %
-                        (chi_sqrd_result, slvr.X2, wv))
-
-    def test_budget(self):
-        """
-        Test that the CompositeSolver handles a memory budget
-        """
-        cmp = { 'rtol' : 1e-4}
-        wv = True
-
-        for t in [17, 27, 53]:
-            with solver(na=28, npsrc=50, ngsrc=50, ntime=t, nchan=32,
-                weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3) as slvr:
-
-                # Solve the RIME
-                slvr.solve()
-
-                # Check that CPU and GPU results agree
-                chi_sqrd_result = SolverCPU(slvr).compute_biro_chi_sqrd(weight_vector=wv)
-                self.assertTrue(np.allclose(chi_sqrd_result, slvr.X2, **cmp))
-
-                slvr.X2 = 0.0
-
-                # Test that solving the RIME a second time produces
-                # the same solution
-                slvr.solve()
-                self.assertTrue(np.allclose(chi_sqrd_result, slvr.X2, **cmp))
-
-    def test_big_budget(self):
-        wv = True
-
-        slvr_cfg = montblanc.rime_solver_cfg(na=64, ntime=10000, nchan=32768,
-            sources=montblanc.sources(point=10000, gaussian=10000, sersic=10000),
-            beam_lw=1, beam_mh=1, beam_nud=1,
-            weight_vector=wv, nsolvers=3,
-            dtype=Options.DTYPE_DOUBLE)
-
-        with solver(slvr_cfg) as slvr:
-            slvr.solve()
 
     def test_medium_budget(self):
         wv = True
@@ -128,84 +67,13 @@ class TestBiroV5(unittest.TestCase):
             sources=montblanc.sources(point=100, gaussian=100, sersic=100),
             beam_lw=50, beam_mh=50, beam_nud=50,
             weight_vector=wv, nsolvers=3,
-            source_batch_size=25,
+            source_batch_size=300,
             dtype=Options.DTYPE_DOUBLE)
 
         with solver(slvr_cfg) as slvr:
-            print slvr
+            montblanc.log.info(slvr)
 
             slvr.solve()
-
-    def test_smart_budget(self):
-        wv = True
-
-        slvr_cfg = montblanc.rime_solver_cfg(na=28, ntime=27, nchan=128,
-            sources=montblanc.sources(point=50, gaussian=50),
-            beam_lw=1, beam_mh=1, beam_nud=1,
-            weight_vector=wv, mem_budget=10*1024*1024, nsolvers=3,
-            dtype=Options.DTYPE_DOUBLE)
-
-        with solver(slvr_cfg) as slvr:
-
-            A = copy.deepcopy(BSV4mod.A)
-            T = slvr.template_dict()
-
-            viable, MT = mbu.viable_dim_config(128*1024*1024,
-                A, T, ['ntime', 'nbl&na', 'nchan'], 1)
-            self.assertTrue(viable is True and len(MT) == 1 and
-                MT['ntime'] == 1)
-
-            viable, MT = mbu.viable_dim_config(8*1024*1024,
-                A, T, ['ntime', 'nbl&na', 'nchan'], 1)
-            self.assertTrue(viable is True and len(MT) == 3 and
-                MT['ntime'] == 1 and
-                MT['na'] == 1 and
-                MT['nbl'] == 1)
-
-            viable, MT = mbu.viable_dim_config(1*1024*1024,
-                A, T, ['ntime', 'nbl&na', 'nchan'], 1)
-            self.assertTrue(viable is True and len(MT) == 4 and
-                MT['ntime'] == 1 and
-                MT['na'] == 1 and
-                MT['nbl'] == 1 and
-                MT['nchan'] == 1)
-
-            viable, MT = mbu.viable_dim_config(512*1024,
-                A, T, ['ntime', 'nbl=6&na=3', 'nchan'], 1)
-            self.assertTrue(viable is True and len(MT) == 4 and
-                MT['ntime'] == 1 and
-                MT['na'] == 3 and
-                MT['nbl'] == 6 and
-                MT['nchan'] == 1)
-
-            viable, MT = mbu.viable_dim_config(
-                1024, A, T, ['ntime', 'nbl&na'], 1)
-            self.assertTrue(viable is False and len(MT) == 3 and
-                MT['ntime'] == 1 and
-                MT['na'] == 1 and
-                MT['nbl'] == 1)
-
-            # Try with 3 solvers.
-            viable, MT = mbu.viable_dim_config(128*1024*1024,
-                A, T, ['ntime', 'nbl&na', 'nchan'], 3)
-            self.assertTrue(viable is True and len(MT) == 1 and
-                MT['ntime'] == 1)
-
-
-    @unittest.skip('Skip timing test')
-    def test_time(self, cmp=None):
-        """ Test for timing purposes """
-        if cmp is None: cmp = {}
-
-        for wv in [True]:
-            with montblanc.factory.rime_solver('biro',version='v5',
-                na=64,npsrc=50,ngsrc=50,ntime=200,nchan=64,weight_vector=wv) as slvr:
-
-                slvr.transfer_lm(slvr.lm)
-                slvr.transfer_brightness(slvr.brightness)
-                slvr.transfer_weight_vector(slvr.weight_vector)
-                slvr.transfer_observed_vis(slvr.observed_vis)
-                slvr.solve()
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV5)
