@@ -1070,8 +1070,8 @@ class CompositeBiroSolver(MontblancNumpySolver):
         # Sets of return value futures for each executor
         value_futures = [set() for ex in self.enqueue_executors]
 
-        # Wait for 2/3's of in-flight futures
-        threshold = self.throttle_factor*len(self.enqueue_executors)*2/3.0
+        # Wait for 1/3 of in-flight futures
+        threshold = self.throttle_factor*len(self.enqueue_executors)*1/3.0
 
         # Iterate over the visibility space, i.e. slices over
         # the CPU and GPU arrays
@@ -1090,20 +1090,15 @@ class CompositeBiroSolver(MontblancNumpySolver):
                         continue
 
                     # Enqueue CUDA operations for solving
-                    # this visibility chunk. Future contains:
-                    #
-                    # (1) A CUDA event which fires after all CUDA operations
-                    #     are complete
-                    # (2) a pinned memory array that will hold the
-                    #     chi-squared total for the chunk after the
-                    #     event has fired
+                    # this visibility chunk. 
                     enqueue_future = enq_ex.submit(
                         C._thread_enqueue_solve_batch,
                         self, cpu_slice_map, gpu_slice_map)
 
-                    # In a synchronisation thread, wait on the
-                    # CUDA event and return the array now holding
-                    # the chi-squared value.
+                    # In a synchronisation thread, wait for the
+                    # enqueue future to complete and return the
+                    # chi-squared value and model visibilities for
+                    # this chunk of the visibility space
                     value_future = sync_ex.submit(_sync_wait,
                         enqueue_future)
 
@@ -1135,7 +1130,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
                         # Break out if we've removed the prescribed
                         # number of futures
-                        if i > threshold:
+                        if i >= threshold:
                             break
 
         # Wait for any remaining values                            

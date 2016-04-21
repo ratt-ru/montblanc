@@ -89,7 +89,7 @@ class BiroSolverConfig(SolverConfig):
         "Number of concurrent GPU solvers per device")
 
     VISIBILITY_THROTTLE_FACTOR = 'visibility_throttle_factor'
-    DEFAULT_VISIBILITY_THROTTLE_FACTOR = 2
+    DEFAULT_VISIBILITY_THROTTLE_FACTOR = 6
     VISIBILITY_THROTTLE_FACTOR_DESCRIPTION = (
         "Maximum number of visibility chunks that may be "
         "enqueued on a solver before throttling is applied.")
