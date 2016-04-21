@@ -478,7 +478,11 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         if direction == ASYNC_HTOD:
             # Copy data into pinned memory and enqueue the transfer.
-            pinned_ary[:] = cpu_slice
+            if pinned_ary.ndim > 0:
+                pinned_ary[:] = cpu_slice
+            else:
+                pinned_ary[()] = cpu_slice
+
             gpu_ary.set_async(pinned_ary, stream=subslvr.stream)
         elif direction == ASYNC_DTOH:
             # Enqueue transfer from device into pinned memory.
