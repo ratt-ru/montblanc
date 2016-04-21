@@ -1152,7 +1152,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         if self.use_weight_vector():
             self.set_X2(X2_sum)
         else:
-            self.set_X2(X2_sum)/self.sigma_sqrd
+            self.set_X2(X2_sum/self.sigma_sqrd)
 
     def shutdown(self):
         """ Shutdown the solver """
