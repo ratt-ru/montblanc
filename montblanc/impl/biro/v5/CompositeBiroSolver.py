@@ -1066,7 +1066,11 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # For easier typing
         C = CompositeBiroSolver
-        zipped_ex = zip(self.enqueue_executors, self.sync_executors)
+
+        # Create an iterator that cycles through each device's
+        # executors, also returning the device index (enumerate)
+        ex_it = itertools.cycle(enumerate(
+            zip(self.enqueue_executors, self.sync_executors)))
 
         # Running sum of the chi-squared values returned in futures
         X2_sum = self.ft(0.0)
@@ -1086,7 +1090,10 @@ class CompositeBiroSolver(MontblancNumpySolver):
             values_waiting = 0
 
             while not submitted:
-                for i, (enq_ex, sync_ex) in enumerate(zipped_ex):
+                # Attempt all devices when submitting work
+                for device in range(len(self.enqueue_executors)):
+                    # Cycle forward to avoid submitting all work to current device
+                    i, (enq_ex, sync_ex) = ex_it.next()
                     nvalues = len(value_futures[i])
                     values_waiting += nvalues
                     # Too much work on this queue, try another executor
