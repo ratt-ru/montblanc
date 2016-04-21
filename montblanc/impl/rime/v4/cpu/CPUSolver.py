@@ -24,7 +24,7 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 from montblanc.solvers import MontblancNumpySolver
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
 class CPUSolver(MontblancNumpySolver):
     def __init__(self, slvr_cfg):
@@ -32,10 +32,10 @@ class CPUSolver(MontblancNumpySolver):
 
         # Monkey patch these functions onto the object
         # TODO: Remove this when deprecating v2.
-        from montblanc.impl.biro.v4.ant_pairs import monkey_patch_antenna_pairs
+        from montblanc.impl.rime.v4.ant_pairs import monkey_patch_antenna_pairs
         monkey_patch_antenna_pairs(self)
 
-        from montblanc.impl.biro.v4.config import (A, P)
+        from montblanc.impl.rime.v4.config import (A, P)
 
         self.register_default_dimensions()
 

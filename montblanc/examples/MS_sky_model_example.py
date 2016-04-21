@@ -25,7 +25,7 @@ import montblanc
 import montblanc.util as mbu
 
 from montblanc.config import (
-    BiroSolverConfig as Options)
+    RimeSolverConfig as Options)
 
 def repeat_brightness_over_time(slvr, parser):
     """

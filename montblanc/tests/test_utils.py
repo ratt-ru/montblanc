@@ -28,7 +28,7 @@ import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
 class TestUtils(unittest.TestCase):
     """

@@ -31,10 +31,10 @@ class CPUSolver(MontblancNumpySolver):
 
         # Monkey patch these functions onto the object
         # TODO: Remove this when deprecating v2.
-        from montblanc.impl.biro.v2.ant_pairs import monkey_patch_antenna_pairs
+        from montblanc.impl.rime.v2.ant_pairs import monkey_patch_antenna_pairs
         monkey_patch_antenna_pairs(self)
 
-        from montblanc.impl.biro.v2.config import (A, P)
+        from montblanc.impl.rime.v2.config import (A, P)
 
         self.register_default_dimensions()
         self.register_properties(P)

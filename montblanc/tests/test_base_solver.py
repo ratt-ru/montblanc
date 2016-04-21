@@ -28,7 +28,7 @@ import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
 def test_solver(slvr_cfg, **kwargs):
     slvr_cfg.update(kwargs)
@@ -87,13 +87,13 @@ class TestSolver(unittest.TestCase):
             data_source=Options.DATA_SOURCE_DEFAULT, version=Options.VERSION_TWO)
 
         with montblanc.factory.rime_solver(slvr_cfg) as slvr:
-            self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
+            self.assertTrue(type(slvr) == montblanc.impl.rime.v2.RimeSolver.RimeSolver)
 
         slvr_cfg = montblanc.rime_solver_cfg(
             data_source=Options.DATA_SOURCE_TEST, version=Options.VERSION_TWO)
 
         with montblanc.factory.rime_solver(slvr_cfg) as slvr:
-            self.assertTrue(type(slvr) == montblanc.impl.biro.v2.BiroSolver.BiroSolver)
+            self.assertTrue(type(slvr) == montblanc.impl.rime.v2.RimeSolver.RimeSolver)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSolver)

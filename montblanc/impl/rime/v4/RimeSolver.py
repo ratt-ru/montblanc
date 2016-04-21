@@ -24,12 +24,12 @@ import montblanc
 import montblanc.util as mbu
 
 from montblanc.solvers import MontblancCUDASolver
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
-from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
-from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
-from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
-from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
+from montblanc.impl.rime.v4.gpu.RimeEBeam import RimeEBeam
+from montblanc.impl.rime.v4.gpu.RimeBSqrt import RimeBSqrt
+from montblanc.impl.rime.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
+from montblanc.impl.rime.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
 
 from montblanc.pipeline import Pipeline
 
@@ -39,12 +39,12 @@ def get_pipeline(slvr_cfg):
         RimeEKBSqrt(),
         RimeSumCoherencies()])
 
-class BiroSolver(MontblancCUDASolver):
+class RimeSolver(MontblancCUDASolver):
     """ BIRO Solver Implementation """
 
     def __init__(self, slvr_cfg):
         """
-        BiroSolver Constructor
+        RimeSolver Constructor
 
         Parameters:
             slvr_cfg : SolverConfiguration
@@ -54,7 +54,7 @@ class BiroSolver(MontblancCUDASolver):
         # Set up a default pipeline if None is supplied
         slvr_cfg.setdefault('pipeline', get_pipeline(slvr_cfg))
 
-        super(BiroSolver, self).__init__(slvr_cfg)
+        super(RimeSolver, self).__init__(slvr_cfg)
 
         self.register_default_dimensions()
 
@@ -73,10 +73,10 @@ class BiroSolver(MontblancCUDASolver):
 
         # Monkey patch these functions onto the object
         # TODO: Remove this when deprecating v2.
-        from montblanc.impl.biro.v4.ant_pairs import monkey_patch_antenna_pairs
+        from montblanc.impl.rime.v4.ant_pairs import monkey_patch_antenna_pairs
         monkey_patch_antenna_pairs(self)
    
-        from montblanc.impl.biro.v4.config import (A, P)
+        from montblanc.impl.rime.v4.config import (A, P)
 
         self.register_properties(P)
         self.register_arrays(A)

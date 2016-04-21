@@ -27,11 +27,11 @@ import time
 import montblanc.factory
 import montblanc.util as mbu
 
-from montblanc.impl.biro.v4.cpu.CPUSolver import CPUSolver
+from montblanc.impl.rime.v4.cpu.CPUSolver import CPUSolver
 
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
-import montblanc.impl.biro.v4.BiroSolver as BSV4mod
+import montblanc.impl.rime.v4.RimeSolver as BSV4mod
 
 def solver(slvr_cfg, **kwargs):
     slvr_cfg[Options.DATA_SOURCE] = Options.DATA_SOURCE_TEST
@@ -40,7 +40,7 @@ def solver(slvr_cfg, **kwargs):
 
     return montblanc.factory.rime_solver(slvr_cfg)
 
-class TestBiroV5(unittest.TestCase):
+class TestRimeV5(unittest.TestCase):
     """
     TestRimes class defining the unit test cases for montblanc
     """
@@ -76,5 +76,5 @@ class TestBiroV5(unittest.TestCase):
             slvr.solve()
 
 if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV5)
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestRimeV5)
     unittest.TextTestRunner(verbosity=2).run(suite)

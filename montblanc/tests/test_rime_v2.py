@@ -28,12 +28,12 @@ import montblanc
 import montblanc.factory
 
 from montblanc.solvers import copy_solver
-from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
+from montblanc.impl.rime.v2.gpu.RimeEK import RimeEK
 
-from montblanc.impl.biro.v2.cpu.CPUSolver import CPUSolver
+from montblanc.impl.rime.v2.cpu.CPUSolver import CPUSolver
 from montblanc.pipeline import Pipeline
 
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
 def solvers(slvr_cfg, **kwargs):
     """ Returns CPU and GPU solvers for computing the RIME """
@@ -55,7 +55,7 @@ def src_perms(slvr_cfg, permute_weights=False):
     for use as input to the solver function/factory.
 
     Parameters:
-        slvr_cfg : BiroSolverConfiguration
+        slvr_cfg : RimeSolverConfiguration
             Configuration containing other sensible defaults to include
             in the returned permutation.
             e.g. {'na': 14, 'ntime': 20, 'nchan': 48}
@@ -68,7 +68,7 @@ def src_perms(slvr_cfg, permute_weights=False):
     { 'point': 20, 'gaussian': 0,  'sersic': 20 }
     { 'point': 20, 'gaussian': 20, 'sersic': 20 }
 
-    >>> slvr_cfg = BiroSolverConfiguration(na=14, ntime=20, nchan=48)
+    >>> slvr_cfg = RimeSolverConfiguration(na=14, ntime=20, nchan=48)
     >>> for p_slvr_cfg in src_perms(slvr_cfg, True)
     >>>     with solver(p_slvr_cfg) as slvr:
     >>>         slvr.solve()
@@ -101,7 +101,7 @@ def src_perms(slvr_cfg, permute_weights=False):
             yield params
 
 
-class TestBiroV2(unittest.TestCase):
+class TestRimeV2(unittest.TestCase):
     """
     TestRimes class defining the unit test cases for montblanc
     """
@@ -222,5 +222,5 @@ class TestBiroV2(unittest.TestCase):
                 self.B_sum_test_impl(gpu_slvr, cpu_slvr, wv)
 
 if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV2)
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestRimeV2)
     unittest.TextTestRunner(verbosity=2).run(suite)

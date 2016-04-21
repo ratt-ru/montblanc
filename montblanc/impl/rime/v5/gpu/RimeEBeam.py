@@ -20,9 +20,9 @@
 
 import pycuda.driver as cuda
 
-import montblanc.impl.biro.v4.gpu.RimeEBeam
+import montblanc.impl.rime.v4.gpu.RimeEBeam
 
-class RimeEBeam(montblanc.impl.biro.v4.gpu.RimeEBeam.RimeEBeam):
+class RimeEBeam(montblanc.impl.rime.v4.gpu.RimeEBeam.RimeEBeam):
     def __init__(self):
         super(RimeEBeam, self).__init__()
     def initialise(self, solver, stream=None):

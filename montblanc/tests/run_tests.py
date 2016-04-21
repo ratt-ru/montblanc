@@ -57,9 +57,9 @@ def suite():
     from test_utils import TestUtils
     from test_source_utils import TestSourceUtils
 
-    from test_biro_v2 import TestBiroV2
-    from test_biro_v4 import TestBiroV4
-    from test_biro_v5 import TestBiroV5
+    from test_rime_v2 import TestRimeV2
+    from test_rime_v4 import TestRimeV4
+    from test_rime_v5 import TestRimeV5
 
     test_suite = unittest.TestSuite()
     niter = 1
@@ -70,9 +70,9 @@ def suite():
         test_suite.addTest(unittest.makeSuite(TestUtils))
         test_suite.addTest(unittest.makeSuite(TestSourceUtils))
         # Test recent code first, as it will be more likely to fail
-        test_suite.addTest(unittest.makeSuite(TestBiroV5))
-        test_suite.addTest(unittest.makeSuite(TestBiroV4))
-        test_suite.addTest(unittest.makeSuite(TestBiroV2))
+        test_suite.addTest(unittest.makeSuite(TestRimeV5))
+        test_suite.addTest(unittest.makeSuite(TestRimeV4))
+        test_suite.addTest(unittest.makeSuite(TestRimeV2))
 
     return test_suite
 

@@ -18,4 +18,4 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from montblanc.impl.biro.v4.loaders.loaders import MeasurementSetLoader
+from montblanc.impl.rime.v4.loaders.loaders import MeasurementSetLoader

@@ -23,9 +23,9 @@ import numpy as np
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
-import montblanc.impl.biro.v4.gpu.RimeSumCoherencies
+import montblanc.impl.rime.v4.gpu.RimeSumCoherencies
 
-class RimeSumCoherencies(montblanc.impl.biro.v4.gpu.RimeSumCoherencies.RimeSumCoherencies):
+class RimeSumCoherencies(montblanc.impl.rime.v4.gpu.RimeSumCoherencies.RimeSumCoherencies):
     def __init__(self):
         super(RimeSumCoherencies, self).__init__()
     def initialise(self, solver, stream=None):

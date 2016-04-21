@@ -20,9 +20,9 @@
 
 import pycuda.driver as cuda
 
-import montblanc.impl.biro.v4.gpu.RimeBSqrt
+import montblanc.impl.rime.v4.gpu.RimeBSqrt
 
-class RimeBSqrt(montblanc.impl.biro.v4.gpu.RimeBSqrt.RimeBSqrt):
+class RimeBSqrt(montblanc.impl.rime.v4.gpu.RimeBSqrt.RimeBSqrt):
     def __init__(self):
         super(RimeBSqrt, self).__init__()
     def initialise(self, solver, stream=None):

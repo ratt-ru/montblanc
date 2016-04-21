@@ -28,7 +28,7 @@ except ImportError:
 
 import montblanc
 from hypercube import HyperCube
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
 import montblanc.util as mbu
 

@@ -29,17 +29,17 @@ import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
-from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
-from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
-from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
-from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
-from montblanc.impl.biro.v4.gpu.MatrixTranspose import MatrixTranspose
+from montblanc.impl.rime.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
+from montblanc.impl.rime.v4.gpu.RimeEBeam import RimeEBeam
+from montblanc.impl.rime.v4.gpu.RimeBSqrt import RimeBSqrt
+from montblanc.impl.rime.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
+from montblanc.impl.rime.v4.gpu.MatrixTranspose import MatrixTranspose
 
-from montblanc.impl.biro.v4.cpu.CPUSolver import CPUSolver
+from montblanc.impl.rime.v4.cpu.CPUSolver import CPUSolver
 
 from montblanc.solvers import copy_solver
 from montblanc.pipeline import Pipeline
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
 def src_perms(slvr_cfg, permute_weights=False):
     """
@@ -47,7 +47,7 @@ def src_perms(slvr_cfg, permute_weights=False):
     for use as input to the solver function/factory.
 
     Parameters:
-        slvr_cfg : BiroSolverConfiguration
+        slvr_cfg : RimeSolverConfiguration
             Configuration containing other sensible defaults to include
             in the returned permutation.
             e.g. {'na': 14, 'ntime': 20, 'nchan': 48}
@@ -106,7 +106,7 @@ def solvers(slvr_cfg, **kwargs):
 
     return montblanc.factory.rime_solver(gpu_slvr_cfg), CPUSolver(cpu_slvr_cfg)
 
-class TestBiroV4(unittest.TestCase):
+class TestRimeV4(unittest.TestCase):
     """
     TestRimes class defining the unit test cases for montblanc
     """
@@ -133,7 +133,7 @@ class TestBiroV4(unittest.TestCase):
 
         # Make the beam cube sufficiently large to contain the
         # test values for the lm and pointing error coordinates
-        # specified in BiroSolver.py
+        # specified in RimeSolver.py
         S = 1
 
         cpu_slvr.set_beam_ll(-S)
@@ -344,7 +344,7 @@ class TestBiroV4(unittest.TestCase):
 
         # Make the beam cube sufficiently large to contain the
         # test values for the lm and pointing error coordinates
-        # specified in BiroSolver.py
+        # specified in RimeSolver.py
         S = 1
 
         cpu_slvr.set_beam_ll(-S)
@@ -564,13 +564,13 @@ class TestBiroV4(unittest.TestCase):
                 name='matrix_in',
                 shape=('nsrc', 'nchan'),
                 dtype='ft',
-                registrant='test_biro_v4')
+                registrant='test_rime_v4')
 
             gpu_slvr.register_array(
                 name='matrix_out',
                 shape=('nchan', 'nsrc'),
                 dtype='ft',
-                registrant='test_biro_v4')
+                registrant='test_rime_v4')
 
             matrix = np.random.random(
                 size=(nsrc, nchan)).astype(gpu_slvr.ft)
@@ -582,5 +582,5 @@ class TestBiroV4(unittest.TestCase):
             assert np.all(matrix == transposed_matrix.T)
 
 if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestBiroV4)
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestRimeV4)
     unittest.TextTestRunner(verbosity=2).run(suite)

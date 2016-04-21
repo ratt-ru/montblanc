@@ -23,7 +23,7 @@ import numpy as np
 import montblanc
 import montblanc.impl.common.loaders
 
-from montblanc.config import (BiroSolverConfig as Options)
+from montblanc.config import (RimeSolverConfig as Options)
 
 # Measurement Set string constants
 UVW = 'UVW'

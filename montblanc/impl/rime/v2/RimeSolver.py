@@ -23,37 +23,37 @@ import numpy as np
 import montblanc
 
 from montblanc.solvers import MontblancCUDASolver
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
-from montblanc.impl.biro.v2.gpu.RimeEK import RimeEK
-from montblanc.impl.biro.v2.gpu.RimeGaussBSum import RimeGaussBSum
+from montblanc.impl.rime.v2.gpu.RimeEK import RimeEK
+from montblanc.impl.rime.v2.gpu.RimeGaussBSum import RimeGaussBSum
 from montblanc.pipeline import Pipeline
 
 def get_pipeline(slvr_cfg):
     wv = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
     return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
 
-class BiroSolver(MontblancCUDASolver):
+class RimeSolver(MontblancCUDASolver):
     """ Solver implementation for BIRO """
     def __init__(self, slvr_cfg):
         """
-        BiroSolver Constructor
+        RimeSolver Constructor
 
         Parameters:
-            slvr_cfg : BiroSolverConfiguration
+            slvr_cfg : RimeSolverConfiguration
         """
 
         # Set up a default pipeline if None is supplied
         slvr_cfg.setdefault('pipeline', get_pipeline(slvr_cfg))
 
-        super(BiroSolver, self).__init__(slvr_cfg)
+        super(RimeSolver, self).__init__(slvr_cfg)
 
         # Monkey patch these functions onto the object
         # TODO: Remove this when deprecating v2.
         from ant_pairs import monkey_patch_antenna_pairs
         monkey_patch_antenna_pairs(self)
 
-        from montblanc.impl.biro.v2.config import (A, P)
+        from montblanc.impl.rime.v2.config import (A, P)
 
         self.register_default_dimensions()
         self.register_properties(P)

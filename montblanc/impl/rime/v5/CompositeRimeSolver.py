@@ -34,18 +34,18 @@ import montblanc
 import montblanc.util as mbu
 
 from montblanc.solvers import MontblancNumpySolver
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
-from montblanc.impl.biro.v4.config import (
+from montblanc.impl.rime.v4.config import (
     A as v4Arrays,
     P as v4Props,
     Classifier)
 
 from hypercube.dims import DIMDATA
 
-import montblanc.impl.biro.v4.BiroSolver as BSV4mod
+import montblanc.impl.rime.v4.RimeSolver as BSV4mod
 
-from montblanc.impl.biro.v5.BiroSolver import BiroSolver
+from montblanc.impl.rime.v5.RimeSolver import RimeSolver
 
 NA_EXTRA = 'na1'
 
@@ -66,22 +66,22 @@ ORDERING_CONSTRAINTS.update({ 'nsrc' : 1,
 ORDERING_RANK = [' or '.join(['nsrc'] + mbu.source_nr_vars()),
     'ntime', ' or '.join(['nbl', 'na']), 'nchan']
 
-class CompositeBiroSolver(MontblancNumpySolver):
+class CompositeRimeSolver(MontblancNumpySolver):
     """
     Composite solver implementation for BIRO.
 
-    Implements a solver composed of multiple BiroSolvers. The sub-solver
+    Implements a solver composed of multiple RimeSolvers. The sub-solver
     memory transfers and pipelines are executed asynchronously.
     """
     def __init__(self, slvr_cfg):
         """
-        BiroSolver Constructor
+        RimeSolver Constructor
 
         Parameters:
             slvr_cfg : SolverConfiguration
                 Solver Configuration variables
         """
-        super(CompositeBiroSolver, self).__init__(slvr_cfg=slvr_cfg)
+        super(CompositeRimeSolver, self).__init__(slvr_cfg=slvr_cfg)
 
         # Create thread local storage
         self.thread_local = threading.local()
@@ -102,7 +102,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             description='E cube nu depth')
 
         # Monkey patch v4 antenna pair functions into the object
-        from montblanc.impl.biro.v4.ant_pairs import monkey_patch_antenna_pairs
+        from montblanc.impl.rime.v4.ant_pairs import monkey_patch_antenna_pairs
         monkey_patch_antenna_pairs(self)
 
         # Copy the v4 arrays and properties and
@@ -129,7 +129,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             d=nsolvers))
 
         # Shorten the type name
-        C = CompositeBiroSolver
+        C = CompositeRimeSolver
 
         # Create a one thread executor for each device context,
         # i.e. a thread per device
@@ -497,7 +497,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
         direction=None, dirty=None, classifiers=None):
         """
         Enqueue asynchronous copies from CPU arrays on the
-        CompositeBiroSolver to GPU arrays on the BIRO sub-solvers
+        CompositeRimeSolver to GPU arrays on the BIRO sub-solvers
         on the CUDA stream associated with a sub-solver.
 
         While it aims for generality, it generally depends on arrays
@@ -756,7 +756,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
         # Create solvers for this context
         for i in range(nsolvers):
-            subslvr = BiroSolver(subslvr_cfg)
+            subslvr = RimeSolver(subslvr_cfg)
 
             # Configure the source dimensions of each sub-solver.
             # Change the local size of each source dim so that there is
@@ -1065,7 +1065,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             return X2, model_vis, model_vis_idx
 
         # For easier typing
-        C = CompositeBiroSolver
+        C = CompositeRimeSolver
 
         # Create an iterator that cycles through each device's
         # executors, also returning the device index (enumerate)
@@ -1189,7 +1189,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
 
     def _get_setter_method(self,name):
         """
-        Setter method for CompositeBiroSolver properties. Sets the property
+        Setter method for CompositeRimeSolver properties. Sets the property
         on sub-solvers.
         """
 
@@ -1200,7 +1200,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
             # Then set the property on solver's associated with each
             # executor
             for ex in self.enqueue_executors:
-                ex.submit(CompositeBiroSolver._thread_property_setter,
+                ex.submit(CompositeRimeSolver._thread_property_setter,
                     self, name, value)
 
         return types.MethodType(setter,self)

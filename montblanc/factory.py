@@ -27,7 +27,7 @@ import pycuda.driver as cuda
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.config import (BiroSolverConfig as Options)
+from montblanc.config import (RimeSolverConfig as Options)
 
 from montblanc.pipeline import Pipeline
 
@@ -160,11 +160,11 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
                 Options.MS_FILE))
 
     if version in [Options.VERSION_TWO]:
-        from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
+        from montblanc.impl.rime.v2.loaders import MeasurementSetLoader
     elif version == Options.VERSION_FOUR:
-        from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
+        from montblanc.impl.rime.v4.loaders import MeasurementSetLoader
     elif version == Options.VERSION_FIVE:
-        from montblanc.impl.biro.v5.loaders import MeasurementSetLoader
+        from montblanc.impl.rime.v5.loaders import MeasurementSetLoader
     else:
         raise ValueError('Incorrect version %s' % version)
 
@@ -192,23 +192,23 @@ def rime_solver(slvr_cfg):
 
     # Figure out which version of BIRO solver we're dealing with.
     if version == Options.VERSION_TWO:
-        from montblanc.impl.biro.v2.BiroSolver import BiroSolver
+        from montblanc.impl.rime.v2.RimeSolver import RimeSolver
     elif version == Options.VERSION_FOUR:
-        from montblanc.impl.biro.v4.BiroSolver import BiroSolver
+        from montblanc.impl.rime.v4.RimeSolver import RimeSolver
     elif version == Options.VERSION_FIVE:
-        from montblanc.impl.biro.v5.CompositeBiroSolver \
-        import CompositeBiroSolver as BiroSolver
+        from montblanc.impl.rime.v5.CompositeRimeSolver \
+        import CompositeRimeSolver as RimeSolver
         slvr_cfg[Options.CONTEXT] = __contexts
     else:
         raise ValueError('Invalid version %s' % version)
 
     if data_source == Options.DATA_SOURCE_MS:
-        return create_rime_solver_from_ms(BiroSolver, slvr_cfg)
+        return create_rime_solver_from_ms(RimeSolver, slvr_cfg)
     elif data_source == Options.DATA_SOURCE_TEST:
-        return BiroSolver(slvr_cfg)
+        return RimeSolver(slvr_cfg)
     elif data_source == Options.DATA_SOURCE_DEFAULT:
-        return BiroSolver(slvr_cfg)
+        return RimeSolver(slvr_cfg)
     elif data_source == Options.DATA_SOURCE_EMPTY:
-        return BiroSolver(slvr_cfg)
+        return RimeSolver(slvr_cfg)
     else:
         raise ValueError('Invalid data source %s' % data_source)

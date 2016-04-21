@@ -28,7 +28,7 @@ def ary_dict(name, shape, dtype, **kwargs):
         'name' : name,
         'shape' : shape,
         'dtype' : dtype,
-        'registrant' : 'BiroSolver',
+        'registrant' : 'RimeSolver',
         'shape_member' : True,
         'dtype_member' : True
     }
@@ -41,7 +41,7 @@ def prop_dict(name,dtype,default):
         'name' : name,
         'dtype' : dtype,
         'default' : default,
-        'registrant' : 'BiroSolver',
+        'registrant' : 'RimeSolver',
         'setter' : True
     }
 

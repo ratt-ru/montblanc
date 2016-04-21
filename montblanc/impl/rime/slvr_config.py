@@ -24,15 +24,15 @@ from montblanc.slvr_config import SolverConfig
 
 def _init_weights(s):
     """ Handle the None value in VALID_INIT_WEIGHTS """
-    if s not in BiroSolverConfig.VALID_INIT_WEIGHTS:
+    if s not in RimeSolverConfig.VALID_INIT_WEIGHTS:
         import configargparse
 
         raise configargparse.ArgumentTypeError("\'{iw}\'' must be one of {viw}"
-            .format(iw=INIT_WEIGHTS, viw=BiroSolverConfig.VALID_INIT_WEIGHTS))
+            .format(iw=INIT_WEIGHTS, viw=RimeSolverConfig.VALID_INIT_WEIGHTS))
 
     return s
 
-class BiroSolverConfig(SolverConfig):
+class RimeSolverConfig(SolverConfig):
     E_BEAM_WIDTH = 'beam_lw'
     DEFAULT_E_BEAM_WIDTH = 50
     E_BEAM_WIDTH_DESCRIPTION = (
@@ -165,7 +165,7 @@ class BiroSolverConfig(SolverConfig):
     }
 
     def parser(self):
-        p = super(BiroSolverConfig, self).parser()
+        p = super(RimeSolverConfig, self).parser()
 
         p.add_argument('--{v}'.format(v=self.E_BEAM_WIDTH),
             required=False,

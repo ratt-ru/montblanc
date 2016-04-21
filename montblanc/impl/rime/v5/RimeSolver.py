@@ -26,28 +26,28 @@ import montblanc.util as mbu
 
 from montblanc.solvers import MontblancCUDASolver
 
-from montblanc.impl.biro.v5.gpu.RimeEBeam import RimeEBeam
-from montblanc.impl.biro.v5.gpu.RimeBSqrt import RimeBSqrt
-from montblanc.impl.biro.v5.gpu.RimeEKBSqrt import RimeEKBSqrt
-from montblanc.impl.biro.v5.gpu.RimeSumCoherencies import RimeSumCoherencies
-from montblanc.impl.biro.v5.gpu.RimeReduction import RimeReduction
+from montblanc.impl.rime.v5.gpu.RimeEBeam import RimeEBeam
+from montblanc.impl.rime.v5.gpu.RimeBSqrt import RimeBSqrt
+from montblanc.impl.rime.v5.gpu.RimeEKBSqrt import RimeEKBSqrt
+from montblanc.impl.rime.v5.gpu.RimeSumCoherencies import RimeSumCoherencies
+from montblanc.impl.rime.v5.gpu.RimeReduction import RimeReduction
 
-from montblanc.impl.biro.v4.BiroSolver import BiroSolver as BiroSolverV4
+from montblanc.impl.rime.v4.RimeSolver import RimeSolver as RimeSolverV4
 
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
-class BiroSolver(MontblancCUDASolver):
+class RimeSolver(MontblancCUDASolver):
     """ BIRO Solver Implementation """
     def __init__(self, slvr_cfg):
         """
-        BiroSolver Constructor
+        RimeSolver Constructor
 
         Parameters:
             slvr_cfg : SolverConfiguration
                 Solver Configuration variables
         """
         # Call the parent constructor
-        super(BiroSolver, self).__init__(slvr_cfg)
+        super(RimeSolver, self).__init__(slvr_cfg)
 
         self.register_default_dimensions()
 
@@ -70,7 +70,7 @@ class BiroSolver(MontblancCUDASolver):
         self.rime_sum = RimeSumCoherencies()
         self.rime_reduce = RimeReduction()
 
-        from montblanc.impl.biro.v4.ant_pairs import monkey_patch_antenna_pairs
+        from montblanc.impl.rime.v4.ant_pairs import monkey_patch_antenna_pairs
         monkey_patch_antenna_pairs(self)
 
         # Create
@@ -100,7 +100,7 @@ class BiroSolver(MontblancCUDASolver):
         """
 
         # Defer to parent method on the base solver
-        super(BiroSolver, self).update_dimension(**update_dict)
+        super(RimeSolver, self).update_dimension(**update_dict)
 
         # Update constant data, updating nsrc with sum of source counts
         self._const_data.update(self, sum_nsrc=True)

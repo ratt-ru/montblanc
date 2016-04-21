@@ -21,9 +21,9 @@
 from montblanc.slvr_config import (
     SolverConfig,
     SolverConfig as SCO)
-from montblanc.impl.biro.slvr_config import (
-    BiroSolverConfig,
-    BiroSolverConfig as BSCO)
+from montblanc.impl.rime.slvr_config import (
+    RimeSolverConfig,
+    RimeSolverConfig as BSCO)
 
 __PADDING = ' '*4
 
