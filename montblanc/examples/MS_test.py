@@ -59,7 +59,7 @@ if __name__ == '__main__':
             alpha[:] = 0.5
 
             slvr.transfer_brightness(B)
-        elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+        elif args.version in [Options.VERSION_FOUR]:
             lm = np.empty(shape=slvr.lm_shape, dtype=slvr.lm_dtype)
             l, m = lm[:,0], lm[:,1]
             l[:] = 0.1
@@ -77,13 +77,24 @@ if __name__ == '__main__':
             alpha[:] = 0.5
             slvr.transfer_stokes(stokes)
             slvr.transfer_alpha(alpha)
+        elif args.version in [Options.VERSION_FIVE]:
+            slvr.lm[:,0] = 0.1
+            slvr.lm[:,1] = 0.25
+
+            slvr.stokes[:,:,0] = 2
+            slvr.stokes[:,:,1] = 1
+            slvr.stokes[:,:,2] = 1
+            slvr.stokes[:,:,3] = 1
+            slvr.alpha[:] = 0.5
 
         slvr.solve()
 
         if args.version in [Options.VERSION_TWO]:
             vis = slvr.retrieve_model_vis().transpose(1, 2, 3, 0)
-        elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+        elif args.version in [Options.VERSION_FOUR]:
             vis = slvr.retrieve_model_vis()
+        elif args.version in [Options.VERSION_FIVE]:
+            vis = slvr.model_vis
 
         print vis
         print vis.shape
