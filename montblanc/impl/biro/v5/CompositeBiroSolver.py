@@ -1123,7 +1123,7 @@ class CompositeBiroSolver(MontblancNumpySolver):
                     for i, f in enumerate(cf.as_completed(future_list)):
                         # Remove the future from waiting future sets
                         for s in value_futures:
-                            s.remove(f)
+                            s.discard(f)
 
                         # Get chi-squared and model visibilities
                         X2, pinned_model_vis, model_vis_idx = f.result()
