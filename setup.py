@@ -32,21 +32,27 @@ def dl_cub(cub_url, cub_archive_name):
     with open(cub_archive_name, 'wb') as f:
         remote_file = urllib2.urlopen(cub_url)
         meta = remote_file.info()
-        remote_file_size = int(meta.getheaders("Content-Length")[0])
 
+        # The server may provide us with the size of the file.
+        cl_header = meta.getheaders("Content-Length")
+        remote_file_size = int(cl_header[0]) if len(cl_header) > 0 else '???'
+
+        # Initialise variables
         local_file_size = 0
         block_size = 128*1024
 
+        # Do the download
         while True:
             data = remote_file.read(block_size)
 
             if not data:
                 break
 
-            local_file_size += len(data)
             f.write(data)
-            status = r"Downloading %s %10d  [%3.2f%%]" % (cub_url,
-                local_file_size, local_file_size * 100. / remote_file_size)
+            local_file_size += len(data)
+
+            status = r"Downloading %s %10d/%s" % (cub_url,
+                local_file_size, remote_file_size)
             status = status + chr(8)*(len(status)+1)
             print status,
 
