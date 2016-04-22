@@ -22,7 +22,7 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.config import BiroSolverConfig as Options
+from montblanc.config import RimeSolverConfig as Options
 
 if __name__ == '__main__':
     import sys
@@ -34,7 +34,8 @@ if __name__ == '__main__':
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')
     parser.add_argument('-ns','--nssrc',dest='nssrc', type=int, default=0, help='Number of Gaussian Sources')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v4', help='version')
+    parser.add_argument('-v','--version',dest='version', type=str,
+        default=Options.VERSION_FOUR, choices=Options.VALID_VERSIONS, help='version')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -53,7 +54,7 @@ if __name__ == '__main__':
         slvr.transfer_lm(lm)
 
         # Create 1Jy point sources
-        if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
+        if args.version in [Options.VERSION_TWO]:
             brightness = np.empty(shape=slvr.brightness_shape, dtype=slvr.brightness_dtype)
             brightness[0,:,:] = 1
             brightness[1,:,:] = 0
@@ -74,5 +75,5 @@ if __name__ == '__main__':
         slvr.solve()
 
         with slvr.context as ctx:
-            print slvr.vis_gpu.get()
+            print slvr.vis.get()
         print slvr

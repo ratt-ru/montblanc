@@ -24,6 +24,9 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 
+from montblanc.config import (
+    RimeSolverConfig as Options)
+
 def repeat_brightness_over_time(slvr, parser):
     """
     Assuming our sky model file doesn't have
@@ -71,8 +74,8 @@ if __name__ == '__main__':
     parser.add_argument('msfile', help='Measurement Set File')
     parser.add_argument('-s', '--sky-file', dest='sky_file', type=str, required=True, help='Sky Model File')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v4', choices=['v4'],
-        help='BIRO Pipeline Version.')
+    parser.add_argument('-v','--version',dest='version', type=str, default='v4', choices=[Options.VERSION_FOUR],
+        help='RIME Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -88,7 +91,7 @@ if __name__ == '__main__':
 
     slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
         sources=sources, init_weights=None, weight_vector=False,
-        store_cpu=False, version=args.version)
+        version=args.version)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
         # Get the lm coordinates
@@ -103,15 +106,15 @@ if __name__ == '__main__':
             gauss_shape = sky_parse.shape_arrays(['el','em','eR'],
                 slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
 
-        # Create a bayesian model and upload it to the GPU
-        bayes_data = mbu.random_like(slvr.bayes_data_gpu)
-        slvr.transfer_bayes_data(bayes_data)
+        # Create observed visibilities and upload them to the GPU
+        observed_vis = mbu.random_like(slvr.observed_vis)
+        slvr.transfer_observed_vis(observed_vis)
 
         # Generate random antenna pointing errors
-        point_errors = mbu.random_like(slvr.point_errors_gpu)
+        point_errors = mbu.random_like(slvr.point_errors)
 
         # Generate and transfer a noise vector.
-        weight_vector = mbu.random_like(slvr.weight_vector_gpu)
+        weight_vector = mbu.random_like(slvr.weight_vector)
         slvr.transfer_weight_vector(weight_vector)
 
         # Execute the pipeline
@@ -131,7 +134,7 @@ if __name__ == '__main__':
 
             # Obtain the visibilities  (slow)
             #with slvr.context:
-            #    V = slvr.vis_gpu.get()
+            #    V = slvr.vis.get()
 
         # Print information about the simulation
         print slvr

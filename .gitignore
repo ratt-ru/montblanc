@@ -4,6 +4,13 @@ dist/
 montblanc.egg-info/
 *.pyc
 
+# cub files
+montblanc/src/cub
+
+# Documentation build
+docs/_build
+docs/make.bat
+
 # log files
 *.log
 
@@ -28,6 +35,3 @@ montblanc.egg-info/
 *.exe
 *.out
 *.app
-
-# cub files
-montblanc/src/cub

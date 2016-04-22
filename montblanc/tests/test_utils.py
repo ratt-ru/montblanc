@@ -28,6 +28,7 @@ import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
+from montblanc.config import RimeSolverConfig as Options
 
 class TestUtils(unittest.TestCase):
     """
@@ -39,12 +40,12 @@ class TestUtils(unittest.TestCase):
         """ Set up each test case """
         np.random.seed(int(time.time()) & 0xFFFFFFFF)
 
-        # Add a handler that outputs INFO level logging
+        # Add a handler that outputs INFO level logging to file
         fh = logging.FileHandler('test.log')
         fh.setLevel(logging.INFO)
 
-        montblanc.log.addHandler(fh)
         montblanc.log.setLevel(logging.INFO)
+        montblanc.log.handlers = [fh]
 
     def tearDown(self):
         """ Tear down each test case """
@@ -206,6 +207,43 @@ class TestUtils(unittest.TestCase):
         fm = (((np.arange(4) + 1)*10) + 2).astype(ft)
         self.assertTrue(np.all(ary[0] == fl))
         self.assertTrue(np.all(ary[1] == fm))
+
+    def test_config_file(self):
+        """ Test config file """
+        import tempfile
+
+        key, value = 'frobulate', 'laksfjdsflk'
+
+        cfg_file_contents = (
+            "[montblanc]\n"
+            "na = 10\n"
+            "nchan = 64\n"
+            "{k} = {v}\n".format(k=key, v=value))
+
+        with tempfile.NamedTemporaryFile('w') as f:
+            f.write(cfg_file_contents)
+            f.flush()
+
+            # Create some keyword arguments used for
+            # generating the RIME solver configuration.
+            # We provide a configuration file that will
+            # provide some defaults which should be overwridden
+            # by these keyword arguments.
+            D = {
+                Options.CFG_FILE: f.name,
+                Options.DATA_SOURCE: Options.DATA_SOURCE_DEFAULT,
+                Options.VERSION: Options.VERSION_FOUR,
+                Options.NA: 14
+            }
+
+            slvr_cfg = montblanc.rime_solver_cfg(**D)
+
+            assert slvr_cfg[Options.NA] == 14
+            assert slvr_cfg[Options.NCHAN] == 64
+            assert slvr_cfg[Options.VERSION] == Options.VERSION_FOUR
+            assert slvr_cfg[key] == value
+
+
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestUtils)

@@ -63,15 +63,16 @@ class SolverConfig(object):
     CFG_FILE_DESCRIPTION = 'Configuration File'
 
     MODE = 'mode'
-    MODE_X2 = 'X2'
+    MODE_CHI_SQUARED = 'chi-squared'
     MODE_SIMULATOR = 'simulator'
-    DEFAULT_MODE = MODE_X2
+    DEFAULT_MODE = MODE_CHI_SQUARED
     MODE_DESCRIPTION = (
         "Montblanc's execution mode. "
-        "If '{x2}', montblanc will compute model visibilities and "
+        "If '{chi}', montblanc will compute model visibilities and "
         "use them in conjunction with observed visibilities, "
         "flag data and weighting vectors to compute a chi-squared value. "
-        "If '{sim}', montblanc will compute model visibilities.")
+        "If '{sim}', montblanc will compute model visibilities.").format(
+            chi=MODE_CHI_SQUARED, sim=MODE_SIMULATOR)
 
     SOURCES = 'sources'
     DEFAULT_SOURCES = {k: v for k, v
@@ -83,30 +84,30 @@ class SolverConfig(object):
     # Number of timesteps
     NTIME = 'ntime'
     DEFAULT_NTIME = 10
-    NTIME_DESCRIPTION = 'Number of timesteps'
+    NTIME_DESCRIPTION = 'Timesteps'
 
     # Number of antenna
     NA = 'na'
     DEFAULT_NA = 7
-    NA_DESCRIPTION = 'Number of antenna'
+    NA_DESCRIPTION = 'Antenna'
 
     # Number of baselines
     NBL = 'nbl'
-    NBL_DESCRIPTION = 'Number of baselines'
+    NBL_DESCRIPTION = 'Baselines'
 
     # Number of channels
     NCHAN = 'nchan'
     DEFAULT_NCHAN = 16
-    NCHAN_DESCRIPTION = 'Number of channels'
+    NCHAN_DESCRIPTION = 'Channels'
 
     # Number of polarisations
     NPOL = 'npol'
     DEFAULT_NPOL = 4
-    NPOL_DESCRIPTION = 'Number of Polarisations'
+    NPOL_DESCRIPTION = 'Polarisations'
 
     # Number of sources
     NSRC = 'nsrc'
-    NSRC_DESCRIPTION = 'Number of sources (total)'
+    NSRC_DESCRIPTION = 'Sources (total)'
 
     # Master solver
     SOLVER_TYPE = 'solver_type'
@@ -141,18 +142,22 @@ class SolverConfig(object):
 
     # Data Source. Defaults/A MeasurementSet/Random Test data
     DATA_SOURCE = 'data_source'
-    DATA_SOURCE_DEFAULTS = 'defaults'
+    DATA_SOURCE_DEFAULT = 'default'
     DATA_SOURCE_MS = 'ms'
     DATA_SOURCE_TEST = 'test'
+    DATA_SOURCE_EMPTY = 'empty'
     DEFAULT_DATA_SOURCE = DATA_SOURCE_MS
-    VALID_DATA_SOURCES = [DATA_SOURCE_DEFAULTS, DATA_SOURCE_MS, DATA_SOURCE_TEST]
+    VALID_DATA_SOURCES = [DATA_SOURCE_DEFAULT, DATA_SOURCE_MS,
+        DATA_SOURCE_TEST, DATA_SOURCE_EMPTY]
     DATA_SOURCE_DESCRIPTION = (
         "The data source for initialising data arrays. "
         "If '{d}', data is initialised with defaults. " 
         "If '{t}' filled with random test data. "
         "If '{ms}', some data will be read from a MeasurementSet, "
-        "and defaults will be used for the rest.").format(
-            d=DATA_SOURCE_DEFAULTS, ms=DATA_SOURCE_MS, t=DATA_SOURCE_TEST)
+        "and defaults will be used for the rest. "
+        "If '{e}', the arrays will not be initialised").format(
+            d=DATA_SOURCE_DEFAULT, ms=DATA_SOURCE_MS,
+            t=DATA_SOURCE_TEST, e=DATA_SOURCE_EMPTY)
 
     # MeasurementSet file
     MS_FILE = 'msfile'
@@ -168,18 +173,6 @@ class SolverConfig(object):
         "If '{c}', assume CASA's default ordering of time x baseline. "
         "If '{o}', assume baseline x time ordering").format(
             c=DATA_ORDER_CASA, o=DATA_ORDER_OTHER)
-
-    # Should we store CPU versions when
-    # transferring data to the GPU?
-    STORE_CPU = 'store_cpu'
-    DEFAULT_STORE_CPU = False
-    VALID_STORE_CPU = [True, False]
-    STORE_CPU_DESCRIPTION = (
-        'Governs whether array transfers to the GPU '
-        'will be stored in CPU arrays on the solver. '
-        'This flag is used for testing purposes only '
-        'and is not generally supported')
-
 
     CONTEXT = 'context'
     CONTEXT_DESCRIPTION = ('PyCUDA context(s) '
@@ -267,12 +260,6 @@ class SolverConfig(object):
             DEFAULT: DEFAULT_SOLVER_TYPE,
             REQUIRED: True
         },
-
-        STORE_CPU: {
-            DESCRIPTION: STORE_CPU_DESCRIPTION,
-            DEFAULT: DEFAULT_STORE_CPU,
-            VALID: VALID_STORE_CPU
-        },
     }
 
     def parser(self):
@@ -357,13 +344,6 @@ class SolverConfig(object):
             choices=self.VALID_DATA_ORDER,
             help=self.DATA_ORDER_DESCRIPTION,
             default=self.DEFAULT_DATA_ORDER)
-
-        p.add_argument('--{v}'.format(v=self.STORE_CPU),
-            required=False,
-            type=bool,
-            choices=self.VALID_STORE_CPU,
-            help=self.STORE_CPU_DESCRIPTION,
-            default=self.DEFAULT_STORE_CPU)
 
         p.add_argument('--{v}'.format(v=self.CONTEXT),
             required=False,

@@ -22,7 +22,7 @@ import numpy as np
 
 from cffi import FFI
 
-from montblanc.enums import (
+from hypercube.dims import (
     DIMDATA)
 
 from montblanc.src_types import (
@@ -125,7 +125,7 @@ class RimeConstStruct(object):
         """
         # Iterate through our dimension data, setting
         # any relevant attributes on cdata
-        for name, dim in slvr.dimensions().iteritems():
+        for name, dim in slvr.dimensions(reify=True).iteritems():
             cdim = getattr(self._cdata, name)
 
             setattr(cdim, DIMDATA.LOCAL_SIZE,
@@ -160,18 +160,13 @@ class RimeConstStruct(object):
         """ Return the cdata object """
         return self._cdata
 
-def create_rime_const_data(slvr, context):
+def create_rime_const_data(slvr):
     """ Creates RIME constant data object """
-    import pycuda.driver as cuda
-
     # Create a structure definition
     struct_def = RimeConstDefinition(slvr)
 
-    # Allocate some page-locked memory within the
-    # given CUDA context
-    with context:
-        ndary = cuda.pagelocked_empty(shape=struct_def.struct_size(),
-            dtype=np.int8)
+    ndary = np.empty(shape=struct_def.struct_size(),
+        dtype=np.int8)
 
     # Construct the constant structure object from the
     # definition and the ndary. Update it with the

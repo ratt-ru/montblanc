@@ -157,8 +157,8 @@ def rime_solver_cfg(**kwargs):
     %s
     """
 
-    from montblanc.impl.biro.slvr_config import (
-        BiroSolverConfig as Options)
+    from montblanc.impl.rime.slvr_config import (
+        RimeSolverConfig as Options)
 
     slvr_cfg = Options().gen_cfg(**kwargs)
 
@@ -177,7 +177,7 @@ def rime_solver(slvr_cfg):
 
     Parameters
     ----------
-    slvr_cfg : BiroSolverConfiguration
+    slvr_cfg : RimeSolverConfiguration
             Solver Configuration.
 
     Returns

@@ -39,7 +39,7 @@ from montblanc.src_types import (
     source_range_tuple,
     source_range_slices)
 
-from montblanc.dims import (
+from hypercube.dims import (
     create_dim_data)
 
 def nr_of_baselines(na, auto_correlations=False):
@@ -68,53 +68,6 @@ def blocks_required(N, threads_per_block):
     N, the total number of threads, and threads_per_block
     """
     return (N + threads_per_block - 1) / threads_per_block
-
-def cpu_name(name):
-    """ Constructs a name for the CPU version of the array """
-    return name + '_cpu'
-
-def gpu_name(name):
-    """ Constructs a name for the GPU version of the array """
-    return name + '_gpu'
-
-def transfer_method_name(name):
-    """ Constructs a transfer method name, given the array name """
-    return 'transfer_' + name
-
-def shape_name(name):
-    """ Constructs a name for the array shape member, based on the array name """
-    return name + '_shape'
-
-def dtype_name(name):
-    """ Constructs a name for the array data-type member, based on the array name """
-    return name + '_dtype'
-
-def setter_name(name):
-    """ Constructs a name for the property, based on the property name """
-    return 'set_' + name
-
-def fmt_dimension_line(name,description,size):
-    return '%-*s%-*s%-*s' % (
-        20,name,
-        40,description,
-        20,size)
-
-def fmt_array_line(name,size,dtype,cpu,gpu,shape):
-    """ Format array parameters on an 80 character width line """
-    return '%-*s%-*s%-*s%-*s%-*s%-*s' % (
-        20,name,
-        10,size,
-        15,dtype,
-        4,cpu,
-        4,gpu,
-        20,shape)
-
-def fmt_property_line(name,dtype,value,default):
-    return '%-*s%-*s%-*s%-*s' % (
-        20,name,
-        10,dtype,
-        20,value,
-        20,default)
 
 def fmt_bytes(nbytes):
     """ Returns a human readable string, given the number of bytes """
@@ -147,17 +100,6 @@ def random_like(ary=None, shape=None, dtype=None):
             np.random.random(size=shape)*1j).astype(dtype)
     else:
         return np.random.random(size=shape).astype(dtype)
-
-def rethrow_attribute_exception(e):
-    """
-    Rethrows an attribute exception with more informative text.
-    Used in CPU code for cases when the solver doesn't have
-    the desired arrays configured.
-    """
-    raise AttributeError('%s. The appropriate numpy array has not '
-        'been set on the solver object. You need to set '
-        'store_cpu=True on your solver object '
-        'as well as call the transfer_* method for this to work.' % e)
 
 def flatten(nested):
     """ Return a flatten version of the nested argument """
@@ -293,7 +235,7 @@ def viable_dim_config(bytes_available, arrays, template,
         try:
             dims = dim_ord.pop(0)
             montblanc.log.debug('Applying reduction {s}. '
-                'Bytes available {a} used {u}'.format(
+                'Bytes available: {a} used: {u}'.format(
                     s=dims,
                     a=fmt_bytes(bytes_available),
                     u=fmt_bytes(bytes_used)))
@@ -310,10 +252,11 @@ def viable_dim_config(bytes_available, arrays, template,
             match = re.match(__DIM_REDUCTION_RE, dim)
 
             if not match:
-                raise ValueError((
-                    "%s is an invalid dimension reduction string "
+                raise ValueError(
+                    "{d} is an invalid dimension reduction string "
                     "Valid strings are for e.g. "
-                    "'ntime', 'ntime=20' or 'ntime=20%'") % dim)
+                    "'ntime', 'ntime=20' or 'ntime=20%'"
+                        .format(d=dim))
 
             dim_name = match.group('name')
             dim_value = match.group('value')
@@ -512,19 +455,3 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
         blockdimz = dimz
 
     return blockdimx, blockdimy, blockdimz
-
-import pycuda.driver as cuda
-
-class ContextWrapper(object):
-    """ Context Manager Wrapper for CUDA Contexts! """
-    def __init__(self, context):
-        self.context = context
-
-    def __enter__(self):
-        """ Pushed the wrapped context onto the stack """
-        self.context.push()
-        return self
-
-    def __exit__(self,type,value,traceback):
-        """ Pop when we're done """
-        cuda.Context.pop()

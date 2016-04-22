@@ -29,14 +29,14 @@ class Node(object):
     >>>         super(type(self), self).__init__()
     >>>     def pre_execution(self, solver):
     >>>         solver.N = 1024
-    >>>         solver.a_cpu = np.random.random(solver.N)
-    >>>         solver.a_gpu = gpuarray.to_gpu(solver.a_cpu)
+    >>>         solver.a = np.random.random(solver.N)
+    >>>         solver.a = gpuarray.to(solver.a)
     >>>     def post_execution(self, solver):
     >>>         del shared.data.N
-    >>>         del solver.a_gpu
-    >>>         del solver.a_cpu
+    >>>         del solver.a
+    >>>         del solver.a
     >>>     def execute(self, solver):
-    >>>         solver.result = (solver.a_gpu*2./3.).get()
+    >>>         solver.result = (solver.a*2./3.).get()
     """
 
     def __init__(self):

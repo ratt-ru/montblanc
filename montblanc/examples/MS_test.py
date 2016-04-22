@@ -22,7 +22,7 @@ import numpy as np
 import montblanc
 
 from montblanc.config import (
-    BiroSolverConfig as Options)
+    RimeSolverConfig as Options)
 
 if __name__ == '__main__':
     import sys
@@ -30,8 +30,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='RIME MS test script')
     parser.add_argument('msfile', help='Measurement Set File')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v2', choices=['v2','v3', 'v4'],
-        help='BIRO Pipeline Version.')
+    parser.add_argument('-v','--version',dest='version', type=str,
+        default=Options.VERSION_FOUR, choices=Options.VALID_VERSIONS,
+        help='RIME Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -41,7 +42,7 @@ if __name__ == '__main__':
         dtype='double', version=args.version)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
-        if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
+        if args.version in [Options.VERSION_TWO]:
             lm = np.empty(shape=slvr.lm_shape, dtype=slvr.lm_dtype)
             l, m = lm[0,:], lm[1,:]
             l[:] = 0.1
@@ -58,7 +59,7 @@ if __name__ == '__main__':
             alpha[:] = 0.5
 
             slvr.transfer_brightness(B)
-        elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+        elif args.version in [Options.VERSION_FOUR]:
             lm = np.empty(shape=slvr.lm_shape, dtype=slvr.lm_dtype)
             l, m = lm[:,0], lm[:,1]
             l[:] = 0.1
@@ -76,16 +77,26 @@ if __name__ == '__main__':
             alpha[:] = 0.5
             slvr.transfer_stokes(stokes)
             slvr.transfer_alpha(alpha)
+        elif args.version in [Options.VERSION_FIVE]:
+            slvr.lm[:,0] = 0.1
+            slvr.lm[:,1] = 0.25
+
+            slvr.stokes[:,:,0] = 2
+            slvr.stokes[:,:,1] = 1
+            slvr.stokes[:,:,2] = 1
+            slvr.stokes[:,:,3] = 1
+            slvr.alpha[:] = 0.5
 
         slvr.solve()
 
-        with slvr.context:
-            if args.version in [Options.VERSION_TWO, Options.VERSION_THREE]:
-                vis = slvr.vis_gpu.get().transpose(1, 2, 3, 0)
-            elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-                vis = slvr.vis_gpu.get()
+        if args.version in [Options.VERSION_TWO]:
+            vis = slvr.retrieve_model_vis().transpose(1, 2, 3, 0)
+        elif args.version in [Options.VERSION_FOUR]:
+            vis = slvr.retrieve_model_vis()
+        elif args.version in [Options.VERSION_FIVE]:
+            vis = slvr.model_vis
 
-            print vis
-            print vis.shape
+        print vis
+        print vis.shape
 
         print slvr.X2

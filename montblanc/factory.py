@@ -27,7 +27,7 @@ import pycuda.driver as cuda
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.config import (BiroSolverConfig as Options)
+from montblanc.config import (RimeSolverConfig as Options)
 
 from montblanc.pipeline import Pipeline
 
@@ -99,7 +99,8 @@ def get_contexts_per_device():
         montblanc.log.info('Montblanc will use the following devices:')
 
         for i, d in enumerate(__devices):
-            montblanc.log.info('Device #%d: %s', i, d.name())
+            montblanc.log.info('{p}{d}: {n}'.format(
+                p=' '*4, d=i, n=d.name()))
 
         # Create contexts for each device
         try:
@@ -133,16 +134,16 @@ def get_empty_pipeline(slvr_cfg):
     """ Get an empty pipeline object """
     return Pipeline([])
 
-def get_base_solver(slvr_cfg):
+def get_rime_solver(slvr_cfg):
     """ Get a basic solver object """
 
     # Get the default cuda context if none is provided
     if slvr_cfg.get(Options.CONTEXT, None) is None:
         slvr_cfg[Options.CONTEXT]=get_default_context()
 
-    from montblanc.BaseSolver import BaseSolver
+    from montblanc.solvers.rime_solver import RIMESolver
 
-    return BaseSolver(slvr_cfg)
+    return RIMESolver(slvr_cfg=slvr_cfg)
 
 def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
     """ Initialise the supplied solver with measurement set data """
@@ -158,15 +159,20 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
                 Options.DATA_SOURCE_MS,
                 Options.MS_FILE))
 
-    if version in [Options.VERSION_TWO, Options.VERSION_THREE]:
-        from montblanc.impl.biro.v2.loaders import MeasurementSetLoader
-    elif version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-        from montblanc.impl.biro.v4.loaders import MeasurementSetLoader
+    if version in [Options.VERSION_TWO]:
+        from montblanc.impl.rime.v2.loaders import MeasurementSetLoader
+    elif version == Options.VERSION_FOUR:
+        from montblanc.impl.rime.v4.loaders import MeasurementSetLoader
+    elif version == Options.VERSION_FIVE:
+        from montblanc.impl.rime.v5.loaders import MeasurementSetLoader
     else:
         raise ValueError('Incorrect version %s' % version)
 
-    with MeasurementSetLoader(slvr_cfg.get('msfile')) as loader:
-        ntime, na, nchan = loader.get_dims()
+    msfile = slvr_cfg.get(Options.MS_FILE)
+    autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS)
+
+    with MeasurementSetLoader(msfile, auto_correlations=autocor) as loader:
+        ntime, na, nchan = loader.get_dims(auto_correlations=autocor)
         slvr_cfg[Options.NTIME] = ntime 
         slvr_cfg[Options.NA] = na 
         slvr_cfg[Options.NCHAN] = nchan 
@@ -175,7 +181,7 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
         return slvr
 
 def rime_solver(slvr_cfg):
-    """ Factory function that produces a BIRO solver """
+    """ Factory function that produces a RIME solver """
 
     # Set the default cuda context if none is provided
     if slvr_cfg.get(Options.CONTEXT, None) is None:
@@ -184,27 +190,25 @@ def rime_solver(slvr_cfg):
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
     version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)
 
-    # Figure out which version of BIRO solver we're dealing with.
+    # Figure out which version of RIME solver we're dealing with.
     if version == Options.VERSION_TWO:
-        from montblanc.impl.biro.v2.BiroSolver import BiroSolver
-    elif version == Options.VERSION_THREE:
-        from montblanc.impl.biro.v3.CompositeBiroSolver \
-        import CompositeBiroSolver as BiroSolver
+        from montblanc.impl.rime.v2.RimeSolver import RimeSolver
     elif version == Options.VERSION_FOUR:
-        from montblanc.impl.biro.v4.BiroSolver import BiroSolver
+        from montblanc.impl.rime.v4.RimeSolver import RimeSolver
     elif version == Options.VERSION_FIVE:
-        from montblanc.impl.biro.v5.CompositeBiroSolver \
-        import CompositeBiroSolver as BiroSolver
+        from montblanc.impl.rime.v5.CompositeRimeSolver \
+        import CompositeRimeSolver as RimeSolver
         slvr_cfg[Options.CONTEXT] = __contexts
     else:
         raise ValueError('Invalid version %s' % version)
 
     if data_source == Options.DATA_SOURCE_MS:
-        return create_rime_solver_from_ms(BiroSolver, slvr_cfg)
+        return create_rime_solver_from_ms(RimeSolver, slvr_cfg)
     elif data_source == Options.DATA_SOURCE_TEST:
-        slvr_cfg[Options.STORE_CPU] = True
-        return BiroSolver(slvr_cfg)
-    elif data_source == Options.DATA_SOURCE_DEFAULTS:
-        return BiroSolver(slvr_cfg)
+        return RimeSolver(slvr_cfg)
+    elif data_source == Options.DATA_SOURCE_DEFAULT:
+        return RimeSolver(slvr_cfg)
+    elif data_source == Options.DATA_SOURCE_EMPTY:
+        return RimeSolver(slvr_cfg)
     else:
         raise ValueError('Invalid data source %s' % data_source)

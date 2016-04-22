@@ -18,8 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import pyrap.tables as pt
 import os
+
+import numpy as np
+import pyrap.tables as pt
 
 import montblanc
 import montblanc.util as mbu
@@ -32,19 +34,27 @@ SPECTRAL_WINDOW = 'SPECTRAL_WINDOW'
 class MeasurementSetLoader(BaseLoader):
     LOG_PREFIX = 'LOADER:'
 
-    def __init__(self, msfile):
+    def __init__(self, msfile, auto_correlations=False):
         super(MeasurementSetLoader, self).__init__()
 
         self.tables = {}
         self.msfile = msfile
-        self.antfile = os.path.join(self.msfile, ANTENNA_TABLE)
-        self.freqfile = os.path.join(self.msfile, SPECTRAL_WINDOW)
+        self.antfile = '::'.join([self.msfile, ANTENNA_TABLE])
+        self.freqfile = '::'.join([self.msfile, SPECTRAL_WINDOW])
 
         montblanc.log.info("{lp} Opening Measurement Set {ms}.".format(
             lp=self.LOG_PREFIX, ms=self.msfile))
 
-        self.tables['main'] = pt.table(self.msfile, ack=False) \
-            .query('ANTENNA1 != ANTENNA2')
+        # Open the main table
+        main_table = pt.table(self.msfile, ack=False)
+
+        # If requested, use TAQL to ignore auto-correlations
+        if not auto_correlations:
+            self.tables['main'] = main_table.query('ANTENNA1 != ANTENNA2')
+        else:
+            self.tables['main'] = main_table
+
+        # Open antenna and frequency tables
         self.tables['ant']  = pt.table(self.antfile, ack=False)
         self.tables['freq'] = pt.table(self.freqfile, ack=False)
 
@@ -55,10 +65,14 @@ class MeasurementSetLoader(BaseLoader):
         # Determine the problem dimensions
         na = self.tables['ant'].nrows()
         nbl = mbu.nr_of_baselines(na, auto_correlations)
-        nchan = self.tables['freq'].getcol('CHAN_FREQ').size
+        nchan = np.asscalar(self.tables['freq'].getcol('NUM_CHAN'))
         ntime = self.tables['main'].nrows() // nbl
 
         return ntime, na, nchan
+
+    def log(self, msg, *args, **kwargs):
+        montblanc.log.info('{lp} {m}'.format(lp=self.LOG_PREFIX, m=msg),
+            *args, **kwargs)
 
     def __enter__(self):
         return self
