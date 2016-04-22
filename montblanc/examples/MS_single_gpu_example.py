@@ -18,6 +18,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+"""
+This script demonstrates a Montblanc use case for a problem size
+small enough to fit within a single GPU's memory. This caters for
+small problem sizes where the user may wish to manually specify and
+optimise data transfers to the GPU. It's also use for internal testing code.
+
+In this use case data the user must manually transfer data to and
+from the GPU, call the solver and then pull the data off. e.g.
+
+slvr.transfer_lm(lm)             # Transfer lm coordinates
+slvr.solve()                     # Execute the solver
+vis = slvr.retrieve_model_vis()  # Retrieve the model visibilities
+
+For larger problem sizes and more general use cases, please
+see the single node example in this directory.
+"""
+
 import logging
 import numpy as np
 
@@ -36,8 +53,8 @@ if __name__ == '__main__':
     parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')
     parser.add_argument('-ns','--nssrc',dest='nssrc', type=int, default=0, help='Number of Sersic Sources')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default='v2',
-        choices=Options.VALID_VERSIONS, help='BIRO Pipeline Version.')
+    parser.add_argument('-v','--version',dest='version', type=str, default=Options.VERSION_FOUR,
+        choices=[Options.VERSION_TWO, Options.VERSION_FOUR], help='BIRO Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -56,7 +73,7 @@ if __name__ == '__main__':
         if args.version in [Options.VERSION_TWO]:
             # Random brightness matrix for the point sources
             brightness = mbu.random_like(slvr.brightness)
-        elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+        elif args.version in [Options.VERSION_FOUR]:
             # Need a positive semi-definite brightness
             # matrix for v4 and v5
             stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
@@ -75,12 +92,12 @@ if __name__ == '__main__':
             slvr.transfer_alpha(alpha)
 
         # E beam
-        if args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+        if args.version in [Options.VERSION_FOUR]:
             E_beam = mbu.random_like(slvr.E_beam)
             slvr.transfer_E_beam(E_beam)
 
         # G term
-        if args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+        if args.version in [Options.VERSION_FOUR]:
             G_term = mbu.random_like(slvr.G_term)
             slvr.transfer_G_term(G_term)
 
@@ -107,7 +124,7 @@ if __name__ == '__main__':
             slvr.transfer_lm(lm)
             if args.version in [Options.VERSION_TWO]:
                 slvr.transfer_brightness(brightness)
-            elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+            elif args.version in [Options.VERSION_FOUR]:
                 slvr.transfer_stokes(stokes)
                 slvr.transfer_alpha(alpha)
             slvr.transfer_point_errors(point_errors)
@@ -119,8 +136,9 @@ if __name__ == '__main__':
             # The chi squared result is set on the solver object
             print 'Chi Squared Value', slvr.X2
 
-            # Obtain the visibilities  (slow)
-            #V = slvr.vis.get()
+
+        # Obtain the visibilities 
+        V = slvr.retrieve_model_vis()
 
         # Print information about the simulation
         print slvr
