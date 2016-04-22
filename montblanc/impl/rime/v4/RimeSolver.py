@@ -40,7 +40,7 @@ def get_pipeline(slvr_cfg):
         RimeSumCoherencies()])
 
 class RimeSolver(MontblancCUDASolver):
-    """ BIRO Solver Implementation """
+    """ RIME Solver Implementation """
 
     def __init__(self, slvr_cfg):
         """

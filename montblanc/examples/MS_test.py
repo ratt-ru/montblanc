@@ -32,7 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('msfile', help='Measurement Set File')
     parser.add_argument('-v','--version',dest='version', type=str,
         default=Options.VERSION_FOUR, choices=Options.VALID_VERSIONS,
-        help='BIRO Pipeline Version.')
+        help='RIME Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 

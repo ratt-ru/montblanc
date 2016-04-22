@@ -181,7 +181,7 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
         return slvr
 
 def rime_solver(slvr_cfg):
-    """ Factory function that produces a BIRO solver """
+    """ Factory function that produces a RIME solver """
 
     # Set the default cuda context if none is provided
     if slvr_cfg.get(Options.CONTEXT, None) is None:
@@ -190,7 +190,7 @@ def rime_solver(slvr_cfg):
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
     version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)
 
-    # Figure out which version of BIRO solver we're dealing with.
+    # Figure out which version of RIME solver we're dealing with.
     if version == Options.VERSION_TWO:
         from montblanc.impl.rime.v2.RimeSolver import RimeSolver
     elif version == Options.VERSION_FOUR:

@@ -37,7 +37,7 @@ from montblanc.impl.rime.v4.RimeSolver import RimeSolver as RimeSolverV4
 from montblanc.config import RimeSolverConfig as Options
 
 class RimeSolver(MontblancCUDASolver):
-    """ BIRO Solver Implementation """
+    """ RIME Solver Implementation """
     def __init__(self, slvr_cfg):
         """
         RimeSolver Constructor

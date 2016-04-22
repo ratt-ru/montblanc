@@ -34,7 +34,7 @@ def get_pipeline(slvr_cfg):
     return Pipeline([RimeEK(), RimeGaussBSum(weight_vector=wv)])
 
 class RimeSolver(MontblancCUDASolver):
-    """ Solver implementation for BIRO """
+    """ Solver implementation for RIME """
     def __init__(self, slvr_cfg):
         """
         RimeSolver Constructor

@@ -94,7 +94,7 @@ class RimeSolverConfig(SolverConfig):
         "Maximum number of visibility chunks that may be "
         "enqueued on a solver before throttling is applied.")
 
-    # BIRO version
+    # RIME version
     VERSION = 'version'
     VERSION_ONE = 'v1'
     VERSION_TWO = 'v2'
@@ -103,7 +103,7 @@ class RimeSolverConfig(SolverConfig):
     VERSION_FIVE = 'v5'
     DEFAULT_VERSION = VERSION_FOUR
     VALID_VERSIONS = [VERSION_TWO, VERSION_FOUR, VERSION_FIVE]
-    VERSION_DESCRIPTION = 'BIRO Version'
+    VERSION_DESCRIPTION = 'RIME Version'
 
     descriptions = {
         WEIGHT_VECTOR: {

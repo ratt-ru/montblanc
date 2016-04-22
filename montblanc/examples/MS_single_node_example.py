@@ -53,7 +53,7 @@ if __name__ == '__main__':
     parser.add_argument('-ns','--nssrc',dest='nssrc', type=int, default=0, help='Number of Sersic Sources')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
     parser.add_argument('-v','--version',dest='version', type=str, default=Options.VERSION_FIVE,
-        choices=[Options.VERSION_FIVE], help='BIRO Pipeline Version.')
+        choices=[Options.VERSION_FIVE], help='RIME Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 

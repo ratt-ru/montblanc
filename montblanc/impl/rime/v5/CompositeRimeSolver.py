@@ -68,7 +68,7 @@ ORDERING_RANK = [' or '.join(['nsrc'] + mbu.source_nr_vars()),
 
 class CompositeRimeSolver(MontblancNumpySolver):
     """
-    Composite solver implementation for BIRO.
+    Composite solver implementation for RIME.
 
     Implements a solver composed of multiple RimeSolvers. The sub-solver
     memory transfers and pipelines are executed asynchronously.
@@ -497,7 +497,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         direction=None, dirty=None, classifiers=None):
         """
         Enqueue asynchronous copies from CPU arrays on the
-        CompositeRimeSolver to GPU arrays on the BIRO sub-solvers
+        CompositeRimeSolver to GPU arrays on the RIME sub-solvers
         on the CUDA stream associated with a sub-solver.
 
         While it aims for generality, it generally depends on arrays

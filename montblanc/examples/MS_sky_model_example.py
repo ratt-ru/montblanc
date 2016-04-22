@@ -75,7 +75,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--sky-file', dest='sky_file', type=str, required=True, help='Sky Model File')
     parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
     parser.add_argument('-v','--version',dest='version', type=str, default='v4', choices=[Options.VERSION_FOUR],
-        help='BIRO Pipeline Version.')
+        help='RIME Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 
