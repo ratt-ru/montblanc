@@ -218,21 +218,21 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                 .reshape(t_end - t_start, nbl, 3))
 
             # Create per antenna UVW coordinates.
-            # u_01 = u_0 - u_1
-            # u_02 = u_0 - u_2
+            # u_01 = u_1 - u_0
+            # u_02 = u_2 - u_0
             # ...
-            # u_0N = u_0 - U_N
+            # u_0N = u_N - U_0
             # where N = na - 1.
 
             # We choose u_0 = 0 and thus have
-            # u_1 = -u_01
-            # u_2 = -u_02
+            # u_1 = u_01
+            # u_2 = u_02
             # ...
-            # u_N = -u_0N
+            # u_N = u_0N
 
             # Then, other baseline values can be derived as
-            # u_21 = u_2 - u_1
-            solver.uvw[t_start:t_end,1:na,:] = -uvw_buffer[:,:na-1,:]
+            # u_21 = u_1 - u_2
+            solver.uvw[t_start:t_end,1:na,:] = uvw_buffer[:,:na-1,:]
             solver.uvw[:,0,:] = 0
 
             if data_present:

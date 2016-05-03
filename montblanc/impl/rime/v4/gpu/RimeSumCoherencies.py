@@ -153,14 +153,14 @@ void rime_sum_coherencies_impl(
     if(threadIdx.x == 0)
     {
         // UVW, calculated from u_pq = u_p - u_q
-        i = TIME*NA + ANT1;
+        i = TIME*NA + ANT2;
         shared.uvw[threadIdx.z][threadIdx.y] = uvw[i];
 
-        i = TIME*NA + ANT2;
-        typename SumCohTraits<T>::UVWType ant2_uvw = uvw[i];
-        U -= ant2_uvw.x;
-        V -= ant2_uvw.y;
-        W -= ant2_uvw.z;
+        i = TIME*NA + ANT1;
+        typename SumCohTraits<T>::UVWType ant1_uvw = uvw[i];
+        U -= ant1_uvw.x;
+        V -= ant1_uvw.y;
+        W -= ant1_uvw.z;
     }
 
     // Wavelength varies by channel, but not baseline and time
@@ -313,7 +313,7 @@ void rime_sum_coherencies_impl(
     // Multiply the visibility by antenna 1's g term
     i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
     typename Tr::ct ant1_g_term = G_term[i];
-    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, polsum);
+    montblanc::jones_multiply_4x4_in_place<T>(ant1_g_term, polsum);
 
     // Multiply the visibility by antenna 2's g term
     i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;

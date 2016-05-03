@@ -121,12 +121,12 @@ void rime_gauss_B_sum_impl(
     // UVW coordinates vary by baseline and time, but not channel
     if(threadIdx.x == 0)
     {
-        // UVW, calculated from u_pq = u_p - u_q
-        i = TIME*NA + ANT1;    u[threadIdx.z][threadIdx.y] = uvw[i];
+        // UVW, calculated from u_pq = u_q - u_p
+        i = TIME*NA + ANT2;    u[threadIdx.z][threadIdx.y] = uvw[i];
         i += NA*NTIME;         v[threadIdx.z][threadIdx.y] = uvw[i];
         i += NA*NTIME;         w[threadIdx.z][threadIdx.y] = uvw[i];
 
-        i = TIME*NA + ANT2;    u[threadIdx.z][threadIdx.y] -= uvw[i];
+        i = TIME*NA + ANT1;    u[threadIdx.z][threadIdx.y] -= uvw[i];
         i += NA*NTIME;         v[threadIdx.z][threadIdx.y] -= uvw[i];
         i += NA*NTIME;         w[threadIdx.z][threadIdx.y] -= uvw[i];
     }
