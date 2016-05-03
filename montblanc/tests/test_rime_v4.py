@@ -397,14 +397,13 @@ class TestRimeV4(unittest.TestCase):
         self.assertTrue(non_zero_E_ratio > 0.85,
             'Non-zero E-term ratio is {r}.'.format(r=non_zero_E_ratio))
 
-<<<<<<< HEAD
     def E_beam_test_helper(self, beam_lw, beam_mh, beam_nud, dtype,
             cmp=None):
 
         if cmp is None:
             cmp = {'rtol':1e-5}
 
-        slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
+        slvr_cfg = montblanc.rime_solver_cfg(na=32, ntime=50, nchan=64,
             sources=montblanc.sources(point=10, gaussian=10),
             beam_lw=beam_lw, beam_mh=beam_mh, beam_nud=beam_nud,
             dtype=dtype,
