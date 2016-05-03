@@ -52,15 +52,15 @@ class CPUSolver(MontblancNumpySolver):
 
         # Calculate per baseline u from per antenna u
         u = self.uvw[0][ap]
-        u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
+        u = ne.evaluate('aq-ap', {'ap': u[0], 'aq': u[1]})
 
         # Calculate per baseline v from per antenna v
         v = self.uvw[1][ap]
-        v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
+        v = ne.evaluate('aq-ap', {'ap': v[0], 'aq': v[1]})
 
         # Calculate per baseline w from per antenna w
         w = self.uvw[2][ap]
-        w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
+        w = ne.evaluate('aq-ap', {'ap': w[0], 'aq': w[1]})
 
         el = self.gauss_shape[0]
         em = self.gauss_shape[1]
@@ -100,15 +100,15 @@ class CPUSolver(MontblancNumpySolver):
 
         # Calculate per baseline u from per antenna u
         u = self.uvw[0][ap]
-        u = ne.evaluate('ap-aq', {'ap': u[0], 'aq': u[1]})
+        u = ne.evaluate('aq-ap', {'ap': u[0], 'aq': u[1]})
 
         # Calculate per baseline v from per antenna v
         v = self.uvw[1][ap]
-        v = ne.evaluate('ap-aq', {'ap': v[0], 'aq': v[1]})
+        v = ne.evaluate('aq-ap', {'ap': v[0], 'aq': v[1]})
 
         # Calculate per baseline w from per antenna w
         w = self.uvw[2][ap]
-        w = ne.evaluate('ap-aq', {'ap': w[0], 'aq': w[1]})
+        w = ne.evaluate('aq-ap', {'ap': w[0], 'aq': w[1]})
 
         e1 = self.sersic_shape[0]
         e2 = self.sersic_shape[1]

@@ -60,22 +60,22 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             'MS UVW shape %s != expected %s' % (ms_uvw.shape, uvw_shape)
 
         # Create per antenna UVW coordinates.
-        # u_01 = u_0 - u_1
-        # u_02 = u_0 - u_2
+        # u_01 = u_1 - u_0
+        # u_02 = u_2 - u_0
         # ...
-        # u_0N = u_0 - U_N
+        # u_0N = u_N - U_0
         # where N = na - 1.
 
         # We choose u_0 = 0 and thus have
-        # u_1 = -u_01
-        # u_2 = -u_02
+        # u_1 = u_01
+        # u_2 = u_02
         # ...
-        # u_N = -u_0N
+        # u_N = u_0N
 
         # Then, other baseline values can be derived as
-        # u_21 = u_2 - u_1
+        # u_21 = u_1 - u_2
         uvw = np.empty(shape=solver.uvw_shape, dtype=solver.uvw_dtype)
-        uvw[:,1:na,:] = -ms_uvw.reshape(ntime, nbl, 3)[:,:na-1,:] \
+        uvw[:,1:na,:] = ms_uvw.reshape(ntime, nbl, 3)[:,:na-1,:] \
             .astype(solver.ft)
         uvw[:,0,:] = solver.ft(0)
         solver.transfer_uvw(np.ascontiguousarray(uvw))

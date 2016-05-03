@@ -397,8 +397,14 @@ class TestRimeV4(unittest.TestCase):
         self.assertTrue(non_zero_E_ratio > 0.85,
             'Non-zero E-term ratio is {r}.'.format(r=non_zero_E_ratio))
 
-    def E_beam_test_helper(self, beam_lw, beam_mh, beam_nud, dtype):
-        slvr_cfg = montblanc.rime_solver_cfg(na=32, ntime=50, nchan=64,
+<<<<<<< HEAD
+    def E_beam_test_helper(self, beam_lw, beam_mh, beam_nud, dtype,
+            cmp=None):
+
+        if cmp is None:
+            cmp = {'rtol':1e-5}
+
+        slvr_cfg = BiroSolverConfiguration(na=32, ntime=50, nchan=64,
             sources=montblanc.sources(point=10, gaussian=10),
             beam_lw=beam_lw, beam_mh=beam_mh, beam_nud=beam_nud,
             dtype=dtype,
@@ -425,7 +431,7 @@ class TestRimeV4(unittest.TestCase):
 
         beam_lw, beam_mh, beam_nud = 1, 1, 1
         self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
-            Options.DTYPE_FLOAT)
+            Options.DTYPE_FLOAT,cmp={'rtol':1e-4})
 
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
