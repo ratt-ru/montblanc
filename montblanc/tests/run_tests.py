@@ -60,6 +60,8 @@ def suite():
     from test_rime_v2 import TestRimeV2
     from test_rime_v4 import TestRimeV4
     from test_rime_v5 import TestRimeV5
+    from test_rime_v5 import TestRimeV5
+    from test_cmp_vis import TestCmpVis
 
     test_suite = unittest.TestSuite()
     niter = 1
@@ -70,6 +72,7 @@ def suite():
         test_suite.addTest(unittest.makeSuite(TestUtils))
         test_suite.addTest(unittest.makeSuite(TestSourceUtils))
         # Test recent code first, as it will be more likely to fail
+        test_suite.addTest(unittest.makeSuite(TestCmpVis))
         test_suite.addTest(unittest.makeSuite(TestRimeV5))
         test_suite.addTest(unittest.makeSuite(TestRimeV4))
         test_suite.addTest(unittest.makeSuite(TestRimeV2))

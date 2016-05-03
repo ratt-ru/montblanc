@@ -183,6 +183,8 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
 def rime_solver(slvr_cfg):
     """ Factory function that produces a RIME solver """
 
+    slvr_cfg = slvr_cfg.copy()
+
     # Set the default cuda context if none is provided
     if slvr_cfg.get(Options.CONTEXT, None) is None:
         slvr_cfg[Options.CONTEXT] = get_default_context()
