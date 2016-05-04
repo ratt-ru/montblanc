@@ -64,6 +64,21 @@ to install the package.
 Possible Issues
 ~~~~~~~~~~~~~~~
 
+-  `numexpr <https://github.com/pydata/numexpr>`__. When running
+   ``python setup.py install``, if you see an error message like this:
+
+   .. code:: python
+
+       Traceback (most recent call last):
+         File "setup.py", line 154, in <module>
+           setup_package()
+         File "setup.py", line 146, in setup_package
+           from numpy.distutils.core import setup
+       ImportError: No module named numpy.distutils.core
+
+   Go back to `Installing the package <#installing-the-package>`__ and
+   install `numpy <http://www.numpy.org>`__.
+
 -  `PyCUDA 2016.1 <http://mathema.tician.de/software/pycuda/>`__.
    setup.py will attempt to install this automatically, but this might
    not work if you have a non-standard CUDA install location. It's worth
@@ -99,20 +114,6 @@ Possible Issues
        $ sudo apt-get update
        $ sudo apt-get install python-casacore
 
--  `numexpr <https://github.com/pydata/numexpr>`__. When running
-   ``python setup.py install``, if you see an error message like this:
-
-   .. code:: python
-
-       Traceback (most recent call last):
-         File "setup.py", line 154, in <module>
-           setup_package()
-         File "setup.py", line 146, in setup_package
-           from numpy.distutils.core import setup
-       ImportError: No module named numpy.distutils.core
-
-   Go back to `Installing the package <#installing-the-package>`__ and
-   install `numpy <http://www.numpy.org>`__.
 
 Running Tests
 -------------
@@ -123,7 +124,7 @@ Once the libraries have been compiled you should be able to run the
 
     $ cd tests
     $ python -c 'import montblanc; montblanc.test()'
-    $ python -m unittest test_biro_v4.TestBiroV4.test_sum_coherencies_double
+    $ python -m unittest test_rime_v4.TestRimeV4.test_sum_coherencies_double
 
 which will run the entire test suite or only the specified test case,
 respectively. The reported times are for the entire test case with numpy
