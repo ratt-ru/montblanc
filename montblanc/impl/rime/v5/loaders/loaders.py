@@ -162,7 +162,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             raise ValueError('MeasurementSet rows {msr} not equal to '
                 'ntime x nbl = {nt} x {nbl} = {t} ({ac})'
                     .format(msr=msrows, nt=ntime, nbl=nbl, t=ntime*nbl,
-                        ac=('auto-correlated' if slvr.is_auto_correlated()
+                        ac=('auto-correlated' if solver.is_auto_correlated()
                             else 'no auto-correlations')))
 
         # Determine row increments in terms of a time increment
