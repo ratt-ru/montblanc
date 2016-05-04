@@ -31,20 +31,6 @@ Pre-requisites
 
        $ sudo apt-get install libffi-dev
 
--  `python-casacore <https://github.com/casacore/python-casacore>`__
-   which depends on
-   `casacore2 <https://github.com/casacore/casacore>`__. On Ubuntu
-   14.04 add the `radio astronomy
-   PPA <https://launchpad.net/~radio-astro/+archive/main>`__ and get the
-   binaries from there:
-
-   .. code:: bash
-
-       $ sudo apt-get install software-properties-common
-       $ sudo add-apt-repository ppa:radio-astro/main
-       $ sudo apt-get update
-       $ sudo apt-get install python-casacore
-
 Installing the package
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -99,6 +85,19 @@ Possible Issues
        $ wget -c https://codeload.github.com/NVlabs/cub/zip/1.5.2
        $ mv 1.5.2 cub.zip
        $ python setup.py install
+
+-  Montblanc depends on `python-casacore <https://github.com/casacore/python-casacore>`__   which depends on
+   `casacore2 <https://github.com/casacore/casacore>`__. setup.py should install
+   python-casacore automatically. If this fails then, on Ubuntu 14.04,
+   these packages can be added from the `radio astronomy
+   PPA <https://launchpad.net/~radio-astro/+archive/main>`__ :
+
+   .. code:: bash
+
+       $ sudo apt-get install software-properties-common
+       $ sudo add-apt-repository ppa:radio-astro/main
+       $ sudo apt-get update
+       $ sudo apt-get install python-casacore
 
 -  `numexpr <https://github.com/pydata/numexpr>`__. When running
    ``python setup.py install``, if you see an error message like this:
