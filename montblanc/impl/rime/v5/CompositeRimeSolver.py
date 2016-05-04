@@ -41,7 +41,7 @@ from montblanc.impl.rime.v4.config import (
     P as v4Props,
     Classifier)
 
-from hypercube.dims import DIMDATA
+from hypercube.dims import DimData
 
 import montblanc.impl.rime.v4.RimeSolver as BSV4mod
 
@@ -369,15 +369,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
     def _cfg_subslvr_dims(self, subslvr_cfg, P):
         for dim in self._dims.itervalues():
-            name = dim[DIMDATA.NAME]
+            name = dim[DimData.NAME]
             if name in P:
                 # Copy dimension data for reconfiguration
                 sub_dim = dim.copy()
 
                 sub_dim.update({
-                    DIMDATA.LOCAL_SIZE: P[name],
-                    DIMDATA.EXTENTS: [0, P[name]],
-                    DIMDATA.SAFETY: False })
+                    DimData.LOCAL_SIZE: P[name],
+                    DimData.EXTENTS: [0, P[name]],
+                    DimData.SAFETY: False })
 
                 subslvr_cfg[name] = sub_dim
 
@@ -766,10 +766,10 @@ class CompositeRimeSolver(MontblancNumpySolver):
             nsrc = P[Options.NSRC]
 
             U = [{
-                DIMDATA.NAME: nr_var,
-                DIMDATA.LOCAL_SIZE: nsrc if nsrc < P[nr_var] else P[nr_var],
-                DIMDATA.EXTENTS: [0, nsrc if nsrc < P[nr_var] else P[nr_var]],
-                DIMDATA.SAFETY: False
+                DimData.NAME: nr_var,
+                DimData.LOCAL_SIZE: nsrc if nsrc < P[nr_var] else P[nr_var],
+                DimData.EXTENTS: [0, nsrc if nsrc < P[nr_var] else P[nr_var]],
+                DimData.SAFETY: False
             } for nr_var in [Options.NSRC] + mbu.source_nr_vars()]
 
             subslvr.update_dimensions(U)
@@ -861,7 +861,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         montblanc.log.info('Primed pinned memory pool '
             'of size {n} for device {d}.'.format(
-                d=device.name(), n=subslvr.fmt_bytes(pinned_allocated)))
+                d=device.name(), n=mbu.fmt_bytes(pinned_allocated)))
 
         # Now force return of memory to the pools
         for a in pinned_pool_refs:
@@ -909,7 +909,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
                 # Configure dimension extents on the sub-solver
                 subslvr.update_dimensions([
-                    { DIMDATA.NAME: dim, DIMDATA.EXTENTS: [S.start, S.stop] }
+                    { DimData.NAME: dim, DimData.EXTENTS: [S.start, S.stop] }
                     for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
 
                 # Enqueue E Beam

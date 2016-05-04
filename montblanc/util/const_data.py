@@ -23,7 +23,7 @@ import numpy as np
 from cffi import FFI
 
 from hypercube.dims import (
-    DIMDATA)
+    DimData)
 
 from montblanc.src_types import (
     source_types,
@@ -69,9 +69,9 @@ class RimeConstDefinition(object):
         # } _FIELD_TYPE;
         l = ['typedef struct  {']
         l.extend([_SPACE + 'unsigned int {n};'.format(n=n)
-            for n in (DIMDATA.GLOBAL_SIZE,
-                DIMDATA.LOCAL_SIZE,
-                DIMDATA.EXTENTS+'[2]')])
+            for n in (DimData.GLOBAL_SIZE,
+                DimData.LOCAL_SIZE,
+                DimData.EXTENTS+'[2]')])
         l.append('}} {t};'.format(t=_FIELD_TYPE))
 
         # Define our constant data structure. Looks something like
@@ -128,14 +128,14 @@ class RimeConstStruct(object):
         for name, dim in slvr.dimensions(reify=True).iteritems():
             cdim = getattr(self._cdata, name)
 
-            setattr(cdim, DIMDATA.LOCAL_SIZE,
-                getattr(dim, DIMDATA.LOCAL_SIZE))
+            setattr(cdim, DimData.LOCAL_SIZE,
+                getattr(dim, DimData.LOCAL_SIZE))
 
-            setattr(cdim, DIMDATA.GLOBAL_SIZE,
-                getattr(dim, DIMDATA.GLOBAL_SIZE))
+            setattr(cdim, DimData.GLOBAL_SIZE,
+                getattr(dim, DimData.GLOBAL_SIZE))
 
-            setattr(cdim, DIMDATA.EXTENTS, 
-                getattr(dim, DIMDATA.EXTENTS))
+            setattr(cdim, DimData.EXTENTS, 
+                getattr(dim, DimData.EXTENTS))
 
         from montblanc.slvr_config import (
             SolverConfig as Options)
@@ -147,10 +147,10 @@ class RimeConstStruct(object):
             if cdim:
                 # This performs an element-wise sum over each sources extents
                 S = map(sum, zip(*[getattr(getattr(self._cdata, s),
-                        DIMDATA.EXTENTS)
+                        DimData.EXTENTS)
                     for s in source_nr_vars()]))
 
-                setattr(cdim, DIMDATA.EXTENTS, S)
+                setattr(cdim, DimData.EXTENTS, S)
 
     def string_def(self):
         """ Return the C string definition of the structure """
