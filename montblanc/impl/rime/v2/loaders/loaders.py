@@ -93,7 +93,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
         # Then, other baseline values can be derived as
         # u_21 = u_1 - u_2
-        uvw=np.empty(shape=solver.uvw_shape, dtype=solver.uvw_dtype)
+        uvw=np.empty(shape=solver.uvw.shape, dtype=solver.uvw.dtype)
         uvw[:,:,1:na] = ms_uvw.reshape(file_uvw_shape).transpose(uvw_transpose) \
             .astype(solver.ft)[:,:,:na-1]
         uvw[:,:,0] = solver.ft(0)
@@ -125,7 +125,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             '{a} shape is {r} != expected {e}'.format(
                 a=ANTENNA2, r=ant2.shape, e=expected_ant_shape)
 
-        ant_pairs = np.vstack((ant1,ant2)).reshape(solver.ant_pairs_shape)
+        ant_pairs = np.vstack((ant1,ant2)).reshape(solver.ant_pairs.shape)
 
         # Transfer the uvw coordinates, antenna pairs and wavelengths to the GPU
         solver.transfer_ant_pairs(np.ascontiguousarray(ant_pairs))
@@ -158,7 +158,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
             # Reshape and transpose
             flag = flag.reshape(file_data_shape).transpose(
-                data_transpose).astype(solver.flag_dtype)
+                data_transpose).astype(solver.flag.dtype)
 
             # Transfer, asking for contiguity
             solver.transfer_flag(np.ascontiguousarray(flag))

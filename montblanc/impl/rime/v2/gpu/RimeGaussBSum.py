@@ -478,10 +478,10 @@ class RimeGaussBSum(Node):
 
         # The gaussian shape array can be empty if
         # no gaussian sources were specified.
-        gauss = np.intp(0) if np.product(slvr.gauss_shape_shape) == 0 \
+        gauss = np.intp(0) if np.product(slvr.gauss_shape.shape) == 0 \
             else slvr.gauss_shape
 
-        sersic = np.intp(0) if np.product(slvr.sersic_shape_shape) == 0 \
+        sersic = np.intp(0) if np.product(slvr.sersic_shape.shape) == 0 \
             else slvr.sersic_shape
 
         self.kernel(slvr.uvw, slvr.brightness, gauss, sersic,

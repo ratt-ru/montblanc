@@ -90,7 +90,7 @@ if __name__ == '__main__':
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
         if slvr.dim_global_size('ngsrc') > 0:
-            slvr.gauss_shape[:] = mbu.random_like(slvr.gauss_shape)*0.1
+            slvr.gauss.shape[:] = mbu.random_like(slvr.gauss.shape)*0.1
 
         # Create observed visibilities and upload them to the GPU
         slvr.observed_vis[:] = mbu.random_like(slvr.observed_vis)

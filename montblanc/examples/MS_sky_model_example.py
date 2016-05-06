@@ -43,24 +43,24 @@ def repeat_brightness_over_time(slvr, parser):
     ntime = slvr.dim_global_size('ntime')
 
     stokes_record = slvr.array('stokes')
-    time_dim = stokes_record.sshape.index('ntime')
+    time_dim = stokes_record.shape.index('ntime')
     no_time_shape = tuple([d if i != time_dim else 1
         for i, d in enumerate(stokes_record.shape)])
 
     stokes = parser.shape_arrays(['I','Q','U','V'],
-        no_time_shape, slvr.stokes_dtype)
+        no_time_shape, slvr.stokes.dtype)
     stokes = (np.repeat(stokes, ntime, time_dim)
         .reshape(stokes_record.shape))
 
     alpha_record = slvr.array('alpha')
-    time_dim = alpha_record.sshape.index('ntime')
+    time_dim = alpha_record.shape.index('ntime')
     no_time_shape = tuple([d if i != time_dim else 1
         for i, d in enumerate(alpha_record.shape)])
 
     alpha = parser.shape_arrays(['alpha'],
-        no_time_shape, slvr.alpha_dtype)
+        no_time.shape, slvr.alpha.dtype)
 
-    print alpha.shape, alpha_record.sshape
+    print alpha.shape, alpha_record.shape
     alpha = (np.repeat(alpha, ntime, time_dim)
         .reshape(alpha_record.shape))
 
@@ -95,7 +95,7 @@ if __name__ == '__main__':
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
         # Get the lm coordinates
-        lm = sky_parse.shape_arrays(['l','m'], slvr.lm_shape, slvr.lm_dtype)
+        lm = sky_parse.shape_arrays(['l','m'], slvr.lm.shape, slvr.lm.dtype)
 
         # Get the stokes and alpha parameters
         stokes, alpha = repeat_brightness_over_time(slvr, sky_parse)
@@ -103,8 +103,8 @@ if __name__ == '__main__':
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
         if slvr.dim_global_size('ngsrc') > 0:
-            gauss_shape = sky_parse.shape_arrays(['el','em','eR'],
-                slvr.gauss_shape_shape, slvr.gauss_shape_dtype)
+            gauss.shape = sky_parse.shape_arrays(['el','em','eR'],
+                slvr.gauss.shape.shape, slvr.gauss.shape.dtype)
 
         # Create observed visibilities and upload them to the GPU
         observed_vis = mbu.random_like(slvr.observed_vis)

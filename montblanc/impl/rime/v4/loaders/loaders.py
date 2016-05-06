@@ -74,7 +74,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
         # Then, other baseline values can be derived as
         # u_21 = u_1 - u_2
-        uvw = np.empty(shape=solver.uvw_shape, dtype=solver.uvw_dtype)
+        uvw = np.empty(shape=solver.uvw.shape, dtype=solver.uvw.dtype)
         uvw[:,1:na,:] = ms_uvw.reshape(ntime, nbl, 3)[:,:na-1,:] \
             .astype(solver.ft)
         uvw[:,0,:] = solver.ft(0)
@@ -102,7 +102,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             '{a} shape is {r} != expected {e}'.format(
                 a=ANTENNA2, r=ant2.shape, e=expected_ant_shape)
 
-        ant_pairs = np.vstack((ant1,ant2)).reshape(solver.ant_pairs_shape)
+        ant_pairs = np.vstack((ant1,ant2)).reshape(solver.ant_pairs.shape)
 
         # Transfer the uvw coordinates, antenna pairs and frequencys to the GPU
         solver.transfer_ant_pairs(np.ascontiguousarray(ant_pairs))
@@ -114,7 +114,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                     lp=self.LOG_PREFIX, ovis='observed_vis'))
             # Obtain visibilities stored in the DATA column
             # This comes in as (ntime*nbl,nchan,4)
-            vis_data = (tm.getcol(DATA).reshape(solver.observed_vis_shape)
+            vis_data = (tm.getcol(DATA).reshape(solver.observed_vis.shape)
                 .astype(solver.ct))
             solver.transfer_observed_vis(np.ascontiguousarray(vis_data))
         else:
@@ -134,7 +134,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             flag = np.logical_or(flag, flag_row[:,np.newaxis,np.newaxis])
 
             # Reshape
-            flag = flag.reshape(solver.flag_shape).astype(solver.flag_dtype)
+            flag = flag.reshape(solver.flag.shape).astype(solver.flag.dtype)
 
             # Transfer, asking for contiguity
             solver.transfer_flag(np.ascontiguousarray(flag))
@@ -176,8 +176,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                             w=WEIGHT, wv='weight_vector'))
 
                     weight_vector = np.ones(
-                        shape=solver.weight_vector_shape,
-                        dtype=solver.weight_vector_dtype)
+                        shape=solver.weight_vector.shape,
+                        dtype=solver.weight_vector.dtype)
             elif init_weights == Options.INIT_WEIGHTS_SIGMA:
                 # Obtain weighting information from SIGMA_SPECTRUM
                 # preferably, otherwise SIGMA.
@@ -205,8 +205,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                         .format(lp=self.LOG_PREFIX, ss=SIGMA_SPECTRUM,
                             s=SIGMA, wv='weight_vector'))
 
-                    weight_vector = np.ones(shape=solver.weight_vector_shape,
-                        dtype=solver.weight_vector_dtype)
+                    weight_vector = np.ones(shape=solver.weight_vector.shape,
+                        dtype=solver.weight_vector.dtype)
             else:
                 raise Exception, 'init_weights used incorrectly!'
 

@@ -111,6 +111,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         self.register_properties(P_main)
         self.register_arrays(A_main)
+        self.create_arrays()
 
         # PyCUDA contexts for each GPU device   
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
@@ -565,11 +566,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # just take everything in the dimension
             cpu_idx = [cpu_slice_map[s]
                 if s in cpu_slice_map else ALL_SLICE
-                for s in r.sshape]
+                for s in r.shape]
 
             gpu_idx = [gpu_slice_map[s]
                 if s in gpu_slice_map else ALL_SLICE
-                for s in r.sshape]
+                for s in r.shape]
 
             # Bail if there's an empty slice in the index
             if gpu_idx.count(EMPTY_SLICE) > 0:
@@ -579,7 +580,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # Checking if we're handling two antenna here
             # A precursor to the vile hackery that follows
             try:
-                na_idx = r.sshape.index('na')
+                na_idx = r.shape.index('na')
             except ValueError:
                 na_idx = -1
 
@@ -791,6 +792,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         for i, subslvr in enumerate(self.thread_local.solvers):
             subslvr.register_properties(P_sub)
             subslvr.register_arrays(A_sub)
+            subslvr.create_arrays()
 
     def _thread_prime_memory_pools(self):
         """
@@ -907,6 +909,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cpu_slice_map.update(src_cpu_slice_map)
                 gpu_slice_map.update(src_gpu_slice_map)
 
+                cpu_slice_map['nvis'] = slice(0,1,None)
+
                 # Configure dimension extents on the sub-solver
                 subslvr.update_dimensions([
                     { DimData.NAME: dim, DimData.EXTENTS: [S.start, S.stop] }
@@ -1009,7 +1013,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         if not self.initialised:
             self.initialise()
 
-        model_vis_sshape = self.arrays()['model_vis']['sshape']
+        model_vis_sshape = self.arrays()['model_vis']['shape']
 
         def _free_pool_allocs(pool_refs, pool_lock):
             """ Free pool-allocated objects in pool_refs, guarded by pool_lock """

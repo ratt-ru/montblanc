@@ -76,7 +76,7 @@ if __name__ == '__main__':
         elif args.version in [Options.VERSION_FOUR]:
             # Need a positive semi-definite brightness
             # matrix for v4 and v5
-            stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
+            stokes = np.empty(shape=slvr.stokes.shape, dtype=slvr.stokes.dtype)
             I, Q, U, V = stokes[:,:,0], stokes[:,:,1], stokes[:,:,2], stokes[:,:,3]
             Q[:] = np.random.random(size=Q.shape)-0.5
             U[:] = np.random.random(size=U.shape)-0.5
@@ -104,8 +104,8 @@ if __name__ == '__main__':
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
         if slvr.dim_global_size('ngsrc') > 0:
-            gauss_shape = mbu.random_like(slvr.gauss_shape)*0.1
-            slvr.transfer_gauss_shape(gauss_shape)
+            gauss.shape = mbu.random_like(slvr.gauss.shape)*0.1
+            slvr.transfer_gauss.shape(gauss.shape)
 
         # Create observed visibilities and upload them to the GPU
         observed_vis = mbu.random_like(slvr.observed_vis)
