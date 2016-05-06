@@ -17,67 +17,60 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import numpy as np
 import types
 
-from hypercube import CUDAHyperCube
+import numpy as np
+
+import hypercube as hc
 from rime_solver import RIMESolver
 from montblanc.config import SolverConfig as Options
+import montblanc.util as mbu
 
-class MontblancCUDASolver(RIMESolver, CUDAHyperCube):
+class MontblancCUDASolver(RIMESolver):
     """ Solves the RIME using CUDA """
     def __init__(self, slvr_cfg):
-        super(MontblancCUDASolver, self).__init__(slvr_cfg=slvr_cfg,
-            context=slvr_cfg.get(Options.CONTEXT, None))
+        super(MontblancCUDASolver, self).__init__(slvr_cfg=slvr_cfg)
+
         self.pipeline = slvr_cfg.get('pipeline')
+        self.context = mbu.ContextWrapper(slvr_cfg.get(Options.CONTEXT))
 
-    def register_array(self, name, shape, dtype, **kwargs):
-        A = super(MontblancCUDASolver, self).register_array(
-            name, shape, dtype, **kwargs)
+    def initialise_gpu_array(self, name, array, data_source):
+        gpu_ary = getattr(self, name)
+        cpu_ary = np.empty(shape=gpu_ary.shape, dtype=gpu_ary.dtype)
 
-        import pycuda.driver as cuda
-        import pycuda.gpuarray as gpuarray
-
-        # Create an empty array
-        cpu_ary = np.empty(shape=A.shape, dtype=A.dtype)                
-        data_source = self._slvr_cfg[Options.DATA_SOURCE]
-
-        # If we're creating test data, initialise the array with
-        # data from the test key, don't initialise if we've been
-        # explicitly told the array should be empty, otherwise
-        # set the defaults
         if data_source == Options.DATA_SOURCE_TEST:
             self.init_array(name, cpu_ary,
-                kwargs.get(Options.DATA_SOURCE_TEST, None))
+                array.get(Options.DATA_SOURCE_TEST, None))
         elif data_source == Options.DATA_SOURCE_EMPTY:
             pass
         else:
             self.init_array(name, cpu_ary,
-                kwargs.get(Options.DATA_SOURCE_DEFAULT, None))               
+                array.get(Options.DATA_SOURCE_DEFAULT, None))    
 
         # We don't use gpuarray.zeros, since it fails for
         # a zero-length array. This is kind of bad since
         # the gpuarray returned by gpuarray.empty() doesn't
         # have GPU memory allocated to it.
-        with self.context:
-            # If the array length is non-zero initialise it
-            if (data_source != Options.DATA_SOURCE_EMPTY and
-                np.product(A.shape) > 0):
+        # If the array length is non-zero initialise it
+        if (data_source != Options.DATA_SOURCE_EMPTY and
+            np.product(gpu_ary.shape) > 0):
 
-                getattr(self, name).set(cpu_ary)
+            gpu_ary.set(cpu_ary)
 
         # Should we create a setter for this property?
-        transfer_method = kwargs.get('transfer_method', True)
+        transfer_method = array.get('transfer_method', True)
 
-        # OK, we got a boolean for the kwarg, create a default transfer method
-        if isinstance(transfer_method, types.BooleanType) and transfer_method is True:
+        # OK, we got a boolean create a default transfer method
+        if (isinstance(transfer_method, types.BooleanType) and
+            transfer_method is True):
+
             # Create the transfer method
             def transfer(self, npary):
                 with self.context:
-                    getattr(self,A.name).set(npary)
+                    gpu_ary.set(npary)
 
             transfer_method = types.MethodType(transfer,self)
-        # Otherwise, we can just use the supplied kwarg
+        # Otherwise, we can just use the supplied method
         elif isinstance(transfer_method, types.MethodType):
             pass
         else:
@@ -92,20 +85,22 @@ class MontblancCUDASolver(RIMESolver, CUDAHyperCube):
         """
         Transfers the npary numpy array to the %s gpuarray.
         npary and %s must be the same shape and type.
-        """ % (A.name,A.name)
+        """ % (name,name)
 
         # Should we create a getter for this property?
-        retrieve_method = kwargs.get('retrieve_method', True)
+        retrieve_method = array.get('retrieve_method', True)
 
-        # OK, we got a boolean for the kwarg, create a default retrieve method
-        if isinstance(retrieve_method, types.BooleanType) and retrieve_method is True:
+        # OK, we got a boolean create a default retrieve method
+        if (isinstance(retrieve_method, types.BooleanType)
+            and retrieve_method is True):
+
             # Create the retrieve method
             def retrieve(self):
                 with self.context:
-                    return getattr(self,A.name).get()
+                    return gpu_ary.get()
 
             retrieve_method = types.MethodType(retrieve,self)
-        # Otherwise, we can just use the supplied kwarg
+        # Otherwise, we can just use the supplied method
         elif isinstance(retrieve_method, types.MethodType):
             pass
         else:
@@ -120,23 +115,33 @@ class MontblancCUDASolver(RIMESolver, CUDAHyperCube):
         """
         Retrieve the npary numpy array to the %s gpuarray.
         npary and %s must be the same shape and type.
-        """ % (A.name,A.name)
+        """ % (name,name)
 
+    def create_arrays(self):
+        import pycuda.driver as cuda
 
-        return A
+        with self.context:
+            # Create the local pycuda arrays on ourself
+            hc.create_local_pycuda_arrays_on_cube(self)
+
+            # Get our data source
+            data_source = self._slvr_cfg[Options.DATA_SOURCE]
+
+            for name, array in self.arrays().iteritems():
+                self.initialise_gpu_array(name, array, data_source)
 
     def solve(self):
         """ Solve the RIME """
-        with self.context as ctx:
+        with self.context:
             self.pipeline.execute(self)
 
     def initialise(self):
-        with self.context as ctx:
+        with self.context:
             self.pipeline.initialise(self)
 
     def shutdown(self):
         """ Stop the RIME solver """
-        with self.context as ctx:
+        with self.context:
             self.pipeline.shutdown(self)             
 
     def transfer_method_name(self, name):
