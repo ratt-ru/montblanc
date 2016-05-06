@@ -91,8 +91,8 @@ class WeightStrategy(AWeightVectorStrategy):
 
 class SpectrumStrategy(AWeightVectorStrategy):
     """ Load per channel weights from the WEIGHT_SPECTRUM or SIGMA_SPECTRUM column """
-    def __init__(self, loader, slvr):
-        super(SigmaSpectrumStrategy, self).__init__(loader, slvr)
+    def __init__(self, loader, slvr, column):
+        super(SpectrumStrategy, self).__init__(loader, slvr)
         self.column = column
 
     def log_strategy(self):
@@ -103,7 +103,7 @@ class SpectrumStrategy(AWeightVectorStrategy):
         Weights apply per channel. Dump directly into solver array.
         """
         self.table.getcolnp(self.column,
-            self.wv_view[startrow:endrow,:,:],
+            self.wv_view[startrow:startrow+nrow,:,:],
             startrow=startrow, nrow=nrow)
 
 class OnesStrategy(AWeightVectorStrategy):
