@@ -909,6 +909,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cpu_slice_map.update(src_cpu_slice_map)
                 gpu_slice_map.update(src_gpu_slice_map)
 
+                # nvis extents are likely to be incorrect which causes
+                # hypercube to complain. Fake them to appease hypercube.
                 cpu_slice_map['nvis'] = slice(0,1,None)
 
                 # Configure dimension extents on the sub-solver
