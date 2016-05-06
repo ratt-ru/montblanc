@@ -80,6 +80,7 @@ class RimeSolver(MontblancCUDASolver):
 
         self.register_properties(P)
         self.register_arrays(A)
+        self.create_arrays()
 
         self._const_data = mbu.create_rime_const_data(self)
 

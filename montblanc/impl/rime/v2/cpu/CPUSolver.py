@@ -39,6 +39,7 @@ class CPUSolver(MontblancNumpySolver):
         self.register_default_dimensions()
         self.register_properties(P)
         self.register_arrays(A)
+        self.create_arrays()
 
     def compute_gaussian_shape(self):
         """
