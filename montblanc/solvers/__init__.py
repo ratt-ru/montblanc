@@ -24,7 +24,7 @@ from montblanc.solvers.mb_cuda_solver import MontblancCUDASolver
 def copy_solver(src_slvr, dest_slvr, safe=False):
     """
     Copies arrays and properties from src_slvr to dest_slvr.
-    If safe is not set, complains if they don't exist on the
+    If safe is True, complains if they don't exist on the
     destination.
     
     Primarily used for copying data from CPU Solvers to
@@ -39,7 +39,7 @@ def copy_solver(src_slvr, dest_slvr, safe=False):
 
         # Transfer CPU arrays to the GPU
         for a in sa.itervalues():
-            if safe and a.name not in da:
+            if not safe and a.name not in da:
                 continue
 
             cpu_ary = getattr(src_slvr, a.name)
@@ -51,7 +51,7 @@ def copy_solver(src_slvr, dest_slvr, safe=False):
 
         # Transfer properties over
         for p in sp.itervalues():
-            if safe and p.name not in dp:
+            if not safe and p.name not in dp:
                 continue
 
             src_prop = getattr(src_slvr, p.name)
