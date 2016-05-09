@@ -255,7 +255,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
                 # Take a view of the solver array and copy the buffer in
                 flag_view = solver.flag.reshape(ntime*nbl, nchan, npol)
-                flag_view[start:end,:,:] = flag_buffer.astype(solver.flag_dtype)
+                flag_view[start:end,:,:] = flag_buffer.astype(solver.flag.dtype)
 
             antenna_view = solver.ant_pairs[0,:,:].reshape(ntime*nbl)
             tm.getcolnp(ANTENNA1, antenna_view[start:end],

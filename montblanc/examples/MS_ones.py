@@ -49,13 +49,13 @@ if __name__ == '__main__':
         # Create point sources at zeros
         l=slvr.ft(np.zeros(nsrc))
         m=slvr.ft(np.zeros(nsrc))
-        lm=mbu.shape_list([l,m], shape=slvr.lm_shape, dtype=slvr.lm_dtype)
+        lm=mbu.shape_list([l,m], shape=slvr.lm.shape, dtype=slvr.lm.dtype)
 
         slvr.transfer_lm(lm)
 
         # Create 1Jy point sources
         if args.version in [Options.VERSION_TWO]:
-            brightness = np.empty(shape=slvr.brightness_shape, dtype=slvr.brightness_dtype)
+            brightness = np.empty(shape=slvr.brightness.shape, dtype=slvr.brightness.dtype)
             brightness[0,:,:] = 1
             brightness[1,:,:] = 0
             brightness[2,:,:] = 0
@@ -63,17 +63,16 @@ if __name__ == '__main__':
             brightness[4,:,:] = 0
             slvr.transfer_brightness(brightness)            
         elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
-            stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
+            stokes = np.empty(shape=slvr.stokes.shape, dtype=slvr.stokes.dtype)
             stokes[:,:,0] = 1
             stokes[:,:,1] = 0
             stokes[:,:,2] = 0
             stokes[:,:,3] = 0
             slvr.transfer_stokes(stokes)
-            slvr.transfer_alpha(np.zeros(shape=slvr.alpha_shape, dtype=slvr.alpha_dtype))
+            slvr.transfer_alpha(np.zeros(shape=slvr.alpha.shape, dtype=slvr.alpha.dtype))
     
         # Solve the RIME
         slvr.solve()
 
-        with slvr.context as ctx:
-            print slvr.vis.get()
+        print slvr.retrieve_model_vis()
         print slvr

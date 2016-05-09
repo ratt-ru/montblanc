@@ -43,14 +43,14 @@ if __name__ == '__main__':
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
         if args.version in [Options.VERSION_TWO]:
-            lm = np.empty(shape=slvr.lm_shape, dtype=slvr.lm_dtype)
+            lm = np.empty(shape=slvr.lm.shape, dtype=slvr.lm.dtype)
             l, m = lm[0,:], lm[1,:]
             l[:] = 0.1
             m[:] = 0.25
 
             slvr.transfer_lm(lm)
 
-            B = np.empty(shape=slvr.brightness_shape, dtype=slvr.brightness_dtype)
+            B = np.empty(shape=slvr.brightness.shape, dtype=slvr.brightness.dtype)
             I, Q, U, V, alpha = B[0,:,:], B[1,:,:], B[2,:,:], B[3,:,:], B[4,:,:]
             I[:] = 2
             Q[:] = 1
@@ -60,15 +60,15 @@ if __name__ == '__main__':
 
             slvr.transfer_brightness(B)
         elif args.version in [Options.VERSION_FOUR]:
-            lm = np.empty(shape=slvr.lm_shape, dtype=slvr.lm_dtype)
+            lm = np.empty(shape=slvr.lm.shape, dtype=slvr.lm.dtype)
             l, m = lm[:,0], lm[:,1]
             l[:] = 0.1
             m[:] = 0.25
 
             slvr.transfer_lm(lm)
 
-            stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
-            alpha = np.empty(shape=slvr.alpha_shape, dtype=slvr.alpha_dtype)
+            stokes = np.empty(shape=slvr.stokes.shape, dtype=slvr.stokes.dtype)
+            alpha = np.empty(shape=slvr.alpha.shape, dtype=slvr.alpha.dtype)
             I, Q, U, V = stokes[:,:,0], stokes[:,:,1], stokes[:,:,2], stokes[:,:,3]
             I[:] = 2
             Q[:] = 1

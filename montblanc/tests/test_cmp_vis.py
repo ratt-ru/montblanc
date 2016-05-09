@@ -215,14 +215,14 @@ class TestCmpVis(unittest.TestCase):
         slvr_cfg[Options.VERSION] = Options.VERSION_TWO
         with montblanc.rime_solver(slvr_cfg) as slvr:
             # Create and transfer lm to the solver
-            lm = np.empty(shape=slvr.lm_shape, dtype=slvr.lm_dtype)
+            lm = np.empty(shape=slvr.lm.shape, dtype=slvr.lm.dtype)
             l, m = lm[0,:], lm[1,:]
             l[:] = _L
             m[:] = _M
             slvr.transfer_lm(lm)
 
             # Create and transfer brightness to the solver
-            B = np.empty(shape=slvr.brightness_shape, dtype=slvr.brightness_dtype)
+            B = np.empty(shape=slvr.brightness.shape, dtype=slvr.brightness.dtype)
             I, Q, U, V, alpha = B[0,:,:], B[1,:,:], B[2,:,:], B[3,:,:], B[4,:,:]
             I[:] = _I
             Q[:] = _Q
@@ -243,15 +243,15 @@ class TestCmpVis(unittest.TestCase):
         slvr_cfg[Options.VERSION] = Options.VERSION_FOUR
         with montblanc.rime_solver(slvr_cfg) as slvr:
             # Create and transfer lm to the solver
-            lm = np.empty(shape=slvr.lm_shape, dtype=slvr.lm_dtype)
+            lm = np.empty(shape=slvr.lm.shape, dtype=slvr.lm.dtype)
             l, m = lm[:,0], lm[:,1]
             l[:] = _L
             m[:] = _M
             slvr.transfer_lm(lm)
 
             # Create and transfer stoke and alpha to the solver
-            stokes = np.empty(shape=slvr.stokes_shape, dtype=slvr.stokes_dtype)
-            alpha = np.empty(shape=slvr.alpha_shape, dtype=slvr.alpha_dtype)
+            stokes = np.empty(shape=slvr.stokes.shape, dtype=slvr.stokes.dtype)
+            alpha = np.empty(shape=slvr.alpha.shape, dtype=slvr.alpha.dtype)
             I, Q, U, V = stokes[:,:,0], stokes[:,:,1], stokes[:,:,2], stokes[:,:,3]
             I[:] = _I
             Q[:] = _Q

@@ -229,6 +229,9 @@ class RIMESolver(HyperCube):
             mbu.dtype_from_str(dtype, self.type_dict()),
             default, **kwargs)
 
+    def create_arrays(self):
+        raise NotImplementedError()
+
     def init_array(self, name, ary, value):
         # No defaults are supplied
         if value is None:
@@ -286,3 +289,21 @@ class RIMESolver(HyperCube):
                     'value value %s, but NumPy\'s fill function '
                     'failed with %s') % (name, value, repr(e)))
 
+    def solve(self):
+        """ Solve the RIME """
+        pass
+
+    def initialise(self):
+        """ Initialise the RIME solver """
+        pass
+
+    def shutdown(self):
+        """ Stop the RIME solver """
+        pass
+
+    def __enter__(self):
+        self.initialise()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.shutdown()

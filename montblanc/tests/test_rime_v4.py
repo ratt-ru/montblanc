@@ -151,14 +151,14 @@ class TestRimeV4(unittest.TestCase):
         # Call the GPU solver
         gpu_slvr.solve()
 
-        ekb = cpu_slvr.compute_ekb_sqrt_jones_per_ant()
-        ekb = gpu_slvr.retrieve_jones()
+        ekb_cpu = cpu_slvr.compute_ekb_sqrt_jones_per_ant()
+        ekb_gpu = gpu_slvr.retrieve_jones()
 
         # Some proportion of values will be out due to
         # discrepancies on the CPU and GPU when computing
         # the E beam (See E_beam_test_impl below)
         proportion_acceptable = 1e-2
-        d = np.invert(np.isclose(ekb, ekb, **cmp))
+        d = np.invert(np.isclose(ekb_cpu, ekb_gpu, **cmp))
         incorrect = d.sum()
         proportion_incorrect = incorrect / float(d.size)
         self.assertTrue(proportion_incorrect < proportion_acceptable,
@@ -172,8 +172,8 @@ class TestRimeV4(unittest.TestCase):
 
         # Test that at a decent proportion of
         # the calculated EKB terms are non-zero
-        non_zero = np.count_nonzero(ekb)
-        non_zero_ratio = non_zero / float(ekb.size)
+        non_zero = np.count_nonzero(ekb_cpu)
+        non_zero_ratio = non_zero / float(ekb_cpu.size)
         self.assertTrue(non_zero_ratio > 0.85,
             'Non-zero EKB ratio is %f.' % non_zero)
 
@@ -215,7 +215,7 @@ class TestRimeV4(unittest.TestCase):
         # The pipeline for this test case doesn't
         # create the jones terms. Create some
         # random terms and transfer them to the GPU
-        sh, dt = cpu_slvr.jones_shape, cpu_slvr.jones_dtype
+        sh, dt = cpu_slvr.jones.shape, cpu_slvr.jones.dtype
         cpu_slvr.jones[:] = (
             np.random.random(size=sh).astype(dt) + 
             1j*np.random.random(size=sh).astype(dt))
@@ -228,21 +228,22 @@ class TestRimeV4(unittest.TestCase):
         # Check that the CPU and GPU visibilities
         # match each other
         ekb_per_bl = cpu_slvr.compute_ekb_jones_per_bl(cpu_slvr.jones)
-        ekb_vis = cpu_slvr.compute_ekb_vis(ekb_per_bl)
-        gekb_vis = cpu_slvr.compute_gekb_vis(ekb_vis)
-        gekb_vis = gpu_slvr.retrieve_model_vis()
-        self.assertTrue(np.allclose(gekb_vis, gekb_vis, **cmp))
+        ekb_vis_cpu = cpu_slvr.compute_ekb_vis(ekb_per_bl)
+        gekb_vis_cpu = cpu_slvr.compute_gekb_vis(ekb_vis_cpu)
+        gekb_vis_gpu = gpu_slvr.retrieve_model_vis()
+
+        self.assertTrue(np.allclose(gekb_vis_cpu, gekb_vis_gpu, **cmp))
 
         # Check that the chi squared sum terms
         # match each other
-        chi_sqrd_sum_terms = cpu_slvr.compute_chi_sqrd_sum_terms(
-            vis=gekb_vis)
-        chi_sqrd_sum_terms = gpu_slvr.retrieve_chi_sqrd_result()
-        self.assertTrue(np.allclose(chi_sqrd_sum_terms,
-            chi_sqrd_sum_terms, **cmp))
+        chi_sqrd_sum_terms_cpu = cpu_slvr.compute_chi_sqrd_sum_terms(
+            vis=gekb_vis_cpu)
+        chi_sqrd_sum_terms_gpu = gpu_slvr.retrieve_chi_sqrd_result()
+        self.assertTrue(np.allclose(chi_sqrd_sum_terms_cpu,
+            chi_sqrd_sum_terms_gpu, **cmp))
 
         chi_sqrd_result = cpu_slvr.compute_chi_sqrd(
-            chi_sqrd_terms=chi_sqrd_sum_terms)
+            chi_sqrd_terms=chi_sqrd_sum_terms_cpu)
         self.assertTrue(np.allclose(chi_sqrd_result, gpu_slvr.X2, **cmp))
 
     def test_sum_coherencies_float(self):
@@ -281,14 +282,14 @@ class TestRimeV4(unittest.TestCase):
         copy_solver(cpu_slvr, gpu_slvr)
 
         # Calculate CPU version of the B sqrt matrix
-        b_sqrt = cpu_slvr.compute_b_sqrt_jones()
+        b_sqrt_cpu = cpu_slvr.compute_b_sqrt_jones()
 
         # Call the GPU solver
         gpu_slvr.solve()
         # Get the GPU version of the B sqrt matrix
-        b_sqrt = gpu_slvr.retrieve_B_sqrt()
+        b_sqrt_gpu = gpu_slvr.retrieve_B_sqrt()
 
-        self.assertTrue(np.allclose(b_sqrt, b_sqrt, **cmp))
+        self.assertTrue(np.allclose(b_sqrt_cpu, b_sqrt_gpu, **cmp))
 
         # TODO: Replace with np.einsum
         # Pick 16 random points in the same and
@@ -299,15 +300,15 @@ class TestRimeV4(unittest.TestCase):
         rand_t = [random.randrange(0, ntime) for i in range(N)]
         rand_ch = [random.randrange(0, nchan) for i in range(N)]
 
-        b = cpu_slvr.compute_b_jones()
+        b_cpu = cpu_slvr.compute_b_jones()
 
         # Test that the square root of B
         # multiplied by itself yields B.
         # Also tests that the square root of B
         # is the Hermitian of the square root of B
         for src, t, ch in zip(rand_srcs, rand_t, rand_ch):
-            B_sqrt = b_sqrt[src,t,ch].reshape(2,2)
-            B = b[src,t,ch].reshape(2,2)
+            B_sqrt = b_sqrt_cpu[src,t,ch].reshape(2,2)
+            B = b_cpu[src,t,ch].reshape(2,2)
             self.assertTrue(np.allclose(B, np.dot(B_sqrt, B_sqrt)))
             self.assertTrue(np.all(B_sqrt == B_sqrt.conj().T))
 
@@ -356,12 +357,12 @@ class TestRimeV4(unittest.TestCase):
         # Set it to 1 degree so that our
         # sources rotate through the cube.
         cpu_slvr.set_parallactic_angle(np.deg2rad(1))
-        E_term = cpu_slvr.compute_E_beam()
+        E_term_cpu = cpu_slvr.compute_E_beam()
 
         copy_solver(cpu_slvr, gpu_slvr)
 
         gpu_slvr.solve()
-        E_term = gpu_slvr.retrieve_jones()
+        E_term_gpu = gpu_slvr.retrieve_jones()
 
         # After extensive debugging and attempts get a nice
         # solution, it has to be accepted that a certain
@@ -378,7 +379,7 @@ class TestRimeV4(unittest.TestCase):
 
         # Hence, we choose a very low ratio of unnacceptable values
         proportion_acceptable = 1e-4
-        d = np.invert(np.isclose(E_term, E_term, **cmp))
+        d = np.invert(np.isclose(E_term_cpu, E_term_gpu, **cmp))
         incorrect = d.sum()
         proportion_incorrect = incorrect / float(d.size)
         self.assertTrue(proportion_incorrect < proportion_acceptable,
@@ -392,8 +393,8 @@ class TestRimeV4(unittest.TestCase):
 
         # Test that at a decent proportion of
         # the calculated E terms are non-zero
-        non_zero_E = np.count_nonzero(E_term)
-        non_zero_E_ratio = non_zero_E / float(E_term.size)
+        non_zero_E = np.count_nonzero(E_term_cpu)
+        non_zero_E_ratio = non_zero_E / float(E_term_cpu.size)
         self.assertTrue(non_zero_E_ratio > 0.85,
             'Non-zero E-term ratio is {r}.'.format(r=non_zero_E_ratio))
 
@@ -414,7 +415,7 @@ class TestRimeV4(unittest.TestCase):
         with gpu_slvr, cpu_slvr:
             # Check that the beam cube dimensions are
             # correctly configured
-            self.assertTrue(cpu_slvr.E_beam_shape == 
+            self.assertTrue(cpu_slvr.E_beam.shape == 
                 (beam_lw, beam_mh, beam_nud, 4))
 
             self.E_beam_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-4})
@@ -472,12 +473,12 @@ class TestRimeV4(unittest.TestCase):
 
             # Fill in the jones matrix with random values
             cpu_slvr.jones[:] = np.random.random(
-                    size=cpu_slvr.jones_shape).astype(cpu_slvr.jones_dtype) + \
+                    size=cpu_slvr.jones.shape).astype(cpu_slvr.jones.dtype) + \
                 np.random.random(
-                    size=cpu_slvr.jones_shape).astype(cpu_slvr.jones_dtype)
+                    size=cpu_slvr.jones.shape).astype(cpu_slvr.jones.dtype)
 
             # Superfluous really, but makes below readable
-            assert cpu_slvr.jones_shape == (nsrc, ntime, na, nchan, 4)
+            assert cpu_slvr.jones.shape == (nsrc, ntime, na, nchan, 4)
 
             # Get per baseline jones matrices from
             # the per antenna jones matrices
@@ -568,14 +569,15 @@ class TestRimeV4(unittest.TestCase):
             gpu_slvr.register_array(
                 name='matrix_in',
                 shape=('nsrc', 'nchan'),
-                dtype='ft',
-                registrant='test_rime_v4')
+                dtype='ft')
 
             gpu_slvr.register_array(
                 name='matrix_out',
                 shape=('nchan', 'nsrc'),
-                dtype='ft',
-                registrant='test_rime_v4')
+                dtype='ft')
+
+            # Recreates existing arrays, but OK for testing purposes!
+            gpu_slvr.create_arrays()
 
             matrix = np.random.random(
                 size=(nsrc, nchan)).astype(gpu_slvr.ft)

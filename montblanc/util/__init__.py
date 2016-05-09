@@ -287,48 +287,6 @@ def viable_dim_config(bytes_available, arrays, template,
 
     return True, modified_dims
 
-def viable_timesteps(bytes_available, arrays, template):
-    """
-    Returns the number of timesteps possible, given the registered arrays
-    and a memory budget defined by bytes_available
-    """
-
-    # Don't accept non-negative memory budgets
-    if bytes_available < 0:
-        bytes_available = 0
-
-    # Figure out which arrays have an ntime dimension
-    has_time = np.array([ \
-        t.sshape.count('ntime') > 0 for t in arrays.values()])
-
-    # Get the shape product of each array, EXCLUDING any ntime dimension,
-    # multiplied by the size of the array type in bytes.
-    products = np.array([array_bytes(
-        shape_from_str_tuple(t.sshape, template,
-            ignore=['ntime']),
-        t.dtype)
-        for t in arrays.values()])
-
-    # TODO: Remove duplicate code paths
-    # This really replicates solver.bytes_required
-    bytes_required = np.array([array_bytes(
-        shape_from_str_tuple(t.sshape, template),
-        t.dtype)
-        for t in arrays.values()]).sum()
-
-    # Determine a linear expression for the bytes
-    # required which varies by timestep. y = a + b*x
-    a = np.sum(np.logical_not(has_time)*products)
-    b = np.sum(has_time*products)
-
-    # Check that if we substitute ntime for x, we agree on the
-    # memory requirements
-    assert a + b*template['ntime'] == bytes_required
-
-    # Given the number of bytes available,
-    # how many timesteps can we fit in our budget?
-    return (bytes_available - a + b - 1) // b
-
 def dtype_from_str(sdtype, template):
     """
     Substitutes string dtype parameters
@@ -455,3 +413,18 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
         blockdimz = dimz
 
     return blockdimx, blockdimy, blockdimz
+
+class ContextWrapper(object):
+    """ Context Manager Wrapper for CUDA Contexts! """
+    def __init__(self, context):
+        self.context = context
+
+    def __enter__(self):
+        """ Pushed the wrapped context onto the stack """
+        self.context.push()
+        return self
+
+    def __exit__(self,type,value,traceback):
+        """ Pop when we're done """
+        import pycuda.driver as cuda
+        cuda.Context.pop()

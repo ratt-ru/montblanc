@@ -41,7 +41,7 @@ from montblanc.impl.rime.v4.config import (
     P as v4Props,
     Classifier)
 
-from hypercube.dims import DIMDATA
+from hypercube.dims import DimData
 
 import montblanc.impl.rime.v4.RimeSolver as BSV4mod
 
@@ -111,6 +111,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         self.register_properties(P_main)
         self.register_arrays(A_main)
+        self.create_arrays()
 
         # PyCUDA contexts for each GPU device   
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
@@ -369,15 +370,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
     def _cfg_subslvr_dims(self, subslvr_cfg, P):
         for dim in self._dims.itervalues():
-            name = dim[DIMDATA.NAME]
+            name = dim[DimData.NAME]
             if name in P:
                 # Copy dimension data for reconfiguration
                 sub_dim = dim.copy()
 
                 sub_dim.update({
-                    DIMDATA.LOCAL_SIZE: P[name],
-                    DIMDATA.EXTENTS: [0, P[name]],
-                    DIMDATA.SAFETY: False })
+                    DimData.LOCAL_SIZE: P[name],
+                    DimData.EXTENTS: [0, P[name]],
+                    DimData.SAFETY: False })
 
                 subslvr_cfg[name] = sub_dim
 
@@ -565,11 +566,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # just take everything in the dimension
             cpu_idx = [cpu_slice_map[s]
                 if s in cpu_slice_map else ALL_SLICE
-                for s in r.sshape]
+                for s in r.shape]
 
             gpu_idx = [gpu_slice_map[s]
                 if s in gpu_slice_map else ALL_SLICE
-                for s in r.sshape]
+                for s in r.shape]
 
             # Bail if there's an empty slice in the index
             if gpu_idx.count(EMPTY_SLICE) > 0:
@@ -579,7 +580,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # Checking if we're handling two antenna here
             # A precursor to the vile hackery that follows
             try:
-                na_idx = r.sshape.index('na')
+                na_idx = r.shape.index('na')
             except ValueError:
                 na_idx = -1
 
@@ -766,10 +767,10 @@ class CompositeRimeSolver(MontblancNumpySolver):
             nsrc = P[Options.NSRC]
 
             U = [{
-                DIMDATA.NAME: nr_var,
-                DIMDATA.LOCAL_SIZE: nsrc if nsrc < P[nr_var] else P[nr_var],
-                DIMDATA.EXTENTS: [0, nsrc if nsrc < P[nr_var] else P[nr_var]],
-                DIMDATA.SAFETY: False
+                DimData.NAME: nr_var,
+                DimData.LOCAL_SIZE: nsrc if nsrc < P[nr_var] else P[nr_var],
+                DimData.EXTENTS: [0, nsrc if nsrc < P[nr_var] else P[nr_var]],
+                DimData.SAFETY: False
             } for nr_var in [Options.NSRC] + mbu.source_nr_vars()]
 
             subslvr.update_dimensions(U)
@@ -791,6 +792,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         for i, subslvr in enumerate(self.thread_local.solvers):
             subslvr.register_properties(P_sub)
             subslvr.register_arrays(A_sub)
+            subslvr.create_arrays()
 
     def _thread_prime_memory_pools(self):
         """
@@ -861,7 +863,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         montblanc.log.info('Primed pinned memory pool '
             'of size {n} for device {d}.'.format(
-                d=device.name(), n=subslvr.fmt_bytes(pinned_allocated)))
+                d=device.name(), n=mbu.fmt_bytes(pinned_allocated)))
 
         # Now force return of memory to the pools
         for a in pinned_pool_refs:
@@ -907,9 +909,13 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cpu_slice_map.update(src_cpu_slice_map)
                 gpu_slice_map.update(src_gpu_slice_map)
 
+                # nvis extents are likely to be incorrect which causes
+                # hypercube to complain. Fake them to appease hypercube.
+                cpu_slice_map['nvis'] = slice(0,1,None)
+
                 # Configure dimension extents on the sub-solver
                 subslvr.update_dimensions([
-                    { DIMDATA.NAME: dim, DIMDATA.EXTENTS: [S.start, S.stop] }
+                    { DimData.NAME: dim, DimData.EXTENTS: [S.start, S.stop] }
                     for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
 
                 # Enqueue E Beam
@@ -1009,7 +1015,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         if not self.initialised:
             self.initialise()
 
-        model_vis_sshape = self.arrays()['model_vis']['sshape']
+        model_vis_sshape = self.arrays()['model_vis']['shape']
 
         def _free_pool_allocs(pool_refs, pool_lock):
             """ Free pool-allocated objects in pool_refs, guarded by pool_lock """

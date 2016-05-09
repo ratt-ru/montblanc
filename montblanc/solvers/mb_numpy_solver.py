@@ -18,59 +18,30 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from hypercube import NumpyHyperCube
+import hypercube as hc
+
 from rime_solver import RIMESolver
 from montblanc.config import SolverConfig as Options
 
-class MontblancNumpySolver(RIMESolver, NumpyHyperCube):
+class MontblancNumpySolver(RIMESolver):
     def __init__(self, slvr_cfg):
         super(MontblancNumpySolver, self).__init__(slvr_cfg=slvr_cfg)
 
-    def register_array(self, name, shape, dtype, **kwargs):
-        """
-        Register an array with this Solver object.
+    def create_arrays(self):
+        # Create the local numpy arrays on ourself
+        hc.create_local_numpy_arrays_on_cube(self)
 
-        Arguments
-        ----------
-            name : string
-                name of the array.
-            shape : integer/string or tuple of integers/strings
-                Shape of the array.
-            dtype : data-type
-                The data-type for the array.
-
-        Keyword Arguments
-        -----------------
-            page_locked : boolean
-                True if the 'name' ndarray should be allocated as
-                a page-locked array.
-            aligned : boolean
-                True if the 'name' ndarray should be allocated as
-                an page-aligned array.
-
-        Returns
-        -------
-            A dictionary describing this array.
-        """
-
-        A = super(MontblancNumpySolver, self).register_array(
-            name, shape, dtype, **kwargs)
-
-        # Our parent will create this
-        cpu_ary = getattr(self, name)
+        # Get our data source
         data_source = self._slvr_cfg[Options.DATA_SOURCE]
 
-        # If we're creating test data, initialise the array with
-        # data from the test key, don't initialise if we've been
-        # explicitly told the array should be empty, otherwise
-        # set the defaults
-        if data_source == Options.DATA_SOURCE_TEST:
-            self.init_array(name, cpu_ary,
-                kwargs.get(Options.DATA_SOURCE_TEST, None))
-        elif data_source == Options.DATA_SOURCE_EMPTY:
-            pass
-        else:
-            self.init_array(name, cpu_ary,
-                kwargs.get(Options.DATA_SOURCE_DEFAULT, None))
+        for name, array in self.arrays().iteritems():
+            cpu_ary = getattr(self, name)
 
-        return A
+            if data_source == Options.DATA_SOURCE_TEST:
+                value = array.get(Options.DATA_SOURCE_TEST, None)
+                self.init_array(name, cpu_ary, value)
+            elif data_source == Options.DATA_SOURCE_EMPTY:
+                pass
+            else:
+                self.init_array(name, cpu_ary,
+                    array.get(Options.DATA_SOURCE_DEFAULT, None))    

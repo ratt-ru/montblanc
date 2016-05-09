@@ -58,29 +58,6 @@ class TestSolver(unittest.TestCase):
         """ Tear down each test case """
         pass
 
-    def test_viable_timesteps(self):
-        """
-        Tests that various parts of the functionality for obtaining the
-        number of viable timesteps work
-        """
-        ntime, nchan, npsrc, ngsrc = 5, 16, 2, 2
-        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=ntime, nchan=nchan,
-            sources=montblanc.sources(point=2, gaussian=2))
-
-        with test_solver(slvr_cfg) as slvr:
-
-            slvr.register_array(name='ary_one',shape=(5,'ntime', 'nchan'), dtype=np.float64,
-                registrant='test_solver', cpu=False, gpu=False)
-
-            slvr.register_array(name='ary_two',shape=(10,'nsrc'), dtype=np.float64,
-                registrant='test_solver', cpu=False, gpu=False)
-
-            # How many timesteps can we accommodate with 2GB ?
-            # Don't bother with the actual value, the assert in viable_timesteps
-            # actually tests things quite well
-            mbu.viable_timesteps(2*1024*1024*1024,
-                slvr.arrays(), slvr.template_dict())
-
     def test_solver_factory(self):
         """ Test that the solver factory produces the correct types """
         slvr_cfg = montblanc.rime_solver_cfg(
