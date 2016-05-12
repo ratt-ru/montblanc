@@ -87,10 +87,10 @@ def lm_to_radec (l,m,ra0,dec0):
 _L = 0.0008
 _M = 0.0036
 _I = 1.0
-_Q = 0.0
-_U = 0.0
-_V = 0.0
-_ALPHA = 0.5
+_Q = 0.2
+_U = 0.25
+_V = 0.3
+_ALPHA = 0.8
 _REF_FREQ = 1.5e9
 
 class TestCmpVis(unittest.TestCase):
