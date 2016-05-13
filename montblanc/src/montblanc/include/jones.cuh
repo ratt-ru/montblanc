@@ -24,9 +24,9 @@
 namespace montblanc {
 
 // The base visibility index. 0 0 0 0 4 4 4 4 8 8 8 8
-#define _MONTBLANC_VIS_BASE_IDX (cub::LaneId() & 28)
+#define _MONTBLANC_VIS_BASE_IDX int(cub::LaneId() & 28)
 // Odd polarisation? 0 1 0 1 0 1 0 1 0 1 0 1
-#define _MONTBLANC_IS_ODD_POL (cub::LaneId() & 0x1)
+#define _MONTBLANC_IS_ODD_POL int(cub::LaneId() & 0x1)
 // Even polarisation? 1 0 1 0 1 0 1 0 1 0 1 0
 #define _MONTBLANC_IS_EVEN_POL int(_MONTBLANC_IS_ODD_POL == 0)
 
