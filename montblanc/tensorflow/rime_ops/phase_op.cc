@@ -19,8 +19,15 @@ REGISTER_OP("RimePhase")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64");
 
+// For simpler partial specialisation
+typedef Eigen::ThreadPoolDevice CPUDevice;
+
+// Declare the fully templated RimePhaseOp class type up front
+template <typename Device, typename FT, typename CT> class RimePhaseOp;
+
+// Partially specialise it for CPUDevice
 template <typename FT, typename CT>
-class RimePhaseOp : public tensorflow::OpKernel {
+class RimePhaseOp<CPUDevice, FT, CT> : public tensorflow::OpKernel {
 public:
     explicit RimePhaseOp(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
 
@@ -149,11 +156,23 @@ REGISTER_KERNEL_BUILDER(
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimePhaseOp<float, tensorflow::complex64>);
+    RimePhaseOp<CPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
     Name("RimePhase")
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimePhaseOp<double, tensorflow::complex128>);} // namespace tensorflow {
+    RimePhaseOp<CPUDevice, double, tensorflow::complex128>);
+
+#if GOOGLE_CUDA
+
+#include "tensorflow/core/platform/stream_executor.h"
+
+// For simpler partial specialisation
+typedef Eigen::GpuDevice GPUDevice;
+
+
+#endif // #if GOOGLE_CUDA
+
+} // namespace tensorflow {
