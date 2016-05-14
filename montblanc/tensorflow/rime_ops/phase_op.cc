@@ -9,6 +9,8 @@
 //#include "tensorflow/core/framework/tensor_shape.h"
 //#include "tensorflow/core/framework/types.h"
 
+namespace tensorflow {
+
 REGISTER_OP("RimePhase")
     .Input("lm: FT")
     .Input("uvw: FT")
@@ -154,4 +156,4 @@ REGISTER_KERNEL_BUILDER(
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimePhaseOp<double, tensorflow::complex128>);
+    RimePhaseOp<double, tensorflow::complex128>);} // namespace tensorflow {
