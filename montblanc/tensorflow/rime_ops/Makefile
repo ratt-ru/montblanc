@@ -8,7 +8,7 @@ all : $(LIBRARY)
 clean :
 	rm $(LIBRARY)
 
-phase_op.cu.o:
+phase_op.cu.o: phase_op.cu.cc
 	echo $(GOOLE_CUDA)
 	nvcc -std=c++11 -c -o phase_op.cu.o phase_op.cu.cc -I $(TF_INC) -D GOOGLE_CUDA=$(TF_CUDA) -x cu -Xcompiler -fPIC
 
