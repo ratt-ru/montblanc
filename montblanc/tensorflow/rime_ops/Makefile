@@ -8,12 +8,12 @@ all : $(LIBRARY)
 clean :
 	rm $(LIBRARY)
 
-phase_op.cu.o: phase_op.cu.cc
+phase_op_gpu.cu.o: phase_op_gpu.cu.cc
 	echo $(GOOLE_CUDA)
-	nvcc -std=c++11 -c -o phase_op.cu.o phase_op.cu.cc -I $(TF_INC) -D GOOGLE_CUDA=$(TF_CUDA) -x cu -Xcompiler -fPIC
+	nvcc -std=c++11 -c -o phase_op_gpu.cu.o phase_op_gpu.cu.cc -I $(TF_INC) -D GOOGLE_CUDA=$(TF_CUDA) -x cu -Xcompiler -fPIC
 
 phase_op.o : phase_op.cc
 	g++ phase_op.cc --std=c++11 -I $(TF_INC) -c -fPIC -D GOOGLE_CUDA=$(TF_CUDA)
 
-$(LIBRARY) : phase_op.o phase_op.cu.o
+$(LIBRARY) : phase_op.o phase_op_gpu.cu.o
 	g++  -shared phase_op.o -o $(LIBRARY) -fPIC
