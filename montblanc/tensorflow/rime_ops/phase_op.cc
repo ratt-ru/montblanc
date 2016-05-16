@@ -1,6 +1,10 @@
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
+#if GOOGLE_CUDA
+#include "phase_op_gpu.h"
+#endif
+
 // For M_PI
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -167,11 +171,78 @@ REGISTER_KERNEL_BUILDER(
 
 #if GOOGLE_CUDA
 
-//#include "tensorflow/core/platform/stream_executor.h"
-
 // For simpler partial specialisation
 typedef Eigen::GpuDevice GPUDevice;
 
+// Partially specialise it for GPUDevice
+template <typename FT, typename CT>
+class RimePhaseOp<GPUDevice, FT, CT> : public tensorflow::OpKernel {
+public:
+    explicit RimePhaseOp(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+
+    void Compute(tensorflow::OpKernelContext * context) override
+    {
+        namespace tf = tensorflow;
+
+        // Sanity check the input tensors
+        const tf::Tensor & in_lm = context->input(0);
+        const tf::Tensor & in_uvw = context->input(1);
+        const tf::Tensor & in_frequency = context->input(2);
+
+        OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
+            tf::errors::InvalidArgument(
+                "lm should be of shape (nsrc, 2)"))
+
+        OP_REQUIRES(context, in_uvw.dims() == 3 && in_uvw.dim_size(2) == 3,
+            tf::errors::InvalidArgument(
+                "uvw should be of shape (ntime, na, 3)"))
+
+        OP_REQUIRES(context, in_frequency.dims() == 1,
+            tf::errors::InvalidArgument(
+                "frequency should be of shape (nchan)"))
+
+        // Extract problem dimensions
+        int nsrc = in_lm.dim_size(0);
+        int ntime = in_uvw.dim_size(0);
+        int na = in_uvw.dim_size(1);
+        int nchan = in_frequency.dim_size(0);
+
+        // Reason about our output shape
+        tf::TensorShape complex_phase_shape({nsrc, ntime, na, nchan});
+
+        // Create a pointer for the complex_phase result
+        tf::Tensor * complex_phase_ptr = nullptr;
+
+        // Allocate memory for the complex_phase
+        OP_REQUIRES_OK(context, context->allocate_output(
+            0, complex_phase_shape, &complex_phase_ptr));
+
+        if (complex_phase_ptr->NumElements() == 0)
+            { return; }
+
+        tf::RimePhaseGPU<FT, CT>::compute(
+            context->template eigen_device<GPUDevice>(),
+            in_lm.flat<FT>().data(),
+            in_uvw.flat<FT>().data(),
+            in_frequency.flat<FT>().data(),
+            complex_phase_ptr->flat<CT>().data(),
+            nsrc, ntime, na, nchan);
+    }
+};
+
+REGISTER_KERNEL_BUILDER(
+    Name("RimePhase")
+    .Device(DEVICE_GPU)
+    .TypeConstraint<float>("FT")
+    .TypeConstraint<tensorflow::complex64>("CT"),
+    RimePhaseOp<GPUDevice, float, tensorflow::complex64>);
+
+REGISTER_KERNEL_BUILDER(
+    Name("RimePhase")
+    .Device(tensorflow::DEVICE_GPU)
+    .TypeConstraint<double>("FT")
+    .TypeConstraint<tensorflow::complex128>("CT"),
+    RimePhaseOp<GPUDevice, double, tensorflow::complex128>);
 
 #endif // #if GOOGLE_CUDA
 
