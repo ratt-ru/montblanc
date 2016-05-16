@@ -167,7 +167,7 @@ REGISTER_KERNEL_BUILDER(
 
 #if GOOGLE_CUDA
 
-#include "tensorflow/core/platform/stream_executor.h"
+//#include "tensorflow/core/platform/stream_executor.h"
 
 // For simpler partial specialisation
 typedef Eigen::GpuDevice GPUDevice;
