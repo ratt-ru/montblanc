@@ -73,43 +73,6 @@ __global__ void rime_phase(
     }
 }
 
-
-template <typename FT, typename CT>
-struct RimePhaseGPU {
-    static void compute(const GPUDevice & device,
-        const FT * lm,
-        const FT * uvw,
-        const FT * frequency,
-        CT * complex_phase,
-        int32 nsrc, int32 ntime, int32 na, int32 nchan);
-};
-
-template <typename FT, typename CT>
-void RimePhaseGPU<FT, CT>::compute(
-        const GPUDevice & device,
-        const FT * lm,
-        const FT * uvw,
-        const FT * frequency,
-        CT * complex_phase,
-        int32 nsrc, int32 ntime, int32 na, int32 nchan)
-{
-    // Set up of thread blocks and grids
-    dim3 blocks;
-    dim3 grid;
-
-    // Trait class governing this kernel instantiaot
-    typedef RimePhaseTraits<FT, CT> Tr;
-
-    // Invoke the kernel
-    rime_phase<Tr> <<<grid, blocks, 0, device.stream()>>>(
-        reinterpret_cast<const typename Tr::lm_type *>(lm),
-        reinterpret_cast<const typename Tr::uvw_type *>(uvw),
-        reinterpret_cast<const typename Tr::frequency_type *>(frequency),
-        reinterpret_cast<typename Tr::complex_phase_type *>(complex_phase),
-        nsrc, ntime, na, nchan);
-}
-
-
 // Partially specialise it for GPUDevice
 template <typename FT, typename CT>
 class RimePhaseOp<GPUDevice, FT, CT> : public tensorflow::OpKernel {
@@ -156,12 +119,28 @@ public:
         if (complex_phase_ptr->NumElements() == 0)
             { return; }
 
-        tf::RimePhaseGPU<FT, CT>::compute(
-            context->template eigen_device<GPUDevice>(),
-            in_lm.flat<FT>().data(),
-            in_uvw.flat<FT>().data(),
-            in_frequency.flat<FT>().data(),
-            complex_phase_ptr->flat<CT>().data(),
+        // Set up our kernel dimensions
+        dim3 blocks;
+        dim3 grid;
+
+        // Cast input into CUDA types defined within the Traits class
+        typedef RimePhaseTraits<FT, CT> Tr;
+        auto lm = reinterpret_cast<const typename Tr::lm_type *>(
+            in_lm.flat<FT>().data());
+        auto uvw = reinterpret_cast<const typename Tr::uvw_type *>(
+            in_uvw.flat<FT>().data());
+        auto frequency = reinterpret_cast<const typename Tr::frequency_type *>(
+            in_frequency.flat<FT>().data());
+        auto complex_phase = reinterpret_cast<
+            typename Tr::complex_phase_type *>(
+                complex_phase_ptr->flat<CT>().data());
+        
+        // Get the stream
+        const auto & stream = context->eigen_device<GPUDevice>().stream();
+
+        // Invoke the kernel, casting to the expected types
+        rime_phase<Tr> <<<grid, blocks, 0, stream>>>(
+            lm, uvw, frequency, complex_phase,
             nsrc, ntime, na, nchan);
     }
 };
