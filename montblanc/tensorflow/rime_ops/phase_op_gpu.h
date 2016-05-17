@@ -3,11 +3,76 @@
 
 #if GOOGLE_CUDA
 
+#include "phase_op.h"
+
 #define EIGEN_USE_GPU
 
 namespace tensorflow {
 
 typedef Eigen::GpuDevice GPUDevice;
+
+
+template <typename FT, typename CT>
+class RimePhaseTraits;
+
+template <>
+class RimePhaseTraits<float, tensorflow::complex64>
+{
+public:
+    typedef float FT;
+    typedef float2 CT;
+    typedef float2 lm_type;
+    typedef float3 uvw_type;
+    typedef float frequency_type;
+    typedef float2 complex_phase_type;
+
+    __device__ __forceinline__ static
+    CT make_complex(const FT & real, const FT & imag)
+        { return ::make_float2(real, imag); }
+};
+
+template <>
+class RimePhaseTraits<double, tensorflow::complex128>
+{
+public:
+    typedef double FT;
+    typedef double2 CT;
+    typedef double2 lm_type;
+    typedef double3 uvw_type;
+    typedef double frequency_type;
+    typedef double2 complex_phase_type;
+
+    __device__ __forceinline__ static
+    CT make_complex(const FT & real, const FT & imag)
+        { return ::make_double2(real, imag); }
+};
+
+template <typename Traits>
+__global__ void rime_phase(
+    const typename Traits::lm_type * lm,
+    const typename Traits::uvw_type * uvw,
+    const typename Traits::frequency_type * frequency,
+    typename Traits::complex_phase_type * complex_phase,
+    int32 nsrc, int32 ntime, int32 na, int32 nchan)
+{
+    typedef typename Traits::FT FT;
+
+    int chan = blockIdx.x*blockDim.x + threadIdx.x;
+    int ant = blockIdx.y*blockDim.y + threadIdx.y;
+    int time = blockIdx.z*blockDim.z + threadIdx.z;
+
+    if(chan >= nchan || ant >= na || time >= ntime)
+        { return; }
+
+    for(int src=0; src < nsrc; ++src)
+    {
+        typename Traits::lm_type r_lm = lm[src];
+        // TODO: This code doesn't do anything sensible
+        FT n = FT(1.0) - r_lm.x*r_lm.x - r_lm.y*r_lm.y;
+        complex_phase[nsrc] = Traits::make_complex(n, 0.0);
+    }
+}
+
 
 template <typename FT, typename CT>
 struct RimePhaseGPU {
@@ -15,11 +80,93 @@ struct RimePhaseGPU {
         const FT * lm,
         const FT * uvw,
         const FT * frequency,
-        const CT * complex_phase,
+        CT * complex_phase,
         int32 nsrc, int32 ntime, int32 na, int32 nchan);
 };
 
+template <typename FT, typename CT>
+void RimePhaseGPU<FT, CT>::compute(
+        const GPUDevice & device,
+        const FT * lm,
+        const FT * uvw,
+        const FT * frequency,
+        CT * complex_phase,
+        int32 nsrc, int32 ntime, int32 na, int32 nchan)
+{
+    // Set up of thread blocks and grids
+    dim3 blocks;
+    dim3 grid;
+
+    // Trait class governing this kernel instantiaot
+    typedef RimePhaseTraits<FT, CT> Tr;
+
+    // Invoke the kernel
+    rime_phase<Tr> <<<grid, blocks, 0, device.stream()>>>(
+        reinterpret_cast<const typename Tr::lm_type *>(lm),
+        reinterpret_cast<const typename Tr::uvw_type *>(uvw),
+        reinterpret_cast<const typename Tr::frequency_type *>(frequency),
+        reinterpret_cast<typename Tr::complex_phase_type *>(complex_phase),
+        nsrc, ntime, na, nchan);
 }
+
+
+// Partially specialise it for GPUDevice
+template <typename FT, typename CT>
+class RimePhaseOp<GPUDevice, FT, CT> : public tensorflow::OpKernel {
+public:
+    explicit RimePhaseOp(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+
+    void Compute(tensorflow::OpKernelContext * context) override
+    {
+        namespace tf = tensorflow;
+
+        // Sanity check the input tensors
+        const tf::Tensor & in_lm = context->input(0);
+        const tf::Tensor & in_uvw = context->input(1);
+        const tf::Tensor & in_frequency = context->input(2);
+
+        OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
+            tf::errors::InvalidArgument(
+                "lm should be of shape (nsrc, 2)"))
+
+        OP_REQUIRES(context, in_uvw.dims() == 3 && in_uvw.dim_size(2) == 3,
+            tf::errors::InvalidArgument(
+                "uvw should be of shape (ntime, na, 3)"))
+
+        OP_REQUIRES(context, in_frequency.dims() == 1,
+            tf::errors::InvalidArgument(
+                "frequency should be of shape (nchan)"))
+
+        // Extract problem dimensions
+        int nsrc = in_lm.dim_size(0);
+        int ntime = in_uvw.dim_size(0);
+        int na = in_uvw.dim_size(1);
+        int nchan = in_frequency.dim_size(0);
+
+        // Reason about our output shape
+        tf::TensorShape complex_phase_shape({nsrc, ntime, na, nchan});
+
+        // Create a pointer for the complex_phase result
+        tf::Tensor * complex_phase_ptr = nullptr;
+
+        // Allocate memory for the complex_phase
+        OP_REQUIRES_OK(context, context->allocate_output(
+            0, complex_phase_shape, &complex_phase_ptr));
+
+        if (complex_phase_ptr->NumElements() == 0)
+            { return; }
+
+        tf::RimePhaseGPU<FT, CT>::compute(
+            context->template eigen_device<GPUDevice>(),
+            in_lm.flat<FT>().data(),
+            in_uvw.flat<FT>().data(),
+            in_frequency.flat<FT>().data(),
+            complex_phase_ptr->flat<CT>().data(),
+            nsrc, ntime, na, nchan);
+    }
+};
+
+} // namespace tensorflow {
 
 #endif // #if GOOGLE_CUDA
 

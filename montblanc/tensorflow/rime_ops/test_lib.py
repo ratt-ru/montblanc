@@ -60,3 +60,5 @@ with tf.Session() as S:
     assert tf_cplx_phase.shape == (nsrc, ntime, na, nchan)
     assert np_cplx_phase.shape == (nsrc, ntime, na, nchan)
     assert np.allclose(tf_cplx_phase, np_cplx_phase)
+
+print 'Tests Succeeded'
