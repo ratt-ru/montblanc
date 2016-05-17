@@ -16,7 +16,7 @@ typedef Eigen::ThreadPoolDevice CPUDevice;
 // Declare the fully templated RimePhaseOp class type up front
 template <typename Device, typename FT, typename CT> class RimePhaseOp;
 
-// Partially specialise it for CPUDevice
+// Partially specialise RimePhaseOp for CPUDevice
 template <typename FT, typename CT>
 class RimePhaseOp<CPUDevice, FT, CT> : public tensorflow::OpKernel {
 public:

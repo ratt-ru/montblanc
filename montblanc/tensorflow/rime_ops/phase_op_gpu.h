@@ -11,10 +11,11 @@ namespace tensorflow {
 
 typedef Eigen::GpuDevice GPUDevice;
 
-
+// Traits class defined by float and complex types
 template <typename FT, typename CT>
 class RimePhaseTraits;
 
+// Specialise for float and complex64
 template <>
 class RimePhaseTraits<float, tensorflow::complex64>
 {
@@ -31,6 +32,7 @@ public:
         { return ::make_float2(real, imag); }
 };
 
+// Specialise for double and complex128
 template <>
 class RimePhaseTraits<double, tensorflow::complex128>
 {
@@ -47,6 +49,7 @@ public:
         { return ::make_double2(real, imag); }
 };
 
+// CUDA kernel computing the phase term
 template <typename Traits>
 __global__ void rime_phase(
     const typename Traits::lm_type * lm,
@@ -67,13 +70,13 @@ __global__ void rime_phase(
     for(int src=0; src < nsrc; ++src)
     {
         typename Traits::lm_type r_lm = lm[src];
-        // TODO: This code doesn't do anything sensible
+        // TODO: This code doesn't do anything sensible yet
         FT n = FT(1.0) - r_lm.x*r_lm.x - r_lm.y*r_lm.y;
         complex_phase[nsrc] = Traits::make_complex(n, 0.0);
     }
 }
 
-// Partially specialise it for GPUDevice
+// Partially specialise RimePhaseOp for GPUDevice
 template <typename FT, typename CT>
 class RimePhaseOp<GPUDevice, FT, CT> : public tensorflow::OpKernel {
 public:
