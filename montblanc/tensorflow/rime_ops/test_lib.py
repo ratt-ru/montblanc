@@ -21,7 +21,7 @@ def complex_phase(lm, uvw, frequency):
     return mod.rime_phase(lm, uvw, frequency, CT=CT)
 
 dtype, ctype = np.float32, np.complex64
-nsrc, ntime, na, nchan = 10, 5, 3, 4
+nsrc, ntime, na, nchan = 100, 50, 64, 128
 lightspeed = 299792458.
 
 # Set up our numpy input arrays
@@ -35,13 +35,19 @@ uvw = tf.Variable(np_uvw, name='uvw')
 frequency = tf.Variable(np_frequency, name='frequency')
 #lm, uvw, frequency = map(tf.Variable, [lm_np, np_uvw, np_frequency])
 
-# Get an expression for the complex phase
-cplx_phase = complex_phase(lm, uvw, frequency)
+# Get an expression for the complex phase on the CPU
+with tf.device('/cpu:0'):
+    cplx_phase_cpu = complex_phase(lm, uvw, frequency)
+
+# Get an expression for the complex phase on the GPU
+with tf.device('/gpu:0'):
+    cplx_phase_gpu = complex_phase(lm, uvw, frequency)
 
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
     S.run(tf.initialize_all_variables())
-    tf_cplx_phase = S.run(cplx_phase)
+    tf_cplx_phase_cpu = S.run(cplx_phase_cpu)
+    tf_cplx_phase_gpu = S.run(cplx_phase_gpu)
 
     # Now calculate the complex phase using numpy
     # Reshapes help us to broadcast
@@ -57,8 +63,10 @@ with tf.Session() as S:
     np_cplx_phase = np.exp(phase)
 
     # Check that our shapes and values agree with a certain tolerance
-    assert tf_cplx_phase.shape == (nsrc, ntime, na, nchan)
+    assert tf_cplx_phase_cpu.shape == (nsrc, ntime, na, nchan)
+    assert tf_cplx_phase_gpu.shape == (nsrc, ntime, na, nchan)
     assert np_cplx_phase.shape == (nsrc, ntime, na, nchan)
-    assert np.allclose(tf_cplx_phase, np_cplx_phase)
+    assert np.allclose(tf_cplx_phase_cpu, np_cplx_phase)
+    assert np.allclose(tf_cplx_phase_gpu, np_cplx_phase)
 
 print 'Tests Succeeded'
