@@ -1,3 +1,5 @@
+import timeit
+
 import numpy as np
 import tensorflow as tf
 
@@ -46,9 +48,19 @@ with tf.device('/gpu:0'):
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
     S.run(tf.initialize_all_variables())
-    tf_cplx_phase_cpu = S.run(cplx_phase_cpu)
-    tf_cplx_phase_gpu = S.run(cplx_phase_gpu)
 
+    # Evaluate and time tensorflow GPU
+    start = timeit.default_timer()
+    tf_cplx_phase_gpu = S.run(cplx_phase_gpu)
+    print 'Tensorflow GPU time %f' % (timeit.default_timer() - start)
+
+    # Evaluate and time tensorflow CPU
+    start = timeit.default_timer()
+    tf_cplx_phase_cpu = S.run(cplx_phase_cpu)
+    print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)
+
+    # Evaluate and time numpy CPU
+    start = timeit.default_timer()
     # Now calculate the complex phase using numpy
     # Reshapes help us to broadcast
     lm = lm_np.reshape(nsrc, 1, 1, 1, 2)
@@ -61,6 +73,7 @@ with tf.Session() as S:
     n = np.sqrt(1.0 - l**2 - m**2) - 1.0
     phase = -2*np.pi*1j*(l*u + m*v + n*w)*frequency/lightspeed
     np_cplx_phase = np.exp(phase)
+    print 'Numpy CPU time %f' % (timeit.default_timer() - start)
 
     # Check that our shapes and values agree with a certain tolerance
     assert tf_cplx_phase_cpu.shape == (nsrc, ntime, na, nchan)
