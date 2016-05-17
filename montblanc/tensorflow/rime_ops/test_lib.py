@@ -6,7 +6,7 @@ import tensorflow as tf
 # Load the library containing the custom operation
 mod = tf.load_op_library('rime.so')
 
-def complex_phase(lm, uvw, frequency):
+def complex_phase_op(lm, uvw, frequency):
     """
     This function wraps rime_phase by deducing the
     complex output result type from the input
@@ -21,6 +21,48 @@ def complex_phase(lm, uvw, frequency):
         raise TypeError("Unhandled type '{t}'".format(t=lm.dtype))
 
     return mod.rime_phase(lm, uvw, frequency, CT=CT)
+
+def complex_phase(lm, uvw, frequency):
+    """
+    Compute the complex phase from lm, uvw and frequency expressions
+    """
+
+    # Get the dynamic shape of input tensors
+    lm_shape = tf.shape(lm)
+    uvw_shape = tf.shape(uvw)
+    frequency_shape = tf.shape(frequency)
+
+    # The shapes are themselves tensors
+    nsrc = lm_shape[0]
+    ntime, na = uvw_shape[0], uvw_shape[1]
+    nchan = frequency_shape[0]
+
+    # Define some constants
+    one = tf.constant(1.0)
+    minus_two_pi_over_C = tf.constant(-2.0*np.pi/lightspeed)
+
+    # Reshape now so that we get broadcasting in later operations
+    # Need to pack list since list contains tensors, e.g. nsrc
+    l = tf.reshape(lm[:,0], tf.pack([nsrc,1,1,1]))
+    m = tf.reshape(lm[:,1], tf.pack([nsrc,1,1,1]))
+
+    u = tf.reshape(uvw[:,:,0], tf.pack([1,ntime,na,1]))
+    v = tf.reshape(uvw[:,:,1], tf.pack([1,ntime,na,1]))
+    w = tf.reshape(uvw[:,:,2], tf.pack([1,ntime,na,1]))
+
+    frequency = tf.reshape(frequency, tf.pack([1,1,1,nchan]))
+
+    n = tf.sqrt(one - l**2 - m**2) - one
+
+    # Outer product l*u + m*v * n*w
+    phase = tf.convert_to_tensor(l*u + m*v + n*w, name='real_phase')
+
+    # Multiply in constants
+    phase = minus_two_pi_over_C*phase*frequency
+
+    # No GPU implementation of exp yet
+    #return tf.exp(tf.complex(0.0, phase), name='complex_phase')
+    return tf.complex(tf.cos(phase), tf.sin(phase))
 
 dtype, ctype = np.float32, np.complex64
 nsrc, ntime, na, nchan = 100, 50, 64, 128
@@ -37,13 +79,17 @@ uvw = tf.Variable(np_uvw, name='uvw')
 frequency = tf.Variable(np_frequency, name='frequency')
 #lm, uvw, frequency = map(tf.Variable, [lm_np, np_uvw, np_frequency])
 
-# Get an expression for the complex phase on the CPU
+# Get an expression for the complex phase op on the CPU
 with tf.device('/cpu:0'):
-    cplx_phase_cpu = complex_phase(lm, uvw, frequency)
+    cplx_phase_op_cpu = complex_phase_op(lm, uvw, frequency)
 
-# Get an expression for the complex phase on the GPU
+# Get an expression for the complex phase op on the GPU
 with tf.device('/gpu:0'):
-    cplx_phase_gpu = complex_phase(lm, uvw, frequency)
+    cplx_phase_op_gpu = complex_phase_op(lm, uvw, frequency)
+
+# Get an expression for the complex phase expression on the GPU
+with tf.device('/gpu:0'):
+    cplx_phase_expr_gpu = complex_phase(lm, uvw, frequency)
 
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
@@ -51,12 +97,17 @@ with tf.Session() as S:
 
     # Evaluate and time tensorflow GPU
     start = timeit.default_timer()
-    tf_cplx_phase_gpu = S.run(cplx_phase_gpu)
-    print 'Tensorflow GPU time %f' % (timeit.default_timer() - start)
+    tf_cplx_phase_op_gpu = S.run(cplx_phase_op_gpu)
+    print 'Tensorflow custom GPU time %f' % (timeit.default_timer() - start)
+
+    # Evaluate and time tensorflow GPU
+    start = timeit.default_timer()
+    tf_cplx_phase_expr_gpu = S.run(cplx_phase_expr_gpu)
+    print 'Tensorflow expression GPU time %f' % (timeit.default_timer() - start)
 
     # Evaluate and time tensorflow CPU
     start = timeit.default_timer()
-    tf_cplx_phase_cpu = S.run(cplx_phase_cpu)
+    tf_cplx_phase_op_cpu = S.run(cplx_phase_op_cpu)
     print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)
 
     # Evaluate and time numpy CPU
@@ -76,10 +127,12 @@ with tf.Session() as S:
     print 'Numpy CPU time %f' % (timeit.default_timer() - start)
 
     # Check that our shapes and values agree with a certain tolerance
-    assert tf_cplx_phase_cpu.shape == (nsrc, ntime, na, nchan)
-    assert tf_cplx_phase_gpu.shape == (nsrc, ntime, na, nchan)
+    assert tf_cplx_phase_op_cpu.shape == (nsrc, ntime, na, nchan)
+    assert tf_cplx_phase_op_gpu.shape == (nsrc, ntime, na, nchan)
+    assert tf_cplx_phase_expr_gpu.shape == (nsrc, ntime, na, nchan)
     assert np_cplx_phase.shape == (nsrc, ntime, na, nchan)
-    assert np.allclose(tf_cplx_phase_cpu, np_cplx_phase)
-    assert np.allclose(tf_cplx_phase_gpu, np_cplx_phase)
+    assert np.allclose(tf_cplx_phase_op_cpu, np_cplx_phase)
+    assert np.allclose(tf_cplx_phase_op_gpu, np_cplx_phase)
+    assert np.allclose(tf_cplx_phase_expr_gpu, np_cplx_phase)
 
 print 'Tests Succeeded'
