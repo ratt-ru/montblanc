@@ -1,9 +1,5 @@
 #include "phase_op.h"
 
-//#include "tensorflow/core/framework/tensor.h"
-//#include "tensorflow/core/framework/tensor_shape.h"
-//#include "tensorflow/core/framework/types.h"
-
 namespace tensorflow {
 
 REGISTER_OP("RimePhase")
