@@ -54,7 +54,6 @@ public:
 
         // Create a pointer for the complex_phase result
         tf::Tensor * complex_phase_ptr = nullptr;
-        tf::Tensor out_complex_phase;
 
         // Allocate memory for the complex_phase
         OP_REQUIRES_OK(context, context->allocate_output(
@@ -63,14 +62,11 @@ public:
         if (complex_phase_ptr->NumElements() == 0)
             { return; }
 
-        CHECK(out_complex_phase.CopyFrom(
-            *complex_phase_ptr, complex_phase_shape));        
-
         // Access the underlying tensors, proper
         auto lm = in_lm.tensor<FT, 2>();
         auto uvw = in_uvw.tensor<FT, 3>();
         auto frequency = in_frequency.tensor<FT, 1>();
-        auto complex_phase = out_complex_phase.tensor<CT, 4>();
+        auto complex_phase = complex_phase_ptr->tensor<CT, 4>();
 
         // Constant
         constexpr FT lightspeed = 299792458;
@@ -86,7 +82,6 @@ public:
             {
                 for(int antenna=0; antenna<na; ++antenna)
                 {
-
                     FT u = uvw(time,antenna,0);
                     FT v = uvw(time,antenna,1);
                     FT w = uvw(time,antenna,2);
