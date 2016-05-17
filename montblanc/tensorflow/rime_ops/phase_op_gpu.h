@@ -9,6 +9,31 @@
 
 namespace tensorflow {
 
+// Ensure that the dimensions of the supplied block
+// are not greater than (X,Y,Z)
+dim3 modify_small_dims(dim3 && block, int X, int Y, int Z)
+{
+    if(X < block.x)
+        { block.x = X; }
+
+    if(Y < block.y)
+        { block.y = Y; }
+
+    if(Z < block.z)
+        { block.z = Z; }
+
+    return std::move(block);
+}
+
+dim3 grid_from_thread_block(const dim3 & block, int X, int Y, int Z)
+{
+    int GX = X / block.x;
+    int GY = Y / block.y;
+    int GZ = Z / block.z;
+
+    return dim3(GX, GY, GZ);
+}
+
 typedef Eigen::GpuDevice GPUDevice;
 
 // Traits class defined by float and complex types
@@ -30,6 +55,12 @@ public:
     __device__ __forceinline__ static
     CT make_complex(const FT & real, const FT & imag)
         { return ::make_float2(real, imag); }
+
+    static dim3 block_size(int nchan, int na, int ntime)
+    {
+        return modify_small_dims(dim3(32, 8, 2),
+            nchan, na, ntime);
+    }        
 };
 
 // Specialise for double and complex128
@@ -47,6 +78,12 @@ public:
     __device__ __forceinline__ static
     CT make_complex(const FT & real, const FT & imag)
         { return ::make_double2(real, imag); }
+
+    static dim3 block_size(int nchan, int na, int ntime)
+    {
+        return modify_small_dims(dim3(32, 4, 1),
+            nchan, na, ntime);
+    }        
 };
 
 // CUDA kernel computing the phase term
@@ -122,12 +159,13 @@ public:
         if (complex_phase_ptr->NumElements() == 0)
             { return; }
 
-        // Set up our kernel dimensions
-        dim3 blocks;
-        dim3 grid;
-
         // Cast input into CUDA types defined within the Traits class
         typedef RimePhaseTraits<FT, CT> Tr;
+
+        // Set up our kernel dimensions
+        dim3 blocks(Tr::block_size(nchan, na, ntime));
+        dim3 grid(grid_from_thread_block(blocks, nchan, na, ntime));
+
         auto lm = reinterpret_cast<const typename Tr::lm_type *>(
             in_lm.flat<FT>().data());
         auto uvw = reinterpret_cast<const typename Tr::uvw_type *>(
@@ -137,7 +175,7 @@ public:
         auto complex_phase = reinterpret_cast<
             typename Tr::complex_phase_type *>(
                 complex_phase_ptr->flat<CT>().data());
-        
+
         // Get the stream
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
