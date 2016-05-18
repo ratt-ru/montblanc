@@ -19,9 +19,20 @@ typedef Eigen::ThreadPoolDevice CPUDevice;
 // Declare the fully templated RimePhaseOp class type up front
 template <typename Device, typename FT, typename CT> class RimePhaseOp;
 
+template <typename T>
+struct make_complex_functor
+{
+    typedef std::complex<T> result_type;
+    
+    EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE result_type
+    operator()(T real, T imag) const
+        { return std::complex<T>(real, imag); }
+};
+
 // Partially specialise RimePhaseOp for CPUDevice
 template <typename FT, typename CT>
-class RimePhaseOp<CPUDevice, FT, CT> : public tensorflow::OpKernel {
+class RimePhaseOp<CPUDevice, FT, CT> : public tensorflow::OpKernel
+{
 public:
     explicit RimePhaseOp(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
 
@@ -72,8 +83,9 @@ public:
         auto complex_phase = complex_phase_ptr->tensor<CT, 4>();
 
         // Constant
-        constexpr FT lightspeed = 299792458;
+        constexpr FT lightspeed = 299792458.0;
 
+        /*
         // Compute the complex phase
         for(int src=0; src<nsrc; ++src)
         {
@@ -101,43 +113,86 @@ public:
                 }
             }
         }
+        */
 
-        /*
         // Doing it this way might give us SIMD's and threading automatically...
         // but compared to the above, it creates an expression tree and I don't
         // know how to evaluate the final result yet...
-        auto l = lm.tensor<FT, 2>().slice(
-            Eigen::DSizes<int,2>(0, 0),
-            Eigen::DSizes<int,2>(nsrc, 1));
 
-        auto m = lm.tensor<FT, 2>().slice(
-            Eigen::DSizes<int,2>(0, 1),
-            Eigen::DSizes<int,2>(nsrc, 2));
+        const CPUDevice & device = context->eigen_device<CPUDevice>();
+
+#if !defined(EIGEN_HAS_INDEX_LIST)
+        Eigen::DSizes<int, 4> lm_shape( nsrc, 1,     1,  1);
+        Eigen::DSizes<int, 4> uvw_shape( 1,    ntime, na, 1);
+        Eigen::DSizes<int, 4> freq_shape(1,    1,     1,  nsrc);
+#else
+        Eigen::IndexList<int,
+            Eigen::type2index<1>,
+            Eigen::type2index<1>,
+            Eigen::type2index<1> > lm_shape;
+        lm_shape.set(0, nsrc);
+
+        Eigen::IndexList<Eigen::type2index<1>,
+            int,
+            int,
+            Eigen::type2index<1> > uvw_shape;
+        uvw_shape.set(1, ntime);
+        uvw_shape.set(2, na);
+
+        Eigen::IndexList<Eigen::type2index<1>,
+            Eigen::type2index<1>,
+            Eigen::type2index<1>,
+            int > freq_shape;
+        freq_shape.set(3, nchan);
+#endif
+
+        auto l = lm.slice(
+                Eigen::DSizes<int, 2>(0,    0),
+                Eigen::DSizes<int, 2>(nsrc, 1))
+            .reshape(lm_shape);
+
+        auto m = lm.slice(
+                Eigen::DSizes<int, 2>(0,    1),
+                Eigen::DSizes<int, 2>(nsrc, 2))
+            .reshape(lm_shape);
 
 
-        // Create a tensor to hold a constant
+        // Create a tensor to hold one as a constant
         Eigen::Tensor<FT, 1> one(1);
         one[0] = 1.0;
 
+        // Create a tensor to hold -2*pi/C
+        Eigen::Tensor<FT, 1> minus_two_pi_over_c(1);
+        minus_two_pi_over_c[0] = FT(-2*M_PI/lightspeed);
+
         auto n = (one - l*l - m*m).sqrt() - one;
 
+        auto u = uvw.slice(
+                Eigen::DSizes<int, 3>(0,     0,  0),
+                Eigen::DSizes<int, 3>(ntime, na, 1))
+            .reshape(uvw_shape);
 
-        auto u = uvw.tensor<FT, 3>().slice(
-            Eigen::DSizes<int,3>(0,0,0),
-            Eigen::DSizes<int,3>(ntime,na,1));
+        auto v = uvw.slice(
+                Eigen::DSizes<int, 3>(0,     0,  1),
+                Eigen::DSizes<int, 3>(ntime, na, 2))
+            .reshape(uvw_shape);
 
-        auto v = uvw.tensor<FT, 3>().slice(
-            Eigen::DSizes<int,3>(0,0,1),
-            Eigen::DSizes<int,3>(ntime,na,2));
+        auto w = uvw.slice(
+                Eigen::DSizes<int, 3>(0,     0,  2),
+                Eigen::DSizes<int, 3>(ntime, na, 3))
+            .reshape(uvw_shape);
 
-        auto w = uvw.tensor<FT, 3>().slice(
-            Eigen::DSizes<int,3>(0,0,2),
-            Eigen::DSizes<int,3>(ntime,na,3));
+        auto f = frequency.reshape(freq_shape);
 
-        auto phase = l*u + m*v + n*w;
-        */
+        auto phase = minus_two_pi_over_c*(l*u + m*v + n*w)*f/lightspeed;
+        // eigen is missing sin and cos members on TensorBase
+        // call them with unaryExpr
+        auto sinp = phase.unaryExpr(Eigen::internal::scalar_sin_op<FT>());
+        auto cosp = phase.unaryExpr(Eigen::internal::scalar_cos_op<FT>());
+
+        complex_phase.device(device) = sinp.binaryExpr(
+            cosp, make_complex_functor<FT>());
     }
-
 };
 
 } // namespace tensorflow {
