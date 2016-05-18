@@ -5,6 +5,7 @@
 
 #include "phase_op.h"
 
+// Required in order for Eigen::GpuDevice to be an actual type
 #define EIGEN_USE_GPU
 
 namespace tensorflow {

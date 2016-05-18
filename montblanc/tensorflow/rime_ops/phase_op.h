@@ -1,6 +1,9 @@
 #ifndef RIME_PHASE_OP_H_
 #define RIME_PHASE_OP_H_
 
+// Required in order for Eigen::ThreadPoolDevice to be an actual type
+#define EIGEN_USE_THREADS
+
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
