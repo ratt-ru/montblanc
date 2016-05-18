@@ -1,13 +1,20 @@
 TF_INC=$(shell python -c 'import tensorflow as tf; print tf.sysconfig.get_include()')
 TF_CUDA=$(shell python -c 'import tensorflow as tf; print int(tf.test.is_built_with_cuda())')
 
-OBJECTS=phase_op.o phase_op_gpu.o
+OBJECTS=phase_op.o phase_op_gpu.o b_sqrt_op_cpu.o b_sqrt_op_gpu.o
 LIBRARY=rime.so
 
 all : $(LIBRARY)
 
 clean :
 	rm $(OBJECTS) $(LIBRARY)
+
+
+b_sqrt_op_gpu.o: b_sqrt_op_gpu.cu.cc b_sqrt_op_gpu.h b_sqrt_op.h
+	nvcc -std=c++11 -c -o b_sqrt_op_gpu.o b_sqrt_op_gpu.cu.cc -I $(TF_INC) -D GOOGLE_CUDA=$(TF_CUDA) -x cu -Xcompiler -fPIC
+
+b_sqrt_op_cpu.o: b_sqrt_op_cpu.cc b_sqrt_op_cpu.h b_sqrt_op.h
+	g++ b_sqrt_op_cpu.cc --std=c++11 -I $(TF_INC) -c -fPIC
 
 phase_op_gpu.o: phase_op_gpu.cu.cc phase_op_gpu.h phase_op.h
 	nvcc -std=c++11 -c -o phase_op_gpu.o phase_op_gpu.cu.cc -I $(TF_INC) -D GOOGLE_CUDA=$(TF_CUDA) -x cu -Xcompiler -fPIC
