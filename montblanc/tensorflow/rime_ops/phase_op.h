@@ -4,6 +4,10 @@
 // Required in order for Eigen::ThreadPoolDevice to be an actual type
 #define EIGEN_USE_THREADS
 
+#define RIME_PHASE_LOOP_STRATEGY 0
+#define RIME_PHASE_EIGEN_STRATEGY 1
+#define RIME_PHASE_CPU_STRATEGY RIME_PHASE_LOOP_STRATEGY
+
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
@@ -85,7 +89,7 @@ public:
         // Constant
         constexpr FT lightspeed = 299792458.0;
 
-        /*
+#if RIME_PHASE_CPU_STRATEGY == RIME_PHASE_LOOP_STRATEGY
         // Compute the complex phase
         for(int src=0; src<nsrc; ++src)
         {
@@ -113,8 +117,8 @@ public:
                 }
             }
         }
-        */
 
+#elif RIME_PHASE_CPU_STRATEGY == RIME_PHASE_EIGEN_STRATEGY
         // Doing it this way might give us SIMD's and threading automatically...
         // but compared to the above, it creates an expression tree and I don't
         // know how to evaluate the final result yet...
@@ -192,6 +196,7 @@ public:
 
         complex_phase.device(device) = sinp.binaryExpr(
             cosp, make_complex_functor<FT>());
+#endif
     }
 };
 
