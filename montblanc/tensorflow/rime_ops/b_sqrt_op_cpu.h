@@ -48,8 +48,8 @@ public:
 
 
         // Extract problem dimensions
-        int ntime = in_stokes.dim_size(0);
-        int nsrc = in_stokes.dim_size(1);
+        int nsrc = in_stokes.dim_size(0);
+        int ntime = in_stokes.dim_size(1);
         int nchan = in_frequency.dim_size(0);
 
         // Reason about our output shape
@@ -63,7 +63,81 @@ public:
             0, b_sqrt_shape, &b_sqrt_ptr));
 
         if (b_sqrt_ptr->NumElements() == 0)
-            { return; }        
+            { return; }
+
+        auto stokes = in_stokes.tensor<FT, 3>();
+        auto alpha = in_alpha.tensor<FT, 2>();
+        auto frequency = in_frequency.tensor<FT, 1>();
+        FT ref_freq = in_ref_freq.tensor<FT, 1>()(0);
+        auto b_sqrt = b_sqrt_ptr->tensor<CT, 4>();
+
+        enum { iI, iQ, iU, iV };
+
+        for(int src=0; src < nsrc; ++src)
+        {
+            for(int time=0; time < ntime; ++time)
+            {
+                // Reference stokes parameters
+                const FT & I = stokes(src, time, iI);
+                const FT & Q = stokes(src, time, iQ);
+                const FT & U = stokes(src, time, iU);
+                const FT & V = stokes(src, time, iV);
+
+                // Compute the brightness matrix
+                CT _XX = CT(I + Q, 0.0);
+                CT _XY = CT(U    ,   V);
+                CT _YX = CT(U    ,  -V);
+                CT _YY = CT(I - Q, 0.0);
+
+                // Compute the trace and determinant of the brightness matrix
+                // trace = I+Q + I-Q = 2I
+                // det = (I+Q)*(I-Q) - (U+iV)*(U-iV) = I**2-Q**2-U**2-V**2
+                // so we have real values in all cases
+                FT _trace = 2.0*I;
+                FT _det = I*I - Q*Q - U*U - V*V;
+
+                for(int chan=0; chan < nchan; ++chan)
+                {
+                    // Compute spectral index
+                    FT power = std::pow(frequency(chan)/ref_freq,
+                        alpha(src, time));
+
+                    // Multiply spi into the brightness matrix 
+                    CT XX = _XX*power;
+                    CT XY = _XY*power;
+                    CT YX = _YX*power;
+                    CT YY = _YY*power;
+
+                    // Multiply spi into the trace and det. Need
+                    // power*power for det because its composed of squares
+                    FT trace = _trace*power;
+                    FT det = _det*power*power;
+
+                    // Compute s and t, used to find matrix roots
+                    FT s = std::sqrt(det);
+                    FT t = std::sqrt(trace + 2.0*s);
+
+                    // We only have roots for matrices when
+                    // both s and t are non-zero. If this is
+                    // not the case, this implies the matrix
+                    // entries are zero.
+                    XX += s; YY += s;
+
+                    if(t != 0.0)
+                    {
+                        // Scale the matrix
+                        XX /= t; XY /= t;
+                        YX /= t; YY /= t;
+                    }
+
+                    // Assign values
+                    b_sqrt(src, time, chan, 0) = XX;
+                    b_sqrt(src, time, chan, 1) = XY;
+                    b_sqrt(src, time, chan, 2) = YX;
+                    b_sqrt(src, time, chan, 3) = YY;
+                }
+            }
+        }
     }
 };
 

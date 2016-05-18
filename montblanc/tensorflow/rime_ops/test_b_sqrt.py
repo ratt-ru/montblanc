@@ -26,10 +26,15 @@ dtype, ctype = np.float32, np.complex64
 nsrc, ntime, na, nchan = 100, 50, 64, 128
 
 # Set up our numpy input arrays
-np_stokes = np.random.random(size=(ntime, nsrc, 4)).astype(dtype)*0.1
-# Need I^2 = Q^2 + U^2 + V^2
-np_stokes[:,:,0] = np_stokes[:,:,1]**2 + np_stokes[:,:,2]**2 + np_stokes[:,:,3]**2
-np_alpha = np.random.random(size=(ntime,nsrc)).astype(dtype)
+np_stokes = np.empty(shape=(nsrc, ntime, 4), dtype=dtype)
+Q = np_stokes[:,:,1] = np.random.random(size=(nsrc, ntime)) - 0.5
+U = np_stokes[:,:,2] = np.random.random(size=(nsrc, ntime)) - 0.5
+V = np_stokes[:,:,3] = np.random.random(size=(nsrc, ntime)) - 0.5
+noise = np.random.random(size=(nsrc, ntime))*0.1
+# Need I^2 = Q^2 + U^2 + V^2 + noise^2
+np_stokes[:,:,0] = np.sqrt(Q**2 + U**2 + V**2 + noise)
+
+np_alpha = np.random.random(size=(nsrc, ntime)).astype(dtype)*0.1
 np_frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=dtype)
 np_ref_freq = np.array([1.4e9], dtype=dtype)
 
