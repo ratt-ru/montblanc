@@ -69,15 +69,15 @@ nsrc, ntime, na, nchan = 100, 50, 64, 128
 lightspeed = 299792458.
 
 # Set up our numpy input arrays
-lm_np = np.random.random(size=(nsrc,2)).astype(dtype)*0.1
+np_lm = np.random.random(size=(nsrc,2)).astype(dtype)*0.1
 np_uvw = np.random.random(size=(ntime,na,3)).astype(dtype)
 np_frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=dtype)
 
 # Create tensorflow arrays from the numpy arrays
-lm = tf.Variable(lm_np, name='lm')
+lm = tf.Variable(np_lm, name='lm')
 uvw = tf.Variable(np_uvw, name='uvw')
 frequency = tf.Variable(np_frequency, name='frequency')
-#lm, uvw, frequency = map(tf.Variable, [lm_np, np_uvw, np_frequency])
+#lm, uvw, frequency = map(tf.Variable, [np_lm, np_uvw, np_frequency])
 
 # Get an expression for the complex phase op on the CPU
 with tf.device('/cpu:0'):
@@ -114,7 +114,7 @@ with tf.Session() as S:
     start = timeit.default_timer()
     # Now calculate the complex phase using numpy
     # Reshapes help us to broadcast
-    lm = lm_np.reshape(nsrc, 1, 1, 1, 2)
+    lm = np_lm.reshape(nsrc, 1, 1, 1, 2)
     uvw = np_uvw.reshape(1, ntime, na, 1, 3)
     frequency = np_frequency.reshape(1, 1, 1,nchan)
 
