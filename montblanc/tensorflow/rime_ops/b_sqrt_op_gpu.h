@@ -13,10 +13,8 @@
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
-namespace tensorflow {
-
-// For simpler partial specialisation
-typedef Eigen::GpuDevice GPUDevice;    
+namespace montblanc {
+namespace bsqrt {
 
 // Traits class defined by float and complex types
 template <typename FT> class LaunchTraits;
@@ -53,6 +51,14 @@ public:
     }        
 };
 
+} // namespace montblanc {
+} // namespace bsqrt {
+
+namespace tensorflow {
+
+// For simpler partial specialisation
+typedef Eigen::GpuDevice GPUDevice;    
+
 constexpr int BSQRT_NPOL = 4;
 
 template <typename Traits>
@@ -69,7 +75,7 @@ __global__ void rime_b_sqrt(
     typedef typename Traits::CT CT;
 
     typedef typename montblanc::kernel_policies<FT> Po;
-    typedef typename tensorflow::LaunchTraits<FT> LTr;
+    typedef typename montblanc::bsqrt::LaunchTraits<FT> LTr;
 
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
@@ -165,7 +171,7 @@ public:
 
         // Cast input into CUDA types defined within the Traits class
         typedef montblanc::kernel_traits<FT> Tr;
-        typedef tensorflow::LaunchTraits<FT> LTr;
+        typedef montblanc::bsqrt::LaunchTraits<FT> LTr;
 
         // Set up our kernel dimensions
         dim3 blocks(LTr::block_size(npolchan, ntime, nsrc));

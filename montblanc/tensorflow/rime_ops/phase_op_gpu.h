@@ -9,17 +9,14 @@
 // Required in order for Eigen::GpuDevice to be an actual type
 #define EIGEN_USE_GPU
 
-namespace tensorflow {
-
-typedef Eigen::GpuDevice GPUDevice;
+namespace montblanc {
+namespace phase {
 
 // Traits class defined by float and complex types
-template <typename FT>
-class LaunchTraits;
+template <typename FT> class LaunchTraits;
 
 // Specialise for float
-template <>
-class LaunchTraits<float>
+template <> class LaunchTraits<float>
 {
 public:
     static constexpr int BLOCKDIMX = 32;
@@ -35,8 +32,7 @@ public:
 };
 
 // Specialise for double
-template <>
-class LaunchTraits<double>
+template <> class LaunchTraits<double>
 {
 public:
     static constexpr int BLOCKDIMX = 32;
@@ -50,6 +46,13 @@ public:
             nchan, na, ntime);
     }        
 };
+
+} // namespace montblanc {
+} // namespace phase {
+
+namespace tensorflow {
+
+typedef Eigen::GpuDevice GPUDevice;
 
 // CUDA kernel computing the phase term
 template <typename Traits>
@@ -72,7 +75,7 @@ __global__ void rime_phase(
     typedef typename Traits::CT CT;
 
     typedef typename montblanc::kernel_policies<FT> Po;
-    typedef typename tensorflow::LaunchTraits<FT> LTr;
+    typedef typename montblanc::phase::LaunchTraits<FT> LTr;
 
     // Lightspeed
     constexpr FT lightspeed = 299792458;
@@ -163,7 +166,7 @@ public:
 
         // Cast input into CUDA types defined within the Traits class
         typedef montblanc::kernel_traits<FT> Tr;
-        typedef typename tensorflow::LaunchTraits<FT> LTr;
+        typedef typename montblanc::phase::LaunchTraits<FT> LTr;
 
         // Set up our kernel dimensions
         dim3 blocks(LTr::block_size(nchan, na, ntime));
