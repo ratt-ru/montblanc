@@ -50,6 +50,10 @@ public:
     typedef float frequency_type;
     typedef float2 complex_phase_type;
 
+    typedef float stokes_type;
+    typedef float alpha_type;
+    typedef float2 B_sqrt_type;
+
 public:
 	const static bool is_implemented = true;
 	constexpr static float cuda_pi = CUDART_PI_F;
@@ -151,6 +155,10 @@ public:
     typedef double3 uvw_type;
     typedef double frequency_type;
     typedef double2 complex_phase_type;    
+
+    typedef double stokes_type;
+    typedef double alpha_type;
+    typedef double2 B_sqrt_type;
 
 public:
 	const static bool is_implemented = true;

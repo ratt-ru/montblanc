@@ -7,7 +7,7 @@ OBJECTS=abstraction.o phase_op.o phase_op_gpu.o b_sqrt_op_cpu.o b_sqrt_op_gpu.o
 LIBRARY=rime.so
 
 CPPFLAGS=-std=c++11 -fPIC $(INCLUDES)
-NVCCFLAGS=-std=c++11 -D GOOGLE_CUDA=$(TF_CUDA) $(INCLUDES) -x cu -Xcompiler -fPIC 
+NVCCFLAGS=-std=c++11 -D GOOGLE_CUDA=$(TF_CUDA) $(INCLUDES) -x cu -Xcompiler -fPIC --gpu-architecture=sm_35
 
 all : $(LIBRARY)
 

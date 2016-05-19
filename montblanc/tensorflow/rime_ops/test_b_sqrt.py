@@ -165,6 +165,11 @@ with tf.Session() as S:
 
     # Evaluate and time tensorflow CPU
     start = timeit.default_timer()
+    tf_b_sqrt_op_gpu = S.run(b_sqrt_op_gpu)
+    print 'Tensorflow GPU time %f' % (timeit.default_timer() - start)
+
+    # Evaluate and time tensorflow CPU
+    start = timeit.default_timer()
     tf_b_expr_cpu, tf_b_sqrt_expr_cpu = S.run(b_sqrt_expr_cpu)
     print 'Tensorflow expression CPU time %f' % (timeit.default_timer() - start)
 
@@ -181,6 +186,7 @@ with tf.Session() as S:
     assert tf_b_sqrt_op_cpu.shape == (nsrc, ntime, nchan, 4)
     assert np_b_sqrt.shape == (nsrc, ntime, nchan, 4)
     assert np.allclose(tf_b_sqrt_op_cpu, np_b_sqrt)
+    assert np.allclose(tf_b_sqrt_op_gpu, np_b_sqrt)
     assert np.allclose(tf_b_expr_cpu, np_b)
     assert np.allclose(tf_b_sqrt_expr_cpu, np_b_sqrt)
 
