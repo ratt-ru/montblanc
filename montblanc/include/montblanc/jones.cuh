@@ -18,8 +18,7 @@
 #ifndef _MONTBLANC_JONES_CUH
 #define _MONTBLANC_JONES_CUH
 
-#include <cub/cub/cub.cuh>
-#include <montblanc/include/abstraction.cuh>
+#include <montblanc/abstraction.cuh>
 
 namespace montblanc {
 

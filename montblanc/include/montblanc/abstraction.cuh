@@ -18,6 +18,9 @@
 #ifndef _MONTBLANC_KERNEL_TRAITS_CUH
 #define _MONTBLANC_KERNEL_TRAITS_CUH
 
+// CUDA include required for CUDART_PI_F and CUDART_PI
+#include <math_constants.h>
+// Include cub
 #include <cub/cub/cub.cuh>
 
 namespace montblanc {

@@ -4,8 +4,7 @@
 #if GOOGLE_CUDA
 
 #include "phase_op.h"
-#include "math_constants.h"
-#include <abstraction.cuh>
+#include <montblanc/abstraction.cuh>
 
 // Required in order for Eigen::GpuDevice to be an actual type
 #define EIGEN_USE_GPU

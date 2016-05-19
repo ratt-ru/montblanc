@@ -1,9 +1,8 @@
 TF_INC=$(shell python -c 'import tensorflow as tf; print tf.sysconfig.get_include()')
 TF_CUDA=$(shell python -c 'import tensorflow as tf; print int(tf.test.is_built_with_cuda())')
-MB_INC=../../src/montblanc/include
-CUB_INC=../../src/
+MB_INC=../../include
 
-INCLUDES = -I $(TF_INC) -I $(TF_CUDA) -I $(MB_INC) -I $(CUB_INC)
+INCLUDES = -I $(TF_INC) -I $(TF_CUDA) -I $(MB_INC)
 OBJECTS=phase_op.o phase_op_gpu.o b_sqrt_op_cpu.o b_sqrt_op_gpu.o
 LIBRARY=rime.so
 
