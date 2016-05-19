@@ -4,110 +4,50 @@
 #if GOOGLE_CUDA
 
 #include "phase_op.h"
+#include "math_constants.h"
+#include <abstraction.cuh>
 
 // Required in order for Eigen::GpuDevice to be an actual type
 #define EIGEN_USE_GPU
 
 namespace tensorflow {
 
-// Ensure that the dimensions of the supplied block
-// are not greater than (X,Y,Z)
-dim3 modify_small_dims(dim3 && block, int X, int Y, int Z)
-{
-    if(X < block.x)
-        { block.x = X; }
-
-    if(Y < block.y)
-        { block.y = Y; }
-
-    if(Z < block.z)
-        { block.z = Z; }
-
-    return std::move(block);
-}
-
-dim3 grid_from_thread_block(const dim3 & block, int X, int Y, int Z)
-{
-    int GX = X / block.x;
-    int GY = Y / block.y;
-    int GZ = Z / block.z;
-
-    return dim3(GX, GY, GZ);
-}
-
 typedef Eigen::GpuDevice GPUDevice;
 
 // Traits class defined by float and complex types
-template <typename FT, typename CT>
-class RimePhaseTraits;
+template <typename FT>
+class LaunchTraits;
 
-// Specialise for float and complex64
+// Specialise for float
 template <>
-class RimePhaseTraits<float, tensorflow::complex64>
+class LaunchTraits<float>
 {
 public:
-    typedef float FT;
-    typedef float2 CT;
-    typedef float2 lm_type;
-    typedef float3 uvw_type;
-    typedef float frequency_type;
-    typedef float2 complex_phase_type;
-
-    __device__ __forceinline__ static
-    CT make_complex(const FT & real, const FT & imag)
-        { return ::make_float2(real, imag); }
-
-    __device__ __forceinline__ static
-    FT sqrt(const FT & value)
-        { return ::sqrtf(value); }
-
-    __device__ __forceinline__ static
-    void sincos(const FT & value, FT * sinptr, FT * cosptr)
-        { ::sincosf(value, sinptr, cosptr); }
-
-
     static constexpr int BLOCKDIMX = 32;
     static constexpr int BLOCKDIMY = 8;
     static constexpr int BLOCKDIMZ = 2;
 
     static dim3 block_size(int nchan, int na, int ntime)
     {
-        return modify_small_dims(dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
+        return montblanc::shrink_small_dims(
+            dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
             nchan, na, ntime);
     }        
 };
 
-// Specialise for double and complex128
+// Specialise for double
 template <>
-class RimePhaseTraits<double, tensorflow::complex128>
+class LaunchTraits<double>
 {
 public:
-    typedef double FT;
-    typedef double2 CT;
-    typedef double2 lm_type;
-    typedef double3 uvw_type;
-    typedef double frequency_type;
-    typedef double2 complex_phase_type;
-
-    __device__ __forceinline__ static
-    CT make_complex(const FT & real, const FT & imag)
-        { return ::make_double2(real, imag); }
-
-    __device__ __forceinline__ static
-    FT sqrt(const FT & value)
-        { return ::sqrt(value); }
-
-    __device__ __forceinline__ static
-    void sincos(const FT & value, FT * sinptr, FT * cosptr)
-        { ::sincos(value, sinptr, cosptr); }
-
     static constexpr int BLOCKDIMX = 32;
     static constexpr int BLOCKDIMY = 4;
     static constexpr int BLOCKDIMZ = 1;
 
     static dim3 block_size(int nchan, int na, int ntime)
     {
-        return modify_small_dims(dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
+        return montblanc::shrink_small_dims(
+            dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
             nchan, na, ntime);
     }        
 };
@@ -132,13 +72,16 @@ __global__ void rime_phase(
     typedef typename Traits::FT FT;
     typedef typename Traits::CT CT;
 
+    typedef typename montblanc::kernel_policies<FT> Po;
+    typedef typename tensorflow::LaunchTraits<FT> LTr;
+
     // Lightspeed
     constexpr FT lightspeed = 299792458;
 
     __shared__ typename Traits::uvw_type
-        s_uvw[Traits::BLOCKDIMZ][Traits::BLOCKDIMY];
+        s_uvw[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];
     __shared__ typename Traits::frequency_type
-        s_freq[Traits::BLOCKDIMX];
+        s_freq[LTr::BLOCKDIMX];
 
     // UVW coordinates vary by antenna and time, but not channel
     if(threadIdx.x == 0)
@@ -155,7 +98,7 @@ __global__ void rime_phase(
     {
         // Calculate the n coordinate
         typename Traits::lm_type r_lm = lm[src];
-        FT n = Traits::sqrt(FT(1.0) - r_lm.x*r_lm.x - r_lm.y*r_lm.y)
+        FT n = Po::sqrt(FT(1.0) - r_lm.x*r_lm.x - r_lm.y*r_lm.y)
             - FT(1.0);
 
         // Calculate the real phase term
@@ -166,7 +109,7 @@ __global__ void rime_phase(
         real_phase *= s_freq[threadIdx.x]*FT(-2*M_PI/lightspeed);
 
         CT cplx_phase;
-        Traits::sincos(real_phase, &cplx_phase.y, &cplx_phase.x);
+        Po::sincos(real_phase, &cplx_phase.y, &cplx_phase.x);
 
         int i = src*ntime*na*nchan + time*na*nchan + ant*nchan + chan;
         complex_phase[i] = cplx_phase;
@@ -220,11 +163,13 @@ public:
             { return; }
 
         // Cast input into CUDA types defined within the Traits class
-        typedef RimePhaseTraits<FT, CT> Tr;
+        typedef montblanc::kernel_traits<FT> Tr;
+        typedef typename tensorflow::LaunchTraits<FT> LTr;
 
         // Set up our kernel dimensions
-        dim3 blocks(Tr::block_size(nchan, na, ntime));
-        dim3 grid(grid_from_thread_block(blocks, nchan, na, ntime));
+        dim3 blocks(LTr::block_size(nchan, na, ntime));
+        dim3 grid(montblanc::grid_from_thread_block(
+            blocks, nchan, na, ntime));
 
         //printf("Threads per block: X %d Y %d Z %d\n",
         //    blocks.x, blocks.y, blocks.z);

@@ -41,9 +41,15 @@ public:
 	typedef float FT;
 	typedef float2 CT;
 
+    // Input array types
+    typedef float2 lm_type;
+    typedef float3 uvw_type;
+    typedef float frequency_type;
+    typedef float2 complex_phase_type;
+
 public:
 	const static bool is_implemented = true;
-	const static float cuda_pi = CUDART_PI_F;
+	constexpr static float cuda_pi = CUDART_PI_F;
 };
 
 template <> class kernel_policies<float>
@@ -137,9 +143,15 @@ public:
 	typedef double FT;
 	typedef double2 CT;
 
+    // Input array types
+    typedef double2 lm_type;
+    typedef double3 uvw_type;
+    typedef double frequency_type;
+    typedef double2 complex_phase_type;    
+
 public:
 	const static bool is_implemented = true;
-	const static double cuda_pi = CUDART_PI;
+	constexpr static double cuda_pi = CUDART_PI;
 };
 
 template <> class kernel_policies<double>
@@ -225,6 +237,8 @@ public:
         { return ::rsqrt(value); }        
 };
 
+dim3 shrink_small_dims(dim3 && block, int X, int Y, int Z);
+dim3 grid_from_thread_block(const dim3 & block, int X, int Y, int Z);
 
 // result = rhs*lhs;
 template <
