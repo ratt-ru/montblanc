@@ -32,8 +32,8 @@ def get_montblanc_path():
     import montblanc
     return os.path.dirname(inspect.getfile(montblanc))
 
-def get_source_path():
-    return os.path.join(get_montblanc_path(), 'src')
+def get_include_path():
+    return os.path.join(get_montblanc_path(), 'include')
 
 log = setup_logging()
 

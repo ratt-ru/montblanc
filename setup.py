@@ -27,6 +27,9 @@ import sys
 import zipfile
 from setuptools import setup, find_packages
 
+mb_path = 'montblanc'
+mb_inc_path = os.path.join(mb_path, 'include')
+
 def dl_cub(cub_url, cub_archive_name):
     """ Download cub archive from cub_url and store it in cub_archive_name """
     with open(cub_archive_name, 'wb') as f:
@@ -93,9 +96,8 @@ def install_cub():
     cub_version_str = 'Current release: v1.5.2 (03/21/2016)'
     cub_zip_file = 'cub.zip'
     cub_zip_dir = 'cub-1.5.2'
-    src_path = os.path.join('montblanc', 'src')
-    cub_unzipped_path = os.path.join(src_path, cub_zip_dir)
-    cub_new_unzipped_path = os.path.join(src_path, 'cub')
+    cub_unzipped_path = os.path.join(mb_inc_path, cub_zip_dir)
+    cub_new_unzipped_path = os.path.join(mb_inc_path, 'cub')
     cub_header = os.path.join(cub_new_unzipped_path, 'cub', 'cub.cuh')
     cub_readme = os.path.join(cub_new_unzipped_path, 'README.md' )
 
@@ -125,15 +127,14 @@ def install_cub():
             'as per the README.md instructions.') % (cub_zip_file,
                 cub_url, cub_sha_hash, cub_file_sha_hash)
 
-    # Unzip into montblanc/src/cub
+    # Unzip into montblanc/include/cub
     with zipfile.ZipFile(cub_zip_file, 'r') as zip_file:
         # Remove any existing installs
         shutil.rmtree(cub_unzipped_path, ignore_errors=True)
         shutil.rmtree(cub_new_unzipped_path, ignore_errors=True)
 
         # Unzip
-        src_path = os.path.join('montblanc', 'src')
-        zip_file.extractall(src_path)
+        zip_file.extractall(mb_inc_path)
 
         # Rename
         shutil.move(cub_unzipped_path, cub_new_unzipped_path)
@@ -172,28 +173,26 @@ def readme():
     with open('README.rst') as f:
         return f.read()
 
-def src_pkg_dirs():
+def include_pkg_dirs():
     """
     Recursively provide package_data directories for
-    directories in montblanc/src.
+    directories in montblanc/include.
     """
     pkg_dirs = []
 
-    mbdir = 'montblanc'
-    l = len(mbdir) + len(os.sep)
-    path = os.path.join(mbdir, 'src')
+    l = len(mb_path) + len(os.sep)
     # Ignore
     exclude = ['docs', '.git', '.svn']
 
-    # Walk 'montblanc/src'
-    for root, dirs, files in os.walk(path, topdown=True):
+    # Walk 'montblanc/include'
+    for root, dirs, files in os.walk(mb_inc_path, topdown=True):
         # Prune out everything we're not interested in
         # from os.walk's next yield.
         dirs[:] = [d for d in dirs if d not in exclude]
 
         for d in dirs:
             # OK, so everything starts with 'montblanc/'
-            # Take everything after that ('src...') and
+            # Take everything after that ('include...') and
             # append a '/*.*' to it
             pkg_dirs.append(os.path.join(root[l:], d, '*.*'))
 
@@ -231,6 +230,6 @@ setup(name='montblanc',
         'python-casacore >= 2.1.2',
     ],
     setup_requires=['numpy >= 1.9.2'],
-    package_data={'montblanc': src_pkg_dirs()},
+    package_data={'montblanc': include_pkg_dirs()},
     include_package_data=True,
     zip_safe=False)

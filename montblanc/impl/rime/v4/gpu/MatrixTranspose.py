@@ -125,7 +125,7 @@ class MatrixTranspose(Node):
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
             options=['-lineinfo','-maxrregcount', regs],
-            include_dirs=[montblanc.get_source_path()],
+            include_dirs=[montblanc.get_include_path()],
             no_extern_c=True)
 
         self.kernel = self.mod.get_function(kname)

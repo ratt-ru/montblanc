@@ -78,11 +78,11 @@ public:
 		{ return ::fmaxf(lhs, rhs); }
 
     __device__ __forceinline__ static
-    Tr::ft clamp(const Tr::ft & value, const Tr::ft & min, const Tr::ft & max)
+    Tr::FT clamp(const Tr::FT & value, const Tr::FT & min, const Tr::FT & max)
         { return Po::min(max, Po::max(value, min)); }
 
     __device__ __forceinline__ static
-    Tr::ft floor(const Tr::ft & value)
+    Tr::FT floor(const Tr::FT & value)
         { return ::floorf(value); }
 
 	__device__ __forceinline__ static
@@ -134,7 +134,7 @@ public:
         { return ::rintf(value); }
 
     __device__ __forceinline__ static
-    Tr::ft rsqrt(const Tr::ft & value)
+    Tr::FT rsqrt(const Tr::FT & value)
         { return ::rsqrtf(value); }
 };
 
@@ -180,11 +180,11 @@ public:
 		{ return ::fmax(lhs, rhs); }
 
     __device__ __forceinline__ static
-    Tr::ft clamp(const Tr::ft & value, const Tr::ft & min, const Tr::ft & max)
+    Tr::FT clamp(const Tr::FT & value, const Tr::FT & min, const Tr::FT & max)
         { return Po::min(max, Po::max(value, min)); }
 
     __device__ __forceinline__ static
-    Tr::ft floor(const Tr::ft & value)
+    Tr::FT floor(const Tr::FT & value)
         { return ::floor(value); }
 
 	__device__ __forceinline__ static
@@ -236,7 +236,7 @@ public:
         { return ::rint(value); }
 
     __device__ __forceinline__ static
-    Tr::ft rsqrt(const Tr::ft & value)
+    Tr::FT rsqrt(const Tr::FT & value)
         { return ::rsqrt(value); }        
 };
 
