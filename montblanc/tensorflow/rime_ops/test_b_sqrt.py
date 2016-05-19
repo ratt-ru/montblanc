@@ -150,10 +150,6 @@ with tf.device('/gpu:0'):
 with tf.device('/cpu:0'):
     b_sqrt_expr_cpu = b_sqrt(stokes, alpha, frequency, ref_freq)
 
-# Get an expression for the complex phase expression on the GPU
-#with tf.device('/gpu:0'):
-#    cplx_phase_expr_cpu = complex_phase(lm, uvw, frequency)
-
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
     S.run(tf.initialize_all_variables())
@@ -177,11 +173,6 @@ with tf.Session() as S:
     np_b, np_b_sqrt = b_sqrt_numpy(np_stokes, np_alpha, np_frequency, np_ref_freq)
     print 'Numpy CPU time %f' % (timeit.default_timer() - start)
 
-    # Evaluate and time tensorflow GPU
-    #start = timeit.default_timer()
-    #tf_b_sqrt_op_gpu = S.run(b_sqrt_op_gpu)
-    #print 'Tensorflow custom GPU time %f' % (timeit.default_timer() - start)
-
     # Check that our shapes and values agree with a certain tolerance
     assert tf_b_sqrt_op_cpu.shape == (nsrc, ntime, nchan, 4)
     assert np_b_sqrt.shape == (nsrc, ntime, nchan, 4)
@@ -190,7 +181,7 @@ with tf.Session() as S:
     assert np.allclose(tf_b_expr_cpu, np_b)
     assert np.allclose(tf_b_sqrt_expr_cpu, np_b_sqrt)
 
-    # Check that multiplying the matrix
+    # Reshape for 2x2 jones multiply below
     np_b_flat = np_b.reshape(-1,2,2)
     np_b_sqrt_flat = np_b_sqrt.reshape(-1,2,2)
 
