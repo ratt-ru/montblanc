@@ -149,7 +149,6 @@ public:
             tf::errors::InvalidArgument(
                 "ref_freq should be a scalar"))
 
-
         // Extract problem dimensions
         int nsrc = in_stokes.dim_size(0);
         int ntime = in_stokes.dim_size(1);
@@ -184,6 +183,7 @@ public:
         printf("Grid: X %d Y %d Z %d\n",
             grid.x, grid.y, grid.z);
 
+        // Get the device pointers of our GPU memory arrays
         auto stokes = reinterpret_cast<const typename Tr::stokes_type *>(
             in_stokes.flat<FT>().data());
         auto alpha = reinterpret_cast<const typename Tr::alpha_type *>(
@@ -192,6 +192,10 @@ public:
             in_frequency.flat<FT>().data());
         auto b_sqrt = reinterpret_cast<typename Tr::B_sqrt_type *>(
             b_sqrt_ptr->flat<CT>().data());
+
+        // By contrast we can access ref_freq on the host 
+        // because of the .HostMemory("ref_freq") directive
+        // used in REGISTER_KERNEL_BUILDER
         FT ref_freq = in_ref_freq.tensor<FT, 1>()(0);
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
@@ -199,7 +203,6 @@ public:
         rime_b_sqrt<Tr> <<<grid, blocks, 0, stream>>>(
             stokes, alpha, frequency, b_sqrt, ref_freq,
             nsrc, ntime, npolchan);
-
     }
 };
 
