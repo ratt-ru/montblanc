@@ -22,7 +22,7 @@ def b_sqrt_op(stokes, alpha, frequency, ref_freq):
 
     return mod.rime_b_sqrt(stokes, alpha, frequency, ref_freq, CT=CT)
 
-def b_sqrt(stokes, alpha, frequency, ref_freq):
+def b_sqrt_numpy(stokes, alpha, frequency, ref_freq):
     I = stokes[:,:,0]
     Q = stokes[:,:,1]
     U = stokes[:,:,2]
@@ -103,7 +103,7 @@ with tf.Session() as S:
     print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)
 
     start = timeit.default_timer()
-    np_b, np_b_sqrt = b_sqrt(np_stokes, np_alpha, np_frequency, np_ref_freq)
+    np_b, np_b_sqrt = b_sqrt_numpy(np_stokes, np_alpha, np_frequency, np_ref_freq)
     print 'Numpy CPU time %f' % (timeit.default_timer() - start)
 
     # Evaluate and time tensorflow GPU
