@@ -72,6 +72,7 @@ public:
         auto b_sqrt = b_sqrt_ptr->tensor<CT, 4>();
 
         enum { iI, iQ, iU, iV };
+        enum { XX, XY, YX, YY };
 
         for(int src=0; src < nsrc; ++src)
         {
@@ -83,18 +84,12 @@ public:
                 const FT & U = stokes(src, time, iU);
                 const FT & V = stokes(src, time, iV);
 
-                // Compute the brightness matrix
-                CT _XX = CT(I + Q, 0.0);
-                CT _XY = CT(U    ,   V);
-                CT _YX = CT(U    ,  -V);
-                CT _YY = CT(I - Q, 0.0);
-
                 // Compute the trace and determinant of the brightness matrix
                 // trace = I+Q + I-Q = 2I
                 // det = (I+Q)*(I-Q) - (U+iV)*(U-iV) = I**2-Q**2-U**2-V**2
                 // so we have real values in all cases
-                FT _trace = 2.0*I;
-                FT _det = I*I - Q*Q - U*U - V*V;
+                FT trace = 2.0*I;
+                FT det = I*I - Q*Q - U*U - V*V;
 
                 for(int chan=0; chan < nchan; ++chan)
                 {
@@ -102,39 +97,27 @@ public:
                     FT power = std::pow(frequency(chan)/ref_freq,
                         alpha(src, time));
 
-                    // Multiply spi into the brightness matrix 
-                    CT XX = _XX*power;
-                    CT XY = _XY*power;
-                    CT YX = _YX*power;
-                    CT YY = _YY*power;
-
-                    // Multiply spi into the trace and det. Need
-                    // power*power for det because its composed of squares
-                    FT trace = _trace*power;
-                    FT det = _det*power*power;
-
                     // Compute s and t, used to find matrix roots
                     FT s = std::sqrt(det);
                     FT t = std::sqrt(trace + 2.0*s);
 
-                    // We only have roots for matrices when
-                    // both s and t are non-zero. If this is
-                    // not the case, this implies the matrix
-                    // entries are zero.
-                    XX += s; YY += s;
+                    // Set t to 1.0 to avoid nans/infs in the output
+                    // t == 0.0 (and s == 0.0) imply a zero matrix
+                    // in any case
+                    if(t == 0.0)
+                        { t = 1.0; }
 
-                    if(t != 0.0)
-                    {
-                        // Scale the matrix
-                        XX /= t; XY /= t;
-                        YX /= t; YY /= t;
-                    }
+                    // Create some common sub-expressions here
+                    FT Is = I + s;
+                    FT pst = std::sqrt(power)/t;
+                    FT Utmp = U*pst;
+                    FT Vtmp = V*pst;
 
-                    // Assign values
-                    b_sqrt(src, time, chan, 0) = XX;
-                    b_sqrt(src, time, chan, 1) = XY;
-                    b_sqrt(src, time, chan, 2) = YX;
-                    b_sqrt(src, time, chan, 3) = YY;
+                    // Assign square root of the brightness matrix
+                    b_sqrt(src, time, chan, XX) = CT(pst*(Is + Q), 0    );
+                    b_sqrt(src, time, chan, XY) = CT(Utmp        , Vtmp );
+                    b_sqrt(src, time, chan, YX) = CT(Utmp        , -Vtmp);
+                    b_sqrt(src, time, chan, YY) = CT(pst*(Is - Q), 0    );
                 }
             }
         }

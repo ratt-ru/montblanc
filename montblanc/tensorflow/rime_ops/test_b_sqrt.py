@@ -23,39 +23,96 @@ def b_sqrt_op(stokes, alpha, frequency, ref_freq):
     return mod.rime_b_sqrt(stokes, alpha, frequency, ref_freq, CT=CT)
 
 def b_sqrt_numpy(stokes, alpha, frequency, ref_freq):
-    I = stokes[:,:,0]
-    Q = stokes[:,:,1]
-    U = stokes[:,:,2]
-    V = stokes[:,:,3]
+    nsrc, ntime, _ = stokes.shape
+    nchan, = frequency.shape
+
+    I = stokes[:,:,0].reshape(nsrc, ntime, 1)
+    Q = stokes[:,:,1].reshape(nsrc, ntime, 1)
+    U = stokes[:,:,2].reshape(nsrc, ntime, 1)
+    V = stokes[:,:,3].reshape(nsrc, ntime, 1)
 
     # Compute the spectral index
     freq_ratio = frequency[np.newaxis,np.newaxis,:]/np.asscalar(ref_freq)
     power = np.power(freq_ratio, alpha[:,:,np.newaxis])
 
+    # Compute the brightness matrix
     B = np.empty(shape=(nsrc, ntime, nchan, 4), dtype=ctype)
-    B[:,:,:,0] = (I+Q)[:,:,np.newaxis]*power
-    B[:,:,:,1] = (U+V*1j)[:,:,np.newaxis]*power
-    B[:,:,:,2] = (U-V*1j)[:,:,np.newaxis]*power
-    B[:,:,:,3] = (I-Q)[:,:,np.newaxis]*power
+    B[:,:,:,0] = power*(I+Q)
+    B[:,:,:,1] = power*(U+V*1j)
+    B[:,:,:,2] = power*(U-V*1j)
+    B[:,:,:,3] = power*(I-Q)
 
     # Compute the trace and determinant. Need power**2
     # for det since its composed of squares
-    trace = (2*I)[:,:,np.newaxis]*power
-    det = (I**2 - Q**2 - U**2 - V**2)[:,:,np.newaxis]*(power**2)
+    trace = 2*I
+    det = I**2 - Q**2 - U**2 - V**2
 
     # Compute values for computing matrix square root
+    # setting any 0.0 values of t to 1.0 to avoid nans
+    # t == 0.0 (and s == 0.0) implies a zero matrix anyway
     s = np.sqrt(det);
-    t = np.sqrt(trace + 2.0*s);
-
-    B_sqrt = B.copy()
-
-    # Add s to the diagonals
-    B_sqrt[:,:,:,0] += s
-    B_sqrt[:,:,:,3] += s
-
-    # Divide all matrix entries by t
+    t = np.sqrt(trace + 2*s);
     t[t == 0.0] = 1.0;
-    B_sqrt /= t[:,:,:,np.newaxis]
+
+    # Take the sqrt of the power
+    power_sqrt = np.sqrt(power)
+
+    # Compute the square root of the brightness matrix
+    B_sqrt = np.empty(shape=(nsrc, ntime, nchan, 4), dtype=ctype)
+    B_sqrt[:,:,:,0] = power_sqrt*(I+Q+s)/t
+    B_sqrt[:,:,:,1] = power_sqrt*(U+V*1j)/t
+    B_sqrt[:,:,:,2] = power_sqrt*(U-V*1j)/t
+    B_sqrt[:,:,:,3] = power_sqrt*(I-Q+s)/t
+
+    return B, B_sqrt
+
+def b_sqrt(stokes, alpha, frequency, ref_freq):
+    stokes_shape = tf.shape(stokes)
+    frequency_shape = tf.shape(frequency)
+
+    nsrc, ntime = stokes_shape[0], stokes_shape[1]
+    nchan = frequency_shape[0]
+
+    I = tf.reshape(stokes[:,:,0], tf.pack([nsrc, ntime, 1]))
+    Q = tf.reshape(stokes[:,:,1], tf.pack([nsrc, ntime, 1]))
+    U = tf.reshape(stokes[:,:,2], tf.pack([nsrc, ntime, 1]))
+    V = tf.reshape(stokes[:,:,3], tf.pack([nsrc, ntime, 1]))
+
+    # Compute the spectral index
+    frequency = tf.reshape(frequency, tf.pack([1, 1, nchan]))
+    alpha = tf.reshape(alpha, tf.pack([nsrc, ntime, 1]))
+    power = tf.pow(frequency/ref_freq[0], alpha)
+
+    # Compute the brightness matrix
+    XX = tf.complex(power*(I+Q), 0         )
+    XY = tf.complex(power*U    , power*V   )
+    YX = tf.complex(power*U    , power*(-V))
+    YY = tf.complex(power*(I-Q), 0         )
+
+    B = tf.transpose(tf.pack([XX, XY, YX, YY]), perm=[1,2,3,0])
+
+    # Compute the trace and determinant.
+    trace = 2.0*I
+    det = I**2 - Q**2 - U**2 - V**2
+
+    # Compute values for computing matrix square root
+    s = tf.sqrt(det);
+    t = tf.sqrt(trace + 2.0*s);
+    # To avoid nans/infs, set t = 1.0 if t == 0.0
+    # as this implies a zero matrix anyway
+    mask = tf.equal(t, 0.0)
+    t = tf.select(mask, tf.ones(tf.shape(t)), t)
+
+    # Compute the square root of the power
+    power_sqrt = tf.sqrt(power)
+
+    # Compute the square root of the brightness matrix
+    XX = tf.complex(power_sqrt*(I+Q+s)/t, 0                )
+    XY = tf.complex(power_sqrt*U/t      , power_sqrt*V/t   )
+    YX = tf.complex(power_sqrt*U/t      , power_sqrt*(-V)/t)
+    YY = tf.complex(power_sqrt*(I-Q+s)/t, 0                )
+    
+    B_sqrt = tf.transpose(tf.pack([XX, XY, YX, YY]), perm=[1,2,3,0])
 
     return B, B_sqrt
 
@@ -89,9 +146,13 @@ with tf.device('/cpu:0'):
 with tf.device('/gpu:0'):
     b_sqrt_op_gpu = b_sqrt_op(stokes, alpha, frequency, ref_freq)
 
+# Get an expression for the complex phase op on the GPU
+with tf.device('/cpu:0'):
+    b_sqrt_expr_cpu = b_sqrt(stokes, alpha, frequency, ref_freq)
+
 # Get an expression for the complex phase expression on the GPU
 #with tf.device('/gpu:0'):
-#    cplx_phase_expr_gpu = complex_phase(lm, uvw, frequency)
+#    cplx_phase_expr_cpu = complex_phase(lm, uvw, frequency)
 
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
@@ -101,6 +162,11 @@ with tf.Session() as S:
     start = timeit.default_timer()
     tf_b_sqrt_op_cpu = S.run(b_sqrt_op_cpu)
     print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)
+
+    # Evaluate and time tensorflow CPU
+    start = timeit.default_timer()
+    tf_b_expr_cpu, tf_b_sqrt_expr_cpu = S.run(b_sqrt_expr_cpu)
+    print 'Tensorflow expression CPU time %f' % (timeit.default_timer() - start)
 
     start = timeit.default_timer()
     np_b, np_b_sqrt = b_sqrt_numpy(np_stokes, np_alpha, np_frequency, np_ref_freq)
@@ -115,6 +181,8 @@ with tf.Session() as S:
     assert tf_b_sqrt_op_cpu.shape == (nsrc, ntime, nchan, 4)
     assert np_b_sqrt.shape == (nsrc, ntime, nchan, 4)
     assert np.allclose(tf_b_sqrt_op_cpu, np_b_sqrt)
+    assert np.allclose(tf_b_expr_cpu, np_b)
+    assert np.allclose(tf_b_sqrt_expr_cpu, np_b_sqrt)
 
     # Check that multiplying the matrix
     np_b_flat = np_b.reshape(-1,2,2)
