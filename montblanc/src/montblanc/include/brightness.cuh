@@ -44,7 +44,8 @@ template <
     typename T,
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
-__device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
+__device__ __forceinline__
+void create_brightness_mask(typename Tr::CT & mask)
 {
     int sign = ((int(cub::LaneId()) - 2) & 0x2) - 1;
     mask.x = T(sign*((int(cub::LaneId()) - 1) & 0x2) >> 1);
@@ -65,7 +66,8 @@ __device__ __forceinline__ void create_brightness_mask(typename Tr::ct & mask)
 //   thread 1 : B = I-Q;
 // This gives the indices of [Q,V,V,Q], [1,3,3,1], offset by the warp lane
 // Subtracting 1 from these indices gives [I,U,U,I], [0,2,2,0]
-__device__ __forceinline__ int brightness_pol_2_shfl_idx()
+__device__ __forceinline__
+int brightness_pol_2_shfl_idx()
 {
     int vis_idx = (cub::LaneId() >> 2) << 2;
     return ((int(cub::LaneId()) + 1) & 0x2) + vis_idx + 1;
@@ -85,9 +87,10 @@ template <
     typename T,
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
-__device__ __forceinline__ void create_brightness(
-    typename Tr::ct & result,
-    const typename Tr::ft & pol)
+__device__ __forceinline__
+void create_brightness(
+    typename Tr::CT & result,
+    const typename Tr::FT & pol)
 {
     // Overwrite the result with the mask
     create_brightness_mask<T>(result);
@@ -111,8 +114,8 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__
 void create_brightness_sqrt(
-    typename Tr::ct & brightness,
-    const typename Tr::ft & pol)
+    typename Tr::CT & brightness,
+    const typename Tr::FT & pol)
 {
     // Create the brightness matrix
     create_brightness<T>(brightness, pol);
@@ -121,23 +124,23 @@ void create_brightness_sqrt(
     int shfl_idx = (cub::LaneId() >> 2) << 2;
 
     // det = I^2 - Q^2 - U^2 - V^2
-    typename Tr::ft I = cub::ShuffleIndex(pol, shfl_idx);
-    typename Tr::ft trace = 2*I;
-    typename Tr::ft det = I*I;
+    typename Tr::FT I = cub::ShuffleIndex(pol, shfl_idx);
+    typename Tr::FT trace = 2*I;
+    typename Tr::FT det = I*I;
 
-    typename Tr::ft Q = cub::ShuffleIndex(pol, ++shfl_idx);
+    typename Tr::FT Q = cub::ShuffleIndex(pol, ++shfl_idx);
     det -= Q*Q;
 
-    typename Tr::ft U = cub::ShuffleIndex(pol, ++shfl_idx);
+    typename Tr::FT U = cub::ShuffleIndex(pol, ++shfl_idx);
     det -= U*U;
 
-    typename Tr::ft V = cub::ShuffleIndex(pol, ++shfl_idx);
+    typename Tr::FT V = cub::ShuffleIndex(pol, ++shfl_idx);
     det -= V*V;
 
     // Assumption here is that the determinant
     // of the brightness matrix is positive
     // I^2 - Q^2 - U^2 - V^2 > 0
-    typename Tr::ft s = Po::sqrt(det);
+    typename Tr::FT s = Po::sqrt(det);
 
     // This gives us 2 0 0 2 2 0 0 2 2 0 0 2
     bool is_diag = ((int(cub::LaneId()) - 1) & 0x2) != 0;
@@ -152,7 +155,7 @@ void create_brightness_sqrt(
     // trace = 2*I > 0 follows from I being positive
     // and real. (although apparently negative I's
     // are positive: see Sunyaev-Zel'dovich effect).
-    typename Tr::ft t = Po::sqrt(trace + 2*s);
+    typename Tr::FT t = Po::sqrt(trace + 2*s);
 
     // If both s and t are 0, this matrix does
     // not have a square root. But then

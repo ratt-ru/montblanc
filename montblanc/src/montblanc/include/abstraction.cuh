@@ -37,8 +37,9 @@ public:
 template <> class kernel_traits<float>
 {
 public:
-	typedef float ft;
-	typedef float2 ct;
+    // float and complex types
+	typedef float FT;
+	typedef float2 CT;
 
 public:
 	const static bool is_implemented = true;
@@ -52,19 +53,19 @@ public:
     typedef kernel_policies<float> Po;
 
 	__device__ __forceinline__ static
-	Tr::ct make_ct(const Tr::ft & real, const Tr::ft & imag)
+	Tr::CT make_ct(const Tr::FT & real, const Tr::FT & imag)
 		{ return ::make_float2(real, imag); }
 
 	__device__ __forceinline__ static
-	Tr::ft sqrt(const Tr::ft & value)
+	Tr::FT sqrt(const Tr::FT & value)
 		{ return ::sqrtf(value); }
 
 	__device__ __forceinline__ static
-	Tr::ft min(const Tr::ft & lhs, const Tr::ft & rhs)
+	Tr::FT min(const Tr::FT & lhs, const Tr::FT & rhs)
 		{ return ::fminf(lhs, rhs); }
 
 	__device__ __forceinline__ static
-	Tr::ft max(const Tr::ft & lhs, const Tr::ft & rhs)
+	Tr::FT max(const Tr::FT & lhs, const Tr::FT & rhs)
 		{ return ::fmaxf(lhs, rhs); }
 
     __device__ __forceinline__ static
@@ -76,51 +77,51 @@ public:
         { return ::floorf(value); }
 
 	__device__ __forceinline__ static
-	Tr::ft pow(const Tr::ft & value, const Tr::ft & exponent)
+	Tr::FT pow(const Tr::FT & value, const Tr::FT & exponent)
 		{ return ::powf(value, exponent); }
 
 	__device__ __forceinline__ static
-	Tr::ft exp(const Tr::ft & value)
+	Tr::FT exp(const Tr::FT & value)
 		{ return ::expf(value); }
 
 	__device__ __forceinline__ static
-	Tr::ft sin(const Tr::ft & value)
+	Tr::FT sin(const Tr::FT & value)
 		{ return ::sinf(value); }
 
 	__device__ __forceinline__ static
-	Tr::ft cos(const Tr::ft & value)
+	Tr::FT cos(const Tr::FT & value)
 		{ return ::cosf(value); }
 
 	__device__ __forceinline__ static
-	void sincos(const Tr::ft & value, Tr::ft * sinptr, Tr::ft * cosptr)
+	void sincos(const Tr::FT & value, Tr::FT * sinptr, Tr::FT * cosptr)
 		{ ::sincosf(value, sinptr, cosptr); }
 
     __device__ __forceinline__ static
-    Tr::ft atan2(const Tr::ft & y, const Tr::ft & x)
+    Tr::FT atan2(const Tr::FT & y, const Tr::FT & x)
         { return ::atan2f(y, x); }
 
     __device__ __forceinline__ static
-    Tr::ft arg(const Tr::ct & value)
+    Tr::FT arg(const Tr::CT & value)
         { return Po::atan2(value.y, value.x); }
 
     __device__ __forceinline__ static
-    Tr::ft arg(const Tr::ft & value)
+    Tr::FT arg(const Tr::FT & value)
         { return Po::atan2(0.0f, value); }
 
     __device__ __forceinline__ static
-    Tr::ft abs(const Tr::ct & value)
+    Tr::FT abs(const Tr::CT & value)
         { return Po::sqrt(value.x*value.x + value.y*value.y); }
 
     __device__ __forceinline__ static
-    Tr::ft abs(const Tr::ft & value)
+    Tr::FT abs(const Tr::FT & value)
         { return ::fabsf(value); }
 
     __device__ __forceinline__ static
-    Tr::ft round(const Tr::ft & value)
+    Tr::FT round(const Tr::FT & value)
         { return ::roundf(value); }
 
     __device__ __forceinline__ static
-    Tr::ft rint(const Tr::ft & value)
+    Tr::FT rint(const Tr::FT & value)
         { return ::rintf(value); }
 
     __device__ __forceinline__ static
@@ -132,8 +133,9 @@ template <>
 class kernel_traits<double>
 {
 public:
-	typedef double ft;
-	typedef double2 ct;
+    // float and complex types
+	typedef double FT;
+	typedef double2 CT;
 
 public:
 	const static bool is_implemented = true;
@@ -147,19 +149,19 @@ public:
     typedef kernel_policies<double> Po;
 
 	__device__ __forceinline__ static
-	Tr::ct make_ct(const Tr::ft & real, const Tr::ft & imag)
+	Tr::CT make_ct(const Tr::FT & real, const Tr::FT & imag)
 		{ return ::make_double2(real, imag); }
 
 	__device__ __forceinline__ static
-	Tr::ft sqrt(const Tr::ft & value)
+	Tr::FT sqrt(const Tr::FT & value)
 		{ return ::sqrt(value); }
 
 	__device__ __forceinline__ static
-	Tr::ft min(const Tr::ft & lhs, const Tr::ft & rhs)
+	Tr::FT min(const Tr::FT & lhs, const Tr::FT & rhs)
 		{ return ::fmin(lhs, rhs); }
 
 	__device__ __forceinline__ static
-	Tr::ft max(const Tr::ft & lhs, const Tr::ft & rhs)
+	Tr::FT max(const Tr::FT & lhs, const Tr::FT & rhs)
 		{ return ::fmax(lhs, rhs); }
 
     __device__ __forceinline__ static
@@ -171,51 +173,51 @@ public:
         { return ::floor(value); }
 
 	__device__ __forceinline__ static
-	Tr::ft pow(const Tr::ft & value, const Tr::ft & exponent)
+	Tr::FT pow(const Tr::FT & value, const Tr::FT & exponent)
 		{ return ::pow(value, exponent); }
 
 	__device__ __forceinline__ static
-	Tr::ft exp(const Tr::ft & value)
+	Tr::FT exp(const Tr::FT & value)
 		{ return ::exp(value); }
 
 	__device__ __forceinline__ static
-	Tr::ft sin(const Tr::ft & value)
+	Tr::FT sin(const Tr::FT & value)
 		{ return ::sin(value); }
 
 	__device__ __forceinline__ static
-	Tr::ft cos(const Tr::ft & value)
+	Tr::FT cos(const Tr::FT & value)
 		{ return ::cos(value); }
 
 	__device__ __forceinline__ static
-	void sincos(const Tr::ft & value, Tr::ft * sinptr, Tr::ft * cosptr)
+	void sincos(const Tr::FT & value, Tr::FT * sinptr, Tr::FT * cosptr)
 		{ ::sincos(value, sinptr, cosptr); }
 
     __device__ __forceinline__ static
-    Tr::ft atan2(const Tr::ft & y, const Tr::ft & x)
+    Tr::FT atan2(const Tr::FT & y, const Tr::FT & x)
         { return ::atan2(y, x); }
 
     __device__ __forceinline__ static
-    Tr::ft arg(const Tr::ct & value)
+    Tr::FT arg(const Tr::CT & value)
         { return Po::atan2(value.y, value.x); }
 
     __device__ __forceinline__ static
-    Tr::ft arg(const Tr::ft & value)
+    Tr::FT arg(const Tr::FT & value)
         { return Po::atan2(0.0, value); }
 
     __device__ __forceinline__ static
-    Tr::ft abs(const Tr::ct & value)
+    Tr::FT abs(const Tr::CT & value)
         { return Po::sqrt(value.x*value.x + value.y*value.y); }
 
     __device__ __forceinline__ static
-    Tr::ft abs(const Tr::ft & value)
+    Tr::FT abs(const Tr::FT & value)
         { return ::abs(value); }
 
     __device__ __forceinline__ static
-    Tr::ft round(const Tr::ft & value)
+    Tr::FT round(const Tr::FT & value)
         { return ::round(value); }
 
     __device__ __forceinline__ static
-    Tr::ft rint(const Tr::ft & value)
+    Tr::FT rint(const Tr::FT & value)
         { return ::rint(value); }
 
     __device__ __forceinline__ static
@@ -230,9 +232,9 @@ template <
     typename Tr=kernel_traits<T>,
     typename Po=kernel_policies<T> >
 __device__ __forceinline__ void complex_multiply(
-    typename Tr::ct & result,
-    const typename Tr::ct & lhs,
-    const typename Tr::ct & rhs)
+    typename Tr::CT & result,
+    const typename Tr::CT & lhs,
+    const typename Tr::CT & rhs)
 {
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = lhs.x b=lhs.y c=rhs.x d = rhs.y
@@ -246,9 +248,9 @@ template <
     typename Tr=kernel_traits<T>,
     typename Po=kernel_policies<T> >
 __device__ __forceinline__ void complex_conjugate_multiply(
-    typename Tr::ct & result,
-    const typename Tr::ct & lhs,
-    const typename Tr::ct & rhs)
+    typename Tr::CT & result,
+    const typename Tr::CT & lhs,
+    const typename Tr::CT & rhs)
 {
     // (a+bi)(c-di) = (ac+bd) + (-ad+bc)i
     // a = lhs.x b=lhs.y c=rhs.x d = rhs.y
@@ -263,10 +265,10 @@ template <
     typename Tr=kernel_traits<T>,
     typename Po=kernel_policies<T> >
 __device__ __forceinline__ void complex_multiply_in_place(
-    typename Tr::ct & lhs,
-    const typename Tr::ct & rhs)
+    typename Tr::CT & lhs,
+    const typename Tr::CT & rhs)
 {
-    typename Tr::ft tmp = lhs.x;
+    typename Tr::FT tmp = lhs.x;
 
     lhs.x *= rhs.x;
     lhs.x -= lhs.y*rhs.y;
@@ -280,10 +282,10 @@ template <
     typename Tr=kernel_traits<T>,
     typename Po=kernel_policies<T> >
 __device__ __forceinline__ void complex_conjugate_multiply_in_place(
-    typename Tr::ct & lhs,
-    const typename Tr::ct & rhs)
+    typename Tr::CT & lhs,
+    const typename Tr::CT & rhs)
 {
-    typename Tr::ft tmp = -lhs.x;
+    typename Tr::FT tmp = -lhs.x;
 
     lhs.x *= rhs.x;
     lhs.x += lhs.y*rhs.y;

@@ -39,18 +39,18 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__
 void jones_multiply_4x4_in_place(
-    typename Tr::ct & J,
-    const typename Tr::ct & K)
+    typename Tr::CT & J,
+    const typename Tr::CT & K)
 {
     // This will produce indexes with the following pattern
     // 1 2 1 2 5 6 5 6 9 10 9 10 13 14 13 14
     int shfl_idx = _MONTBLANC_VIS_BASE_IDX + 1 + _MONTBLANC_IS_ODD_POL;
     // Load in the value to multiply.
-    typename Tr::ct shfl_K = cub::ShuffleIndex(K, shfl_idx);
+    typename Tr::CT shfl_K = cub::ShuffleIndex(K, shfl_idx);
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = J.x, b=J.y, c=shfl_K.x, d = shfl_K.y
-    typename Tr::ct sum;
+    typename Tr::CT sum;
     sum.x = J.x*shfl_K.x - J.y*shfl_K.y,
     sum.y = J.x*shfl_K.y + J.y*shfl_K.x;
 
@@ -80,18 +80,18 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__
 void jones_multiply_4x4_hermitian_transpose_in_place(
-    typename Tr::ct & J,
-    const typename Tr::ct & K)
+    typename Tr::CT & J,
+    const typename Tr::CT & K)
 {
     // This will produce indexes with the following pattern
     // 2 1 2 1 6 5 6 5 10 9 10 9 14 13 14 13
     int shfl_idx = _MONTBLANC_VIS_BASE_IDX + 1 + _MONTBLANC_IS_EVEN_POL;
     // Load in the value to multiply.
-    typename Tr::ct shfl_K = cub::ShuffleIndex(K, shfl_idx);
+    typename Tr::CT shfl_K = cub::ShuffleIndex(K, shfl_idx);
 
     // (a+bi)*conj(c+di) = (a+bi)*(c-di) = (ac+bd) + (-ad+bc)i
     // a = J.x, b=J.y, c=shfl_K.x, d = shfl_K.y
-    typename Tr::ct sum;
+    typename Tr::CT sum;
     sum.x =  J.x*shfl_K.x + J.y*shfl_K.y;
     sum.y = -J.x*shfl_K.y + J.y*shfl_K.x;
 
