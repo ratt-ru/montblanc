@@ -64,6 +64,22 @@ def complex_phase(lm, uvw, frequency):
     #return tf.exp(tf.complex(0.0, phase), name='complex_phase')
     return tf.complex(tf.cos(phase), tf.sin(phase))
 
+def complex_phase_numpy(lm, uvw, frequency):
+    nsrc, _ = lm.shape
+    ntime, na, _ = uvw.shape
+    nchan, = frequency.shape
+
+    lm = lm.reshape(nsrc, 1, 1, 1, 2)
+    uvw = uvw.reshape(1, ntime, na, 1, 3)
+    frequency = frequency.reshape(1, 1, 1, nchan)
+
+    l, m = lm[:,:,:,:,0], lm[:,:,:,:,1]
+    u, v, w = uvw[:,:,:,:,0], uvw[:,:,:,:,1], uvw[:,:,:,:,2]
+
+    n = np.sqrt(1.0 - l**2 - m**2) - 1.0
+    real_phase = -2*np.pi*1j*(l*u + m*v + n*w)*frequency/lightspeed
+    return np.exp(real_phase)
+
 dtype, ctype = np.float32, np.complex64
 nsrc, ntime, na, nchan = 100, 50, 64, 128
 lightspeed = 299792458.
@@ -114,16 +130,7 @@ with tf.Session() as S:
     start = timeit.default_timer()
     # Now calculate the complex phase using numpy
     # Reshapes help us to broadcast
-    lm = np_lm.reshape(nsrc, 1, 1, 1, 2)
-    uvw = np_uvw.reshape(1, ntime, na, 1, 3)
-    frequency = np_frequency.reshape(1, 1, 1,nchan)
-
-    l, m = lm[:,:,:,:,0], lm[:,:,:,:,1]
-    u, v, w = uvw[:,:,:,:,0], uvw[:,:,:,:,1], uvw[:,:,:,:,2]
-
-    n = np.sqrt(1.0 - l**2 - m**2) - 1.0
-    phase = -2*np.pi*1j*(l*u + m*v + n*w)*frequency/lightspeed
-    np_cplx_phase = np.exp(phase)
+    np_cplx_phase = complex_phase_numpy(np_lm, np_uvw, np_frequency)
     print 'Numpy CPU time %f' % (timeit.default_timer() - start)
 
     # Check that our shapes and values agree with a certain tolerance
