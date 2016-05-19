@@ -2,27 +2,32 @@ TF_INC=$(shell python -c 'import tensorflow as tf; print tf.sysconfig.get_includ
 TF_CUDA=$(shell python -c 'import tensorflow as tf; print int(tf.test.is_built_with_cuda())')
 MB_INC=../../include
 
-INCLUDES = -I $(TF_INC) -I $(TF_CUDA) -I $(MB_INC)
-OBJECTS=phase_op.o phase_op_gpu.o b_sqrt_op_cpu.o b_sqrt_op_gpu.o
+INCLUDES = -I $(TF_INC) -I $(MB_INC)
+OBJECTS=abstraction.o phase_op.o phase_op_gpu.o b_sqrt_op_cpu.o b_sqrt_op_gpu.o
 LIBRARY=rime.so
+
+CPPFLAGS=-std=c++11 -fPIC $(INCLUDES)
+NVCCFLAGS=-std=c++11 -D GOOGLE_CUDA=$(TF_CUDA) $(INCLUDES) -x cu -Xcompiler -fPIC 
 
 all : $(LIBRARY)
 
 clean :
 	rm $(OBJECTS) $(LIBRARY)
 
+abstraction.o : abstraction.cc
+	nvcc abstraction.cc -c $(NVCCFLAGS) $(INCLUDES)
 
 b_sqrt_op_gpu.o: b_sqrt_op_gpu.cu.cc b_sqrt_op_gpu.h b_sqrt_op.h
-	nvcc -std=c++11 -c -o b_sqrt_op_gpu.o b_sqrt_op_gpu.cu.cc $(INCLUDES) -D GOOGLE_CUDA=$(TF_CUDA) -x cu -Xcompiler -fPIC
+	nvcc -c -o b_sqrt_op_gpu.o b_sqrt_op_gpu.cu.cc $(NVCCFLAGS) 
 
 b_sqrt_op_cpu.o: b_sqrt_op_cpu.cc b_sqrt_op_cpu.h b_sqrt_op.h
-	g++ b_sqrt_op_cpu.cc --std=c++11 $(INCLUDES) -c -fPIC
+	g++ -c b_sqrt_op_cpu.cc $(CPPFLAGS) 
 
 phase_op_gpu.o: phase_op_gpu.cu.cc phase_op_gpu.h phase_op.h
-	nvcc -std=c++11 -c -o phase_op_gpu.o phase_op_gpu.cu.cc $(INCLUDES) -D GOOGLE_CUDA=$(TF_CUDA) -x cu -Xcompiler -fPIC
+	nvcc -c -o phase_op_gpu.o phase_op_gpu.cu.cc $(NVCCFLAGS)
 
 phase_op.o : phase_op.cc phase_op.h
-	g++ phase_op.cc --std=c++11 $(INCLUDE) -c -fPIC
+	g++ -c phase_op.cc $(CPPFLAGS)
 
 $(LIBRARY) : $(OBJECTS)
 	g++  -shared $(OBJECTS) -o $(LIBRARY) -fPIC
