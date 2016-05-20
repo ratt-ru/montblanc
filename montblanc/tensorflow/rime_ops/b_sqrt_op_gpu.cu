@@ -1,6 +1,6 @@
 #if GOOGLE_CUDA
 
-#include "b_sqrt_op_gpu.h"
+#include "b_sqrt_op_gpu.cuh"
 
 namespace tensorflow {
 

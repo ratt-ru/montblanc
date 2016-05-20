@@ -14,20 +14,20 @@ all : $(LIBRARY)
 clean :
 	rm -f $(OBJECTS) $(LIBRARY)
 
-abstraction.o : abstraction.cc
-	nvcc abstraction.cc -c $(NVCCFLAGS) $(INCLUDES)
+abstraction.o : abstraction.cu
+	nvcc abstraction.cu -c $(NVCCFLAGS)
 
-b_sqrt_op_gpu.o: b_sqrt_op_gpu.cu.cc b_sqrt_op_gpu.h b_sqrt_op.h
-	nvcc -c -o b_sqrt_op_gpu.o b_sqrt_op_gpu.cu.cc $(NVCCFLAGS) 
+b_sqrt_op_gpu.o: b_sqrt_op_gpu.cu b_sqrt_op_gpu.cuh b_sqrt_op.h
+	nvcc -c b_sqrt_op_gpu.cu $(NVCCFLAGS) 
 
-b_sqrt_op_cpu.o: b_sqrt_op_cpu.cc b_sqrt_op_cpu.h b_sqrt_op.h
-	g++ -c b_sqrt_op_cpu.cc $(CPPFLAGS) 
+b_sqrt_op_cpu.o: b_sqrt_op_cpu.cpp b_sqrt_op_cpu.h b_sqrt_op.h
+	g++ -c b_sqrt_op_cpu.cpp $(CPPFLAGS) 
 
-phase_op_gpu.o: phase_op_gpu.cu.cc phase_op_gpu.h phase_op.h
-	nvcc -c -o phase_op_gpu.o phase_op_gpu.cu.cc $(NVCCFLAGS)
+phase_op_gpu.o: phase_op_gpu.cu phase_op_gpu.cuh phase_op.h
+	nvcc -c phase_op_gpu.cu $(NVCCFLAGS)
 
-phase_op_cpu.o : phase_op_cpu.cc phase_op.h
-	g++ -c phase_op_cpu.cc $(CPPFLAGS)
+phase_op_cpu.o : phase_op_cpu.cpp phase_op.h
+	g++ -c phase_op_cpu.cpp $(CPPFLAGS)
 
 $(LIBRARY) : $(OBJECTS)
 	g++  -shared $(OBJECTS) -o $(LIBRARY) -fPIC

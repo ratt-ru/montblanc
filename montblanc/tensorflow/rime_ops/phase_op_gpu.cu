@@ -2,7 +2,7 @@
 
 #define EIGEN_USE_GPU
 
-#include "phase_op_gpu.h"
+#include "phase_op_gpu.cuh"
 
 namespace tensorflow {
 
