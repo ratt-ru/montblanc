@@ -61,6 +61,10 @@ typedef Eigen::GpuDevice GPUDevice;
 
 constexpr int BSQRT_NPOL = 4;
 
+template <typename Traits> __device__ __forceinline__
+int bsqrt_pol()
+    { return threadIdx.x & 0x3; }
+
 template <typename Traits>
 __global__ void rime_b_sqrt(
     const typename Traits::stokes_type * stokes,
@@ -80,10 +84,9 @@ __global__ void rime_b_sqrt(
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
     int SRC = blockIdx.z*blockDim.z + threadIdx.z;
-    #define POL (threadIdx.x & 0x3)
 
     if(SRC >= nsrc || TIME >= ntime || POLCHAN >= npolchan)
-        return;
+        { return; }
 
     __shared__  FT freq[LTr::BLOCKDIMX];
 
@@ -104,7 +107,7 @@ __global__ void rime_b_sqrt(
 
     // Read in the stokes parameter,
     // multiplying it by the power term
-    i = i*BSQRT_NPOL + POL;
+    i = i*BSQRT_NPOL + bsqrt_pol<Traits>();
     FT pol = stokes[i]*power;
     CT B_square_root;
 
@@ -114,7 +117,6 @@ __global__ void rime_b_sqrt(
     // Write out the square root of the brightness
     i = (SRC*ntime + TIME)*npolchan + POLCHAN;
     B_sqrt[i] = B_square_root;
-    #undef POL
 }
 
 template <typename FT, typename CT>
