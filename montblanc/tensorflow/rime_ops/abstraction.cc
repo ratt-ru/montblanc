@@ -22,9 +22,9 @@ dim3 shrink_small_dims(dim3 && block, int X, int Y, int Z)
 // our grid
 dim3 grid_from_thread_block(const dim3 & block, int X, int Y, int Z)
 {
-    int GX = X / block.x;
-    int GY = Y / block.y;
-    int GZ = Z / block.z;
+    int GX = (X + block.x - 1) / block.x;
+    int GY = (Y + block.y - 1) / block.y;
+    int GZ = (Z + block.z - 1) / block.z;
 
     return dim3(GX, GY, GZ);
 }
