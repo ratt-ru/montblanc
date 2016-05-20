@@ -9,6 +9,9 @@
 // Required in order for Eigen::GpuDevice to be an actual type
 #define EIGEN_USE_GPU
 
+#include "tensorflow/core/framework/op.h"
+#include "tensorflow/core/framework/op_kernel.h"
+
 namespace montblanc {
 namespace phase {
 
