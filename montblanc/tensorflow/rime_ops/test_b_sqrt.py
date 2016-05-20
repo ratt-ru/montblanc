@@ -42,8 +42,7 @@ def b_sqrt_numpy(stokes, alpha, frequency, ref_freq):
     B[:,:,:,2] = power*(U-V*1j)
     B[:,:,:,3] = power*(I-Q)
 
-    # Compute the trace and determinant. Need power**2
-    # for det since its composed of squares
+    # Compute the trace and determinant.
     trace = 2*I
     det = I**2 - Q**2 - U**2 - V**2
 
