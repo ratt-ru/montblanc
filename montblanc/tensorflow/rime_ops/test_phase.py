@@ -38,8 +38,8 @@ def complex_phase(lm, uvw, frequency):
     nchan = frequency_shape[0]
 
     # Define some constants
-    one = tf.constant(1.0)
-    minus_two_pi_over_C = tf.constant(-2.0*np.pi/lightspeed)
+    one = tf.constant(1.0, dtype=dtype)
+    minus_two_pi_over_C = tf.constant(-2.0*np.pi/lightspeed, dtype=dtype)
 
     # Reshape now so that we get broadcasting in later operations
     # Need to pack list since list contains tensors, e.g. nsrc
@@ -80,7 +80,7 @@ def complex_phase_numpy(lm, uvw, frequency):
     real_phase = -2*np.pi*1j*(l*u + m*v + n*w)*frequency/lightspeed
     return np.exp(real_phase)
 
-dtype, ctype = np.float32, np.complex64
+dtype, ctype = np.float64, np.complex128
 nsrc, ntime, na, nchan = 100, 50, 64, 128
 lightspeed = 299792458.
 

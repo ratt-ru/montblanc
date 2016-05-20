@@ -83,10 +83,10 @@ def b_sqrt(stokes, alpha, frequency, ref_freq):
     power = tf.pow(frequency/ref_freq[0], alpha)
 
     # Compute the brightness matrix
-    XX = tf.complex(power*(I+Q), 0         )
+    XX = tf.complex(power*(I+Q), dtype(0.0))
     XY = tf.complex(power*U    , power*V   )
     YX = tf.complex(power*U    , power*(-V))
-    YY = tf.complex(power*(I-Q), 0         )
+    YY = tf.complex(power*(I-Q), dtype(0.0))
 
     B = tf.transpose(tf.pack([XX, XY, YX, YY]), perm=[1,2,3,0])
 
@@ -99,23 +99,23 @@ def b_sqrt(stokes, alpha, frequency, ref_freq):
     t = tf.sqrt(trace + 2.0*s);
     # To avoid nans/infs, set t = 1.0 if t == 0.0
     # as this implies a zero matrix anyway
-    mask = tf.equal(t, 0.0)
-    t = tf.select(mask, tf.ones(tf.shape(t)), t)
+    mask = tf.equal(t, dtype(0.0))
+    t = tf.select(mask, tf.ones(tf.shape(t), dtype=dtype), t)
 
     # Compute the square root of the power
     power_sqrt = tf.sqrt(power)
 
     # Compute the square root of the brightness matrix
-    XX = tf.complex(power_sqrt*(I+Q+s)/t, 0                )
+    XX = tf.complex(power_sqrt*(I+Q+s)/t, dtype(0.0)       )
     XY = tf.complex(power_sqrt*U/t      , power_sqrt*V/t   )
     YX = tf.complex(power_sqrt*U/t      , power_sqrt*(-V)/t)
-    YY = tf.complex(power_sqrt*(I-Q+s)/t, 0                )
+    YY = tf.complex(power_sqrt*(I-Q+s)/t, dtype(0.0)       )
     
     B_sqrt = tf.transpose(tf.pack([XX, XY, YX, YY]), perm=[1,2,3,0])
 
     return B, B_sqrt
 
-dtype, ctype = np.float32, np.complex64
+dtype, ctype = np.float64, np.complex128
 nsrc, ntime, na, nchan = 100, 50, 64, 128
 
 # Set up our numpy input arrays
@@ -146,8 +146,8 @@ with tf.device('/gpu:0'):
     b_sqrt_op_gpu = b_sqrt_op(stokes, alpha, frequency, ref_freq)
 
 # Get an expression for the complex phase op on the GPU
-with tf.device('/cpu:0'):
-    b_sqrt_expr_cpu = b_sqrt(stokes, alpha, frequency, ref_freq)
+with tf.device('/gpu:0'):
+    b_sqrt_expr_gpu = b_sqrt(stokes, alpha, frequency, ref_freq)
 
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
@@ -165,7 +165,7 @@ with tf.Session() as S:
 
     # Evaluate and time tensorflow CPU
     start = timeit.default_timer()
-    tf_b_expr_cpu, tf_b_sqrt_expr_cpu = S.run(b_sqrt_expr_cpu)
+    tf_b_expr_cpu, tf_b_sqrt_expr_gpu = S.run(b_sqrt_expr_gpu)
     print 'Tensorflow expression CPU time %f' % (timeit.default_timer() - start)
 
     start = timeit.default_timer()
@@ -178,7 +178,7 @@ with tf.Session() as S:
     assert np.allclose(tf_b_sqrt_op_cpu, np_b_sqrt)
     assert np.allclose(tf_b_sqrt_op_gpu, np_b_sqrt, rtol=1e-3)
     assert np.allclose(tf_b_expr_cpu, np_b)
-    assert np.allclose(tf_b_sqrt_expr_cpu, np_b_sqrt)
+    assert np.allclose(tf_b_sqrt_expr_gpu, np_b_sqrt)
 
     # Reshape for 2x2 jones multiply below
     np_b_flat = np_b.reshape(-1,2,2)
