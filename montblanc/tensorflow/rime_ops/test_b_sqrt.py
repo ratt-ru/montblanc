@@ -176,7 +176,7 @@ with tf.Session() as S:
     assert tf_b_sqrt_op_cpu.shape == (nsrc, ntime, nchan, 4)
     assert np_b_sqrt.shape == (nsrc, ntime, nchan, 4)
     assert np.allclose(tf_b_sqrt_op_cpu, np_b_sqrt)
-    assert np.allclose(tf_b_sqrt_op_gpu, np_b_sqrt)
+    assert np.allclose(tf_b_sqrt_op_gpu, np_b_sqrt, rtol=1e-3)
     assert np.allclose(tf_b_expr_cpu, np_b)
     assert np.allclose(tf_b_sqrt_expr_cpu, np_b_sqrt)
 
