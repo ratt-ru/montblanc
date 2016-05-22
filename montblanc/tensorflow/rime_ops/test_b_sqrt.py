@@ -72,14 +72,17 @@ def b_sqrt(stokes, alpha, frequency, ref_freq):
     nsrc, ntime = stokes_shape[0], stokes_shape[1]
     nchan = frequency_shape[0]
 
-    I = tf.reshape(stokes[:,:,0], tf.pack([nsrc, ntime, 1]))
-    Q = tf.reshape(stokes[:,:,1], tf.pack([nsrc, ntime, 1]))
-    U = tf.reshape(stokes[:,:,2], tf.pack([nsrc, ntime, 1]))
-    V = tf.reshape(stokes[:,:,3], tf.pack([nsrc, ntime, 1]))
+    src_shape = tf.pack([nsrc, ntime, 1, 1])
+    freq_shape = tf.pack([1, 1, nchan, 1])
+
+    I = tf.reshape(stokes[:,:,0], src_shape)
+    Q = tf.reshape(stokes[:,:,1], src_shape)
+    U = tf.reshape(stokes[:,:,2], src_shape)
+    V = tf.reshape(stokes[:,:,3], src_shape)
 
     # Compute the spectral index
-    frequency = tf.reshape(frequency, tf.pack([1, 1, nchan]))
-    alpha = tf.reshape(alpha, tf.pack([nsrc, ntime, 1]))
+    frequency = tf.reshape(frequency, freq_shape)
+    alpha = tf.reshape(alpha, src_shape)
     power = tf.pow(frequency/ref_freq[0], alpha)
 
     # Compute the brightness matrix
@@ -88,7 +91,7 @@ def b_sqrt(stokes, alpha, frequency, ref_freq):
     YX = tf.complex(power*U    , power*(-V))
     YY = tf.complex(power*(I-Q), dtype(0.0))
 
-    B = tf.transpose(tf.pack([XX, XY, YX, YY]), perm=[1,2,3,0])
+    B = tf.concat(3, [XX, XY, YX, YY])
 
     # Compute the trace and determinant.
     trace = 2.0*I
@@ -111,7 +114,7 @@ def b_sqrt(stokes, alpha, frequency, ref_freq):
     YX = tf.complex(power_sqrt*U/t      , power_sqrt*(-V)/t)
     YY = tf.complex(power_sqrt*(I-Q+s)/t, dtype(0.0)       )
     
-    B_sqrt = tf.transpose(tf.pack([XX, XY, YX, YY]), perm=[1,2,3,0])
+    B_sqrt = tf.concat(3, [XX, XY, YX, YY])
 
     return B, B_sqrt
 
