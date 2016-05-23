@@ -22,6 +22,12 @@ import types
 import numpy as np
 
 import hypercube as hc
+from hypercube.array_factory import (
+    create_local_arrays_on_cube,
+    create_local_arrays,
+    generic_stitch,
+    gpuarray_factory)
+
 from rime_solver import RIMESolver
 from montblanc.config import SolverConfig as Options
 import montblanc.util as mbu
@@ -117,17 +123,49 @@ class MontblancCUDASolver(RIMESolver):
         npary and %s must be the same shape and type.
         """ % (name,name)
 
-    def create_arrays(self):
+    def create_arrays(self, ignore=None, supplied=None):
+        """
+        Create any necessary arrays on the solver. 
+
+        Arguments
+        ---------
+            ignore : list
+                List of array names to ignore.
+            supplied : dictionary
+                A dictionary of supplied arrays to create
+                on the solver, keyed by name. Note that
+                these arrays will not be initialised by
+                montblanc, it is the responsibility of the
+                user to initialise them.
+        """
+
         import pycuda.driver as cuda
 
+        if ignore is None:
+            ignore = []
+
+        if supplied is None:
+            supplied = {}
+
+        reified_arrays = self.arrays(reify=True)
+        create_arrays = self._arrays_to_create(reified_arrays,
+            ignore=ignore, supplied=supplied)
+
         with self.context:
-            # Create the local pycuda arrays on ourself
-            hc.create_local_pycuda_arrays_on_cube(self)
+            # Create local arrays on the cube
+            create_local_arrays_on_cube(self, create_arrays,
+                array_stitch=generic_stitch,
+                array_factory=gpuarray_factory)
+
+            self._validate_supplied_arrays(reified_arrays, supplied)
+
+            # Stitch the supplied arrays onto the cube
+            generic_stitch(self, supplied)
 
             # Get our data source
             data_source = self._slvr_cfg[Options.DATA_SOURCE]
 
-            for name, array in self.arrays().iteritems():
+            for name, array in create_arrays.iteritems():
                 self.initialise_gpu_array(name, array, data_source)
 
     def solve(self):
