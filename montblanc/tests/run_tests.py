@@ -53,7 +53,7 @@ def print_versions():
     print('-=' * 38)
 
 def suite():
-    from test_base_solver import TestSolver
+    from test_rime_solver import TestSolver
     from test_utils import TestUtils
     from test_source_utils import TestSourceUtils
 
