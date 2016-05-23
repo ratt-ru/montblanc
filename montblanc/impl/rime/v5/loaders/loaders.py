@@ -200,8 +200,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
         weight_strategy.log_strategy()
 
-        self.log_load(ANTENNA1, 'ant_pair[0]')
-        self.log_load(ANTENNA2, 'ant_pair[1]')
+        self.log_load(ANTENNA1, 'antenna1')
+        self.log_load(ANTENNA2, 'antenna2')
 
         # Iterate over the main MS rows
         for start in range(0, msrows, row_inc):
@@ -257,12 +257,12 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                 flag_view = solver.flag.reshape(ntime*nbl, nchan, npol)
                 flag_view[start:end,:,:] = flag_buffer.astype(solver.flag.dtype)
 
-            antenna_view = solver.ant_pairs[0,:,:].reshape(ntime*nbl)
-            tm.getcolnp(ANTENNA1, antenna_view[start:end],
+            ant_view = solver.antenna1.reshape(ntime*nbl)
+            tm.getcolnp(ANTENNA1, ant_view[start:end],
                 startrow=start, nrow=nrows)
 
-            antenna_view = solver.ant_pairs[1,:,:].reshape(ntime*nbl)
-            tm.getcolnp(ANTENNA2, antenna_view[start:end],
+            ant_view = solver.antenna2.reshape(ntime*nbl)
+            tm.getcolnp(ANTENNA2, ant_view[start:end],
                 startrow=start, nrow=nrows)
 
             # Execute weight vector loading strategy

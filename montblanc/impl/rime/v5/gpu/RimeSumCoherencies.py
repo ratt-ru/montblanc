@@ -60,7 +60,7 @@ class RimeSumCoherencies(montblanc.impl.rime.v4.gpu.RimeSumCoherencies.RimeSumCo
             else slvr.sersic_shape
 
         self.kernel(slvr.uvw, gauss, sersic,
-            slvr.frequency, slvr.ant_pairs,
+            slvr.frequency, slvr.antenna1, slvr.antenna2,
             slvr.jones, slvr.flag, slvr.weight_vector,
             slvr.observed_vis, slvr.G_term,
             slvr.model_vis, slvr.chi_sqrd_result,

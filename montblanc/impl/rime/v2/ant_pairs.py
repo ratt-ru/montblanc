@@ -22,15 +22,17 @@ import numpy as np
 
 def default_ant_pairs(self):
     """
-    Return an np.array(shape=(2, ntime, nbl), dtype=np.int32])
+    Return a list of 2 arrays of shape (ntime, nbl)
     containing the default antenna pairs for each timestep
     at each baseline.
     """
     # Create the antenna pair mapping, from upper triangle indices
     # based on the number of antenna.
     ntime, nbl = self.dim_local_size('ntime', 'nbl')
-    return np.tile(self.default_base_ant_pairs(), ntime) \
-        .reshape(2, ntime, nbl)
+    ant0, ant1 = self.default_base_ant_pairs()
+
+    return (np.tile(ant0, ntime).reshape(ntime, nbl),
+        np.tile(ant1, ntime).reshape(ntime, nbl))
 
 def ap_idx(self, default_ap=None, src=False, chan=False):
     """
@@ -60,38 +62,40 @@ def ap_idx(self, default_ap=None, src=False, chan=False):
     >>> assert u_bl.shape == (2, ntime, nbl)
     """
 
+    slvr = self
+
     if default_ap is None:
-        default_ap = self.default_base_ant_pairs()
+        default_ap = self.default_ant_pairs()
 
-    newdim = lambda d: [np.newaxis for n in range(d)]
-    nsrc, ntime, nchan = self.dim_local_size('nsrc', 'ntime', 'nchan')
+    ant0, ant1 = default_ap
+    idx0, idx1 = [], []
 
-    sed = (1 if src else 0)      # Extra source dimension
-    ced = (1 if chan else 0)     # Extra channel dimension
-    ned = sed + ced              # Nr of extra dimensions
-    all = slice(None, None, 1)   # all slice
-    idx = []                     # Index we're returning
+    needed = (True, True, src, chan)
+    nsrc, ntime, nbl, nchan = slvr.dim_local_size(
+        'nsrc', 'ntime', 'nbl', 'nchan')
 
-    # Create the time index, [np.newaxis,:,np.newaxis] + [...]
-    time_slice = tuple([np.newaxis, all, np.newaxis] + newdim(ned))
-    idx.append(np.arange(ntime)[time_slice])
+    time_shape = tuple(t for t, n in zip((ntime,1,1,1), needed) if n)
+    time_range = np.arange(ntime).reshape(time_shape)
+    idx0.append(time_range)
+    idx1.append(time_range)
 
-    # Create the antenna pair index, [:, np.newaxis, :] + [...]
-    ap_slice = tuple([all, np.newaxis, all] + newdim(ned))
-    idx.append(default_ap[ap_slice])
+    ant_shape = tuple(a for a, n in zip((ntime,nbl,1,1), needed) if n)
+    idx0.append(ant0.reshape(ant_shape))
+    idx1.append(ant1.reshape(ant_shape))
 
-    # Create the source index, [np.newaxis,np.newaxis,np.newaxis,:] + [...]
-    if src is True:
-        src_slice = tuple(newdim(3) + [all] + newdim(ced))
-        idx.append(np.arange(nsrc)[src_slice])
+    if src:
+        src_shape = tuple(s for s,n in zip((1,1,nsrc,1), needed) if n)
+        src_range = np.arange(nsrc).reshape(src_shape)
+        idx0.append(src_range)
+        idx1.append(src_range)
 
-    # Create the channel index,
-    # [np.newaxis,np.newaxis,np.newaxis] + [...] + [:]
-    if chan is True:
-        chan_slice = tuple(newdim(3 + sed) + [all])
-        idx.append(np.arange(nchan)[chan_slice])
+    if chan:
+        chan_shape = tuple(c for c, n in zip((1,1,1,nchan), needed) if n)
+        chan_range = np.arange(nchan).reshape(chan_shape)
+        idx0.append(chan_range)
+        idx1.append(chan_range)
 
-    return tuple(idx)
+    return idx0, idx1
 
 def monkey_patch_antenna_pairs(slvr):
     # Monkey patch these functions onto the solver object

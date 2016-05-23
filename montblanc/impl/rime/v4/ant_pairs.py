@@ -22,7 +22,7 @@ import numpy as np
 
 def default_ant_pairs(self):
     """
-    Return an np.array(shape=(2, ntime, nbl), dtype=np.int32])
+    Return a list of 2 arrays of shape (ntime, nbl)
     containing the default antenna pairs for each timestep
     at each baseline.
     """
@@ -30,74 +30,73 @@ def default_ant_pairs(self):
     # Create the antenna pair mapping, from upper triangle indices
     # based on the number of antenna.
     ntime, nbl = self.dim_local_size('ntime', 'nbl')
-    return np.tile(self.default_base_ant_pairs(), ntime) \
-        .reshape(2, ntime, nbl)
+    ant0, ant1 = self.default_base_ant_pairs()
+
+    return (np.tile(ant0, ntime).reshape(ntime, nbl),
+        np.tile(ant1, ntime).reshape(ntime, nbl))
 
 def ap_idx(self, default_ap=None, src=False, chan=False):
     """
-    This method produces an index
+    This method produces a pair of indices
     which arranges per antenna values into a
-    per baseline configuration, using the supplied (default_ap)
+    per baseline configuration, using the supplied default_ap
     per timestep and baseline antenna pair configuration.
     Thus, indexing an array with shape (na) will produce
-    a view of the values in this array with shape (2, nbl).
+    a view of the values in this array with shape (nbl).
 
     Consequently, this method is suitable for indexing
     an array of shape (ntime, na). Specifiying source
     and channel dimensions allows indexing of an array
     of shape (nsrc, ntime, na, nchan).
 
-    Using this index on an array of (ntime, na)
-    produces a (2, ntime, nbl) array,
-    or (2, nsrc, ntime, nbl, nchan) if source
+    Index an array of (ntime, na) with one of the 
+    returned indices produces a (ntime, nbl) array,
+    or (nsrc, ntime, nbl, nchan) if source
     and channel are also included.
 
-    The values for the first antenna are in position 0, while
-    those for the second are in position 1.
+    The values for antenna one and two are in the
+    first and second indices, respectively.
 
-    >>> ap = slvr.ap_idx()
+    >>> ant0, ant1 = slvr.ap_idx()
     >>> u_ant = np.random.random(size=(ntime,na))
-    >>> u_bl = u_ant[ap][1] - u_ant[ap][0]
-    >>> assert u_bl.shape == (2, ntime, nbl)
+    >>> u_bl = u_ant[ant1] - u_ant[ant0]
+    >>> assert u_bl.shape == (ntime, nbl)
     """
-
-    if default_ap is None:
-        default_ap = self.default_base_ant_pairs()
 
     slvr = self
 
-    newdim = lambda d: [np.newaxis for n in range(d)]
+    if default_ap is None:
+        default_ap = self.default_ant_pairs()
 
-    sed = (1 if src else 0)     # Extra source dimension
-    ced = (1 if chan else 0)    # Extra channel dimension
-    ned = sed + ced             # Nr of extra dimensions
-    all = slice(None, None, 1)  # all slice
-    idx = []                    # Index we're returning
-    nsrc, ntime, nchan = slvr.dim_local_size('nsrc', 'ntime', 'nchan')
+    ant0, ant1 = default_ap
+    idx0, idx1 = [], []
 
-    # Create the source index, [np.newaxis,:,np.newaxis,np.newaxis] + [...]
-    if src is True:
-        src_slice = tuple(newdim(1) + [all] + newdim(2) + newdim(ced))
-        idx.append(np.arange(nsrc)[src_slice])
+    needed = (src, True, True, chan)
+    nsrc, ntime, nbl, nchan = slvr.dim_local_size(
+        'nsrc', 'ntime', 'nbl', 'nchan')
 
-    # Create the time index, [np.newaxis] + [...]  + [:,np.newaxis] + [...]
-    time_slice = tuple(newdim(1) + newdim(sed) +
-        [all, np.newaxis] + newdim(ced))
-    idx.append(np.arange(ntime)[time_slice])
+    if src:
+        src_shape = tuple(s for s,n in zip((nsrc,1,1,1), needed) if n)
+        src_range = np.arange(nsrc).reshape(src_shape)
+        idx0.append(src_range)
+        idx1.append(src_range)
 
-    # Create the antenna pair index, [:] + [...]  + [np.newaxis,:] + [...]
-    ap_slice = tuple([all] + newdim(sed) +
-        [np.newaxis, all] + newdim(ced))
-    idx.append(default_ap[ap_slice])
+    time_shape = tuple(t for t, n in zip((1,ntime,1,1), needed) if n)
+    time_range = np.arange(ntime).reshape(time_shape)
+    idx0.append(time_range)
+    idx1.append(time_range)
 
-    # Create the channel index,
-    # Create the antenna pair index, [np.newaxis] + [...]  + [np.newaxis,np.newaxis] + [:]
-    if chan is True:
-        chan_slice = tuple(newdim(1) + newdim(sed) +
-            [np.newaxis, np.newaxis] + [all])
-        idx.append(np.arange(nchan)[chan_slice])
+    ant_shape = tuple(a for a, n in zip((1,ntime,nbl,1), needed) if n)
+    idx0.append(ant0.reshape(ant_shape))
+    idx1.append(ant1.reshape(ant_shape))
 
-    return tuple(idx)
+    if chan:
+        chan_shape = tuple(c for c, n in zip((1,1,1,nchan), needed) if n)
+        chan_range = np.arange(nchan).reshape(chan_shape)
+        idx0.append(chan_range)
+        idx1.append(chan_range)
+
+    return idx0, idx1
 
 def monkey_patch_antenna_pairs(slvr):
     # Monkey patch these functions onto the solver object

@@ -108,9 +108,13 @@ A = [
         default=0,
         test=rand_uvw),
 
-    ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32,
-        default=lambda slvr, ary: slvr.default_ant_pairs(),
-        test=lambda slvr, ary: slvr.default_ant_pairs()),
+    ary_dict('antenna1', ('ntime', 'nbl'), np.int32,
+        default=lambda slvr, ary: slvr.default_ant_pairs()[0],
+        test=lambda slvr, ary: slvr.default_ant_pairs()[0]),
+
+    ary_dict('antenna2', ('ntime', 'nbl'), np.int32,
+        default=lambda slvr, ary: slvr.default_ant_pairs()[1],
+        test=lambda slvr, ary: slvr.default_ant_pairs()[1]),
 
     ary_dict('lm', (2,'nsrc'), 'ft',
         default=0,

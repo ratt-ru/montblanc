@@ -64,20 +64,19 @@ class CPUSolver(MontblancNumpySolver):
         """
 
         ntime, nbl, ngsrc = self.dim_local_size('ntime', 'nbl', 'ngsrc')
-
-        ap = self.ap_idx()
+        ant0, ant1 = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
-        u = self.uvw[:,:,0][ap]
-        u = ne.evaluate('aq-ap', {'ap': u[0], 'aq': u[1]})
+        up, uq = self.uvw[:,:,0][ant0], self.uvw[:,:,0][ant1]
+        u = ne.evaluate('uq-up', {'up': up, 'uq': uq})
 
         # Calculate per baseline v from per antenna v
-        v = self.uvw[:,:,1][ap]
-        v = ne.evaluate('aq-ap', {'ap': v[0], 'aq': v[1]})
+        vp, vq = self.uvw[:,:,1][ant0], self.uvw[:,:,1][ant1]
+        v = ne.evaluate('vq-vp', {'vp': vp, 'vq': vq})
 
         # Calculate per baseline w from per antenna w
-        w = self.uvw[:,:,2][ap]
-        w = ne.evaluate('aq-ap', {'ap': w[0], 'aq': w[1]})
+        wp, wq = self.uvw[:,:,2][ant0], self.uvw[:,:,2][ant1]
+        w = ne.evaluate('wq-wp', {'wp': wp, 'wq': wq})
 
         el = self.gauss_shape[0]
         em = self.gauss_shape[1]
@@ -112,20 +111,19 @@ class CPUSolver(MontblancNumpySolver):
 
         
         nssrc, ntime, nbl, nchan  = self.dim_local_size('nssrc', 'ntime', 'nbl', 'nchan')
-
-        ap = self.ap_idx()
+        ant0, ant1 = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
-        u = self.uvw[:,:,0][ap]
-        u = ne.evaluate('aq-ap', {'ap': u[0], 'aq': u[1]})
+        up, uq = self.uvw[:,:,0][ant0], self.uvw[:,:,0][ant1]
+        u = ne.evaluate('uq-up', {'up': up, 'uq': uq})
 
         # Calculate per baseline v from per antenna v
-        v = self.uvw[:,:,1][ap]
-        v = ne.evaluate('aq-ap', {'ap': v[0], 'aq': v[1]})
+        vp, vq = self.uvw[:,:,1][ant0], self.uvw[:,:,1][ant1]
+        v = ne.evaluate('vq-vp', {'vp': vp, 'vq': vq})
 
         # Calculate per baseline w from per antenna w
-        w = self.uvw[:,:,2][ap]
-        w = ne.evaluate('aq-ap', {'ap': w[0], 'aq': w[1]})
+        wp, wq = self.uvw[:,:,2][ant0], self.uvw[:,:,2][ant1]
+        w = ne.evaluate('wq-wp', {'wp': wp, 'wq': wq})
 
         e1 = self.sersic_shape[0]
         e2 = self.sersic_shape[1]
@@ -557,11 +555,13 @@ class CPUSolver(MontblancNumpySolver):
             if ekb_sqrt is None:
                 ekb_sqrt = self.compute_ekb_sqrt_jones_per_ant()
 
-            ap = self.ap_idx(src=True, chan=True)
-            ekb_sqrt_idx = ekb_sqrt[ap]
-            assert ekb_sqrt_idx.shape == (2, nsrc, ntime, nbl, nchan, 4)
+            ant0, ant1 = self.ap_idx(src=True, chan=True)
 
-            result = self.jones_multiply(ekb_sqrt_idx[0], ekb_sqrt_idx[1],
+            ekb_sqrt_p = ekb_sqrt[ant0]
+            ekb_sqrt_q = ekb_sqrt[ant1]
+            assert ekb_sqrt_p.shape == (nsrc, ntime, nbl, nchan, 4)
+
+            result = self.jones_multiply(ekb_sqrt_p, ekb_sqrt_q,
                 hermitian=True).reshape(nsrc, ntime, nbl, nchan, 4)
 
             # Multiply in Gaussian Shape Terms
@@ -632,15 +632,16 @@ class CPUSolver(MontblancNumpySolver):
             'Expected shape %s. Got %s instead.' % \
             (want_shape, ekb_vis.shape)
 
-        ap = self.ap_idx(chan=True)
-        g_term = self.G_term[ap]
+        ant0, ant1 = self.ap_idx(chan=True)
+        g_term_p = self.G_term[ant0]
+        g_term_q = self.G_term[ant1]
 
-        assert g_term.shape == (2, ntime, nbl, nchan, 4)
+        assert g_term_p.shape == (ntime, nbl, nchan, 4)
 
-        result = (self.jones_multiply(g_term[0], ekb_vis)
+        result = (self.jones_multiply(g_term_p, ekb_vis)
             .reshape(ntime, nbl, nchan, 4))
 
-        result = (self.jones_multiply(result, g_term[1], hermitian=True)
+        result = (self.jones_multiply(result, g_term_q, hermitian=True)
             .reshape(ntime, nbl, nchan, 4))
 
         # Zero any flagged visibilities

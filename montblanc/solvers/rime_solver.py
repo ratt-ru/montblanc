@@ -89,12 +89,12 @@ class RIMESolver(HyperCube):
 
     def default_base_ant_pairs(self):
         """
-        Return an np.array(shape=(2, nbl), dtype=np.int32]) containing the
+        Return a list of two arrays containing the
         default antenna pairs for each baseline.
         """
         na = self.dim_local_size('na')
         k = 0 if self.is_autocorrelated() else 1
-        return np.int32(np.triu_indices(na, k))
+        return np.triu_indices(na, k)
 
     def register_default_dimensions(self):
         """ Register the default dimensions for a RIME solver """ 

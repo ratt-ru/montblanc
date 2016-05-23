@@ -48,20 +48,19 @@ class CPUSolver(MontblancNumpySolver):
         Returns a (ntime, nbl, ngsrc, nchan) matrix of floating point scalars.
         """
         ntime, nbl, ngsrc = self.dim_local_size('ntime', 'nbl', 'ngsrc')
-
-        ap = self.ap_idx()
+        ant0, ant1 = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
-        u = self.uvw[0][ap]
-        u = ne.evaluate('aq-ap', {'ap': u[0], 'aq': u[1]})
+        up, uq = self.uvw[0][ant0], self.uvw[0][ant1]
+        u = ne.evaluate('uq-up', {'up': up, 'uq': uq})
 
         # Calculate per baseline v from per antenna v
-        v = self.uvw[1][ap]
-        v = ne.evaluate('aq-ap', {'ap': v[0], 'aq': v[1]})
+        vp, vq = self.uvw[1][ant0], self.uvw[1][ant1]
+        v = ne.evaluate('vq-vp', {'vp': vp, 'vq': vq})
 
         # Calculate per baseline w from per antenna w
-        w = self.uvw[2][ap]
-        w = ne.evaluate('aq-ap', {'ap': w[0], 'aq': w[1]})
+        wp, wq = self.uvw[2][ant0], self.uvw[2][ant1]
+        w = ne.evaluate('wq-wp', {'wp': wp, 'wq': wq})
 
         el = self.gauss_shape[0]
         em = self.gauss_shape[1]
@@ -96,20 +95,19 @@ class CPUSolver(MontblancNumpySolver):
         Returns a (ntime, nbl, nssrc, nchan) matrix of floating point scalars.
         """        
         ntime, nbl, nchan, nssrc = self.dim_local_size('ntime', 'nbl', 'nchan', 'nssrc')
-
-        ap = self.ap_idx()
+        ant0, ant1 = self.ap_idx()
 
         # Calculate per baseline u from per antenna u
-        u = self.uvw[0][ap]
-        u = ne.evaluate('aq-ap', {'ap': u[0], 'aq': u[1]})
+        up, uq = self.uvw[0][ant0], self.uvw[0][ant1]
+        u = ne.evaluate('uq-up', {'up': up, 'uq': uq})
 
         # Calculate per baseline v from per antenna v
-        v = self.uvw[1][ap]
-        v = ne.evaluate('aq-ap', {'ap': v[0], 'aq': v[1]})
+        vp, vq = self.uvw[1][ant0], self.uvw[1][ant1]
+        v = ne.evaluate('vq-vp', {'vp': vp, 'vq': vq})
 
         # Calculate per baseline w from per antenna w
-        w = self.uvw[2][ap]
-        w = ne.evaluate('aq-ap', {'ap': w[0], 'aq': w[1]})
+        wp, wq = self.uvw[2][ant0], self.uvw[2][ant1]
+        w = ne.evaluate('wq-wp', {'wp': wp, 'wq': wq})
 
         e1 = self.sersic_shape[0]
         e2 = self.sersic_shape[1]
@@ -199,10 +197,9 @@ class CPUSolver(MontblancNumpySolver):
         npsrc, ngsrc, nssrc = self.dim_local_size('npsrc', 'ngsrc', 'nssrc')
 
         # Re-arrange per antenna terms into per baseline antenna pair values
-        ap = self.ap_idx(src=True, chan=True)
-        k_jones = self.compute_k_jones_scalar_per_ant()[ap]
-
-        k_jones_per_bl = k_jones[0]*k_jones[1].conj()
+        ant0, ant1 = self.ap_idx(src=True, chan=True)
+        k_jones = self.compute_k_jones_scalar_per_ant()
+        k_jones_per_bl = k_jones[ant0]*k_jones[ant1].conj()
 
         # Add in the shape terms of the gaussian sources.
         if ngsrc > 0:
@@ -267,10 +264,9 @@ class CPUSolver(MontblancNumpySolver):
         """        
 
         # Re-arrange per antenna terms into per baseline antenna pair values
-        ap = self.ap_idx(src=True, chan=True)
-        e_jones = self.compute_e_jones_scalar_per_ant()[ap]
-
-        return e_jones[0]*e_jones[1].conj()
+        ant0, ant1 = self.ap_idx(src=True, chan=True)
+        e_jones = self.compute_e_jones_scalar_per_ant()
+        return e_jones[ant0]*e_jones[ant1].conj()
 
     def compute_ek_jones_scalar_per_ant(self):
         """
