@@ -577,41 +577,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 #print '%s has an empty slice, skipping' % r.name
                 continue
 
-            # Checking if we're handling two antenna here
-            # A precursor to the vile hackery that follows
-            try:
-                na_idx = r.shape.index('na')
-            except ValueError:
-                na_idx = -1
-
-            # If we've got the two antenna case, slice
-            # the gpu array at the first antenna position
-            if two_ant_case and na_idx > 0:
-                gpu_idx[na_idx] = 0
-
-            # For the one baseline, two antenna case,
-            # hard code the antenna indices on the GPU
-            # to 0 and 1
-            if two_ant_case and r.name == 'ant_pairs':
-                cpu_idx = [ALL_SLICE for s in r.shape]
-                cpu_ary = np.array([0,1]).reshape(subslvr.ant_pairs_shape)
-
             pinned_ary = self._enqueue_array_slice(r, subslvr,
                 cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx),
                 direction, dirty)
+
             pool_refs.append(pinned_ary)
-
-            # Right, handle transfer of the second antenna's data
-            if two_ant_case and na_idx > 0:
-                # Slice the CPU and GPU arrays
-                # at the second antenna position
-                gpu_idx[na_idx] = 1
-                cpu_idx[na_idx] = cpu_slice_map[NA_EXTRA]
-
-                pinned_ary = self._enqueue_array_slice(r, subslvr,
-                    cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx),
-                    direction, dirty)
-                pool_refs.append(pinned_ary)
 
         return pool_refs
 
@@ -685,8 +655,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         viable, modded_dims = mbu.viable_dim_config(
             mem_budget, A_sub, props,
                 [ntime_split_str, src_reduction_str, 'ntime',
-                'nbl=%s&na=%s' % (na, na)
-                ,'nbl=1&na=2',
+                'nbl={na}&na={na}'.format(na=na),
                 'nchan=50%'],
             nsolvers)                
 
