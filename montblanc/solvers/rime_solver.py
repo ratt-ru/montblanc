@@ -229,8 +229,59 @@ class RIMESolver(HyperCube):
             mbu.dtype_from_str(dtype, self.type_dict()),
             default, **kwargs)
 
-    def create_arrays(self):
+    def create_arrays(self, ignore=None, supplied=None):
+        """
+        Create any necessary arrays on the solver. 
+
+        Arguments
+        ---------
+            ignore : list
+                List of array names to ignore.
+            supplied : dictionary
+                A dictionary of supplied arrays to create
+                on the solver, keyed by name. Note that
+                these arrays will not be initialised by
+                montblanc, it is the responsibility of the
+                user to initialise them.
+        """
         raise NotImplementedError()
+
+    @staticmethod
+    def _arrays_to_create(reified_arrays, ignore, supplied):
+        """
+        Given reified_arrays, arrays to ignore and supplied arrays,
+        work out which arrays must be created.
+        """
+
+        # Work out which arrays we shouldn't create
+        dont_create = set(ignore)
+        dont_create.update(supplied.iterkeys())
+
+        return { n: a for n, a
+            in reified_arrays.iteritems()
+            if n not in dont_create }
+
+    @staticmethod
+    def _validate_supplied_arrays(reified_arrays, supplied):
+        """
+        Validate that the supplied arrays matched the shape
+        and type of the reified arrays
+        """
+
+        for k, a in supplied.iteritems():
+            expected_shape = reified_arrays[k].shape
+
+            if a.shape != expected_shape:
+                raise ValueError("Supplied array '{sn}'s' shape '{ss}' "
+                    "does not match the expected shape of '{es}'".format(
+                        sn=k, ss=a.shape, es=expected_shape))
+
+            expected_dtype = reified_arrays[k].dtype
+
+            if a.dtype != expected_dtype:
+                raise TypeError("Supplied array '{sn}''s' dtype '{st}'' "
+                    "does not match the expected dtype of '{et}'".format(
+                        sn=k, st=a.dtype, et=expected_dtype))        
 
     def init_array(self, name, ary, value):
         # No defaults are supplied

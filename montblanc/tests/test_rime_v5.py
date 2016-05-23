@@ -75,6 +75,52 @@ class TestRimeV5(unittest.TestCase):
 
             slvr.solve()
 
+
+    def test_array_supply(self):
+        """ Test that its possible to supply a custom array to the solver """
+        uvw = np.zeros(shape=(20,27,3), dtype=np.float64)
+
+        slvr_cfg = montblanc.rime_solver_cfg(na=27, ntime=20, nchan=16,
+            sources=montblanc.sources(point=10, gaussian=10, sersic=10),
+            beam_lw=50, beam_mh=50, beam_nud=50,
+            weight_vector=True, dtype=Options.DTYPE_DOUBLE,
+            array_cfg={'supplied' : {'uvw':uvw }})
+
+        with solver(slvr_cfg) as slvr:
+            # Test that all UVW elements are zero, as supplied by above array
+            self.assertTrue(np.all(slvr.uvw == 0.0))
+            # By contrast, lm is initialised with random test data
+            # which is 90% non-zero
+            self.assertTrue(np.count_nonzero(slvr.lm) > float(slvr.lm.size)*0.9)
+
+
+        # Fall over on bad shape
+        uvw = np.zeros(shape=(20,26,3), dtype=np.float64)
+
+        slvr_cfg = montblanc.rime_solver_cfg(na=27, ntime=20, nchan=16,
+            sources=montblanc.sources(point=10, gaussian=10, sersic=10),
+            beam_lw=50, beam_mh=50, beam_nud=50,
+            weight_vector=True, dtype=Options.DTYPE_DOUBLE,
+            array_cfg={'supplied' : {'uvw':uvw }})
+
+        with self.assertRaises(ValueError):
+            with solver(slvr_cfg) as slvr:
+                pass
+
+        # Fall over on bad dtype
+        uvw = np.zeros(shape=(20,27,3), dtype=np.float32)
+
+        slvr_cfg = montblanc.rime_solver_cfg(na=27, ntime=20, nchan=16,
+            sources=montblanc.sources(point=10, gaussian=10, sersic=10),
+            beam_lw=50, beam_mh=50, beam_nud=50,
+            weight_vector=True, dtype=Options.DTYPE_DOUBLE,
+            array_cfg={'supplied' : {'uvw':uvw }})
+
+        with self.assertRaises(TypeError):
+            with solver(slvr_cfg) as slvr:
+                pass
+
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestRimeV5)
     unittest.TextTestRunner(verbosity=2).run(suite)

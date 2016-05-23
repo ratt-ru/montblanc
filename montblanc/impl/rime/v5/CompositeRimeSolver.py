@@ -111,7 +111,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         self.register_properties(P_main)
         self.register_arrays(A_main)
-        self.create_arrays()
+
+        # Look for ignored and supplied arrays in the solver configuration
+        array_cfg = slvr_cfg.get('array_cfg', {})
+        ignore = array_cfg.get('ignore', None)
+        supplied = array_cfg.get('supplied', None)
+
+        # Create arrays on the solver, ignoring
+        # and using supplied arrays as necessary
+        self.create_arrays(ignore, supplied)
 
         # PyCUDA contexts for each GPU device   
         self.dev_ctxs = slvr_cfg.get(Options.CONTEXT)
