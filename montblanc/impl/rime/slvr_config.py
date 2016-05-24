@@ -94,17 +94,29 @@ class RimeSolverConfig(SolverConfig):
         "Maximum number of visibility chunks that may be "
         "enqueued on a solver before throttling is applied.")
 
+    VISIBILITY_OUTPUT = 'vis_output'
+    VISIBILITY_OUTPUT_MODEL = 'model'
+    VISIBILITY_OUTPUT_RESIDUALS = 'residuals'
+    DEFAULT_VISIBILITY_OUTPUT = VISIBILITY_OUTPUT_MODEL
+    VALID_VISIBILITY_OUTPUTS = [VISIBILITY_OUTPUT_MODEL,
+        VISIBILITY_OUTPUT_RESIDUALS]
+    VISIBILITY_OUTPUT_DESCRIPTION = (
+        "If '{m}' produces model visibilities. "
+        "If '{r}' produces residuals from the "
+        "difference of model and observed visibilities.").format(
+            m=VISIBILITY_OUTPUT_MODEL, r=VISIBILITY_OUTPUT_RESIDUALS)
+
     VISIBILITY_WRITE_MODE = 'vis_write_mode'
     VISIBILITY_WRITE_MODE_OVERWRITE = 'overwrite'
     VISIBILITY_WRITE_MODE_SUM = 'sum'
     DEFAULT_VISIBILITY_WRITE_MODE = VISIBILITY_WRITE_MODE_OVERWRITE
+    VALID_VISIBILITY_WRITE_MODES = [VISIBILITY_WRITE_MODE_SUM,
+        VISIBILITY_WRITE_MODE_OVERWRITE]
     VISIBILITY_WRITE_MODE_DESCRIPTION = (
         "If '{o}', model visibilities will be over-written. "
         "If '{s}', model visibilities will be accumulated.").format(
             o=VISIBILITY_WRITE_MODE_OVERWRITE,
             s=VISIBILITY_WRITE_MODE_SUM)
-    VALID_VISIBILITY_WRITE_MODES = [VISIBILITY_WRITE_MODE_SUM,
-        VISIBILITY_WRITE_MODE_OVERWRITE]
 
     # RIME version
     VERSION = 'version'
@@ -141,6 +153,12 @@ class RimeSolverConfig(SolverConfig):
         VISIBILITY_THROTTLE_FACTOR: {
             SolverConfig.DESCRIPTION: VISIBILITY_THROTTLE_FACTOR_DESCRIPTION,
             SolverConfig.DEFAULT: DEFAULT_VISIBILITY_THROTTLE_FACTOR,
+            SolverConfig.REQUIRED: True
+        },
+
+        VISIBILITY_OUTPUT: {
+            SolverConfig.DESCRIPTION: VISIBILITY_OUTPUT_DESCRIPTION,
+            SolverConfig.DEFAULT: DEFAULT_VISIBILITY_OUTPUT,
             SolverConfig.REQUIRED: True
         },
 
@@ -234,6 +252,13 @@ class RimeSolverConfig(SolverConfig):
             type=int,
             help=self.VISIBILITY_THROTTLE_FACTOR_DESCRIPTION,
             default=self.DEFAULT_VISIBILITY_THROTTLE_FACTOR)
+
+        p.add_argument('--{v}'.format(v=self.VISIBILITY_OUTPUT),
+            required=False,
+            type=str,
+            choices=self.VALID_VISIBILITY_OUTPUTS,
+            help=self.VISIBILITY_OUTPUT_DESCRIPTION,
+            default=self.DEFAULT_VISIBILITY_OUTPUT)
 
         p.add_argument('--{v}'.format(v=self.VISIBILITY_WRITE_MODE),
             required=False,
