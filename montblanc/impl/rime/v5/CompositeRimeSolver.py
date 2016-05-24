@@ -240,6 +240,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         self.enqueue_executors = enqueue_executors
         self.sync_executors = sync_executors
         self.initialised = False
+        self._vis_write_mode = slvr_cfg.get(Options.VISIBILITY_WRITE_MODE)
 
     def _gen_source_slices(self):
         """
@@ -1064,6 +1065,18 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # Wait for 1/3 of in-flight futures
         threshold = self.throttle_factor*len(self.enqueue_executors)*1/3.0
 
+        # Decide whether to replace or accumulate model visibilities
+        def _overwrite(model_slice, model_chunk):
+            model_slice[:] = model_chunk
+
+        def _accumulate(model_slice, model_chunk):
+            model_slice[:] += model_chunk
+
+        if self._vis_write_mode == Options.VISIBILITY_WRITE_MODE_SUM:
+            vis_write = _accumulate
+        else:
+            vis_write = _overwrite
+
         # Iterate over the visibility space, i.e. slices over
         # the CPU and GPU arrays
         for cpu_slice_map, gpu_slice_map in self._gen_vis_slices():
@@ -1120,7 +1133,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
                         # Sum X2
                         X2_sum += X2
                         # Write model visibilities to the numpy array
-                        self.model_vis[model_vis_idx] = pinned_model_vis[:]
+                        vis_write(self.model_vis[model_vis_idx], pinned_model_vis[:])
 
                         # Break out if we've removed the prescribed
                         # number of futures
@@ -1139,7 +1152,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # Sum X2
             X2_sum += X2
             # Write model visibilities to the numpy array
-            self.model_vis[model_vis_idx] = pinned_model_vis[:]
+            vis_write(self.model_vis[model_vis_idx], pinned_model_vis[:])
 
         # Set the chi-squared value possibly
         # taking the weight vector into account

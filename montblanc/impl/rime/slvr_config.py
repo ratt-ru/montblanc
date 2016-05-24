@@ -94,6 +94,18 @@ class RimeSolverConfig(SolverConfig):
         "Maximum number of visibility chunks that may be "
         "enqueued on a solver before throttling is applied.")
 
+    VISIBILITY_WRITE_MODE = 'vis_write'
+    VISIBILITY_WRITE_MODE_OVERWRITE = 'overwrite'
+    VISIBILITY_WRITE_MODE_SUM = 'sum'
+    DEFAULT_VISIBILITY_WRITE_MODE = VISIBILITY_WRITE_MODE_OVERWRITE
+    VISIBILITY_WRITE_MODE_DESCRIPTION = (
+        "If '{o}', model visibilities will be over-written. "
+        "If '{s}', model visibilities will be accumulated.").format(
+            o=VISIBILITY_WRITE_MODE_OVERWRITE,
+            s=VISIBILITY_WRITE_MODE_SUM)
+    VALID_VISIBILITY_WRITE_MODES = [VISIBILITY_WRITE_MODE_SUM,
+        VISIBILITY_WRITE_MODE_OVERWRITE]
+
     # RIME version
     VERSION = 'version'
     VERSION_ONE = 'v1'
@@ -129,6 +141,12 @@ class RimeSolverConfig(SolverConfig):
         VISIBILITY_THROTTLE_FACTOR: {
             SolverConfig.DESCRIPTION: VISIBILITY_THROTTLE_FACTOR_DESCRIPTION,
             SolverConfig.DEFAULT: DEFAULT_VISIBILITY_THROTTLE_FACTOR,
+            SolverConfig.REQUIRED: True
+        },
+
+        VISIBILITY_WRITE_MODE: {
+            SolverConfig.DESCRIPTION: VISIBILITY_WRITE_MODE_DESCRIPTION,
+            SolverConfig.DEFAULT: DEFAULT_VISIBILITY_WRITE_MODE,
             SolverConfig.REQUIRED: True
         },
 
@@ -216,6 +234,12 @@ class RimeSolverConfig(SolverConfig):
             type=int,
             help=self.VISIBILITY_THROTTLE_FACTOR_DESCRIPTION,
             default=self.DEFAULT_VISIBILITY_THROTTLE_FACTOR)
+
+        p.add_argument('--{v}'.format(v=self.VISIBILITY_WRITE_MODE),
+            required=False,
+            type=str,
+            help=self.VISIBILITY_WRITE_MODE_DESCRIPTION,
+            default=self.DEFAULT_VISIBILITY_WRITE_MODE)
 
         p.add_argument('--{v}'.format(v=self.VERSION),
             required=False,
