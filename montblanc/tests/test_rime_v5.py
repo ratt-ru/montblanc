@@ -76,6 +76,39 @@ class TestRimeV5(unittest.TestCase):
             slvr.solve()
 
 
+    def test_visibility_write_mode(self):
+        """ Test visibility write mode """
+        slvr_cfg = montblanc.rime_solver_cfg(na=27, ntime=20, nchan=16,
+            sources=montblanc.sources(point=10, gaussian=10, sersic=10),
+            beam_lw=50, beam_mh=50, beam_nud=50,
+            weight_vector=True, dtype=Options.DTYPE_DOUBLE,
+            vis_write=Options.VISIBILITY_WRITE_MODE_OVERWRITE)
+
+        # Test that when the write mode is 'overwrite', multiple
+        # calls to solve produce the same model visibilities
+        with solver(slvr_cfg) as slvr:
+            slvr.solve()
+            vis = slvr.model_vis.copy()
+            slvr.solve()
+            assert np.allclose(vis, slvr.model_vis)
+
+        slvr_cfg = montblanc.rime_solver_cfg(na=27, ntime=20, nchan=16,
+            sources=montblanc.sources(point=10, gaussian=10, sersic=10),
+            beam_lw=50, beam_mh=50, beam_nud=50,
+            weight_vector=True, dtype=Options.DTYPE_DOUBLE,
+            vis_write=Options.VISIBILITY_WRITE_MODE_SUM)
+
+        # Test that when the write mode is 'sum', multiple
+        # calls to solve produce a summation of model visibilities
+        with solver(slvr_cfg) as slvr:
+            slvr.solve()
+            vis = slvr.model_vis.copy()
+            slvr.solve()
+            slvr.solve()
+            slvr.solve()
+            slvr.solve()
+            assert np.allclose(5*vis, slvr.model_vis)
+
     def test_array_supply(self):
         """ Test that its possible to supply a custom array to the solver """
         uvw = np.zeros(shape=(20,27,3), dtype=np.float64)
