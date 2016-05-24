@@ -61,9 +61,6 @@ class RIMESolver(HyperCube):
         else:
             raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
 
-        # Is this a master solver or not
-        self._is_master = slvr_cfg.get(Options.SOLVER_TYPE)
-
         # Should we use the weight vector when computing the X2?
         self._use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR)
 
@@ -87,10 +84,6 @@ class RIMESolver(HyperCube):
 
     def outputs_residuals(self):
         return self._visibility_output == Options.VISIBILITY_OUTPUT_RESIDUALS
-
-    def is_master(self):
-        """ Is this a master solver """
-        return self._is_master == Options.SOLVER_TYPE_MASTER
 
     def is_autocorrelated(self):
         """ Does this solver handle autocorrelations? """

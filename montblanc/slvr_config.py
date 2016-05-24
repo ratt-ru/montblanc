@@ -109,18 +109,6 @@ class SolverConfig(object):
     NSRC = 'nsrc'
     NSRC_DESCRIPTION = 'Sources (total)'
 
-    # Master solver
-    SOLVER_TYPE = 'solver_type'
-    SOLVER_TYPE_MASTER = 'master'
-    SOLVER_TYPE_SLAVE = 'slave'
-    DEFAULT_SOLVER_TYPE = SOLVER_TYPE_MASTER
-    VALID_SOLVER_TYPE = [SOLVER_TYPE_MASTER, SOLVER_TYPE_SLAVE]
-    SOLVER_TYPE_DESCRIPTION = (
-        'String indicating the solver type. '
-        "If '{m}' it controls other solvers "
-        "If '{s}' it is controlled by master solvers ").format(
-            m=SOLVER_TYPE_MASTER, s=SOLVER_TYPE_SLAVE)
-
     # Are we dealing with floats or doubles?
     DTYPE = 'dtype'
     DTYPE_FLOAT = 'float'
@@ -254,12 +242,6 @@ class SolverConfig(object):
             DESCRIPTION: CONTEXT_DESCRIPTION,
             REQUIRED: True
         },
-
-        SOLVER_TYPE : {
-            DESCRIPTION: SOLVER_TYPE_DESCRIPTION,
-            DEFAULT: DEFAULT_SOLVER_TYPE,
-            REQUIRED: True
-        },
     }
 
     def parser(self):
@@ -304,13 +286,6 @@ class SolverConfig(object):
             type=int,
             help=self.NCHAN_DESCRIPTION,
             default=self.DEFAULT_NCHAN)
-
-        p.add_argument('--{v}'.format(v=self.SOLVER_TYPE),
-            required=False,
-            type=str,
-            help=self.SOLVER_TYPE_DESCRIPTION,
-            choices=self.VALID_SOLVER_TYPE,
-            default=self.SOLVER_TYPE_MASTER)
 
         p.add_argument('--{v}'.format(v=self.DTYPE),
             required=False,
