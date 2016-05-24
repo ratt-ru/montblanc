@@ -107,18 +107,21 @@ class TestRimeV5(unittest.TestCase):
             with solver(slvr_cfg) as slvr:
                 pass
 
-        # Fall over on bad dtype
+        # Test that we can handle a single precision array
+        # on a double precision solver
+        visibilities = np.zeros(shape=(20,27*(27-1)//2,16,4), dtype=np.complex64)
         uvw = np.zeros(shape=(20,27,3), dtype=np.float32)
 
         slvr_cfg = montblanc.rime_solver_cfg(na=27, ntime=20, nchan=16,
             sources=montblanc.sources(point=10, gaussian=10, sersic=10),
             beam_lw=50, beam_mh=50, beam_nud=50,
             weight_vector=True, dtype=Options.DTYPE_DOUBLE,
-            array_cfg={'supplied' : {'uvw':uvw }})
+            array_cfg={'supplied' : {'model_vis':visibilities }})
 
-        with self.assertRaises(TypeError):
-            with solver(slvr_cfg) as slvr:
-                pass
+        with solver(slvr_cfg) as slvr:
+            self.assertTrue(slvr.model_vis.dtype == np.complex64)
+            self.assertTrue(slvr.observed_vis.dtype == np.complex128)
+            slvr.solve()
 
 
 if __name__ == '__main__':

@@ -276,13 +276,6 @@ class RIMESolver(HyperCube):
                     "does not match the expected shape of '{es}'".format(
                         sn=k, ss=a.shape, es=expected_shape))
 
-            expected_dtype = reified_arrays[k].dtype
-
-            if a.dtype != expected_dtype:
-                raise TypeError("Supplied array '{sn}''s' dtype '{st}'' "
-                    "does not match the expected dtype of '{et}'".format(
-                        sn=k, st=a.dtype, et=expected_dtype))        
-
     def init_array(self, name, ary, value):
         # No defaults are supplied
         if value is None:
