@@ -94,7 +94,7 @@ class RimeSolverConfig(SolverConfig):
         "Maximum number of visibility chunks that may be "
         "enqueued on a solver before throttling is applied.")
 
-    VISIBILITY_WRITE_MODE = 'vis_write'
+    VISIBILITY_WRITE_MODE = 'vis_write_mode'
     VISIBILITY_WRITE_MODE_OVERWRITE = 'overwrite'
     VISIBILITY_WRITE_MODE_SUM = 'sum'
     DEFAULT_VISIBILITY_WRITE_MODE = VISIBILITY_WRITE_MODE_OVERWRITE
@@ -238,6 +238,7 @@ class RimeSolverConfig(SolverConfig):
         p.add_argument('--{v}'.format(v=self.VISIBILITY_WRITE_MODE),
             required=False,
             type=str,
+            choices=self.VALID_VISIBILITY_WRITE_MODES,
             help=self.VISIBILITY_WRITE_MODE_DESCRIPTION,
             default=self.DEFAULT_VISIBILITY_WRITE_MODE)
 
