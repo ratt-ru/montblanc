@@ -15,19 +15,19 @@ clean :
 	rm -f $(OBJECTS) $(LIBRARY)
 
 abstraction.o : abstraction.cu
-	nvcc abstraction.cu -c $(NVCCFLAGS)
+	nvcc $< -c -o $@ $(NVCCFLAGS)
 
 b_sqrt_op_gpu.o: b_sqrt_op_gpu.cu b_sqrt_op_gpu.cuh b_sqrt_op.h
-	nvcc -c b_sqrt_op_gpu.cu $(NVCCFLAGS) 
+	nvcc $< -c -o $@ $(NVCCFLAGS)
 
 b_sqrt_op_cpu.o: b_sqrt_op_cpu.cpp b_sqrt_op_cpu.h b_sqrt_op.h
-	g++ -c b_sqrt_op_cpu.cpp $(CPPFLAGS) 
+	g++ $< -c -o $@ $(CPPFLAGS)
 
 phase_op_gpu.o: phase_op_gpu.cu phase_op_gpu.cuh phase_op.h
-	nvcc -c phase_op_gpu.cu $(NVCCFLAGS)
+	nvcc $< -c -o $@ $(NVCCFLAGS)
 
 phase_op_cpu.o : phase_op_cpu.cpp phase_op.h
-	g++ -c phase_op_cpu.cpp $(CPPFLAGS)
+	g++ $< -c -o $@ $(CPPFLAGS)
 
 $(LIBRARY) : $(OBJECTS)
 	g++  -shared $(OBJECTS) -o $(LIBRARY) -fPIC
