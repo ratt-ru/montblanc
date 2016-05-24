@@ -182,6 +182,10 @@ class RIMESolver(HyperCube):
 
         return D
 
+    def config(self):
+        """ Returns the configuration dictionary for this solver """
+        return self._slvr_cfg
+
     def register_array(self, name, shape, dtype, **kwargs):
         """
         Register an array with this Solver object.

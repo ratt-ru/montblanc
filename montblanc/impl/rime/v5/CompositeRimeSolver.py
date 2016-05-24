@@ -249,7 +249,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
             nsrc, npsrc, ngsrc, nssrc, ...
         """
         src_nr_var_counts = mbu.sources_to_nr_vars(
-            self._slvr_cfg[Options.SOURCES])
+            self.config()[Options.SOURCES])
         src_nr_vars = mbu.source_nr_vars()
 
         nsrc = self.dim_local_size(Options.NSRC)
