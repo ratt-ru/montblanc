@@ -136,10 +136,15 @@ A = [
         default=0,
         test=rand_uvw),
 
-    ary_dict('ant_pairs', (2,'ntime','nbl'), np.int32,
+    ary_dict('antenna1', ('ntime', 'nbl'), np.int32,
         classifiers=frozenset([Classifier.COHERENCIES_INPUT]),
-        default=lambda slvr, ary: slvr.default_ant_pairs(),
-        test=lambda slvr, ary: slvr.default_ant_pairs()),
+        default=lambda slvr, ary: slvr.default_ant_pairs()[0],
+        test=lambda slvr, ary: slvr.default_ant_pairs()[0]),
+
+    ary_dict('antenna2', ('ntime', 'nbl'), np.int32,
+        classifiers=frozenset([Classifier.COHERENCIES_INPUT]),
+        default=lambda slvr, ary: slvr.default_ant_pairs()[1],
+        test=lambda slvr, ary: slvr.default_ant_pairs()[1]),
 
     ary_dict('frequency', ('nchan',), 'ft',
         classifiers=frozenset([Classifier.B_SQRT_INPUT,

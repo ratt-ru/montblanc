@@ -107,7 +107,8 @@ void rime_sum_coherencies_impl(
     typename Tr::ft * gauss_shape,
     typename Tr::ft * sersic_shape,
     typename Tr::ft * frequency,
-    int * ant_pairs,
+    int * antenna1,
+    int * antenna2,
     typename Tr::ct * jones,
     uint8_t * flag,
     typename Tr::ft * weight_vector,
@@ -146,8 +147,9 @@ void rime_sum_coherencies_impl(
     int i;
 
     // Figure out the antenna pairs
-    i = TIME*NBL + BL;   int ANT1 = ant_pairs[i];
-    i += NBL*NTIME;      int ANT2 = ant_pairs[i];
+    i = TIME*NBL + BL;
+    int ANT1 = antenna1[i];
+    int ANT2 = antenna2[i];
 
     // UVW coordinates vary by baseline and time, but not polarised channel
     if(threadIdx.x == 0)
@@ -387,7 +389,8 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ft * gauss_shape, \
     ft * sersic_shape, \
     ft * frequency, \
-    int * ant_pairs, \
+    int * antenna1, \
+    int * antenna2, \
     ct * jones, \
     uint8_t * flag, \
     ft * weight_vector, \
@@ -397,7 +400,7 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ft * chi_sqrd_result) \
 { \
     rime_sum_coherencies_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
-        frequency, ant_pairs, jones, flag, \
+        frequency, antenna1, antenna2, jones, flag, \
         weight_vector, observed_vis, G_term, \
         visibilities, chi_sqrd_result); \
 }
@@ -489,7 +492,7 @@ class RimeSumCoherencies(Node):
             else slvr.sersic_shape
 
         self.kernel(slvr.uvw, gauss, sersic,
-            slvr.frequency, slvr.ant_pairs,
+            slvr.frequency, slvr.antenna1, slvr.antenna2,
             slvr.jones, slvr.flag, slvr.weight_vector,
             slvr.observed_vis, slvr.G_term,
             slvr.model_vis, slvr.chi_sqrd_result,

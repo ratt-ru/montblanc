@@ -75,7 +75,8 @@ void rime_gauss_B_sum_impl(
     typename Tr::ft * gauss_shape,
     typename Tr::ft * sersic_shape,
     typename Tr::ft * wavelength,
-    int * ant_pairs,
+    int * antenna1,
+    int * antenna2,
     typename Tr::ct * jones_EK_scalar,
     int * flag,
     typename Tr::ft * weight_vector,
@@ -115,8 +116,9 @@ void rime_gauss_B_sum_impl(
     int i;
 
     // Figure out the antenna pairs
-    i = TIME*NBL + BL;   int ANT1 = ant_pairs[i];
-    i += NBL*NTIME;      int ANT2 = ant_pairs[i];
+    i = TIME*NBL + BL;
+    int ANT1 = antenna1[i];
+    int ANT2 = antenna2[i];
 
     // UVW coordinates vary by baseline and time, but not channel
     if(threadIdx.x == 0)
@@ -401,7 +403,8 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * gauss_shape, \
     ft * sersic_shape, \
     ft * wavelength, \
-    int * ant_pairs, \
+    int * antenna1, \
+    int * antenna2, \
     ct * jones_EK_scalar, \
     int * flag, \
     ft * weight_vector, \
@@ -410,7 +413,7 @@ rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
     ft * chi_sqrd_result) \
 { \
     rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, sersic_shape, \
-        wavelength, ant_pairs, jones_EK_scalar, flag, \
+        wavelength, antenna1, antenna2, jones_EK_scalar, flag, \
         weight_vector, visibilities, data_vis, \
         chi_sqrd_result); \
 }
@@ -485,7 +488,8 @@ class RimeGaussBSum(Node):
             else slvr.sersic_shape
 
         self.kernel(slvr.uvw, slvr.brightness, gauss, sersic,
-            slvr.wavelength, slvr.ant_pairs, slvr.jones_scalar,
+            slvr.wavelength, slvr.antenna1, slvr.antenna2,
+            slvr.jones_scalar,
             slvr.flag, slvr.weight_vector,
             slvr.model_vis, slvr.observed_vis, slvr.chi_sqrd_result,
             **self.get_kernel_params(slvr))

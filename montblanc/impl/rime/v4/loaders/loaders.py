@@ -95,17 +95,15 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         expected_ant_shape = (ntime,nbl)
 
         assert expected_ant_shape == ant1.shape, \
-            '{a1} shape is {r} != expected {e}'.format(
+            '{a} shape is {r} != expected {e}'.format(
                 a=ANTENNA1, r=ant1.shape, e=expected_ant_shape)
 
         assert expected_ant_shape == ant2.shape, \
             '{a} shape is {r} != expected {e}'.format(
                 a=ANTENNA2, r=ant2.shape, e=expected_ant_shape)
 
-        ant_pairs = np.vstack((ant1,ant2)).reshape(solver.ant_pairs.shape)
-
-        # Transfer the uvw coordinates, antenna pairs and frequencys to the GPU
-        solver.transfer_ant_pairs(np.ascontiguousarray(ant_pairs))
+        solver.transfer_antenna1(np.ascontiguousarray(ant1))
+        solver.transfer_antenna2(np.ascontiguousarray(ant2))
 
         # Load in visibility data, if it exists.
         if tm.colnames().count(DATA) > 0:

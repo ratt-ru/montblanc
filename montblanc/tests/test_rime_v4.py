@@ -466,7 +466,7 @@ class TestRimeV4(unittest.TestCase):
                 'nsrc', 'ntime', 'na', 'nbl', 'nchan')
 
             # Calculate per baseline antenna pair indexes
-            idx = cpu_slvr.ap_idx(src=True, chan=True)
+            ant0, ant1 = cpu_slvr.ap_idx(src=True, chan=True)
 
             # Get the brightness matrix
             B = cpu_slvr.compute_b_jones()
@@ -482,7 +482,7 @@ class TestRimeV4(unittest.TestCase):
 
             # Get per baseline jones matrices from
             # the per antenna jones matrices
-            J2, J1 = cpu_slvr.jones[idx]
+            J2, J1 = cpu_slvr.jones[ant0], cpu_slvr.jones[ant1]
             assert J1.shape == (nsrc, ntime, nbl, nchan, 4)
             assert J2.shape == (nsrc, ntime, nbl, nchan, 4)
 
@@ -516,7 +516,7 @@ class TestRimeV4(unittest.TestCase):
 
             # Get per baseline jones matrices from
             # the per antenna jones matrices
-            J2, J1 = J[idx]
+            J2, J1 = J[ant0], J[ant1]
             assert J2.shape == (nsrc, ntime, nbl, nchan, 4)
             assert J1.shape == (nsrc, ntime, nbl, nchan, 4)
 
