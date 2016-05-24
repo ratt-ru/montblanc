@@ -230,6 +230,7 @@ setup(name='montblanc',
         'pytools >= 2016.1',
         'python-casacore >= 2.1.2',
     ],
+    setup_requires=['numpy >= 1.9.2'],
     package_data={'montblanc': src_pkg_dirs()},
     include_package_data=True,
     zip_safe=False)
