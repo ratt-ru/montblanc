@@ -29,6 +29,8 @@ import montblanc
 import montblanc.util as mbu
 from montblanc.node import Node
 
+from montblanc.config import RimeSolverConfig as Options
+
 FLOAT_PARAMS = {
     'BLOCKDIMX': 32,    # Number of channels*4 polarisations
     'BLOCKDIMY': 8,     # Number of baselines
@@ -56,6 +58,8 @@ KERNEL_TEMPLATE = string.Template("""
 
 #define GAUSS_SCALE ${gauss_scale}
 #define TWO_PI_OVER_C ${two_pi_over_c}
+
+enum { VIS_MODEL_OUTPUT=0, VIS_RESIDUAL_OUTPUT=1 };
 
 template <typename T>
 class SumCohTraits {};
@@ -99,6 +103,7 @@ __constant__ rime_const_data C;
 template <
     typename T,
     bool apply_weights=false,
+    int vis_output=VIS_MODEL_OUTPUT,
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__
@@ -314,61 +319,76 @@ void rime_sum_coherencies_impl(
 
     // Multiply the visibility by antenna 1's g term
     i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
-    typename Tr::ct ant1_g_term = G_term[i];
-    montblanc::jones_multiply_4x4_in_place<T>(ant1_g_term, polsum);
+    typename Tr::ct model_vis = G_term[i];
+    montblanc::jones_multiply_4x4_in_place<T>(model_vis, polsum);
 
     // Multiply the visibility by antenna 2's g term
     i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
     typename Tr::ct ant2_g_term = G_term[i];
-    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, ant2_g_term);
+    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(model_vis, ant2_g_term);
 
     // Compute the chi squared sum terms
     i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
-    typename Tr::ct delta = observed_vis[i];
+    typename Tr::ct obs_vis = observed_vis[i];
 
     // Zero the polarisation if it is flagged
     if(flag[i] > 0)
     {
-        ant1_g_term.x = 0; ant1_g_term.y = 0;
-        delta.x = 0; delta.y = 0;
+        model_vis.x = 0; model_vis.y = 0;
+        obs_vis.x = 0; obs_vis.y = 0;
     }
 
-    // Write out the visibilities
-    visibilities[i] = ant1_g_term;
+    // This if else ladder should be optimised out
+    // since vis_output is a compile time constant
+    // Output the residual in the model visibilities
+    if(vis_output == VIS_RESIDUAL_OUTPUT)
+    {
+        obs_vis.x -= model_vis.x;
+        obs_vis.y -= model_vis.y;
+        visibilities[i] = obs_vis;
+    }
+    // Otherwise write out the visibilities and
+    // then compute the residual by default
+    else // if(vis_output == VIS_MODEL_OUTPUT)
+    {
+        visibilities[i] = model_vis;        
+        obs_vis.x -= model_vis.x;
+        obs_vis.y -= model_vis.y;
+    }
 
-    delta.x -= ant1_g_term.x; delta.y -= ant1_g_term.y;
-    delta.x *= delta.x; delta.y *= delta.y;
+    obs_vis.x *= obs_vis.x;
+    obs_vis.y *= obs_vis.y;
 
     // Apply any necessary weighting factors
     if(apply_weights)
     {
         T w = weight_vector[i];
-        delta.x *= w;
-        delta.y *= w;
+        obs_vis.x *= w;
+        obs_vis.y *= w;
     }
 
     // Now, add the real and imaginary components
     // of each adjacent group of four polarisations
     // into the first polarisation.
-    typename Tr::ct other = cub::ShuffleIndex(delta, cub::LaneId() + 2);
+    typename Tr::ct other = cub::ShuffleIndex(obs_vis, cub::LaneId() + 2);
 
     // Add polarisations 2 and 3 to 0 and 1
     if((POLCHAN & 0x3) < 2)
     {
-        delta.x += other.x;
-        delta.y += other.y;
+        obs_vis.x += other.x;
+        obs_vis.y += other.y;
     }
 
-    other = cub::ShuffleIndex(delta, cub::LaneId() + 1);
+    other = cub::ShuffleIndex(obs_vis, cub::LaneId() + 1);
 
     // If this is the polarisation 0, add polarisation 1
     // and write out this chi squared sum term
     if((POLCHAN & 0x3) == 0) {
-        delta.x += other.x;
-        delta.y += other.y;
+        obs_vis.x += other.x;
+        obs_vis.y += other.y;
 
         i = (TIME*NBL + BL)*NCHAN + (POLCHAN >> 2);
-        chi_sqrd_result[i] = delta.x + delta.y;
+        chi_sqrd_result[i] = obs_vis.x + obs_vis.y;
     }
 }
 
@@ -380,11 +400,11 @@ extern "C" {
 // - ft: The floating point type. Should be float/double.
 // - ct: The complex type. Should be float2/double2.
 // - apply_weights: boolean indicating whether we're weighting our visibilities
-// - symbol: u or w depending on whether we're handling unweighted/weighted visibilities.
+// - vis_output: integer specifying the visibility output strategy
 
-#define stamp_sum_coherencies_fn(ft, ct, uvwt, apply_weights, symbol) \
+#define stamp_sum_coherencies_fn(ft, ct, uvwt, apply_weights, vis_output) \
 __global__ void \
-rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
+rime_sum_coherencies( \
     uvwt * uvw, \
     ft * gauss_shape, \
     ft * sersic_shape, \
@@ -399,16 +419,14 @@ rime_sum_coherencies_ ## symbol ## chi_ ## ft( \
     ct * visibilities, \
     ft * chi_sqrd_result) \
 { \
-    rime_sum_coherencies_impl<ft, apply_weights>(uvw, gauss_shape, sersic_shape, \
+    rime_sum_coherencies_impl<ft, apply_weights, vis_output>( \
+        uvw, gauss_shape, sersic_shape, \
         frequency, antenna1, antenna2, jones, flag, \
         weight_vector, observed_vis, G_term, \
         visibilities, chi_sqrd_result); \
 }
 
-stamp_sum_coherencies_fn(float, float2, float3, false, u)
-stamp_sum_coherencies_fn(float, float2, float3, true, w)
-stamp_sum_coherencies_fn(double, double2, double3, false, u)
-stamp_sum_coherencies_fn(double, double2, double3, true, w)
+${stamp_function}
 
 } // extern "C" {
 """)
@@ -435,9 +453,17 @@ class RimeSumCoherencies(Node):
         regs = str(FLOAT_PARAMS['maxregs'] \
             if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
 
-        kname = 'rime_sum_coherencies_' + \
-            ('w' if slvr.use_weight_vector() else 'u') + 'chi_' + \
-            ('float' if slvr.is_float() is True else 'double')
+        # Create the signature of the call to the function stamping macro
+        stamp_args = ', '.join([
+            'float' if slvr.is_float() else 'double',
+            'float2' if slvr.is_float() else 'double2',
+            'float3' if slvr.is_float() else 'double3',
+            'true' if slvr.use_weight_vector() else 'false',
+            '1' if slvr.outputs_residuals() else '0'])
+        stamp_fn = ''.join(['stamp_sum_coherencies_fn(', stamp_args, ')'])
+        D['stamp_function'] = stamp_fn
+
+        kname = 'rime_sum_coherencies'
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),

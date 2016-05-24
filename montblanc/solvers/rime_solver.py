@@ -70,6 +70,9 @@ class RIMESolver(HyperCube):
         # Is this solver handling auto-correlations
         self._is_auto_correlated = slvr_cfg.get(Options.AUTO_CORRELATIONS)
 
+        # Is this solver outputting visibilities or residuals
+        self._visibility_output = slvr_cfg.get(Options.VISIBILITY_OUTPUT)
+
     def is_float(self):
         return self.ft == np.float32
 
@@ -78,6 +81,12 @@ class RIMESolver(HyperCube):
 
     def use_weight_vector(self):
         return self._use_weight_vector
+
+    def outputs_model_visibilities(self):
+        return self._visibility_output == Options.VISIBILITY_OUTPUT_MODEL
+
+    def outputs_residuals(self):
+        return self._visibility_output == Options.VISIBILITY_OUTPUT_RESIDUALS
 
     def is_master(self):
         """ Is this a master solver """

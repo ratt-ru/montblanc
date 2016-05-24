@@ -644,8 +644,16 @@ class CPUSolver(MontblancNumpySolver):
         result = (self.jones_multiply(result, g_term_q, hermitian=True)
             .reshape(ntime, nbl, nchan, 4))
 
-        # Zero any flagged visibilities
-        result[self.flag > 0] = 0
+        # Output residuals if requested, otherwise return
+        # visibilities after flagging
+        if self.outputs_residuals():
+            result = ne.evaluate('(ovis - mvis)*where(flag > 0, 0, 1)', {
+                'mvis': result,
+                'ovis': self.observed_vis,
+                'flag' : self.flag })
+            assert result.shape == (ntime, nbl, nchan, 4)
+        else:
+            result[self.flag > 0] = 0
 
         return result
 
@@ -658,15 +666,18 @@ class CPUSolver(MontblancNumpySolver):
         """
         ntime, nbl, nchan = self.dim_local_size('ntime', 'nbl', 'nchan')
 
-        if vis is None: vis = self.compute_gekb_vis()
+        if vis is None:
+            vis = self.compute_gekb_vis()
 
-        # Take the difference between the visibilities and the model
-        # (nbl,nchan,ntime,4)
-        d = ne.evaluate('mvis - (ovis*where(flag > 0, 0, 1))', {
-            'mvis': vis,
-            'ovis': self.observed_vis,
-            'flag' : self.flag })
-        assert d.shape == (ntime, nbl, nchan, 4)
+        # Compute the residuals if this has not yet happened
+        if not self.outputs_residuals():
+            d = ne.evaluate('(ovis - mvis)*where(flag > 0, 0, 1)', {
+                'mvis': vis,
+                'ovis': self.observed_vis,
+                'flag' : self.flag })
+            assert d.shape == (ntime, nbl, nchan, 4)
+        else:
+            d = vis
 
         # Square of the real and imaginary components
         re = ne.evaluate('re**2', {'re': d.real})
