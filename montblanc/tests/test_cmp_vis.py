@@ -208,10 +208,10 @@ class TestCmpVis(unittest.TestCase):
             return vis.reshape(ntime, nbl, nchan, 4)
 
 
-    def get_v2_output(self, slvr_cfg):
-        slvr_cfg[Options.VERSION] = Options.VERSION_TWO
-
+    def get_v2_output(self, slvr_cfg, **kwargs):
         # Get visibilities from the v2 solver
+        slvr_cfg = slvr_cfg.copy()
+        slvr_cfg.update(**kwargs)
         slvr_cfg[Options.VERSION] = Options.VERSION_TWO
         with montblanc.rime_solver(slvr_cfg) as slvr:
             # Create and transfer lm to the solver
@@ -238,8 +238,10 @@ class TestCmpVis(unittest.TestCase):
 
             return slvr.X2, slvr.retrieve_model_vis().transpose(1,2,3,0)
 
-    def get_v4_output(self, slvr_cfg):
+    def get_v4_output(self, slvr_cfg, **kwargs):
         # Get visibilities from the v4 solver
+        slvr_cfg = slvr_cfg.copy()
+        slvr_cfg.update(**kwargs)
         slvr_cfg[Options.VERSION] = Options.VERSION_FOUR
         with montblanc.rime_solver(slvr_cfg) as slvr:
             # Create and transfer lm to the solver
@@ -268,8 +270,10 @@ class TestCmpVis(unittest.TestCase):
 
             return slvr.X2, slvr.retrieve_model_vis()
 
-    def get_v5_output(self, slvr_cfg):
+    def get_v5_output(self, slvr_cfg, **kwargs):
         # Get visibilities from the v5 solver
+        slvr_cfg = slvr_cfg.copy()
+        slvr_cfg.update(**kwargs)
         slvr_cfg[Options.VERSION] = Options.VERSION_FIVE
         with montblanc.rime_solver(slvr_cfg) as slvr:
             slvr.lm[:,0] = _L
@@ -299,6 +303,14 @@ class TestCmpVis(unittest.TestCase):
             sources=montblanc.sources(point=1, gaussian=0, sersic=0),
             dtype='double', version=Options.VERSION_TWO)
 
+        # Test the v4 and v5 residuals agree
+        v4_chi, v4_vis = self.get_v4_output(slvr_cfg,
+            vis_output=Options.VISIBILITY_OUTPUT_RESIDUALS)
+        v5_chi, v5_vis = self.get_v5_output(slvr_cfg,
+            vis_output=Options.VISIBILITY_OUTPUT_RESIDUALS)
+
+        self.assertTrue(np.allclose(v4_vis, v5_vis))
+        self.assertTrue(np.allclose(v4_chi, v5_chi))
 
         v2_chi, v2_vis = self.get_v2_output(slvr_cfg)
         v4_chi, v4_vis = self.get_v4_output(slvr_cfg)

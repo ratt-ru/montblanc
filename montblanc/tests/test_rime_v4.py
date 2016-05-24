@@ -260,6 +260,20 @@ class TestRimeV4(unittest.TestCase):
                 self.sum_coherencies_test_impl(gpu_slvr, cpu_slvr,
                     cmp={'rtol': 1e-3})
 
+    def test_sum_coherencies_residuals_float(self):
+        """ Test computation of float residuals """
+        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=20, nchan=48,
+            sources=montblanc.sources(point=10, gaussian=10),
+            dtype=Options.DTYPE_FLOAT,
+            pipeline=Pipeline([RimeSumCoherencies()]),
+            vis_output=Options.VISIBILITY_OUTPUT_RESIDUALS)
+
+        gpu_slvr, cpu_slvr = solvers(slvr_cfg)
+
+        with gpu_slvr, cpu_slvr:
+            self.sum_coherencies_test_impl(gpu_slvr, cpu_slvr,
+                cmp={'rtol': 1e-3})
+
     def test_sum_coherencies_double(self):
         """ Test the coherency sum double kernel """
         slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=20, nchan=48,
@@ -273,6 +287,19 @@ class TestRimeV4(unittest.TestCase):
 
             with gpu_slvr, cpu_slvr:
                 self.sum_coherencies_test_impl(gpu_slvr, cpu_slvr)
+
+    def test_sum_coherencies_residuals_double(self):
+        """ Test computation of double residuals """
+        slvr_cfg = montblanc.rime_solver_cfg(na=14, ntime=20, nchan=48,
+            sources=montblanc.sources(point=10, gaussian=10),
+            dtype=Options.DTYPE_DOUBLE,
+            pipeline=Pipeline([RimeSumCoherencies()]),
+            vis_output=Options.VISIBILITY_OUTPUT_RESIDUALS)
+
+        gpu_slvr, cpu_slvr = solvers(slvr_cfg)
+
+        with gpu_slvr, cpu_slvr:
+            self.sum_coherencies_test_impl(gpu_slvr, cpu_slvr)
 
     def B_sqrt_test_impl(self, gpu_slvr, cpu_slvr, cmp=None):
         """ Type independent implementation of the B square root test """
