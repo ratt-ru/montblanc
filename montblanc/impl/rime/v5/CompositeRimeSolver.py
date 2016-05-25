@@ -47,8 +47,6 @@ import montblanc.impl.rime.v4.RimeSolver as BSV4mod
 
 from montblanc.impl.rime.v5.RimeSolver import RimeSolver
 
-NA_EXTRA = 'na1'
-
 ONE_KB = 1024
 ONE_MB = ONE_KB**2
 ONE_GB = ONE_KB**3
@@ -305,28 +303,9 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cpu_slice[Options.NBL] = slice(bl,  bl_end, 1)
                 gpu_slice[Options.NBL] = slice(0, bl_diff, 1)
 
-                # If we have one baseline, create
-                # slices for the two related baselines,
-                # obtained from the antenna pairs array
-                # The antenna indices will be random
-                # on the CPU side, but fit into indices
-                # 0 and 1 on the GPU. We have the NA_EXTRA
-                # key, so that transfer_data can handle
-                # the first and second antenna index
-                if bl_diff == 1:
-                    ant0 = self.ant_pairs[0, t, bl]
-                    ant1 = self.ant_pairs[1, t, bl]
-                    cpu_slice[Options.NA] = slice(ant0, ant0 + 1, 1)
-                    cpu_slice[NA_EXTRA] = slice(ant1, ant1 + 1, 1)
-                    gpu_slice[Options.NA] = slice(0, 1, 1)
-                    gpu_slice[NA_EXTRA] = slice(1, 2, 1)
-                # Otherwise just take all antenna pairs
-                # NA_EXTRA will be ignored in this case
-                else:
-                    cpu_slice[Options.NA] = slice(0, na, 1)
-                    cpu_slice[NA_EXTRA] = slice(0, na, 1)
-                    gpu_slice[Options.NA] = slice(0, na, 1)
-                    gpu_slice[NA_EXTRA] = slice(0, na, 1)
+                # Take all antenna pairs
+                cpu_slice[Options.NA] = slice(0, na, 1)
+                gpu_slice[Options.NA] = slice(0, na, 1)
 
                 # Set up channel slicing
                 for ch in xrange(0, nchan, self.chan_diff):
@@ -893,7 +872,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 # Configure dimension extents on the sub-solver
                 subslvr.update_dimensions([
                     { DimData.NAME: dim, DimData.EXTENTS: [S.start, S.stop] }
-                    for dim, S in cpu_slice_map.iteritems() if dim != NA_EXTRA])
+                    for dim, S in cpu_slice_map.iteritems()])
 
                 # Enqueue E Beam
                 kernel = subslvr.rime_e_beam
