@@ -226,24 +226,43 @@ class CompositeRimeSolver(MontblancNumpySolver):
         dictionary of slices keyed on the following dimensions:
             nsrc, npsrc, ngsrc, nssrc, ...
         """
-        src_nr_var_counts = mbu.sources_to_nr_vars(
-            self.config()[Options.SOURCES])
-        src_nr_vars = mbu.source_nr_vars()
 
-        nsrc = self.dim_local_size(Options.NSRC)
+        # Get a list of source number variables/dimensions
+        src_nr_vars = mbu.source_nr_vars()
+        lower_extents = self.dim_lower_extent(*src_nr_vars)
+        upper_extents = self.dim_upper_extent(*src_nr_vars)
+
+        non_zero = [(n, l) for n, l
+            in zip(src_nr_vars, lower_extents) if l != 0]
+
+        if len(non_zero) > 0:
+            raise ValueError("The following source dimensions "
+                "have non-zero lower extents [{nzd}]".format(
+                    nzd=non_zero))
+
+        # Create source counts, or dimension extent sizes
+        # for each source type/dimension
+        src_nr_var_counts = { nr_var: u-l
+            for nr_var, l, u in zip(src_nr_vars,
+                lower_extents, upper_extents) }
+
+        # Work out which range of sources in the total space
+        # we are iterating over
+        nsrc_lower, nsrc_upper = self.dim_extents(Options.NSRC)
 
         # Create the slice dictionaries, which we use to index
         # dimensions of the CPU and GPU array.
         cpu_slice, gpu_slice = {}, {}
 
         # Set up source slicing
-        for src in xrange(0, nsrc, self.src_diff):
-            src_end = min(src + self.src_diff, nsrc)
+        for src in xrange(nsrc_lower, nsrc_upper, self.src_diff):
+            src_end = min(src + self.src_diff, nsrc_upper)
             src_diff = src_end - src
             cpu_slice[Options.NSRC] = slice(src, src_end, 1)
             gpu_slice[Options.NSRC] = slice(0, src_diff, 1)
 
-            # Set up the CPU source range slices
+            # Get the source slice ranges for each individual
+            # source type, and update the CPU dictionary with them
             cpu_slice.update(mbu.source_range_slices(
                 src, src_end, src_nr_var_counts))
 
@@ -261,8 +280,10 @@ class CompositeRimeSolver(MontblancNumpySolver):
             ntime, nbl, na, na1, nchan
         """
 
-        ntime, nbl, na, nchan = self.dim_local_size(
-            'ntime', 'nbl', 'na', 'nchan')
+        ((ntime_lower, ntime_upper), (nbl_lower, nbl_upper),
+            (na_lower, na_upper),
+            (nchan_lower, nchan_upper)) = self.dim_extents(
+                'ntime', 'nbl', 'na', 'nchan')
 
         # Create the slice dictionaries, which we use to index
         # dimensions of the CPU and GPU array.
@@ -271,26 +292,26 @@ class CompositeRimeSolver(MontblancNumpySolver):
         montblanc.log.debug('Generating RIME slices')
 
         # Set up time slicing
-        for t in xrange(0, ntime, self.time_diff):
-            t_end = min(t + self.time_diff, ntime)
+        for t in xrange(ntime_lower, ntime_upper, self.time_diff):
+            t_end = min(t + self.time_diff, ntime_upper)
             t_diff = t_end - t
             cpu_slice[Options.NTIME] = slice(t,  t_end, 1)
             gpu_slice[Options.NTIME] = slice(0, t_diff, 1)
 
             # Set up baseline and antenna slicing
-            for bl in xrange(0, nbl, self.bl_diff):
-                bl_end = min(bl + self.bl_diff, nbl)
+            for bl in xrange(nbl_lower, nbl_upper, self.bl_diff):
+                bl_end = min(bl + self.bl_diff, nbl_upper)
                 bl_diff = bl_end - bl
                 cpu_slice[Options.NBL] = slice(bl,  bl_end, 1)
                 gpu_slice[Options.NBL] = slice(0, bl_diff, 1)
 
                 # Take all antenna pairs
-                cpu_slice[Options.NA] = slice(0, na, 1)
-                gpu_slice[Options.NA] = slice(0, na, 1)
+                cpu_slice[Options.NA] = slice(na_lower, na_upper, 1)
+                gpu_slice[Options.NA] = slice(na_lower, na_upper, 1)
 
                 # Set up channel slicing
-                for ch in xrange(0, nchan, self.chan_diff):
-                    ch_end = min(ch + self.chan_diff, nchan)
+                for ch in xrange(nchan_lower, nchan_upper, self.chan_diff):
+                    ch_end = min(ch + self.chan_diff, nchan_upper)
                     ch_diff = ch_end - ch
                     cpu_slice[Options.NCHAN] = slice(ch, ch_end, 1)
                     gpu_slice[Options.NCHAN] = slice(0, ch_diff, 1)
@@ -715,11 +736,14 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # this will be setup properly in _thread_solve_sub
             nsrc = P[Options.NSRC]
 
-            for nr_var in [Options.NSRC] + mbu.source_nr_vars():
-                subslvr.update_dimension(name=nr_var,
-                    local_size=nsrc if nsrc < P[nr_var] else P[nr_var],
-                    lower_extent=0,
-                    upper_extent=nsrc if nsrc < P[nr_var] else P[nr_var])
+            U = [{
+                'name': nr_var,
+                'local_size': nsrc if nsrc < P[nr_var] else P[nr_var],
+                'lower_extent': 0,
+                'upper_extent': nsrc if nsrc < P[nr_var] else P[nr_var],
+            } for nr_var in [Options.NSRC] + mbu.source_nr_vars()]
+
+            subslvr.update_dimensions(U)
 
             # Give sub solvers access to device and pinned memory pools
             subslvr.dev_mem_pool = dev_mem_pool
