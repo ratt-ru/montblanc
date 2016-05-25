@@ -45,9 +45,9 @@ class RimeReduction(Node):
 
     def execute(self, solver, stream=None):
         C = solver.const_data().cdata()
-        td = C.ntime.extents[1] - C.ntime.extents[0]
-        bld = C.nbl.extents[1] - C.nbl.extents[0]
-        chd = C.nchan.extents[1] - C.nchan.extents[0]
+        td = C.ntime.upper_extent - C.ntime.lower_extent
+        bld = C.nbl.upper_extent - C.nbl.lower_extent
+        chd = C.nchan.upper_extent - C.nchan.lower_extent
 
         # Call pycuda's internal reduction kernel on
         # the chi squared result array. We slice this array

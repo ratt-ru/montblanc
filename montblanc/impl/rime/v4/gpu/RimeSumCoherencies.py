@@ -84,9 +84,9 @@ public:
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
-#define LEXT(name) C.name.extents[0]
-#define UEXT(name) C.name.extents[1]
-#define DEXT(name) (C.name.extents[1] - C.name.extents[0])
+#define LEXT(name) C.name.lower_extent
+#define UEXT(name) C.name.upper_extent
+#define DEXT(name) (C.name.upper_extent - C.name.lower_extent)
 #define GLOBAL(name) (C.name.global_size)
 
 #define NA (C.na.local_size)

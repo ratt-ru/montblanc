@@ -18,6 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+from copy import (copy as shallowcopy, deepcopy)
 import functools
 import itertools
 import numpy as np
@@ -40,8 +41,6 @@ from montblanc.impl.rime.v4.config import (
     A as v4Arrays,
     P as v4Props,
     Classifier)
-
-from hypercube.dims import DimData
 
 import montblanc.impl.rime.v4.RimeSolver as BSV4mod
 
@@ -339,15 +338,12 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
     def _cfg_subslvr_dims(self, subslvr_cfg, P):
         for dim in self._dims.itervalues():
-            name = dim[DimData.NAME]
+            name = dim.name
             if name in P:
                 # Copy dimension data for reconfiguration
-                sub_dim = dim.copy()
-
-                sub_dim.update({
-                    DimData.LOCAL_SIZE: P[name],
-                    DimData.EXTENTS: [0, P[name]],
-                    DimData.SAFETY: False })
+                sub_dim = shallowcopy(dim)
+                sub_dim.update(local_size=P[name],
+                    lower_extent=0, upper_extent=P[name])
 
                 subslvr_cfg[name] = sub_dim
 
@@ -719,14 +715,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # this will be setup properly in _thread_solve_sub
             nsrc = P[Options.NSRC]
 
-            U = [{
-                DimData.NAME: nr_var,
-                DimData.LOCAL_SIZE: nsrc if nsrc < P[nr_var] else P[nr_var],
-                DimData.EXTENTS: [0, nsrc if nsrc < P[nr_var] else P[nr_var]],
-                DimData.SAFETY: False
-            } for nr_var in [Options.NSRC] + mbu.source_nr_vars()]
-
-            subslvr.update_dimensions(U)
+            for nr_var in [Options.NSRC] + mbu.source_nr_vars():
+                subslvr.update_dimension(name=nr_var,
+                    local_size=nsrc if nsrc < P[nr_var] else P[nr_var],
+                    lower_extent=0,
+                    upper_extent=nsrc if nsrc < P[nr_var] else P[nr_var])
 
             # Give sub solvers access to device and pinned memory pools
             subslvr.dev_mem_pool = dev_mem_pool
@@ -862,14 +855,10 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cpu_slice_map.update(src_cpu_slice_map)
                 gpu_slice_map.update(src_gpu_slice_map)
 
-                # nvis extents are likely to be incorrect which causes
-                # hypercube to complain. Fake them to appease hypercube.
-                cpu_slice_map['nvis'] = slice(0,1,None)
-
                 # Configure dimension extents on the sub-solver
-                subslvr.update_dimensions([
-                    { DimData.NAME: dim, DimData.EXTENTS: [S.start, S.stop] }
-                    for dim, S in cpu_slice_map.iteritems()])
+                for name, slice_ in cpu_slice_map.iteritems():
+                    subslvr.update_dimension(name=name,
+                        lower_extent=slice_.start, upper_extent=slice_.stop)
 
                 # Enqueue E Beam
                 kernel = subslvr.rime_e_beam
