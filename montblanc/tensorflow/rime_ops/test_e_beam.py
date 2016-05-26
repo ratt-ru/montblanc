@@ -1,0 +1,68 @@
+import timeit
+
+import numpy as np
+import tensorflow as tf
+
+# Load the library containing the custom operation
+mod = tf.load_op_library('rime.so')
+
+def e_beam_op(lm, point_errors, antenna_scaling,
+        e_beam, parallactic_angle,
+        beam_ll, beam_lm, beam_ul, beam_um):
+    """
+    This function wraps rime_phase by deducing the
+    complex output result type from the input
+    """
+    lm_dtype = lm.dtype.base_dtype
+
+    if lm_dtype == tf.float32:
+        CT = tf.complex64
+    elif lm_dtype == tf.float64:
+        CT = tf.complex128
+    else:
+        raise TypeError("Unhandled type '{t}'".format(t=lm.dtype))
+
+    return mod.rime_e_beam(lm, point_errors, antenna_scaling,
+        e_beam, parallactic_angle,
+        beam_ll, beam_lm, beam_ul, beam_um)
+
+dtype, ctype = np.float64, np.complex128
+nsrc, ntime, na, nchan = 100, 50, 64, 128
+beam_lw = beam_mh = beam_nud = 50
+
+# Beam cube coordinates
+
+# Useful random floats functor
+rfloats = lambda *s: np.random.random(size=s).astype(dtype)
+
+# Set up our numpy input arrays
+np_lm = rfloats(nsrc,2)*0.1
+np_point_errors = rfloats(ntime, na, nchan, 2)
+np_antenna_scaling = rfloats(na,nchan,2)
+np_e_beam = (rfloats(beam_lw, beam_mh, beam_nud, 4) +
+        rfloats(beam_lw, beam_mh, beam_nud, 4)).astype(ctype)
+np_parallactic_angle = rfloats(1,)[0]
+np_beam_ll, np_beam_ul, np_beam_lm, np_beam_um = dtype(
+    [-0.5, 0.5, -0.5, 0.5])
+
+# Create tensorflow variables
+args = map(lambda n, s: tf.Variable(n, name=s),
+    [np_lm, np_point_errors, np_antenna_scaling,
+    np_e_beam, np_parallactic_angle,
+    np_beam_ll, np_beam_ul, np_beam_lm, np_beam_um],
+    ["lm", "point_errors", "antenna_scaling",
+    "e_beam", "parallactic_angle",
+    "beam_ll", "beam_ul", "beam_lm", "beam_um"])
+
+# Get an expression for the e beam op on the CPU
+with tf.device('/cpu:0'):
+    e_beam_op_cpu = e_beam_op(*args)
+
+# Now create a tensorflow Session to evaluate the above
+with tf.Session() as S:
+    S.run(tf.initialize_all_variables())
+
+    # Evaluate and time tensorflow CPU
+    start = timeit.default_timer()
+    tf_e_beam_op_cpu = S.run(e_beam_op_cpu)
+    print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)    

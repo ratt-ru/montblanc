@@ -3,7 +3,10 @@ TF_CUDA=$(shell python -c 'import tensorflow as tf; print int(tf.test.is_built_w
 MB_INC=../../include
 
 INCLUDES = -I $(TF_INC) -I $(MB_INC)
-OBJECTS=abstraction.o phase_op_cpu.o phase_op_gpu.o b_sqrt_op_cpu.o b_sqrt_op_gpu.o
+OBJECTS=abstraction.o \
+	phase_op_cpu.o phase_op_gpu.o \
+	b_sqrt_op_cpu.o b_sqrt_op_gpu.o \
+	e_beam_op_cpu.o e_beam_op_gpu.o
 LIBRARY=rime.so
 
 CPPFLAGS=-std=c++11 -fPIC $(INCLUDES)
@@ -27,6 +30,12 @@ phase_op_gpu.o: phase_op_gpu.cu phase_op_gpu.cuh phase_op.h
 	nvcc $< -c -o $@ $(NVCCFLAGS)
 
 phase_op_cpu.o : phase_op_cpu.cpp phase_op.h
+	g++ $< -c -o $@ $(CPPFLAGS)
+
+e_beam_op_gpu.o : e_beam_op_gpu.cu e_beam_op_gpu.cuh e_beam_op.h
+	nvcc $< -c -o $@ $(NVCCFLAGS)
+
+e_beam_op_cpu.o : e_beam_op_cpu.cpp e_beam_op_cpu.h e_beam_op.h
 	g++ $< -c -o $@ $(CPPFLAGS)
 
 $(LIBRARY) : $(OBJECTS)
