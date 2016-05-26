@@ -22,9 +22,6 @@ import numpy as np
 
 from cffi import FFI
 
-from hypercube.dims import (
-    DimData)
-
 from montblanc.src_types import (
     source_types,
     source_nr_vars,
@@ -69,9 +66,8 @@ class RimeConstDefinition(object):
         # } _FIELD_TYPE;
         l = ['typedef struct  {']
         l.extend([_SPACE + 'unsigned int {n};'.format(n=n)
-            for n in (DimData.GLOBAL_SIZE,
-                DimData.LOCAL_SIZE,
-                DimData.EXTENTS+'[2]')])
+            for n in ('global_size', 'local_size',
+                'lower_extent', 'upper_extent')])
         l.append('}} {t};'.format(t=_FIELD_TYPE))
 
         # Define our constant data structure. Looks something like
@@ -128,29 +124,25 @@ class RimeConstStruct(object):
         for name, dim in slvr.dimensions(reify=True).iteritems():
             cdim = getattr(self._cdata, name)
 
-            setattr(cdim, DimData.LOCAL_SIZE,
-                getattr(dim, DimData.LOCAL_SIZE))
-
-            setattr(cdim, DimData.GLOBAL_SIZE,
-                getattr(dim, DimData.GLOBAL_SIZE))
-
-            setattr(cdim, DimData.EXTENTS, 
-                getattr(dim, DimData.EXTENTS))
+            setattr(cdim, 'global_size', getattr(dim, 'global_size'))
+            setattr(cdim, 'local_size', getattr(dim, 'local_size'))
+            setattr(cdim, 'lower_extent', getattr(dim, 'lower_extent'))
+            setattr(cdim, 'upper_extent', getattr(dim, 'upper_extent'))
 
         from montblanc.slvr_config import (
             SolverConfig as Options)
 
+        cdim = getattr(self._cdata, Options.NSRC, None)
         # If 'nsrc' exists set it by by summing each source type
-        if sum_nsrc is True:
-            cdim = getattr(self._cdata, Options.NSRC, None)
+        if cdim is not None and sum_nsrc is True:
+            L = sum([getattr(getattr(self._cdata, s), 'lower_extent')
+                for s in source_nr_vars()])    
 
-            if cdim:
-                # This performs an element-wise sum over each sources extents
-                S = map(sum, zip(*[getattr(getattr(self._cdata, s),
-                        DimData.EXTENTS)
-                    for s in source_nr_vars()]))
+            U = sum([getattr(getattr(self._cdata, s), 'upper_extent')
+                for s in source_nr_vars()])    
 
-                setattr(cdim, DimData.EXTENTS, S)
+            setattr(cdim, 'lower_extent', L)
+            setattr(cdim, 'upper_extent', U)
 
     def string_def(self):
         """ Return the C string definition of the structure """
