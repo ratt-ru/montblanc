@@ -47,10 +47,6 @@ KERNEL_TEMPLATE = string.Template("""
 #include <montblanc/include/abstraction.cuh>
 #include <montblanc/include/brightness.cuh>
 
-#define BEAM_LW (${beam_lw})
-#define BEAM_MH (${beam_mh})
-#define BEAM_NUD (${beam_nud})
-
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
@@ -63,21 +59,22 @@ KERNEL_TEMPLATE = string.Template("""
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
-#define LEXT(name) C.name.lower_extent
-#define UEXT(name) C.name.upper_extent
+#define LEXT(name) (C.name.lower_extent)
+#define UEXT(name) (C.name.upper_extent)
 #define DEXT(name) (C.name.upper_extent - C.name.lower_extent)
-#define GLOBAL(name) C.name.global_size
+#define GLOBAL(name) (C.name.global_size)
+#define LOCAL(name) (C.name.local_size)
 
-#define NA (C.na.local_size)
-#define NBL (C.nbl.local_size)
-#define NCHAN (C.nchan.local_size)
-#define NTIME (C.ntime.local_size)
-#define NPSRC (C.npsrc.local_size)
-#define NGSRC (C.ngsrc.local_size)
-#define NSSRC (C.nssrc.local_size)
-#define NSRC (C.nnsrc.local_size)
-#define NPOL (C.npol.local_size)
-#define NPOLCHAN (C.npolchan.local_size)
+#define NA LOCAL(na)
+#define NBL LOCAL(nbl)
+#define NCHAN LOCAL(nchan)
+#define NTIME LOCAL(ntime)
+#define NSRC LOCAL(nsrc)
+#define NPOL LOCAL(npol)
+#define NPOLCHAN LOCAL(npolchan)
+#define BEAM_LW LOCAL(beam_lw)
+#define BEAM_MH LOCAL(beam_mh)
+#define BEAM_NUD LOCAL(beam_nud)
 
 template <
     typename T,
