@@ -143,20 +143,19 @@ class CompositeRimeSolver(MontblancNumpySolver):
         enqueue_executors = [cf.ThreadPoolExecutor(1) for ctx in self.dev_ctxs]
         sync_executors = [cf.ThreadPoolExecutor(1) for ctx in self.dev_ctxs]
 
+        self.enqueue_executors = enqueue_executors
+        self.sync_executors = sync_executors
+        self.initialised = False
+        self._vis_write_mode = slvr_cfg.get(Options.VISIBILITY_WRITE_MODE)
+
         montblanc.log.info('Created {d} executor(s).'.format(d=len(enqueue_executors)))
 
         # Initialise executor threads
         for ex, ctx in zip(enqueue_executors, self.dev_ctxs):
-            try:
-                ex.submit(C._thread_init, self, ctx).result()
-            except Exception as e:
-                raise e, None, sys.exc_info()[2]
+            ex.submit(C._thread_init, self, ctx).result()
 
         for ex, ctx in zip(sync_executors, self.dev_ctxs):
-            try:
-                ex.submit(C._thread_init, self, ctx).result()
-            except Exception as e:
-                raise e, None, sys.exc_info()[2]
+            ex.submit(C._thread_init, self, ctx).result()
 
         montblanc.log.info('Initialised {d} thread(s).'.format(d=len(enqueue_executors)))
 
@@ -168,13 +167,10 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         # Find the budget with the lowest memory usage
         # Work with the device with the lowest memory
-        try:
-            budgets = sorted([ex.submit(C._thread_budget, self,
-                                slvr_cfg, A_sub, T).result()
-                            for ex in enqueue_executors],
-                        key=lambda T: T[1])
-        except Exception as e:
-            raise e, None, sys.exc_info()[2]
+        budgets = sorted([ex.submit(C._thread_budget, self,
+                            slvr_cfg, A_sub, T).result()
+                        for ex in enqueue_executors],
+                    key=lambda T: T[1])
 
         P, M, mem = budgets[0]
 
@@ -209,35 +205,21 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         # Now create the solvers on each thread
         for ex in enqueue_executors:
-            try:
-                ex.submit(C._thread_create_solvers,
-                    self, subslvr_cfg, P, nsolvers).result()
-            except Exception as e:
-                raise e, None, sys.exc_info()[2]
+            ex.submit(C._thread_create_solvers,
+                self, subslvr_cfg, P, nsolvers).result()
 
         montblanc.log.info('Solvers Created')
 
         # Register arrays and properties on each thread's solvers
         for ex in enqueue_executors:
-            try:
-                ex.submit(C._thread_reg_sub_arys_and_props,
-                    self, A_sub, P_sub).result()
-            except Exception as e:
-                raise e, None, sys.exc_info()[2]
+            ex.submit(C._thread_reg_sub_arys_and_props,
+                self, A_sub, P_sub).result()
 
         montblanc.log.info('Priming Memory Pools')
 
         # Prime the memory pools on each sub-solver
         for ex in enqueue_executors:
-            try:
-                ex.submit(C._thread_prime_memory_pools, self).result()
-            except Exception as e:
-                raise e, None, sys.exc_info()[2]
-
-        self.enqueue_executors = enqueue_executors
-        self.sync_executors = sync_executors
-        self.initialised = False
-        self._vis_write_mode = slvr_cfg.get(Options.VISIBILITY_WRITE_MODE)
+            ex.submit(C._thread_prime_memory_pools, self).result()
 
     def _gen_source_slices(self):
         """
@@ -580,12 +562,25 @@ class CompositeRimeSolver(MontblancNumpySolver):
         self.initialise()
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, etype, evalue, etrace):
         """
         When exiting a run-time context related to this solver,
         also perform exit for the sub-solvers.
         """
-        self.shutdown()
+        try:
+            self.shutdown()
+        except Exception as se:
+            # If there was no exception entering
+            # this context, re-raise the shutdown exception
+            if evalue is None:
+                raise
+            else:
+                # Otherwise log the shutdown exception
+                montblanc.log.exception("Exception occurred during "
+                    "ComposeRimeSolver shutdown")
+
+                # And raise the exception from the context
+                raise etype, evalue, etrace
 
     def _thread_init(self, context):
         """
@@ -604,7 +599,9 @@ class CompositeRimeSolver(MontblancNumpySolver):
         """
         montblanc.log.debug('Popping CUDA context in thread %s',
             threading.current_thread())
-        self.thread_local.context.pop()
+
+        if self.thread_local.context is not None:
+            self.thread_local.context.pop()
 
     def _thread_budget(self, slvr_cfg, A_sub, props):
         """
