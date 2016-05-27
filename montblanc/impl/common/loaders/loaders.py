@@ -58,17 +58,29 @@ class MeasurementSetLoader(BaseLoader):
         self.tables['ant']  = pt.table(self.antfile, ack=False)
         self.tables['freq'] = pt.table(self.freqfile, ack=False)
 
-    def get_dims(self, auto_correlations=False):
+        msrows = self.tables['main'].nrows()
+        self.na = self.tables['ant'].nrows()
+        self.nbl = mbu.nr_of_baselines(self.na, auto_correlations)
+        self.nchan = np.asscalar(self.tables['freq'].getcol('NUM_CHAN'))
+        self.ntime = msrows // self.nbl
+
+        # Require a ntime x nbl shape for MS rows
+        if msrows != self.ntime*self.nbl:
+            autocor_str = ('with auto-correlations' if auto_correlations
+                else 'without auto-correlations')
+
+            raise ValueError("{na} antenna {astr} produce {nbl} baselines, "
+                "but {msr}, the number of rows in '{msf}', cannot "
+                "be divided exactly by this number.".format(
+                    na=self.na, nbl=self.nbl, astr=autocor_str,
+                    msr=msrows, msf=self.msfile))        
+
+    def get_dims(self):
         """
         Returns a tuple with the number of timesteps, antenna and channels
         """
         # Determine the problem dimensions
-        na = self.tables['ant'].nrows()
-        nbl = mbu.nr_of_baselines(na, auto_correlations)
-        nchan = np.asscalar(self.tables['freq'].getcol('NUM_CHAN'))
-        ntime = self.tables['main'].nrows() // nbl
-
-        return ntime, na, nchan
+        return self.ntime, self.na, self.nchan
 
     def log(self, msg, *args, **kwargs):
         montblanc.log.info('{lp} {m}'.format(lp=self.LOG_PREFIX, m=msg),
