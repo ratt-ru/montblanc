@@ -48,11 +48,20 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='RIME MS test script')
     parser.add_argument('msfile', help='Measurement Set File')
-    parser.add_argument('-np','--npsrc',dest='npsrc', type=int, default=10, help='Number of Point Sources')
-    parser.add_argument('-ng','--ngsrc',dest='ngsrc', type=int, default=0, help='Number of Gaussian Sources')
-    parser.add_argument('-ns','--nssrc',dest='nssrc', type=int, default=0, help='Number of Sersic Sources')
-    parser.add_argument('-c','--count',dest='count', type=int, default=10, help='Number of Iterations')
-    parser.add_argument('-v','--version',dest='version', type=str, default=Options.VERSION_FIVE,
+    parser.add_argument('-np','--npsrc',dest='npsrc',
+        type=int, default=10, help='Number of Point Sources')
+    parser.add_argument('-ng','--ngsrc',dest='ngsrc',
+        type=int, default=0, help='Number of Gaussian Sources')
+    parser.add_argument('-ns','--nssrc',dest='nssrc',
+        type=int, default=0, help='Number of Sersic Sources')
+    parser.add_argument('-c','--count',dest='count',
+        type=int, default=10, help='Number of Iterations')
+    parser.add_argument('-ac','--auto-correlations',dest='auto_correlations',
+        type=lambda v: v.lower() in ("yes", "true", "t", "1"),
+        choices=[True, False], default=False,
+        help='Handle auto-correlations')
+    parser.add_argument('-v','--version',dest='version',
+        type=str, default=Options.VERSION_FIVE,
         choices=[Options.VERSION_FIVE], help='RIME Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
@@ -61,9 +70,13 @@ if __name__ == '__main__':
     montblanc.log.setLevel(logging.INFO)
 
     slvr_cfg = montblanc.rime_solver_cfg(msfile=args.msfile,
-        sources=montblanc.sources(point=args.npsrc, gaussian=args.ngsrc, sersic=args.nssrc),
+        sources=montblanc.sources(point=args.npsrc,
+            gaussian=args.ngsrc, sersic=args.nssrc),
         init_weights='weight', weight_vector=False,
-        dtype='double', version=args.version)
+        dtype='double', auto_correlations=args.auto_correlations,
+        version=args.version)
+
+    print slvr_cfg
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
         # Random point source coordinates in the l,m,n (brightness image) domain

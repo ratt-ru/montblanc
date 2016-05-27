@@ -157,14 +157,6 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         msrows = tm.nrows()
         column_names = tm.colnames()
 
-        # Demand a ntime x nbl shape for MS rows
-        if msrows != ntime*nbl:
-            raise ValueError('MeasurementSet rows {msr} not equal to '
-                'ntime x nbl = {nt} x {nbl} = {t} ({ac})'
-                    .format(msr=msrows, nt=ntime, nbl=nbl, t=ntime*nbl,
-                        ac=('auto-correlated' if solver.is_autocorrelated()
-                            else 'no auto-correlations')))
-
         # Determine row increments in terms of a time increment
         # This is required for calculating per antenna UVW coordinates below
         time_inc = 1
