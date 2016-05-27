@@ -123,11 +123,14 @@ class Pipeline:
             self.nr_of_executions += 1
 
         except PipeLineError:
-            montblanc.log.error('Pipeline Error occurred during RIME pipeline execution', exc_info=True)
+            montblanc.log.error("Pipeline Error occurred "
+                "during RIME pipeline execution",
+                exc_info=True)
             return False
         except Exception:
-            montblanc.log.error(('Unexpected exception occurred '
-                'during RIME pipeline execution'), exc_info=True)
+            montblanc.log.error("Unexpected exception occurred "
+                "during RIME pipeline execution",
+                exc_info=True)
             return False
 
         montblanc.log.debug('Execution of pipeline complete')

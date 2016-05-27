@@ -46,13 +46,7 @@ class TestSolver(unittest.TestCase):
     def setUp(self):
         """ Set up each test case """
         np.random.seed(int(time.time()) & 0xFFFFFFFF)
-
-        # Add a handler that outputs INFO level logging to file
-        fh = logging.FileHandler('test.log')
-        fh.setLevel(logging.INFO)
-
-        montblanc.log.setLevel(logging.INFO)
-        montblanc.log.handlers = [fh]
+        montblanc.setup_test_logging()
 
     def tearDown(self):
         """ Tear down each test case """

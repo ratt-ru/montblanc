@@ -23,6 +23,7 @@ import os
 
 import montblanc.config
 
+from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
 from montblanc.version import __version__
 
@@ -33,49 +34,6 @@ def get_montblanc_path():
 
 def get_source_path():
     return os.path.join(get_montblanc_path(), 'src')
-
-def setup_logging():
-    """ Setup logging configuration """
-
-    import logging
-    import logging.handlers
-
-   # Console formatter
-    cfmt = logging.Formatter((
-        '%(name)s - '
-        '%(levelname)s - '
-        '%(message)s'))
-
-    # Console handler
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(cfmt)
-
-   # File formatter
-    cfmt = logging.Formatter((
-        '%(asctime)s - '
-        '%(levelname)s - '
-        '%(message)s'))
-
-    # File handler
-    fh = logging.handlers.RotatingFileHandler('montblanc.log',
-        maxBytes=10*1024*1024, backupCount=10)
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(cfmt)
-
-    # Create the logger,
-    # adding the console and file handler
-    mb_logger = logging.getLogger('montblanc')
-    mb_logger.setLevel(logging.INFO)
-    mb_logger.addHandler(ch)
-    mb_logger.addHandler(fh)
-
-    # Set up the concurrent.futures logger
-    cf_logger = logging.getLogger('concurrent.futures')
-    cf_logger.setLevel(logging.INFO)
-    cf_logger.addHandler(ch)
-
-    return mb_logger
 
 log = setup_logging()
 
