@@ -456,9 +456,9 @@ class TestRimeV4(unittest.TestCase):
         self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
             Options.DTYPE_FLOAT)
 
-        beam_lw, beam_mh, beam_nud = 1, 1, 1
+        beam_lw, beam_mh, beam_nud = 2, 2, 2
         self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
-            Options.DTYPE_FLOAT,cmp={'rtol':1e-4})
+            Options.DTYPE_DOUBLE)
 
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
@@ -469,7 +469,7 @@ class TestRimeV4(unittest.TestCase):
         self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
             Options.DTYPE_DOUBLE)
 
-        beam_lw, beam_mh, beam_nud = 1, 1, 1
+        beam_lw, beam_mh, beam_nud = 2, 2, 2
         self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
             Options.DTYPE_DOUBLE)
 

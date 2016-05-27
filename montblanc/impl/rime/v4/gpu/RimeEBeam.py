@@ -47,10 +47,6 @@ KERNEL_TEMPLATE = string.Template("""
 #include <montblanc/include/abstraction.cuh>
 #include <montblanc/include/brightness.cuh>
 
-#define BEAM_LW (${beam_lw})
-#define BEAM_MH (${beam_mh})
-#define BEAM_NUD (${beam_nud})
-
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
 #define BLOCKDIMZ (${BLOCKDIMZ})
@@ -63,21 +59,26 @@ KERNEL_TEMPLATE = string.Template("""
 // structure is declared. 
 ${rime_const_data_struct}
 __constant__ rime_const_data C;
-#define LEXT(name) C.name.lower_extent
-#define UEXT(name) C.name.upper_extent
+#define LEXT(name) (C.name.lower_extent)
+#define UEXT(name) (C.name.upper_extent)
 #define DEXT(name) (C.name.upper_extent - C.name.lower_extent)
-#define GLOBAL(name) C.name.global_size
+#define GLOBAL(name) (C.name.global_size)
+#define LOCAL(name) (C.name.local_size)
 
-#define NA (C.na.local_size)
-#define NBL (C.nbl.local_size)
-#define NCHAN (C.nchan.local_size)
-#define NTIME (C.ntime.local_size)
-#define NPSRC (C.npsrc.local_size)
-#define NGSRC (C.ngsrc.local_size)
-#define NSSRC (C.nssrc.local_size)
-#define NSRC (C.nnsrc.local_size)
-#define NPOL (C.npol.local_size)
-#define NPOLCHAN (C.npolchan.local_size)
+#define NA LOCAL(na)
+#define NBL LOCAL(nbl)
+#define NCHAN LOCAL(nchan)
+#define NTIME LOCAL(ntime)
+#define NSRC LOCAL(nsrc)
+#define NPOL LOCAL(npol)
+#define NPOLCHAN LOCAL(npolchan)
+#define BEAM_LW LOCAL(beam_lw)
+#define BEAM_MH LOCAL(beam_mh)
+#define BEAM_NUD LOCAL(beam_nud)
+
+template <typename T> __device__ __forceinline__
+int ebeam_pol()
+    { return threadIdx.x & 0x3; }
 
 template <
     typename T,
@@ -91,21 +92,19 @@ void trilinear_interpolate(
     float gl, float gm, float gchan,
     const T & weight)
 {
-    #define POL (threadIdx.x & 0x3)
-
     // If this source is outside the cube, do nothing
     if(gl < 0 || gl >= BEAM_LW || gm < 0 || gm >= BEAM_MH)
         { return; }
 
-    int i = ((int(gl)*BEAM_MH + int(gm))*BEAM_NUD + int(gchan))*NPOL + POL;
+    int i = ((int(gl)*BEAM_MH +
+        int(gm))*BEAM_NUD +
+        int(gchan))*NPOL + ebeam_pol<T>();
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
     typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
     sum.x += weight*pol.x;
     sum.y += weight*pol.y;
     abs_sum += weight*Po::abs(pol);
-
-    #undef POL
 }
 
 template <typename T> class EBeamTraits {};
@@ -218,25 +217,10 @@ void rime_jones_E_beam_impl(
         // Work out where we are in the beam cube.
         // POLCHAN >> 2 is our position in the local channel space
         // Add this to the lower extent in the global channel space
-        float chan = float(POLCHAN>>2 + LEXT(nchan));
-
-        // Divide by the size of the global channel space gives us
-        // a normalised position, also accounts for the one channel case.
-        if(GLOBAL(nchan) > 1)
-            { chan /= float(GLOBAL(nchan)-1); }
-
-        // Now multiply by beam cube depth to get position in the cube.
-        chan *= float(BEAM_NUD-1);
-
+        float chan = float(BEAM_NUD-1) * float(POLCHAN>>2 + LEXT(nchan))
+            / float(GLOBAL(nchan));
         float gchan = floorf(chan);
         float chd = chan - gchan;
-
-        // Handle the boundary case where the
-        // channel lies on the last grid point
-        if(chan == T(BEAM_NUD-1)) {
-            gchan = T(BEAM_NUD-2);
-            chd = 1.0f;
-        }
 
         typename Tr::ct sum = Po::make_ct(0.0, 0.0);
         typename Tr::ft abs_sum = T(0.0);

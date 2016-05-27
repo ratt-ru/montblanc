@@ -416,22 +416,15 @@ class CPUSolver(MontblancNumpySolver):
         chan_low, chan_high = self.dim_extents('nchan')
         nchan_global = self.dim_global_size('nchan')
 
-        # Global channel size is divisor, but handle one channel case
-        div = self.ft(nchan_global-1) if nchan_global > 1 else 1.0
         # Create the channel range from the extents
-        chan_range = np.arange(chan_low, chan_high).astype(self.ft)
+        chan_range = np.arange(chan_low, chan_high).astype(np.float32)
         # Divide channel range by global size and multiply
         # to obtain position in the beam cube
-        chan = (beam_nud-1)*chan_range / div
+        chan = (np.float32(beam_nud-1)*chan_range /
+            np.float32(nchan_global))
         assert chan.shape == (chan_high - chan_low, )
         gchan = np.floor(chan)
         chd = (chan - gchan)[np.newaxis,np.newaxis,np.newaxis,:]
-
-        # Handle the boundary case where the channel
-        # lies on the last grid point
-        fiddle = (chan == beam_nud - 1)
-        gchan[fiddle] = beam_nud - 2
-        chd[:,:,:,fiddle] = 1
 
         # Initialise the sum to zero
         sum = np.zeros_like(self.jones)
