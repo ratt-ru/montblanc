@@ -76,6 +76,10 @@ __constant__ rime_const_data C;
 #define BEAM_MH LOCAL(beam_mh)
 #define BEAM_NUD LOCAL(beam_nud)
 
+template <typename T> __device__ __forceinline__
+int ebeam_pol()
+    { return threadIdx.x & 0x3; }
+
 template <
     typename T,
     typename Tr=montblanc::kernel_traits<T>,
@@ -88,21 +92,19 @@ void trilinear_interpolate(
     float gl, float gm, float gchan,
     const T & weight)
 {
-    #define POL (threadIdx.x & 0x3)
-
     // If this source is outside the cube, do nothing
     if(gl < 0 || gl >= BEAM_LW || gm < 0 || gm >= BEAM_MH)
         { return; }
 
-    int i = ((int(gl)*BEAM_MH + int(gm))*BEAM_NUD + int(gchan))*NPOL + POL;
+    int i = ((int(gl)*BEAM_MH +
+        int(gm))*BEAM_NUD +
+        int(gchan))*NPOL + ebeam_pol<T>();
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
     typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
     sum.x += weight*pol.x;
     sum.y += weight*pol.y;
     abs_sum += weight*Po::abs(pol);
-
-    #undef POL
 }
 
 template <typename T> class EBeamTraits {};
@@ -215,25 +217,10 @@ void rime_jones_E_beam_impl(
         // Work out where we are in the beam cube.
         // POLCHAN >> 2 is our position in the local channel space
         // Add this to the lower extent in the global channel space
-        float chan = float(POLCHAN>>2 + LEXT(nchan));
-
-        // Divide by the size of the global channel space gives us
-        // a normalised position, also accounts for the one channel case.
-        if(GLOBAL(nchan) > 1)
-            { chan /= float(GLOBAL(nchan)-1); }
-
-        // Now multiply by beam cube depth to get position in the cube.
-        chan *= float(BEAM_NUD-1);
-
+        float chan = float(BEAM_NUD-1) * float(POLCHAN>>2 + LEXT(nchan))
+            / float(GLOBAL(nchan));
         float gchan = floorf(chan);
         float chd = chan - gchan;
-
-        // Handle the boundary case where the
-        // channel lies on the last grid point
-        if(chan == T(BEAM_NUD-1)) {
-            gchan = T(BEAM_NUD-2);
-            chd = 1.0f;
-        }
 
         typename Tr::ct sum = Po::make_ct(0.0, 0.0);
         typename Tr::ft abs_sum = T(0.0);
