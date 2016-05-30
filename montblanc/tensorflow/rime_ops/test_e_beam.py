@@ -74,4 +74,7 @@ with tf.Session() as S:
     # Evaluate and time tensorflow GPU
     start = timeit.default_timer()
     tf_e_beam_op_gpu = S.run(e_beam_op_gpu)
-    print 'Tensorflow GPU time %f' % (timeit.default_timer() - start)    
+    print 'Tensorflow GPU time %f' % (timeit.default_timer() - start)
+
+    assert tf_e_beam_op_gpu.shape == tf_e_beam_op_cpu.shape
+    assert np.allclose(tf_e_beam_op_cpu, tf_e_beam_op_gpu)

@@ -12,7 +12,6 @@
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
-#include "rime_constant_structures.h"
 
 namespace montblanc {
 namespace ebeam {
@@ -51,17 +50,6 @@ public:
             X, Y, Z);
     }        
 };
-
-typedef struct {
-    uint32_t nsrc;
-    uint32_t ntime;
-    uint32_t na;
-    dim_field nchan;
-    dim_field npolchan;
-    uint32_t beam_lw;
-    uint32_t beam_mh;
-    uint32_t beam_nud;
-} const_data;
 
 } // namespace montblanc {
 } // namespace ebeam {
