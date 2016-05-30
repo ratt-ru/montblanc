@@ -10,6 +10,9 @@ typedef struct {
     uint32_t local_size;
     uint32_t lower_extent;
     uint32_t upper_extent;
+
+    __host__ __device__ __forceinline__ uint32_t extent_size(void) const
+        { return upper_extent - lower_extent; }
     
 } dim_field;
 

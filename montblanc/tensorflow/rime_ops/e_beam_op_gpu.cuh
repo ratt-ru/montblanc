@@ -53,8 +53,14 @@ public:
 };
 
 typedef struct {
+    uint32_t nsrc;
+    uint32_t ntime;
+    uint32_t na;
     dim_field nchan;
     dim_field npolchan;
+    uint32_t beam_lw;
+    uint32_t beam_mh;
+    uint32_t beam_nud;
 } const_data;
 
 } // namespace montblanc {
@@ -65,9 +71,6 @@ namespace tensorflow {
 // For simpler partial specialisation
 typedef Eigen::GpuDevice GPUDevice;    
 
-// Number of polarisations handled by this kernel
-constexpr int EBEAM_NPOL = 4;
-
 // Constant GPU memory 
 __constant__ montblanc::ebeam::const_data cdata;
 
@@ -75,6 +78,29 @@ __constant__ montblanc::ebeam::const_data cdata;
 template <typename Traits>
 __device__ __forceinline__ int ebeam_pol()
     { return threadIdx.x & 0x3; }
+
+template <typename Traits, typename Policies>
+__device__ __forceinline__
+void trilinear_interpolate(
+    typename Traits::CT & sum,
+    typename Traits::FT & abs_sum,
+    const typename Traits::CT * E_beam,
+    float gl, float gm, float gchan,
+    const typename Traits::FT & weight)
+{
+    // If this source is outside the cube, do nothing
+    if(gl < 0 || gl >= cdata.beam_lw || gm < 0 || gm >= cdata.beam_mh)
+        { return; }
+
+    int i = ((int(gl)*cdata.beam_mh + int(gm))*cdata.beam_nud +
+        int(gchan))*EBEAM_NPOL + ebeam_pol<Traits>();
+
+    // Perhaps unnecessary as long as BLOCKDIMX is 32
+    typename Traits::CT data = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
+    sum.x += weight*data.x;
+    sum.y += weight*data.y;
+    abs_sum += weight*Policies::abs(data);
+}
 
 template <typename Traits>
 __global__ void rime_e_beam(
@@ -85,8 +111,7 @@ __global__ void rime_e_beam(
     typename Traits::CT * jones,
     typename Traits::FT parallactic_angle,
     typename Traits::FT beam_ll, typename Traits::FT beam_lm,
-    typename Traits::FT beam_ul, typename Traits::FT beam_um,
-    int nsrc, int ntime, int na, int npolchan)
+    typename Traits::FT beam_ul, typename Traits::FT beam_um)
 {
     // Simpler float and complex types
     typedef typename Traits::FT FT;
@@ -100,12 +125,7 @@ __global__ void rime_e_beam(
     int SRC = blockIdx.z*blockDim.z + threadIdx.z;
     constexpr int BLOCKCHANS = LTr::BLOCKDIMX >> 2;
 
-    if(POLCHAN == 0 && ANT == 0 && SRC == 0)
-    {
-        printf("nchan.global_size=%d\n", cdata.nchan.global_size);
-    }
-
-    if(SRC >= nsrc || ANT >= na || POLCHAN >= npolchan)
+    if(SRC >= cdata.nsrc || ANT >= cdata.na || POLCHAN >= cdata.npolchan.extent_size())
         return;
 
     __shared__ typename Traits::lm_type
@@ -115,6 +135,150 @@ __global__ void rime_e_beam(
     __shared__ typename Traits::antenna_scale_type
         s_ab[LTr::BLOCKDIMY][BLOCKCHANS];
 
+    int i;
+
+    // LM coordinates vary by source only,
+    // not antenna or polarised channel
+    if(threadIdx.y == 0 && threadIdx.x == 0)
+    {
+        i = SRC;   s_lm0[threadIdx.z] = lm[i];
+    }
+
+    // Antenna scaling factors vary by antenna and channel,
+    // but not source or timestep
+    if(threadIdx.z == 0 && ebeam_pol<Traits>() == 0)
+    {
+        int blockchan = threadIdx.x >> 2;
+        i = ANT*cdata.nchan.extent_size() + (POLCHAN >> 2);
+        s_ab[threadIdx.y][blockchan] = antenna_scaling[i];
+    }
+
+    __syncthreads();
+
+    for(int TIME=0; TIME < cdata.ntime; ++TIME)
+    {
+        // Pointing errors vary by time, antenna and channel,
+        // but not source
+        if(threadIdx.z == 0 && (threadIdx.x & 0x3) == 0)
+        {
+            int blockchan = threadIdx.x >> 2;
+            i = (TIME*cdata.na + ANT)*cdata.nchan.extent_size() + (POLCHAN >> 2);
+            s_lmd[threadIdx.y][blockchan] = point_errors[i];
+        }
+
+        __syncthreads();
+
+        // Figure out how far the source has
+        // rotated within the beam
+        FT sint, cost;
+        Po::sincos(parallactic_angle*TIME, &sint, &cost);
+
+        // Rotate the source
+        FT l = s_lm0[threadIdx.z].x*cost - s_lm0[threadIdx.z].y*sint;
+        FT m = s_lm0[threadIdx.z].x*sint + s_lm0[threadIdx.z].y*cost;
+
+        // Add the pointing errors for this antenna.
+        int blockchan = threadIdx.x >> 2;
+        l += s_lmd[threadIdx.y][blockchan].x;
+        m += s_lmd[threadIdx.y][blockchan].y;
+
+        // Multiply by the antenna scaling factors.
+        l *= s_ab[threadIdx.y][blockchan].x;
+        m *= s_ab[threadIdx.y][blockchan].y;
+
+        // Compute grid position and difference from
+        // actual position for the source at each channel
+        l = FT(cdata.beam_lw-1) * (l - beam_ll) / (beam_ul - beam_ll);
+        float gl = floorf(l);
+        float ld = l - gl;
+
+        m = FT(cdata.beam_mh-1) * (m - beam_lm) / (beam_um - beam_lm);
+        float gm = floorf(m);
+        float md = m - gm;
+
+        // Work out where we are in the beam cube.
+        // POLCHAN >> 2 is our position in the local channel space
+        // Add this to the lower extent in the global channel space
+        float chan = float(cdata.beam_nud-1) * float(POLCHAN>>2 + cdata.nchan.lower_extent)
+            / float(cdata.nchan.global_size);
+        float gchan = floorf(chan);
+        float chd = chan - gchan;
+
+        CT sum = Po::make_ct(0.0, 0.0);
+        FT abs_sum = FT(0.0);
+
+        // A simplified bilinear weighting is used here. Given
+        // point x between points x1 and x2, with function f
+        // provided values f(x1) and f(x2) at these points.
+        //
+        // x1 ------- x ---------- x2
+        //
+        // Then, the value of f can be approximated using the following:
+        // f(x) ~= f(x1)(x2-x)/(x2-x1) + f(x2)(x-x1)/(x2-x1)
+        //
+        // Note how the value f(x1) is weighted with the distance
+        // from the opposite point (x2-x).
+        //
+        // As we are interpolating on a grid, we have the following
+        // 1. (x2 - x1) == 1
+        // 2. (x - x1)  == 1 - 1 + (x - x1)
+        //              == 1 - (x2 - x1) + (x - x1)
+        //              == 1 - (x2 - x)
+        // 2. (x2 - x)  == 1 - 1 + (x2 - x)
+        //              == 1 - (x2 - x1) + (x2 - x)
+        //              == 1 - (x - x1)
+        //
+        // Extending the above to 3D, we have
+        // f(x,y,z) ~= f(x1,y1,z1)(x2-x)(y2-y)(z2-z) + ...
+        //           + f(x2,y2,z2)(x-x1)(y-y1)(z-z1)
+        //
+        // f(x,y,z) ~= f(x1,y1,z1)(1-(x-x1))(1-(y-y1))(1-(z-z1)) + ...
+        //           + f(x2,y2,z2)   (x-x1)    (y-y1)    (z-z1)
+
+        // Load in the complex values from the E beam
+        // at the supplied coordinate offsets.
+        // Save the sum of abs in sum.real
+        // and the sum of args in sum.imag
+        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
+            gl + 0.0f, gm + 0.0f, gchan + 0.0f,
+            (1.0f-ld)*(1.0f-md)*(1.0f-chd));
+        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
+            gl + 1.0f, gm + 0.0f, gchan + 0.0f,
+            ld*(1.0f-md)*(1.0f-chd));
+        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
+            gl + 0.0f, gm + 1.0f, gchan + 0.0f,
+            (1.0f-ld)*md*(1.0f-chd));
+        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
+            gl + 1.0f, gm + 1.0f, gchan + 0.0f,
+            ld*md*(1.0f-chd));
+
+        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
+            gl + 0.0f, gm + 0.0f, gchan + 1.0f,
+            (1.0f-ld)*(1.0f-md)*chd);
+        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
+            gl + 1.0f, gm + 0.0f, gchan + 1.0f,
+            ld*(1.0f-md)*chd);
+        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
+            gl + 0.0f, gm + 1.0f, gchan + 1.0f,
+            (1.0f-ld)*md*chd);
+        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
+            gl + 1.0f, gm + 1.0f, gchan + 1.0f,
+            ld*md*chd);
+
+        // Determine the normalised angle
+        FT angle = Po::arg(sum);
+
+        // Take the complex exponent of the angle
+        // and multiply by the sum of abs
+        CT value;
+        Po::sincos(angle, &value.y, &value.x);
+        value.x *= abs_sum;
+        value.y *= abs_sum;
+
+        i = ((SRC*cdata.ntime + TIME)*cdata.na + ANT)*cdata.npolchan.extent_size() + POLCHAN;
+        jones[i] = value;
+        __syncthreads();
+    }        
 }
 
 template <typename FT, typename CT>
@@ -128,15 +292,12 @@ public:
     explicit RimeEBeam(tensorflow::OpKernelConstruction * context) :
         tensorflow::OpKernel(context)
     {
-        printf("Getting constant data address\n");
         // Get device address of GPU constant data
         cudaError_t error = cudaGetSymbolAddress((void **)&d_cdata, cdata);
 
         if(error != cudaSuccess) {
             printf("Cuda Error: %s\n", cudaGetErrorString(error));
         }
-
-        printf("Got constant data address%\n");
     }
 
     void Compute(tensorflow::OpKernelContext * context) override
@@ -219,8 +380,6 @@ public:
         tf::TensorShape cdata_shape({sizeof(cdata)});
         tf::Tensor cdata_tensor;
 
-        printf("Allocating constant data\n");
-
         // TODO. Does this actually allocate pinned memory?
         tensorflow::AllocatorAttributes pinned_allocator;
         pinned_allocator.set_on_host(true);
@@ -231,14 +390,14 @@ public:
             DT_UINT8, cdata_shape, &cdata_tensor,
             pinned_allocator));
 
-        printf("Allocated constant data\n");
-
         // Cast raw bytes to the constant data structure type
         montblanc::ebeam::const_data * cdata_ptr = 
             reinterpret_cast<montblanc::ebeam::const_data *>(
                 cdata_tensor.flat<uint8_t>().data());
 
-        printf("Accessing constant data\n");
+        cdata_ptr->nsrc = nsrc;
+        cdata_ptr->ntime = ntime;
+        cdata_ptr->na = na;
 
         cdata_ptr->nchan.global_size = nchan;
         cdata_ptr->nchan.local_size = nchan;
@@ -250,8 +409,9 @@ public:
         cdata_ptr->npolchan.lower_extent = 0;
         cdata_ptr->npolchan.upper_extent = npolchan;
 
-
-        printf("Accessed constant data\n");
+        cdata_ptr->beam_lw = in_E_beam.dim_size(0);
+        cdata_ptr->beam_mh = in_E_beam.dim_size(1);
+        cdata_ptr->beam_nud = in_E_beam.dim_size(2);
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
@@ -281,20 +441,16 @@ public:
         auto jones = reinterpret_cast<typename Tr::CT *>(
             jones_ptr->flat<CT>().data());
 
-        printf("Getting constants\n");
         FT parallactic_angle = in_parallactic_angle.tensor<FT, 0>()(0);
         FT beam_ll = in_beam_ll.tensor<FT, 0>()(0);
         FT beam_lm = in_beam_lm.tensor<FT, 0>()(0);
         FT beam_ul = in_beam_ul.tensor<FT, 0>()(0);
         FT beam_um = in_beam_um.tensor<FT, 0>()(0);
 
-        printf("Calling kernel\n");
-
         rime_e_beam<Tr><<<grid, blocks, 0, stream>>>(
             lm, point_errors, antenna_scaling, E_beam,
             jones, parallactic_angle,
-            beam_ll, beam_lm, beam_ul, beam_um,
-            nsrc, ntime, na, npolchan);
+            beam_ll, beam_lm, beam_ul, beam_um);
 
     }
 };
