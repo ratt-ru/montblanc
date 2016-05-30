@@ -33,17 +33,17 @@ beam_lw = beam_mh = beam_nud = 50
 # Beam cube coordinates
 
 # Useful random floats functor
-rfloats = lambda *s: np.random.random(size=s).astype(dtype)
+rf = lambda *s: np.random.random(size=s).astype(dtype)
 
 # Set up our numpy input arrays
-np_lm = rfloats(nsrc,2)*0.1
-np_point_errors = rfloats(ntime, na, nchan, 2)
-np_antenna_scaling = rfloats(na,nchan,2)
-np_e_beam = (rfloats(beam_lw, beam_mh, beam_nud, 4) +
-        rfloats(beam_lw, beam_mh, beam_nud, 4)).astype(ctype)
-np_parallactic_angle = rfloats(1,)[0]
+np_lm = (rf(nsrc,2)-0.5)*1e-1
+np_point_errors = (rf(ntime, na, nchan, 2)-0.5)*1e-2
+np_antenna_scaling = rf(na,nchan,2)
+np_e_beam = (rf(beam_lw, beam_mh, beam_nud, 4) +
+        1j*rf(beam_lw, beam_mh, beam_nud, 4)).astype(ctype)
+np_parallactic_angle = np.deg2rad(1).astype(dtype)
 np_beam_ll, np_beam_ul, np_beam_lm, np_beam_um = dtype(
-    [-0.5, 0.5, -0.5, 0.5])
+    [-1, -1, 1, 1])
 
 # Create tensorflow variables
 args = map(lambda n, s: tf.Variable(n, name=s),
@@ -77,4 +77,17 @@ with tf.Session() as S:
     print 'Tensorflow GPU time %f' % (timeit.default_timer() - start)
 
     assert tf_e_beam_op_gpu.shape == tf_e_beam_op_cpu.shape
-    assert np.allclose(tf_e_beam_op_cpu, tf_e_beam_op_gpu)
+
+    proportion_acceptable = 1e-4
+    d = np.invert(np.isclose(tf_e_beam_op_cpu, tf_e_beam_op_gpu))
+    incorrect = d.sum()
+    proportion_incorrect = incorrect / float(d.size)
+
+    assert proportion_incorrect < proportion_acceptable, (
+        'Proportion of incorrect E beam values {pi} '
+        '({i} out of {t}) '
+        'is greater than the accepted tolerance {pa}.').format(
+            pi=proportion_incorrect,
+            i=incorrect,
+            t=d.size,
+            pa=proportion_acceptable)
