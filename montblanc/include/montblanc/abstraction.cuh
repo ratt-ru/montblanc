@@ -54,6 +54,9 @@ public:
     typedef float alpha_type;
     typedef float2 B_sqrt_type;
 
+    typedef float2 point_error_type;
+    typedef float2 antenna_scale_type;
+
 public:
 	const static bool is_implemented = true;
 	constexpr static float cuda_pi = CUDART_PI_F;
@@ -159,6 +162,9 @@ public:
     typedef double stokes_type;
     typedef double alpha_type;
     typedef double2 B_sqrt_type;
+
+    typedef double2 point_error_type;
+    typedef double2 antenna_scale_type;
 
 public:
 	const static bool is_implemented = true;

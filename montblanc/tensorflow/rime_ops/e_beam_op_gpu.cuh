@@ -12,17 +12,132 @@
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
+#include "rime_constant_structures.h"
+
+namespace montblanc {
+namespace ebeam {
+
+// Traits class defined by float types
+template <typename FT> class LaunchTraits;
+
+// Specialise for float
+template <> class LaunchTraits<float>
+{
+public:
+    static constexpr int BLOCKDIMX = 32;
+    static constexpr int BLOCKDIMY = 32;
+    static constexpr int BLOCKDIMZ = 1;
+
+    static dim3 block_size(int X, int Y, int Z)
+    {
+        return montblanc::shrink_small_dims(
+            dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
+            X, Y, Z);
+    }        
+};
+
+// Specialise for double
+template <> class LaunchTraits<double>
+{
+public:
+    static constexpr int BLOCKDIMX = 32;
+    static constexpr int BLOCKDIMY = 16;
+    static constexpr int BLOCKDIMZ = 1;
+
+    static dim3 block_size(int X, int Y, int Z)
+    {
+        return montblanc::shrink_small_dims(
+            dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
+            X, Y, Z);
+    }        
+};
+
+typedef struct {
+    dim_field nchan;
+    dim_field npolchan;
+} const_data;
+
+} // namespace montblanc {
+} // namespace ebeam {
 
 namespace tensorflow {
 
 // For simpler partial specialisation
-typedef Eigen::ThreadPoolDevice GPUDevice;    
+typedef Eigen::GpuDevice GPUDevice;    
+
+// Number of polarisations handled by this kernel
+constexpr int EBEAM_NPOL = 4;
+
+// Constant GPU memory 
+__constant__ montblanc::ebeam::const_data cdata;
+
+// Get the current polarisation from the thread ID
+template <typename Traits>
+__device__ __forceinline__ int ebeam_pol()
+    { return threadIdx.x & 0x3; }
+
+template <typename Traits>
+__global__ void rime_e_beam(
+    const typename Traits::lm_type * lm,
+    const typename Traits::point_error_type * point_errors,
+    const typename Traits::antenna_scale_type * antenna_scaling,
+    const typename Traits::CT * e_beam,
+    typename Traits::CT * jones,
+    typename Traits::FT parallactic_angle,
+    typename Traits::FT beam_ll, typename Traits::FT beam_lm,
+    typename Traits::FT beam_ul, typename Traits::FT beam_um,
+    int nsrc, int ntime, int na, int npolchan)
+{
+    // Simpler float and complex types
+    typedef typename Traits::FT FT;
+    typedef typename Traits::CT CT;
+
+    typedef typename montblanc::kernel_policies<FT> Po;
+    typedef typename montblanc::ebeam::LaunchTraits<FT> LTr;
+
+    int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
+    int ANT = blockIdx.y*blockDim.y + threadIdx.y;
+    int SRC = blockIdx.z*blockDim.z + threadIdx.z;
+    constexpr int BLOCKCHANS = LTr::BLOCKDIMX >> 2;
+
+    if(POLCHAN == 0 && ANT == 0 && SRC == 0)
+    {
+        printf("nchan.global_size=%d\n", cdata.nchan.global_size);
+    }
+
+    if(SRC >= nsrc || ANT >= na || POLCHAN >= npolchan)
+        return;
+
+    __shared__ typename Traits::lm_type
+        s_lm0[LTr::BLOCKDIMZ];
+    __shared__ typename Traits::point_error_type
+        s_lmd[LTr::BLOCKDIMY][BLOCKCHANS];
+    __shared__ typename Traits::antenna_scale_type
+        s_ab[LTr::BLOCKDIMY][BLOCKCHANS];
+
+}
 
 template <typename FT, typename CT>
 class RimeEBeam<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
+private:
+    // Pointer to constant memory on the device
+    montblanc::rime_const_data * d_cdata;
+
 public:
-    explicit RimeEBeam(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+    explicit RimeEBeam(tensorflow::OpKernelConstruction * context) :
+        tensorflow::OpKernel(context)
+    {
+        printf("Getting constant data address\n");
+        // Get device address of GPU constant data
+        cudaError_t error = cudaGetSymbolAddress((void **)&d_cdata, cdata);
+
+        if(error != cudaSuccess) {
+            printf("Cuda Error: %s\n", cudaGetErrorString(error));
+        }
+
+        printf("Got constant data address%\n");
+    }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
@@ -87,11 +202,11 @@ public:
         int ntime = in_point_errors.dim_size(0);
         int na = in_point_errors.dim_size(1);
         int nchan = in_point_errors.dim_size(2);
+        int npolchan = nchan*EBEAM_NPOL;
 
         // Reason about our output shape
-        tf::TensorShape jones_shape({nsrc, ntime, na, nchan, 4});
-
         // Create a pointer for the jones result
+        tf::TensorShape jones_shape({nsrc, ntime, na, nchan, 4});
         tf::Tensor * jones_ptr = nullptr;
 
         // Allocate memory for the jones
@@ -100,6 +215,87 @@ public:
 
         if (jones_ptr->NumElements() == 0)
             { return; }
+
+        tf::TensorShape cdata_shape({sizeof(cdata)});
+        tf::Tensor cdata_tensor;
+
+        printf("Allocating constant data\n");
+
+        // TODO. Does this actually allocate pinned memory?
+        tensorflow::AllocatorAttributes pinned_allocator;
+        pinned_allocator.set_on_host(true);
+        pinned_allocator.set_gpu_compatible(true);
+
+        // Allocate memory for the constant data
+        OP_REQUIRES_OK(context, context->allocate_temp(
+            DT_UINT8, cdata_shape, &cdata_tensor,
+            pinned_allocator));
+
+        printf("Allocated constant data\n");
+
+        // Cast raw bytes to the constant data structure type
+        montblanc::ebeam::const_data * cdata_ptr = 
+            reinterpret_cast<montblanc::ebeam::const_data *>(
+                cdata_tensor.flat<uint8_t>().data());
+
+        printf("Accessing constant data\n");
+
+        cdata_ptr->nchan.global_size = nchan;
+        cdata_ptr->nchan.local_size = nchan;
+        cdata_ptr->nchan.lower_extent = 0;
+        cdata_ptr->nchan.upper_extent = nchan;
+
+        cdata_ptr->npolchan.global_size = npolchan;
+        cdata_ptr->npolchan.local_size = npolchan;
+        cdata_ptr->npolchan.lower_extent = 0;
+        cdata_ptr->npolchan.upper_extent = npolchan;
+
+
+        printf("Accessed constant data\n");
+
+        const auto & stream = context->eigen_device<GPUDevice>().stream();
+
+        // Enqueue a copy of constant data to the device
+        cudaMemcpyAsync(d_cdata, cdata_ptr, sizeof(cdata),
+           cudaMemcpyHostToDevice, stream);
+
+        typedef montblanc::kernel_traits<FT> Tr;
+        typedef typename montblanc::ebeam::LaunchTraits<FT> LTr;
+
+        // Set up our kernel dimensions
+        dim3 blocks(LTr::block_size(npolchan, na, nsrc));
+        dim3 grid(montblanc::grid_from_thread_block(
+            blocks, npolchan, na, nsrc));
+
+        // Cast to the cuda types expected by the kernel
+        auto lm = reinterpret_cast<const typename Tr::lm_type *>(
+            in_lm.flat<FT>().data());
+        auto point_errors = reinterpret_cast<
+            const typename Tr::point_error_type *>(
+                in_point_errors.flat<FT>().data());
+        auto antenna_scaling = reinterpret_cast<
+            const typename Tr::antenna_scale_type *>(
+                in_antenna_scaling.flat<FT>().data());
+        auto E_beam = reinterpret_cast<const typename Tr::CT *>(
+            in_E_beam.flat<CT>().data());
+        auto jones = reinterpret_cast<typename Tr::CT *>(
+            jones_ptr->flat<CT>().data());
+
+        printf("Getting constants\n");
+        FT parallactic_angle = in_parallactic_angle.tensor<FT, 0>()(0);
+        FT beam_ll = in_beam_ll.tensor<FT, 0>()(0);
+        FT beam_lm = in_beam_lm.tensor<FT, 0>()(0);
+        FT beam_ul = in_beam_ul.tensor<FT, 0>()(0);
+        FT beam_um = in_beam_um.tensor<FT, 0>()(0);
+
+        printf("Calling kernel\n");
+
+        rime_e_beam<Tr><<<grid, blocks, 0, stream>>>(
+            lm, point_errors, antenna_scaling, E_beam,
+            jones, parallactic_angle,
+            beam_ll, beam_lm, beam_ul, beam_um,
+            nsrc, ntime, na, npolchan);
+
     }
 };
 

@@ -27,7 +27,7 @@ def e_beam_op(lm, point_errors, antenna_scaling,
         beam_ll, beam_lm, beam_ul, beam_um)
 
 dtype, ctype = np.float64, np.complex128
-nsrc, ntime, na, nchan = 100, 50, 64, 128
+nsrc, ntime, na, nchan = 20, 10, 7, 32
 beam_lw = beam_mh = beam_nud = 50
 
 # Beam cube coordinates
@@ -58,6 +58,10 @@ args = map(lambda n, s: tf.Variable(n, name=s),
 with tf.device('/cpu:0'):
     e_beam_op_cpu = e_beam_op(*args)
 
+# Get an expression for the e beam op on the GPU
+with tf.device('/gpu:0'):
+    e_beam_op_gpu = e_beam_op(*args)
+
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
     S.run(tf.initialize_all_variables())
@@ -65,4 +69,9 @@ with tf.Session() as S:
     # Evaluate and time tensorflow CPU
     start = timeit.default_timer()
     tf_e_beam_op_cpu = S.run(e_beam_op_cpu)
-    print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)    
+    print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)
+
+    # Evaluate and time tensorflow GPU
+    start = timeit.default_timer()
+    tf_e_beam_op_gpu = S.run(e_beam_op_gpu)
+    print 'Tensorflow GPU time %f' % (timeit.default_timer() - start)    
