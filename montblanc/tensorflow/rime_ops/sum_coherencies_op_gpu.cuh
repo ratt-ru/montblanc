@@ -29,7 +29,7 @@ public:
         namespace tf = tensorflow;
 
         const tf::Tensor & in_uvw = context->input(0);
-        const tf::Tensor & in_obs_vis = context->input(1);
+        const tf::Tensor & in_obs_vis = context->input(10);
 
         OP_REQUIRES(context, in_uvw.dims() == 3 && in_uvw.dim_size(2) == 3,
             tf::errors::InvalidArgument(
