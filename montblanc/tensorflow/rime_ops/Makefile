@@ -1,42 +1,43 @@
+# Tensorflow includes and defines
 TF_INC=$(shell python -c 'import tensorflow as tf; print tf.sysconfig.get_include()')
 TF_CUDA=$(shell python -c 'import tensorflow as tf; print int(tf.test.is_built_with_cuda())')
 MB_INC=../../include
 
-INCLUDES = -I $(TF_INC) -I $(MB_INC)
-OBJECTS=abstraction.o \
-	phase_op_cpu.o phase_op_gpu.o \
-	b_sqrt_op_cpu.o b_sqrt_op_gpu.o \
-	e_beam_op_cpu.o e_beam_op_gpu.o
+# Dependencies
+DEPDIR:=.d
+$(shell mkdir -p $(DEPDIR) >/dev/null)
+DEPFLAGS=-MT $@ -MMD -MP -MF $(DEPDIR)/$*.Td
+
+# Define our sources, objects and libraries
+SOURCES=$(wildcard *.cpp *.cu)
+OBJECTS=$(addsuffix .o, $(basename $(SOURCES)))
 LIBRARY=rime.so
 
-CPPFLAGS=-std=c++11 -fPIC $(INCLUDES)
-NVCCFLAGS=-std=c++11 -D GOOGLE_CUDA=$(TF_CUDA) $(INCLUDES) -x cu -Xcompiler -fPIC --gpu-architecture=sm_35
+# Compiler flags
+INCLUDES= -I $(TF_INC) -I $(MB_INC)
+CPPFLAGS=-std=c++11 $(INCLUDES) -fPIC 
+NVCCFLAGS=-std=c++11 -D GOOGLE_CUDA=$(TF_CUDA) $(INCLUDES) \
+	-x cu --compiler-options "-fPIC" --gpu-architecture=sm_35
+
+# Compiler directives
+COMPILE.cpp = g++ $(DEPFLAGS) $(CPPFLAGS) -c
+COMPILE.nvcc = nvcc --compiler-options " $(DEPFLAGS)" $(NVCCFLAGS) -c
 
 all : $(LIBRARY)
+
+%.o : %.cpp
+	$(COMPILE.cpp) $<
+
+%.o : %.cu
+	$(COMPILE.nvcc) $<
 
 clean :
 	rm -f $(OBJECTS) $(LIBRARY)
 
-abstraction.o : abstraction.cu
-	nvcc $< -c -o $@ $(NVCCFLAGS)
-
-b_sqrt_op_gpu.o: b_sqrt_op_gpu.cu b_sqrt_op_gpu.cuh b_sqrt_op.h
-	nvcc $< -c -o $@ $(NVCCFLAGS)
-
-b_sqrt_op_cpu.o: b_sqrt_op_cpu.cpp b_sqrt_op_cpu.h b_sqrt_op.h
-	g++ $< -c -o $@ $(CPPFLAGS)
-
-phase_op_gpu.o: phase_op_gpu.cu phase_op_gpu.cuh phase_op.h
-	nvcc $< -c -o $@ $(NVCCFLAGS)
-
-phase_op_cpu.o : phase_op_cpu.cpp phase_op.h
-	g++ $< -c -o $@ $(CPPFLAGS)
-
-e_beam_op_gpu.o : e_beam_op_gpu.cu e_beam_op_gpu.cuh e_beam_op.h
-	nvcc $< -c -o $@ $(NVCCFLAGS)
-
-e_beam_op_cpu.o : e_beam_op_cpu.cpp e_beam_op_cpu.h e_beam_op.h
-	g++ $< -c -o $@ $(CPPFLAGS)
-
 $(LIBRARY) : $(OBJECTS)
 	g++  -shared $(OBJECTS) -o $(LIBRARY) -fPIC
+
+$(DEPDIR)/%.d: ;
+.PRECIOUS: $(DEPDIR)/%.d
+
+-include $(patsubst %,$(DEPDIR)/%.d,$(basename $(SRCS)))	
