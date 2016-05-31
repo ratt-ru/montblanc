@@ -17,7 +17,8 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
-namespace tensorflow {
+namespace montblanc {
+namespace phase {
 
 // For simpler partial specialisation
 typedef Eigen::ThreadPoolDevice CPUDevice;
@@ -199,6 +200,7 @@ public:
     }
 };
 
-} // namespace tensorflow {
+} // namespace phase {
+} // namespace montblanc {
 
 #endif // #define RIME_PHASE_OP_H

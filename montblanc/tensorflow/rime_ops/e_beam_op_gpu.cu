@@ -1,6 +1,7 @@
 #include "e_beam_op_gpu.cuh"
 
-namespace tensorflow {
+namespace montblanc {
+namespace ebeam {
 
 REGISTER_KERNEL_BUILDER(
     Name("RimeEBeam")
@@ -12,7 +13,7 @@ REGISTER_KERNEL_BUILDER(
     .HostMemory("beam_um")
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimeEBeam<tensorflow::GPUDevice, float, tensorflow::complex64>);
+    RimeEBeam<GPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
     Name("RimeEBeam")
@@ -24,6 +25,7 @@ REGISTER_KERNEL_BUILDER(
     .HostMemory("beam_um")
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimeEBeam<tensorflow::GPUDevice, double, tensorflow::complex128>);
+    RimeEBeam<GPUDevice, double, tensorflow::complex128>);
 
-} // namespace tensorflow {
+} // namespace ebeam {
+} // namespace montblanc {

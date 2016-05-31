@@ -51,11 +51,6 @@ public:
     }        
 };
 
-} // namespace montblanc {
-} // namespace bsqrt {
-
-namespace tensorflow {
-
 // For simpler partial specialisation
 typedef Eigen::GpuDevice GPUDevice;    
 
@@ -208,7 +203,8 @@ public:
     }
 };
 
-} // namespace tensorflow {
+} // namespace sqrt {
+} // namespace montblanc {
 
 #endif
 

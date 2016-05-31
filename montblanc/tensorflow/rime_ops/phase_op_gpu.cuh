@@ -50,11 +50,6 @@ public:
     }        
 };
 
-} // namespace montblanc {
-} // namespace phase {
-
-namespace tensorflow {
-
 typedef Eigen::GpuDevice GPUDevice;
 
 // CUDA kernel computing the phase term
@@ -64,7 +59,7 @@ __global__ void rime_phase(
     const typename Traits::uvw_type * uvw,
     const typename Traits::frequency_type * frequency,
     typename Traits::complex_phase_type * complex_phase,
-    int32 nsrc, int32 ntime, int32 na, int32 nchan)
+    int nsrc, int ntime, int na, int nchan)
 {
     int chan = blockIdx.x*blockDim.x + threadIdx.x;
     int ant = blockIdx.y*blockDim.y + threadIdx.y;
@@ -203,7 +198,8 @@ public:
     }
 };
 
-} // namespace tensorflow {
+} // namespace phase {
+} // namespace montblanc {
 
 #endif // #if GOOGLE_CUDA
 

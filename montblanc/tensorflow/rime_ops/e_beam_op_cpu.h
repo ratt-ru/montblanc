@@ -9,8 +9,8 @@
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
-namespace tensorflow {
-
+namespace montblanc {
+namespace ebeam {
 // For simpler partial specialisation
 typedef Eigen::ThreadPoolDevice CPUDevice;    
 
@@ -245,6 +245,7 @@ public:
     }
 };
 
-} // namespace tensorflow {
+} // namespace ebeam {
+} // namespace montblanc {
 
 #endif // #ifndef RIME_E_BEAM_OP_CPU_H_

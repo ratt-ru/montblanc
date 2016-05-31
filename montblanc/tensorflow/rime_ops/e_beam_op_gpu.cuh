@@ -51,10 +51,6 @@ public:
     }        
 };
 
-} // namespace montblanc {
-} // namespace ebeam {
-
-namespace tensorflow {
 
 // For simpler partial specialisation
 typedef Eigen::GpuDevice GPUDevice;    
@@ -369,13 +365,13 @@ public:
         tf::Tensor cdata_tensor;
 
         // TODO. Does this actually allocate pinned memory?
-        tensorflow::AllocatorAttributes pinned_allocator;
+        tf::AllocatorAttributes pinned_allocator;
         pinned_allocator.set_on_host(true);
         pinned_allocator.set_gpu_compatible(true);
 
         // Allocate memory for the constant data
         OP_REQUIRES_OK(context, context->allocate_temp(
-            DT_UINT8, cdata_shape, &cdata_tensor,
+            tf::DT_UINT8, cdata_shape, &cdata_tensor,
             pinned_allocator));
 
         // Cast raw bytes to the constant data structure type
@@ -443,7 +439,8 @@ public:
     }
 };
 
-} // namespace tensorflow {
+} // namespace ebeam {
+} // namespace montblanc {
 
 #endif // #if GOOGLE_CUDA
 

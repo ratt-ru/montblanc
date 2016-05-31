@@ -2,7 +2,8 @@
 
 #include "b_sqrt_op_gpu.cuh"
 
-namespace tensorflow {
+namespace montblanc {
+namespace bsqrt {
 
 REGISTER_KERNEL_BUILDER(
     Name("RimeBSqrt")
@@ -10,7 +11,7 @@ REGISTER_KERNEL_BUILDER(
     .HostMemory("ref_freq")
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimeBSqrt<tensorflow::GPUDevice, float, tensorflow::complex64>);
+    RimeBSqrt<GPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
     Name("RimeBSqrt")
@@ -18,8 +19,9 @@ REGISTER_KERNEL_BUILDER(
     .HostMemory("ref_freq")
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimeBSqrt<tensorflow::GPUDevice, double, tensorflow::complex128>);
+    RimeBSqrt<GPUDevice, double, tensorflow::complex128>);
 
-} // namespace tensorflow {
+} // namespace bsqrt {
+} // namespace montblanc {
 
 #endif

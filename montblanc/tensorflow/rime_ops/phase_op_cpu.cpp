@@ -1,6 +1,7 @@
 #include "phase_op_cpu.h"
 
-namespace tensorflow {
+namespace montblanc {
+namespace phase {
 
 REGISTER_OP("RimePhase")
     .Input("lm: FT")
@@ -15,13 +16,14 @@ REGISTER_KERNEL_BUILDER(
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimePhaseOp<tensorflow::CPUDevice, float, tensorflow::complex64>);
+    RimePhaseOp<CPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
     Name("RimePhase")
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimePhaseOp<tensorflow::CPUDevice, double, tensorflow::complex128>);
+    RimePhaseOp<CPUDevice, double, tensorflow::complex128>);
 
-} // namespace tensorflow {
+} // namespace phase {
+} // namespace montblanc {

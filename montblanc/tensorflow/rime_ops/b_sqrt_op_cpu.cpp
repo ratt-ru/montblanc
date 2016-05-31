@@ -1,6 +1,7 @@
 #include "b_sqrt_op_cpu.h"
 
-namespace tensorflow {
+namespace montblanc {
+namespace bsqrt {
 
 REGISTER_OP("RimeBSqrt")
     .Input("stokes: FT")
@@ -16,13 +17,14 @@ REGISTER_KERNEL_BUILDER(
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimeBSqrt<tensorflow::CPUDevice, float, tensorflow::complex64>);
+    RimeBSqrt<CPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
     Name("RimeBSqrt")
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimeBSqrt<tensorflow::CPUDevice, double, tensorflow::complex128>);
+    RimeBSqrt<CPUDevice, double, tensorflow::complex128>);
 
-} // namespace tensorflow {
+} // namespace bsqrt {
+} // namespace montblanc {

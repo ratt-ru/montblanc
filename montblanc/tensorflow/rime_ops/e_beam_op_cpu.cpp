@@ -1,7 +1,7 @@
 #include "e_beam_op_cpu.h"
 
-namespace tensorflow {
-
+namespace montblanc {
+namespace ebeam {
 REGISTER_OP("RimeEBeam")
     .Input("lm: FT")
     .Input("point_errors: FT")
@@ -21,13 +21,14 @@ REGISTER_KERNEL_BUILDER(
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimeEBeam<tensorflow::CPUDevice, float, tensorflow::complex64>);
+    RimeEBeam<CPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
     Name("RimeEBeam")
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimeEBeam<tensorflow::CPUDevice, double, tensorflow::complex128>);
+    RimeEBeam<CPUDevice, double, tensorflow::complex128>);
 
-} // namespace tensorflow {
+} // namespace ebeam {
+} // namespace montblanc {

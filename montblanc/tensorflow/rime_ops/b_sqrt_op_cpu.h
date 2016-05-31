@@ -9,7 +9,8 @@
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
-namespace tensorflow {
+namespace montblanc {
+namespace bsqrt {
 
 // For simpler partial specialisation
 typedef Eigen::ThreadPoolDevice CPUDevice;    
@@ -124,6 +125,7 @@ public:
     }
 };
 
-} // namespace tensorflow {
+} // namespace bsqrt {
+} // namespace montblanc {
 
 #endif // #ifndef RIME_B_SQRT_OP_CPU_H_
