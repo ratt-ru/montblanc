@@ -270,7 +270,7 @@ class RimeEBeam<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 private:
     // Pointer to constant memory on the device
-    montblanc::rime_const_data * d_cdata;
+    montblanc::ebeam::const_data * d_cdata;
 
 public:
     explicit RimeEBeam(tensorflow::OpKernelConstruction * context) :
