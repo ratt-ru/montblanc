@@ -12,14 +12,14 @@ template <typename Device, typename FT, typename CT> class RimeEBeam;
 constexpr int EBEAM_NPOL = 4;
 
 typedef struct {
-    uint32_t nsrc;
-    uint32_t ntime;
-    uint32_t na;
+    int nsrc;
+    int ntime;
+    int na;
     dim_field nchan;
     dim_field npolchan;
-    uint32_t beam_lw;
-    uint32_t beam_mh;
-    uint32_t beam_nud;
+    int beam_lw;
+    int beam_mh;
+    int beam_nud;
 } const_data;
 
 } // namespace ebeam {

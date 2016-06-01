@@ -6,17 +6,17 @@
 namespace montblanc {
 
 typedef struct {
-    uint32_t global_size;
-    uint32_t local_size;
-    uint32_t lower_extent;
-    uint32_t upper_extent;
+    int global_size;
+    int local_size;
+    int lower_extent;
+    int upper_extent;
 
 #ifdef GOOGLE_CUDA
     __host__ __device__ __forceinline__
 #else
     inline
 #endif
-    uint32_t extent_size(void) const
+    int extent_size(void) const
         { return upper_extent - lower_extent; }
     
 } dim_field;
