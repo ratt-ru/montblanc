@@ -10,14 +10,14 @@ template <typename Device, typename FT, typename CT> class RimeSumCoherencies;
 
 typedef struct {
     dim_field nsrc;
-    dim_field npsrc;
-    dim_field ngsrc;
-    dim_field nssrc;
     uint32_t ntime;
     uint32_t nbl;
     uint32_t na;
     uint32_t nchan;
     uint32_t npolchan;
+    uint32_t npsrc;
+    uint32_t nssrc;
+    uint32_t ngsrc;
 
 } const_data;
 

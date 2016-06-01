@@ -23,7 +23,7 @@ template <> class LaunchTraits<float>
 {
 public:
     static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 32;
+    static constexpr int BLOCKDIMY = 8;
     static constexpr int BLOCKDIMZ = 1;
 
     static dim3 block_size(int X, int Y, int Z)
@@ -144,7 +144,7 @@ __global__ void rime_sum_coherencies(
 
     // Iterate over point sources
     int src_start = 0;
-    int src_stop = cdata.npsrc.extent_size();
+    int src_stop = cdata.npsrc;
 
     for(int src=src_start; src < src_stop; ++src)
     {
@@ -153,7 +153,7 @@ __global__ void rime_sum_coherencies(
 
     // Iterate over gaussian sources
     src_start = src_stop;
-    src_stop += cdata.ngsrc.extent_size();
+    src_stop += cdata.ngsrc;
 
     for(int src=src_start; src < src_stop; ++src)
     {
@@ -162,7 +162,7 @@ __global__ void rime_sum_coherencies(
 
     // Iterate over sersic sources
     src_start = src_stop;
-    src_stop += cdata.nssrc.extent_size();
+    src_stop += cdata.nssrc;
 
     for(int src=src_start; src < src_stop; ++src)
     {
@@ -265,21 +265,9 @@ public:
         cdata_ptr->nbl = nbl;
         cdata_ptr->nchan = nchan;
         cdata_ptr->npolchan = npolchan;
-
-        cdata_ptr->npsrc.local_size = npsrc;
-        cdata_ptr->npsrc.global_size = npsrc;
-        cdata_ptr->npsrc.lower_extent = 0;
-        cdata_ptr->npsrc.upper_extent = npsrc;
-
-        cdata_ptr->ngsrc.local_size = ngsrc;
-        cdata_ptr->ngsrc.global_size = ngsrc;
-        cdata_ptr->ngsrc.lower_extent = 0;
-        cdata_ptr->ngsrc.upper_extent = ngsrc;
-
-        cdata_ptr->nssrc.local_size = nssrc;
-        cdata_ptr->nssrc.global_size = nssrc;
-        cdata_ptr->nssrc.lower_extent = 0;
-        cdata_ptr->nssrc.upper_extent = nssrc;
+        cdata_ptr->npsrc = npsrc;
+        cdata_ptr->ngsrc = ngsrc;
+        cdata_ptr->nssrc = nssrc;
 
         cdata_ptr->nsrc.local_size = nsrc;
         cdata_ptr->nsrc.global_size = nsrc;
