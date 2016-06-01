@@ -71,6 +71,13 @@ __global__ void rime_sum_coherencies(
     const typename Traits::vis_type * in_model_vis,
     typename Traits::vis_type * out_model_vis)
 {
+    int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
+    int BL = blockIdx.y*blockDim.y + threadIdx.y;
+    int TIME = blockIdx.z*blockDim.z + threadIdx.z;
+
+    if(TIME >= cdata.ntime || BL >= cdata.nbl || POLCHAN >= cdata.npolchan)
+            { return; }
+
     // Helpful types
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
@@ -93,9 +100,6 @@ __global__ void rime_sum_coherencies(
     FT & V = shared.uvw[threadIdx.z][threadIdx.y].y;
     FT & W = shared.uvw[threadIdx.z][threadIdx.y].z;
 
-    int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
-    int BL = blockIdx.y*blockDim.y + threadIdx.y;
-    int TIME = blockIdx.z*blockDim.z + threadIdx.z;
     int i;
 
     i = TIME*cdata.nbl + BL;
