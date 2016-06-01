@@ -53,6 +53,8 @@ with tf.device('/cpu:0'):
 
 with tf.device('/gpu:0'):
     sum_coh_op_gpu = sum_coherencies_op(*args)
+    args[-1] = sum_coh_op_gpu
+    sum_coh_op_gpu = sum_coherencies_op(*args)
 
 with tf.Session() as S:
     S.run(tf.initialize_all_variables())
@@ -62,4 +64,4 @@ with tf.Session() as S:
 
     print tf_sum_coh_op_gpu.flatten()[0:20]
 
-    assert np.allclose(tf_sum_coh_op_gpu, np.array([nsrc + 0*1j]))
+    assert np.allclose(tf_sum_coh_op_gpu, np.array([nsrc*2 + 0*1j]))
