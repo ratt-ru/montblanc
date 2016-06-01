@@ -35,18 +35,31 @@ np_flag = np.zeros(shape=(ntime, nbl, nchan, 4)).astype(np.uint8)
 np_weight = rf(ntime, nbl, nchan, 4)
 np_g_term = rf(ntime, na, nchan, 4) + rf(ntime, na, nchan, 4)*1j
 np_obs_vis = rf(ntime, nbl, nchan, 4) + rf(ntime, nbl, nchan, 4)*1j
+np_model_vis = (np.zeros(shape=(ntime, nbl, nchan, 4), dtype=dtype) +
+        np.zeros(shape=(ntime, nbl, nchan, 4), dtype=dtype)*1j)
 
 args = map(lambda n, s: tf.Variable(n, name=s),
     [np_uvw, np_gauss_shape, np_sersic_shape,
     np_frequency, np_ant1, np_ant2, np_ant_jones,
-    np_flag, np_weight, np_g_term, np_obs_vis],
+    np_flag, np_weight, np_g_term,
+    np_obs_vis, np_model_vis],
     ["uvw", "gauss_shape", "sersic_shape",
     "frequency", "ant1", "ant2", "ant_jones",
-    "flag", "weight", "g_term", "observed_vis"])
+    "flag", "weight", "g_term", "observed_vis",
+    "model_vis"])
 
 with tf.device('/cpu:0'):
     sum_coh_op_cpu = sum_coherencies_op(*args)
 
+with tf.device('/gpu:0'):
+    sum_coh_op_gpu = sum_coherencies_op(*args)
+
 with tf.Session() as S:
     S.run(tf.initialize_all_variables())
+
     tf_sum_coh_op_cpu = S.run(sum_coh_op_cpu)
+    tf_sum_coh_op_gpu = S.run(sum_coh_op_gpu)
+
+    print tf_sum_coh_op_gpu.flatten()[0:20]
+
+    assert np.allclose(tf_sum_coh_op_gpu, np.array([nsrc + 0*1j]))

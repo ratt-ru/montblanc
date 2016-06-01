@@ -57,6 +57,15 @@ public:
     typedef float2 point_error_type;
     typedef float2 antenna_scale_type;
 
+    typedef float3 gauss_shape_type;
+    typedef float3 sersic_shape_type;
+    typedef int32_t antenna_type;
+    typedef float2 ant_jones_type;
+    typedef uint8_t flag_type;
+    typedef float weight_type;
+    typedef float gterm_type;
+    typedef float2 vis_type;
+
 public:
 	const static bool is_implemented = true;
 	constexpr static float cuda_pi = CUDART_PI_F;
@@ -165,6 +174,16 @@ public:
 
     typedef double2 point_error_type;
     typedef double2 antenna_scale_type;
+
+    typedef double3 gauss_shape_type;
+    typedef double3 sersic_shape_type;
+    typedef int32_t antenna_type;
+    typedef double2 ant_jones_type;
+    typedef uint8_t flag_type;
+    typedef double weight_type;
+    typedef double gterm_type;
+    typedef double2 vis_type;
+
 
 public:
 	const static bool is_implemented = true;
