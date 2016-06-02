@@ -57,7 +57,8 @@ public:
     typedef float2 point_error_type;
     typedef float2 antenna_scale_type;
 
-    typedef float3 gauss_shape_type;
+    typedef float gauss_param_type;
+    typedef float gauss_shape_type;
     typedef float3 sersic_shape_type;
     typedef int32_t antenna_type;
     typedef float2 ant_jones_type;
@@ -175,7 +176,8 @@ public:
     typedef double2 point_error_type;
     typedef double2 antenna_scale_type;
 
-    typedef double3 gauss_shape_type;
+    typedef double gauss_param_type;
+    typedef double gauss_shape_type;
     typedef double3 sersic_shape_type;
     typedef int32_t antenna_type;
     typedef double2 ant_jones_type;
