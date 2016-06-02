@@ -59,7 +59,10 @@ public:
 
     typedef float gauss_param_type;
     typedef float gauss_shape_type;
-    typedef float3 sersic_shape_type;
+
+    typedef float sersic_param_type;
+    typedef float sersic_shape_type;
+
     typedef int32_t antenna_type;
     typedef float2 ant_jones_type;
     typedef uint8_t flag_type;
@@ -178,7 +181,10 @@ public:
 
     typedef double gauss_param_type;
     typedef double gauss_shape_type;
-    typedef double3 sersic_shape_type;
+
+    typedef double sersic_param_type;
+    typedef double sersic_shape_type;
+
     typedef int32_t antenna_type;
     typedef double2 ant_jones_type;
     typedef uint8_t flag_type;
