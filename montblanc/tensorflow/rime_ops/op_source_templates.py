@@ -17,10 +17,10 @@ ${project_namespace_start}
 ${op_namespace_start}
 
 // General definition of the ${opname} op, which will be specialised for CPUs and GPUs in
-// ${cpp_header_file} and ${cuda_header_file} respectively.
+// ${cpp_header_file} and ${cuda_header_file} respectively, as well as float types (FT).
 // Concrete template instantiations of this class should be provided in
 // ${cpp_source_file} and ${cuda_source_file} respectively
-template <typename Device> class ${opname} {};
+template <typename Device, typename FT> class ${opname} {};
 
 ${op_namespace_stop}
 ${project_namespace_stop}
@@ -52,8 +52,8 @@ ${op_namespace_start}
 typedef Eigen::ThreadPoolDevice CPUDevice; 
 
 // Specialise the ${opname} op for CPUs
-template <>
-class ${opname}<CPUDevice> : public tensorflow::OpKernel
+template <typename FT>
+class ${opname}<CPUDevice, FT> : public tensorflow::OpKernel
 {
 public:
     explicit ${opname}(tensorflow::OpKernelConstruction * context) :
@@ -63,12 +63,20 @@ public:
     {
         namespace tf = tensorflow;
 
-        const tf::Tensor & input = context->input(0);
+        const tf::Tensor & in_input = context->input(0);
 
         // Allocate an output tensor
         tf::Tensor * output_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
-            0, input.shape(), &output_ptr));        
+            0, in_input.shape(), &output_ptr));        
+
+
+        int N = in_input.dim_size(0);
+        auto input = in_input.tensor<FT, 1>();
+        auto output = output_ptr->tensor<FT, 1>();
+
+        for(int i=0; i<N; ++i)
+            { output(i) = input(i) + FT(1.0); }
     }
 };
 
@@ -89,14 +97,26 @@ CPP_SOURCE_TEMPLATE = string.Template(
 ${project_namespace_start}
 ${op_namespace_start}
 
+// Register the ${opname} operator.
 REGISTER_OP("${opname}")
-    .Input("in: float")
-    .Output("out: float");
+    .Input("in: FT")
+    .Output("out: FT")
+    .Attr("FT: {double, float} = DT_FLOAT");
 
+// Register a CPU kernel for ${opname} that handles floats
 REGISTER_KERNEL_BUILDER(
     Name("${opname}")
+    .TypeConstraint<float>("FT")
     .Device(tensorflow::DEVICE_CPU),
-    ${opname}<CPUDevice>);
+    ${opname}<CPUDevice, float>);
+
+// Register a CPU kernel for ${opname} that handles doubles
+REGISTER_KERNEL_BUILDER(
+    Name("${opname}")
+    .TypeConstraint<double>("FT")
+    .Device(tensorflow::DEVICE_CPU),
+    ${opname}<CPUDevice, double>);
+
 
 ${op_namespace_stop}
 ${project_namespace_stop}
@@ -127,20 +147,41 @@ ${op_namespace_start}
 // For simpler partial specialisation
 typedef Eigen::GpuDevice GPUDevice; 
 
+// LaunchTraits struct defining
+// kernel block sizes for floats and doubles
+template <typename FT> struct LaunchTraits {};
+
+template <> struct LaunchTraits<float>
+    { static constexpr int BLOCKDIMX = 1024; };
+
+template <> struct LaunchTraits<double>
+    { static constexpr int BLOCKDIMX = 1024; };
+
 // CUDA kernel outline
-__global__ void ${kernel_name}(const float * input, float * output, int N)
+template <typename FT>
+__global__ void ${kernel_name}(const FT * input, FT * output, int N)
 {
+    // Shared memory usage unnecesssary, but demonstrates use of
+    // constant Trait members to create kernel shared memory.
+    using LTr = LaunchTraits<FT>;
+    __shared__ FT buffer[LTr::BLOCKDIMX];
+
     int i = blockIdx.x*blockDim.x + threadIdx.x;
 
     if(i >= N)
         { return; }
 
-    output[i] = 0.0f;
+    // Load in our input and add one to it
+    buffer[threadIdx.x] = input[i];
+    buffer[threadIdx.x] += FT(1.0);
+
+    // Write to the outpu
+    output[i] = buffer[threadIdx.x];
 }
 
 // Specialise the ${opname} op for GPUs
-template <>
-class ${opname}<GPUDevice> : public tensorflow::OpKernel
+template <typename FT>
+class ${opname}<GPUDevice, FT> : public tensorflow::OpKernel
 {
 public:
     explicit ${opname}(tensorflow::OpKernelConstruction * context) :
@@ -150,23 +191,31 @@ public:
     {
         namespace tf = tensorflow;
 
-        const tf::Tensor & input = context->input(0);
+        const tf::Tensor & in_input = context->input(0);
 
-        int N = input.dim_size(0);
+        int N = in_input.dim_size(0);
 
         // Allocate an output tensor
         tf::Tensor * output_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
-            0, input.shape(), &output_ptr));        
+            0, in_input.shape(), &output_ptr));        
 
-        // One block of 1024 threads
-        dim3 block(1024, 0, 0);
-        dim3 grid(1, 0, 0);
+        using LTr = LaunchTraits<FT>;
+
+        // Set up our CUDA thread block and grid
+        dim3 block(LTr::BLOCKDIMX);
+        dim3 grid((N + block.x - 1)/block.x);
         
-        const auto & stream = context->eigen_device<GPUDevice>().stream();
+        // Get the GPU device
+        const auto & device = context->eigen_device<GPUDevice>();
 
-        ${kernel_name}<<<grid, block, 0, stream>>>(input.flat<float>().data(),
-            output_ptr->flat<float>().data(), N);
+        // Get pointers to flattened tensor data buffers
+        auto const input = in_input.flat<FT>().data();
+        auto output = output_ptr->flat<FT>().data();
+
+        // Call the ${kernel_name} CUDA kernel
+        ${kernel_name}<<<grid, block, 0, device.stream()>>>(
+            input, output, N);
     }
 };
 
@@ -191,10 +240,19 @@ CUDA_SOURCE_TEMPLATE = string.Template(
 ${project_namespace_start}
 ${op_namespace_start}
 
+// Register a GPU kernel for ${opname} that handles floats
 REGISTER_KERNEL_BUILDER(
     Name("${opname}")
+    .TypeConstraint<float>("FT")
     .Device(tensorflow::DEVICE_GPU),
-    ${opname}<GPUDevice>);
+    ${opname}<GPUDevice, float>);
+
+// Register a GPU kernel for ${opname} that handles doubles
+REGISTER_KERNEL_BUILDER(
+    Name("${opname}")
+    .TypeConstraint<double>("FT")
+    .Device(tensorflow::DEVICE_GPU),
+    ${opname}<GPUDevice, double>);
 
 ${op_namespace_stop}
 ${project_namespace_stop}
@@ -211,14 +269,31 @@ PYTHON_SOURCE_TEMPLATE = string.Template(
 """import numpy as np
 import tensorflow as tf
 
+# Load the shared library with the operation
 rime = tf.load_op_library('${library}')
 
-np_array = np.random.random(size=1000).astype(np.float32)
+# Create some input and wrap it in a tensorflow Variable
+np_array = np.random.random(size=512*1024).astype(np.float32)
 tf_array = tf.Variable(np_array)
 
-result = rime.${snake_case}(tf_array)
+# Pin the compute to the CPU
+with tf.device('/cpu:0'):
+    expr_cpu = rime.${snake_case}(tf_array)
+
+# Pin the compute to the GPU
+with tf.device('/gpu:0'):
+    expr_gpu = rime.${snake_case}(tf_array)
 
 with tf.Session() as S:
     S.run(tf.initialize_all_variables())
-    res = S.run(result)
+
+    # Run our expressions on CPU and GPU
+    result_cpu = S.run(expr_cpu)
+    result_gpu = S.run(expr_gpu)
+
+    # Check that 1.0 has been added to the input
+    # and that CPU and GPU results agree
+    assert np.allclose(result_cpu, np_array + 1.0)
+    assert np.allclose(result_cpu, result_gpu)
+
 """)

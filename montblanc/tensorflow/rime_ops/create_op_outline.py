@@ -1,4 +1,3 @@
-from attrdict import AttrDict
 import argparse
 import re
 
@@ -31,13 +30,13 @@ args = parser.parse_args()
 snake_case = camel_to_snake_case(args.opname)
 
 # Create dictionary with variables required for creating the templates
-D = AttrDict({
+D = {
     'opname' : args.opname,
     'project' : PROJECT,
     'module' : MODULE,
     'snake_case' : snake_case,
     'library' : ''.join([MODULE, '.so']),
-})
+}
 
 # Filenames
 D.update({
@@ -51,9 +50,9 @@ D.update({
 
 # C++ header guards
 D.update({
-    'main_header_guard' : header_guard(D.main_header_file),
-    'cpp_header_guard' : header_guard(D.cpp_header_file),
-    'cuda_header_guard' : header_guard(D.cuda_header_file),
+    'main_header_guard' : header_guard(D['main_header_file']),
+    'cpp_header_guard' : header_guard(D['cpp_header_file']),
+    'cuda_header_guard' : header_guard(D['cuda_header_file']),
 })
 
 # C++ namespace
@@ -70,20 +69,20 @@ D.update({
 })
 
 # Write out each file, substituting template variables
-with open(D.main_header_file, 'w') as f:
+with open(D['main_header_file'], 'w') as f:
     f.write(MAIN_HEADER_TEMPLATE.substitute(**D))
 
-with open(D.cpp_header_file, 'w') as f:
+with open(D['cpp_header_file'], 'w') as f:
     f.write(CPP_HEADER_TEMPLATE.substitute(**D))
 
-with open(D.cpp_source_file, 'w') as f:
+with open(D['cpp_source_file'], 'w') as f:
     f.write(CPP_SOURCE_TEMPLATE.substitute(**D))
 
-with open(D.cuda_header_file, 'w') as f:
+with open(D['cuda_header_file'], 'w') as f:
     f.write(CUDA_HEADER_TEMPLATE.substitute(**D))
 
-with open(D.cuda_source_file, 'w') as f:
+with open(D['cuda_source_file'], 'w') as f:
     f.write(CUDA_SOURCE_TEMPLATE.substitute(**D))
 
-with open(D.python_test_file, 'w') as f:
+with open(D['python_test_file'], 'w') as f:
     f.write(PYTHON_SOURCE_TEMPLATE.substitute(**D))
