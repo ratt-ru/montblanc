@@ -16,6 +16,8 @@ REGISTER_OP("RimeSumCoherencies")
     .Input("gterm: CT")
     .Input("observed_vis: CT")
     .Input("model_vis_in: CT")
+    .Input("src_lower: int32")
+    .Input("src_upper: int32")
     .Output("model_vis_out: CT")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64");

@@ -4,7 +4,7 @@ import tensorflow as tf
 # Load the library containing the custom operation
 mod = tf.load_op_library('rime.so')
 
-def sum_coherencies_op(nsrc, src_step, *args):
+def sum_coherencies_op(src_step, *args):
     uvw_dtype = args[0].dtype.base_dtype
 
     if uvw_dtype == tf.float32:
@@ -14,18 +14,26 @@ def sum_coherencies_op(nsrc, src_step, *args):
     else:
         raise TypeError("Unhandled type '{t}'".format(t=lm.dtype))
 
+    # Model visibilities that we accumulate over
     model_vis = tf.zeros([ntime, nbl, nchan, 4], dtype=CT)
 
-    new_args = lambda m: args + (m, )
+    # For adding model visibilities and
+    # lower and upper source extents to the args
+    new_args = lambda m, l, u: args + (m,l,u)
 
-    i = tf.constant(0)
-    cond = lambda i, m: tf.less(i, nsrc)
-    body = lambda i, m: (
-        tf.minimum(tf.add(i, src_step), nsrc),
-        mod.rime_sum_coherencies(*new_args(m)))
+    # l from 0 until nsrc
+    l = tf.constant(0)
+    cond = lambda l, m: tf.less(l, nsrc)
 
-    r = tf.while_loop(cond, body, [i, model_vis])
+    # At each iteration compute model vis,
+    # utilising model vis from previous iteration
+    def body(l, m):
+        u = tf.minimum(tf.add(l, src_step), nsrc)
+        return u, mod.rime_sum_coherencies(*new_args(m,l,u))
 
+    r = tf.while_loop(cond, body, [l, model_vis])
+
+    # Return final model visibilities
     return r[1]
 
 ntime, na, nchan = 20, 7, 32
@@ -33,7 +41,7 @@ nbl = na*(na-1)//2
 dtype = np.float32
 npsrc, ngsrc, nssrc = 20, 20, 20
 nsrc = npsrc+ngsrc+nssrc
-srcstep = 4
+src_step = 5
 
 rf = lambda *s: np.random.random(size=s).astype(dtype)
 
@@ -59,17 +67,15 @@ args = map(lambda n, s: tf.Variable(n, name=s),
     "flag", "weight", "g_term",
     "observed_vis"])
 
-tf_nsrc, tf_src_step = map(lambda n, s: tf.Variable(n, name=s),
-    [np.int32(nsrc), np.int32(srcstep)],
-    ["nsrc", "src_step"])
+tf_src_step = tf.Variable(src_step)
 
 with tf.device('/cpu:0'):
-    sum_coh_op_cpu = sum_coherencies_op(tf_nsrc, tf_src_step, *args)
+    sum_coh_op_cpu = sum_coherencies_op(tf_src_step, *args)
 
 with tf.device('/gpu:0'):
-    sum_coh_op_gpu = sum_coherencies_op(tf_nsrc, tf_src_step, *args)
+    sum_coh_op_gpu = sum_coherencies_op(tf_src_step, *args)
     args[-1] = sum_coh_op_gpu
-    sum_coh_op_gpu = sum_coherencies_op(tf_nsrc, tf_src_step, *args)
+    sum_coh_op_gpu = sum_coherencies_op(tf_src_step, *args)
 
 with tf.Session() as S:
     S.run(tf.initialize_all_variables())

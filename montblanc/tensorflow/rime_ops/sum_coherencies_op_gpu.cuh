@@ -169,6 +169,13 @@ __global__ void rime_sum_coherencies(
         polsum.x += 1.0;
     }
 
+    if(cdata.nsrc.upper_extent < cdata.nsrc.local_size)
+    {
+        i = (TIME*cdata.nbl + BL)*cdata.npolchan + POLCHAN;
+        out_model_vis[i] = polsum;
+        return;
+    }
+
     if(flag[i] > 0)
     {
         polsum.x = 0;
@@ -213,6 +220,8 @@ public:
         const tf::Tensor & in_gterm = context->input(9);
         const tf::Tensor & in_obs_vis = context->input(10);
         const tf::Tensor & in_in_model_vis = context->input(11);
+        const tf::Tensor & in_src_lower = context->input(12);
+        const tf::Tensor & in_src_upper = context->input(13);
 
         OP_REQUIRES(context, in_uvw.dims() == 3 && in_uvw.dim_size(2) == 3,
             tf::errors::InvalidArgument(
@@ -233,6 +242,9 @@ public:
         int nsrc = in_ant_jones.dim_size(0);
         int na = in_ant_jones.dim_size(2);
         int npsrc = nsrc - ngsrc - nssrc;
+
+        int src_lower = in_src_lower.flat<int>().data()[0];
+        int src_upper = in_src_upper.flat<int>().data()[0];
 
         // Allocate an output tensor
         tf::TensorShape model_vis_shape({ntime, nbl, nchan, npol});
@@ -269,10 +281,10 @@ public:
         cdata_ptr->ngsrc = ngsrc;
         cdata_ptr->nssrc = nssrc;
 
-        cdata_ptr->nsrc.local_size = nsrc;
-        cdata_ptr->nsrc.global_size = nsrc;
-        cdata_ptr->nsrc.lower_extent = 0;
-        cdata_ptr->nsrc.upper_extent = nsrc;
+        cdata_ptr->nsrc.lower_extent = src_lower;
+        cdata_ptr->nsrc.upper_extent = src_upper;
+        cdata_ptr->nsrc.local_size = src_upper - src_lower;
+        cdata_ptr->nsrc.global_size = src_upper - src_lower;
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
