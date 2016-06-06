@@ -148,8 +148,6 @@ class CPUSolver(MontblancNumpySolver):
         """        
         nsrc, ntime, na, nchan = self.dim_local_size('nsrc', 'ntime', 'na', 'nchan')
 
-        wave = self.wavelength
-
         u, v, w = self.uvw[0], self.uvw[1], self.uvw[2]
         l, m = self.lm[0], self.lm[1]
         alpha = self.brightness[4]
@@ -167,7 +165,7 @@ class CPUSolver(MontblancNumpySolver):
         # Dim. na x ntime x nchan x nsrcs
         phase = ne.evaluate('exp(-2*pi*1j*p/wl)', {
             'p': phase[:, :, :, np.newaxis],
-            'wl': wave[np.newaxis, np.newaxis, np.newaxis, :],
+            'wl': self.wavelength[np.newaxis, np.newaxis, np.newaxis, :],
             'pi': np.pi
         })
 
@@ -177,8 +175,8 @@ class CPUSolver(MontblancNumpySolver):
         # when the other antenna term is multiplied with this one, we
         # end up with the full power term. sqrt(n)*sqrt(n) == n.
         power = ne.evaluate('(rw/wl)**(0.5*a)', {
-            'rw': self.ref_wave,
-            'wl': wave[np.newaxis, np.newaxis, :],
+            'rw': self.ref_wavelength[np.newaxis, np.newaxis, :],
+            'wl': self.wavelength[np.newaxis, np.newaxis, :],
             'a': alpha[:, :, np.newaxis]
         })
         assert power.shape == (ntime, nsrc, nchan)

@@ -85,8 +85,8 @@ void rime_jones_B_sqrt_impl(
     T * stokes,
     T * alpha,
     T * frequency,
-    typename Tr::ct * B_sqrt,
-    T ref_freq)
+    T * ref_frequency,
+    typename Tr::ct * B_sqrt)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
@@ -94,24 +94,24 @@ void rime_jones_B_sqrt_impl(
     #define POL (threadIdx.x & 0x3)
 
     if(SRC >= DEXT(nsrc) || TIME >= DEXT(ntime) || POLCHAN >= DEXT(npolchan))
-        return;
+        { return; }
 
-    __shared__ T freq[BLOCKDIMX];
+    __shared__ T freq_ratio[BLOCKDIMX];
 
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only
     // one frequency per channel.
     if(threadIdx.y == 0 && threadIdx.z == 0)
     {
-        freq[threadIdx.x] = frequency[POLCHAN >> 2];
+        freq_ratio[threadIdx.x] = frequency[POLCHAN>>2] / 
+            ref_frequency[POLCHAN>>2];
     }
 
     __syncthreads();
 
     // Calculate the power term
     int i = SRC*NTIME + TIME;
-    typename Tr::ft freq_ratio = freq[threadIdx.x]/ref_freq;
-    typename Tr::ft power = Po::pow(freq_ratio, alpha[i]);
+    typename Tr::ft power = Po::pow(freq_ratio[threadIdx.x], alpha[i]);
 
     // Read in the stokes parameter,
     // multiplying it by the power term
@@ -135,11 +135,11 @@ rime_jones_B_sqrt_ ## ft( \
     ft * stokes, \
     ft * alpha, \
     ft * frequency, \
-    ct * B_sqrt, \
-    ft ref_freq) \
+    ft * ref_frequency, \
+    ct * B_sqrt) \
 { \
     rime_jones_B_sqrt_impl<ft>(stokes, alpha, \
-        frequency, B_sqrt, ref_freq); \
+        frequency, ref_frequency, B_sqrt); \
 }
 
 stamp_jones_B_sqrt_fn(float,float2);
@@ -176,6 +176,7 @@ class RimeBSqrt(Node):
             'rime_jones_B_sqrt_double'
 
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
+
         self.mod = SourceModule(kernel_string,
             options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
@@ -220,8 +221,7 @@ class RimeBSqrt(Node):
                 slvr.const_data().ndary())
 
         self.kernel(slvr.stokes, slvr.alpha,
-            slvr.frequency, slvr.B_sqrt,
-            slvr.ref_freq,
+            slvr.frequency, slvr.ref_frequency, slvr.B_sqrt,
             stream=stream, **self.launch_params)
 
     def post_execution(self, solver, stream=None):

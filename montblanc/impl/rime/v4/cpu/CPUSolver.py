@@ -252,7 +252,7 @@ class CPUSolver(MontblancNumpySolver):
 
             # Multiply the scalar power term into the matrix
             B_power = ne.evaluate('B*((f/rf)**a)', {
-                 'rf': self.ref_freq,
+                 'rf': self.ref_frequency[np.newaxis, np.newaxis, :, np.newaxis],
                  'B': B[:,:,np.newaxis,:],
                  'f': self.frequency[np.newaxis, np.newaxis, :, np.newaxis],
                  'a': self.alpha[:, :, np.newaxis, np.newaxis] })

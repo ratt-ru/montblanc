@@ -58,7 +58,6 @@ P = [
     # on frequency, while we're dealing with wavelengths.
     prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi),
     prop_dict('two_pi', 'ft', 2*np.pi),
-    prop_dict('ref_wave', 'ft', 1.5e9),
     prop_dict('sigma_sqrd', 'ft', 1.0),
     prop_dict('X2', 'ft', 0.0),
     prop_dict('beam_width', 'ft', 65),
@@ -137,6 +136,10 @@ A = [
             np.linspace(1e9, 2e9, slvr.dim_local_size('nchan')),
         test=lambda slvr, ary: montblanc.constants.C / \
             np.linspace(1e9, 2e9, slvr.dim_local_size('nchan'))),
+
+    ary_dict('ref_wavelength', ('nchan',), 'ft',
+        default=montblanc.constants.C / 1.4e9,
+        test=montblanc.constants.C / 1.4e9),
 
     ary_dict('point_errors', (2,'ntime','na'), 'ft',
         default=1,

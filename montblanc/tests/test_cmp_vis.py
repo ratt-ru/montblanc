@@ -224,7 +224,8 @@ class TestCmpVis(unittest.TestCase):
             slvr.transfer_brightness(B)
 
             # Set the reference wavelength
-            slvr.set_ref_wave(montblanc.constants.C / _REF_FREQ)
+            ref_wave = montblanc.constants.C / np.full(slvr.ref_wavelength.shape, _REF_FREQ)
+            slvr.transfer_ref_wavelength(ref_wave)
 
             slvr.solve()
 
@@ -256,7 +257,8 @@ class TestCmpVis(unittest.TestCase):
             slvr.transfer_alpha(alpha)
 
             # Set the reference frequency
-            slvr.set_ref_freq(_REF_FREQ)
+            ref_freq = np.full(slvr.ref_frequency.shape, _REF_FREQ)
+            slvr.transfer_ref_frequency(ref_freq)
 
             slvr.solve()
 
@@ -277,7 +279,7 @@ class TestCmpVis(unittest.TestCase):
             slvr.stokes[:,:,3] = _V
             slvr.alpha[:] = _ALPHA
 
-            slvr.set_ref_freq(_REF_FREQ)
+            slvr.ref_frequency[:] = _REF_FREQ
 
             slvr.solve()
 

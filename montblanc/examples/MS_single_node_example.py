@@ -73,10 +73,8 @@ if __name__ == '__main__':
         sources=montblanc.sources(point=args.npsrc,
             gaussian=args.ngsrc, sersic=args.nssrc),
         init_weights='weight', weight_vector=False,
-        dtype='double', auto_correlations=args.auto_correlations,
+        dtype='float', auto_correlations=args.auto_correlations,
         version=args.version)
-
-    print slvr_cfg
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
         # Random point source coordinates in the l,m,n (brightness image) domain
