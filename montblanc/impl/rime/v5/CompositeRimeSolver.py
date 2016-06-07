@@ -879,10 +879,12 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cpu_slice_map.update(src_cpu_slice_map)
                 gpu_slice_map.update(src_gpu_slice_map)
 
-                # Configure dimension extents on the sub-solver
+                # Configure dimension extents and global size on the sub-solver
                 for name, slice_ in cpu_slice_map.iteritems():
                     subslvr.update_dimension(name=name,
-                        lower_extent=slice_.start, upper_extent=slice_.stop)
+                        global_size=self.dimension(name).global_size,
+                        lower_extent=slice_.start,
+                        upper_extent=slice_.stop)
 
                 # Enqueue E Beam
                 kernel = subslvr.rime_e_beam
