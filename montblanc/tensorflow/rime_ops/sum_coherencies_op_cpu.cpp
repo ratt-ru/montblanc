@@ -1,40 +1,37 @@
 #include "sum_coherencies_op_cpu.h"
 
-namespace montblanc {
-namespace sumcoherencies {
+MONTBLANC_NAMESPACE_BEGIN
+MONTBLANC_SUM_COHERENCIES_NAMESPACE_BEGIN
 
-REGISTER_OP("RimeSumCoherencies")
-    .Input("uvw: FT")
-    .Input("gauss_shape: FT")
-    .Input("sersic_shape: FT")
-    .Input("frequency: FT")
+// Register the SumCoherencies operator.
+REGISTER_OP("SumCoherencies")
     .Input("antenna1: int32")
     .Input("antenna2: int32")
-    .Input("antenna_jones: CT")
+    .Input("shape: FT")
+    .Input("ant_jones: CT")
     .Input("flag: uint8")
-    .Input("weight: FT")
     .Input("gterm: CT")
-    .Input("observed_vis: CT")
     .Input("model_vis_in: CT")
-    .Input("src_lower: int32")
-    .Input("src_upper: int32")
+    .Input("apply_dies: bool")
     .Output("model_vis_out: CT")
-    .Attr("FT: {float, double} = DT_FLOAT")
+    .Attr("FT: {double, float} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64");
 
+// Register a CPU kernel for SumCoherencies that handles floats
 REGISTER_KERNEL_BUILDER(
-    Name("RimeSumCoherencies")
-    .Device(tensorflow::DEVICE_CPU)
+    Name("SumCoherencies")
     .TypeConstraint<float>("FT")
-    .TypeConstraint<tensorflow::complex64>("CT"),
-    RimeSumCoherencies<CPUDevice, float, tensorflow::complex64>);
+    .TypeConstraint<tensorflow::complex64>("CT")
+    .Device(tensorflow::DEVICE_CPU),
+    SumCoherencies<CPUDevice, float, tensorflow::complex64>);
 
+// Register a CPU kernel for SumCoherencies that handles doubles
 REGISTER_KERNEL_BUILDER(
-    Name("RimeSumCoherencies")
-    .Device(tensorflow::DEVICE_CPU)
+    Name("SumCoherencies")
     .TypeConstraint<double>("FT")
-    .TypeConstraint<tensorflow::complex128>("CT"),
-    RimeSumCoherencies<CPUDevice, double, tensorflow::complex128>);
+    .TypeConstraint<tensorflow::complex128>("CT")
+    .Device(tensorflow::DEVICE_CPU),
+    SumCoherencies<CPUDevice, double, tensorflow::complex128>);
 
-} // namespace sumcoherencies {
-} // namespace montblanc {
+MONTBLANC_SUM_COHERENCIES_NAMESPACE_STOP
+MONTBLANC_NAMESPACE_STOP

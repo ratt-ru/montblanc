@@ -67,7 +67,7 @@ public:
     typedef float2 ant_jones_type;
     typedef uint8_t flag_type;
     typedef float weight_type;
-    typedef float gterm_type;
+    typedef float2 gterm_type;
     typedef float2 vis_type;
 
 public:
@@ -189,7 +189,7 @@ public:
     typedef double2 ant_jones_type;
     typedef uint8_t flag_type;
     typedef double weight_type;
-    typedef double gterm_type;
+    typedef double2 gterm_type;
     typedef double2 vis_type;
 
 
