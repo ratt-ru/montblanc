@@ -28,9 +28,10 @@ def default_ant_pairs(self):
     """
 
     # Create the antenna pair mapping, from upper triangle indices
-    # based on the number of antenna.
+    # based on the number of antenna. Clamp this to the actual
+    # number of baselines
     ntime, nbl = self.dim_local_size('ntime', 'nbl')
-    ant0, ant1 = self.default_base_ant_pairs()
+    ant0, ant1 = (ant[0:nbl] for ant in self.default_base_ant_pairs())
 
     return (np.tile(ant0, ntime).reshape(ntime, nbl),
         np.tile(ant1, ntime).reshape(ntime, nbl))
