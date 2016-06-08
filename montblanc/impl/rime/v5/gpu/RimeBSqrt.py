@@ -49,6 +49,5 @@ class RimeBSqrt(montblanc.impl.rime.v4.gpu.RimeBSqrt.RimeBSqrt):
         slvr = solver
 
         self.kernel(slvr.stokes, slvr.alpha,
-            slvr.frequency, slvr.B_sqrt,
-            slvr.ref_freq,
+            slvr.frequency, slvr.ref_frequency, slvr.B_sqrt,
             stream=stream, **self.launch_params)

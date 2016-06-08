@@ -54,7 +54,6 @@ fwhm2int = 1.0/np.sqrt(np.log(256))
 P = [
     prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi/montblanc.constants.C),
     prop_dict('two_pi_over_c', 'ft', 2*np.pi/montblanc.constants.C),
-    prop_dict('ref_freq', 'ft', 1.5e9),
     prop_dict('sigma_sqrd', 'ft', 1.0),
     prop_dict('X2', 'ft', 0.0),
 
@@ -130,7 +129,7 @@ class Classifier(Enum):
 # List of arrays
 A = [
     # Input Arrays
-    ary_dict('uvw', ('ntime','na', 3), 'ft',
+    ary_dict('uvw', ('ntime', 'na', 3), 'ft',
         classifiers=frozenset([Classifier.EKB_SQRT_INPUT,
             Classifier.COHERENCIES_INPUT]),
         default=0,
@@ -152,6 +151,11 @@ A = [
             Classifier.COHERENCIES_INPUT]),
         default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan')),
         test=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan'))),
+
+    ary_dict('ref_frequency', ('nchan',), 'ft',
+        classifiers=frozenset([Classifier.B_SQRT_INPUT]),
+        default=1.4e9,
+        test=1.4e9),
 
     # Holographic Beam
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',

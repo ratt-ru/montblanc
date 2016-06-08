@@ -67,9 +67,9 @@ void rime_jones_EK_impl(
     T * lm,
     T * brightness,
     T * wavelength,
+    T * ref_wavelength,
     T * point_errors,
     typename Tr::ct * jones_scalar,
-    T ref_wave,
     T beam_width,
     T beam_clip)
 {
@@ -93,6 +93,7 @@ void rime_jones_EK_impl(
     __shared__ T md[BLOCKDIMZ][BLOCKDIMY];
 
     __shared__ T wl[BLOCKDIMX];
+    __shared__ T wl_ratio[BLOCKDIMX];
 
     __shared__ T a[BLOCKDIMZ];
 
@@ -113,7 +114,10 @@ void rime_jones_EK_impl(
 
     // Wavelengths vary by channel, not by time and antenna
     if(threadIdx.y == 0 && threadIdx.z == 0)
-        { wl[threadIdx.x] = wavelength[CHAN]; }
+    {
+        wl[threadIdx.x] = wavelength[CHAN];
+        wl_ratio[threadIdx.x] = ref_wavelength[CHAN]/wl[threadIdx.x];
+    }
 
     for(int SRC=0;SRC<NSRC;++SRC)
     {
@@ -145,7 +149,7 @@ void rime_jones_EK_impl(
         T real, imag;
         Po::sincos(phase, &imag, &real);
 
-        T power = Po::pow(ref_wave/wl[threadIdx.x], T(0.5)*a[threadIdx.z]);
+        T power = Po::pow(wl_ratio[threadIdx.x], T(0.5)*a[threadIdx.z]);
         real *= power; imag *= power;
 
         // Calculate the beam term for this antenna
@@ -175,14 +179,14 @@ rime_jones_EK_ ## ft( \
     ft * LM, \
     ft * brightness, \
     ft * wavelength, \
+    ft * ref_wavelength, \
     ft * point_errors, \
     ct * jones, \
-    ft ref_wave, \
     ft beam_width, \
     ft beam_clip) \
 { \
-    rime_jones_EK_impl<ft>(UVW, LM, brightness, wavelength, \
-        point_errors, jones, ref_wave, beam_width, beam_clip); \
+    rime_jones_EK_impl<ft>(UVW, LM, brightness, wavelength, ref_wavelength, \
+        point_errors, jones, beam_width, beam_clip); \
 }
 
 stamp_rime_ek_fn(float,float2)
@@ -244,8 +248,8 @@ class RimeEK(Node):
         slvr = solver
 
         self.kernel(slvr.uvw, slvr.lm, slvr.brightness,
-            slvr.wavelength, slvr.point_errors, slvr.jones_scalar,
-            slvr.ref_wave, slvr.beam_width, slvr.beam_clip,
+            slvr.wavelength, slvr.ref_wavelength, slvr.point_errors, slvr.jones_scalar,
+            slvr.beam_width, slvr.beam_clip,
             stream=stream, **self.get_kernel_params(slvr))
 
     def post_execution(self, solver, stream=None):

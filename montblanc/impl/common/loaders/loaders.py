@@ -46,41 +46,72 @@ class MeasurementSetLoader(BaseLoader):
             lp=self.LOG_PREFIX, ms=self.msfile))
 
         # Open the main table
-        main_table = pt.table(self.msfile, ack=False)
+        ms = pt.table(self.msfile, ack=False)
 
-        # If requested, use TAQL to ignore auto-correlations
-        if not auto_correlations:
-            self.tables['main'] = main_table.query('ANTENNA1 != ANTENNA2')
-        else:
-            self.tables['main'] = main_table
+        # Create an ordered view over the MS
+        ordering_query = ' '.join(["SELECT FROM $ms",
+            "" if auto_correlations else "WHERE ANTENNA1 != ANTENNA2",
+            "ORDERBY TIME, ANTENNA1, ANTENNA2"])
 
-        # Open antenna and frequency tables
-        self.tables['ant']  = pt.table(self.antfile, ack=False)
-        self.tables['freq'] = pt.table(self.freqfile, ack=False)
+        ordered_ms = pt.taql(ordering_query)
 
-        msrows = self.tables['main'].nrows()
-        self.na = self.tables['ant'].nrows()
-        self.nbl = mbu.nr_of_baselines(self.na, auto_correlations)
-        self.nchan = np.asscalar(self.tables['freq'].getcol('NUM_CHAN'))
-        self.ntime = msrows // self.nbl
+        # Open main and sub-tables
+        self.tables['main'] = ordered_ms
+        self.tables['ant']  = at = pt.table(self.antfile, ack=False, readonly=True)
+        self.tables['freq'] = ft = pt.table(self.freqfile, ack=False, readonly=True)
 
-        # Require a ntime x nbl shape for MS rows
-        if msrows != self.ntime*self.nbl:
-            autocor_str = ('with auto-correlations' if auto_correlations
-                else 'without auto-correlations')
+        self.nrows = ordered_ms.nrows()
+        self.na = at.nrows()
+        # Count distinct timesteps in the MS
+        t_query = "SELECT FROM $ordered_ms ORDERBY UNIQUE TIME"
+        self.ntime = pt.taql(t_query).nrows()
+        # Count number of baselines in the MS
+        bl_query = "SELECT FROM $ordered_ms ORDERBY UNIQUE ANTENNA1, ANTENNA2"
+        self.nbl = pt.taql(bl_query).nrows()
 
-            raise ValueError("{na} antenna {astr} produce {nbl} baselines, "
-                "but {msr}, the number of rows in '{msf}', cannot "
-                "be divided exactly by this number.".format(
-                    na=self.na, nbl=self.nbl, astr=autocor_str,
-                    msr=msrows, msf=self.msfile))        
+        # Number of channels per band
+        chan_per_band = ft.getcol('NUM_CHAN')
+
+        # Require the same number of channels per band
+        if not all(chan_per_band[0] == cpb for cpb in chan_per_band):
+            raise ValueError('Channels per band {cpb} are not equal!'
+                .format(cpb=chan_per_band))
+
+        # Number of channels equal to sum of channels per band
+        self.nbands = len(chan_per_band)
+        self.nchan = sum(chan_per_band)
+
+        # Do some logging
+        expected_nbl = mbu.nr_of_baselines(self.na, auto_correlations)
+        autocor_str = ('with auto-correlations' if auto_correlations
+            else 'without auto-correlations')
+        autocor_eq = '({na}x{na1})/2'.format(na=self.na, na1=(
+            self.na+1 if auto_correlations else self.na-1))
+
+        self.log("Found {na} antenna(s) in the ANTENNA sub-table.".format(
+            na=self.na))
+        self.log("Found {nbl} of {ebl}={aeq} possible baseline(s) ({astr}).".format(
+            aeq=autocor_eq, ebl=expected_nbl, astr=autocor_str, nbl=self.nbl))
+        self.log("Found {nb} band(s), containing {cpb} channels.".format(
+            nb=self.nbands, nc=chan_per_band[0], cpb=chan_per_band))
+
+        # Sanity check computed rows vs actual rows
+        computed_rows = self.ntime*self.nbl*self.nbands
+
+        if not computed_rows == self.nrows:
+            montblanc.log.warn("{nt} x {nbl} x {nb} = {cr} does not equal "
+                "the number of measurement set rows '{msr}'."
+                    .format(nt=self.ntime,
+                        nbl=self.nbl, nb=self.nbands,
+                        cr=computed_rows, msr=self.nrows))
 
     def get_dims(self):
         """
-        Returns a tuple with the number of timesteps, antenna and channels
+        Returns a tuple with the number of
+        timesteps, baselines, antenna, channel bands and channels
         """
         # Determine the problem dimensions
-        return self.ntime, self.na, self.nchan
+        return self.ntime, self.nbl, self.na, self.nbands, self.nchan
 
     def log(self, msg, *args, **kwargs):
         montblanc.log.info('{lp} {m}'.format(lp=self.LOG_PREFIX, m=msg),

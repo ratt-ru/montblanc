@@ -19,6 +19,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
+import pyrap.tables as pt
 
 import montblanc
 import montblanc.impl.common.loaders
@@ -28,6 +29,7 @@ from montblanc.config import (RimeSolverConfig as Options)
 # Measurement Set string constants
 UVW = 'UVW'
 CHAN_FREQ = 'CHAN_FREQ'
+NUM_CHAN = 'NUM_CHAN'
 REF_FREQUENCY = 'REF_FREQUENCY'
 ANTENNA1 = 'ANTENNA1'
 ANTENNA2 = 'ANTENNA2'
@@ -48,14 +50,33 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         ta = self.tables['ant']
         tf = self.tables['freq']
 
-        ntime, na, nbl, nchan = solver.dim_global_size('ntime', 'na', 'nbl', 'nchan')
+        ntime, na, nbl, nbands, nchan = solver.dim_global_size(
+            'ntime', 'na', 'nbl', 'nbands', 'nchan')
+
+
+        # Transfer frequencies
+        freqs = (tf.getcol(CHAN_FREQ)
+            .reshape(solver.frequency.shape)
+            .astype(solver.frequency.dtype))
+        solver.transfer_frequency(np.ascontiguousarray(freqs))
+
+        # Transfer reference frequencies
+        ref_freqs_per_band = np.concatenate(
+            [np.repeat(rf, size) for rf, size
+            in zip(tf.getcol(REF_FREQUENCY), tf.getcol(NUM_CHAN))], axis=0)
+        solver.transfer_ref_frequency(ref_freqs_per_band)
+
+        # If the main table has visibilities for multiple bands, then
+        # there will be multiple (duplicate) UVW, ANTENNA1 and ANTENNA2 values
+        # Ensure uniqueness to get a single value here
+        uvw_table = pt.taql('SELECT FROM $tm ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2')
 
         # Check that we're getting the correct shape...
         uvw_shape = (ntime*nbl, 3)
 
         # Read in UVW
         # Reshape the array and correct the axes
-        ms_uvw = tm.getcol(UVW)
+        ms_uvw = uvw_table.getcol(UVW)
         assert ms_uvw.shape == uvw_shape, \
             'MS UVW shape %s != expected %s' % (ms_uvw.shape, uvw_shape)
 
@@ -80,30 +101,14 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         uvw[:,0,:] = solver.ft(0)
         solver.transfer_uvw(np.ascontiguousarray(uvw))
 
-        # Determine the frequencys
-        freqs = tf.getcol(CHAN_FREQ)
-        solver.transfer_frequency(freqs[0].astype(solver.ft))
-
-        # First dimension also seems to be of size 1 here...
-        # Divide speed of light by frequency to get the frequency here.
-        solver.set_ref_freq(tf.getcol(REF_FREQUENCY)[0])
-
         # Get the baseline antenna pairs and correct the axes
-        ant1 = tm.getcol(ANTENNA1).reshape(ntime,nbl)
-        ant2 = tm.getcol(ANTENNA2).reshape(ntime,nbl)
-
-        expected_ant_shape = (ntime,nbl)
-
-        assert expected_ant_shape == ant1.shape, \
-            '{a} shape is {r} != expected {e}'.format(
-                a=ANTENNA1, r=ant1.shape, e=expected_ant_shape)
-
-        assert expected_ant_shape == ant2.shape, \
-            '{a} shape is {r} != expected {e}'.format(
-                a=ANTENNA2, r=ant2.shape, e=expected_ant_shape)
+        ant1 = uvw_table.getcol(ANTENNA1).reshape(ntime,nbl)
+        ant2 = uvw_table.getcol(ANTENNA2).reshape(ntime,nbl)
 
         solver.transfer_antenna1(np.ascontiguousarray(ant1))
         solver.transfer_antenna2(np.ascontiguousarray(ant2))
+
+        uvw_table.close()
 
         # Load in visibility data, if it exists.
         if tm.colnames().count(DATA) > 0:
@@ -144,6 +149,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Should we initialise our weights from the MS data?
         init_weights = slvr_cfg.get(Options.INIT_WEIGHTS)
  
+        chans_per_band = nchan // nbands
+
         # Load in weighting data, if it exists
         if init_weights is not Options.INIT_WEIGHTS_NONE:
             if init_weights == Options.INIT_WEIGHTS_WEIGHT:
@@ -165,7 +172,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                             n=WEIGHT))
 
                     weight = tm.getcol(WEIGHT)[:,np.newaxis,:]
-                    weight_vector = weight*np.ones(shape=(nchan,1))
+                    weight_vector = weight*np.ones(shape=(chans_per_band,1))
                 else:
                     # We couldn't find anything, set to one
                     montblanc.log.info('{lp} No {ws} or {w} columns. '
@@ -195,7 +202,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
                             n=SIGMA))
 
                     sigma = tm.getcol(SIGMA)[:,np.newaxis,:]
-                    weight_vector = (sigma*np.ones(shape=(nchan,1)))
+                    weight_vector = (sigma*np.ones(shape=(chans_per_band,1)))
                 else:
                     # We couldn't find anything, set to one
                     montblanc.log.info('{lp} No {ss} or {s} columns. '
@@ -208,7 +215,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             else:
                 raise Exception, 'init_weights used incorrectly!'
 
-            assert weight_vector.shape == (ntime*nbl, nchan, 4)
+            assert weight_vector.shape == (ntime*nbl*nbands, chans_per_band, 4)
 
             weight_vector = weight_vector.reshape(ntime,nbl,nchan,4) \
                 .astype(solver.ft)

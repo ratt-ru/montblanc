@@ -105,6 +105,7 @@ class RIMESolver(HyperCube):
         autocor = self._slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
         ntime = self._slvr_cfg.get(Options.NTIME)
         na = self._slvr_cfg.get(Options.NA)
+        nbands = self._slvr_cfg.get(Options.NBANDS)
         nchan = self._slvr_cfg.get(Options.NCHAN)
         npol = self._slvr_cfg.get(Options.NPOL)
 
@@ -113,6 +114,8 @@ class RIMESolver(HyperCube):
             description=Options.NTIME_DESCRIPTION)
         self.register_dimension('na', na,
             description=Options.NA_DESCRIPTION)
+        self.register_dimension('nbands', nbands,
+            description=Options.NBANDS_DESCRIPTION)
         self.register_dimension('nchan', nchan,
             description=Options.NCHAN_DESCRIPTION)
         self.register_dimension(Options.NPOL, npol,

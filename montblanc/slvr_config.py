@@ -100,6 +100,11 @@ class SolverConfig(object):
     DEFAULT_NCHAN = 16
     NCHAN_DESCRIPTION = 'Channels'
 
+    # Number of bands
+    NBANDS = 'nbands'
+    DEFAULT_NBANDS = 1
+    NBANDS_DESCRIPTION = 'Bands'
+
     # Number of polarisations
     NPOL = 'npol'
     DEFAULT_NPOL = 4
@@ -203,6 +208,11 @@ class SolverConfig(object):
             DEFAULT: DEFAULT_NCHAN,
             REQUIRED: True },
 
+        NBANDS: {
+            DESCRIPTION: NBANDS_DESCRIPTION,
+            DEFAULT: DEFAULT_NBANDS,
+            REQUIRED: True },
+
         NPOL: {
             DESCRIPTION: NPOL_DESCRIPTION,
             DEFAULT: DEFAULT_NPOL,
@@ -286,6 +296,12 @@ class SolverConfig(object):
             type=int,
             help=self.NCHAN_DESCRIPTION,
             default=self.DEFAULT_NCHAN)
+
+        p.add_argument('--{v}'.format(v=self.NBANDS),
+            required=False,
+            type=int,
+            help=self.NBANDS_DESCRIPTION,
+            default=self.DEFAULT_NBANDS)
 
         p.add_argument('--{v}'.format(v=self.DTYPE),
             required=False,

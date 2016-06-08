@@ -21,6 +21,7 @@
 import os
 
 import numpy as np
+import pyrap.tables as pt
 
 import montblanc
 import montblanc.impl.common.loaders
@@ -30,6 +31,7 @@ from montblanc.config import (RimeSolverConfig as Options)
 # Measurement Set string constants
 UVW = 'UVW'
 CHAN_FREQ = 'CHAN_FREQ'
+NUM_CHAN='NUM_CHAN'
 REF_FREQUENCY = 'REF_FREQUENCY'
 ANTENNA1 = 'ANTENNA1'
 ANTENNA2 = 'ANTENNA2'
@@ -49,10 +51,10 @@ class AWeightVectorStrategy(object):
         self.loader = loader
         self.table = loader.tables['main']
         self.slvr = slvr
-        self.ntime, self.na, self.nbl, self.nchan, self.npol = \
-            slvr.dim_global_size('ntime', 'na', 'nbl', 'nchan', 'npol')
+        self.ntime, self.na, self.nbl, self.nchan, self.nbands, self.npol = \
+            slvr.dim_global_size('ntime', 'na', 'nbl', 'nchan', 'nbands', 'npol')
         self.wv_view = slvr.weight_vector.reshape(
-            self.ntime*self.nbl, self.nchan, self.npol)
+            self.ntime*self.nbl*self.nbands, -1, self.npol)
 
     def log_strategy(self):
         raise NotImplementedError()
@@ -148,8 +150,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         ta = self.tables['ant']
         tf = self.tables['freq']
 
-        ntime, na, nbl, nchan, npol = solver.dim_global_size(
-            'ntime', 'na', 'nbl', 'nchan', 'npol')
+        ntime, na, nbl, nchan, nbands, npol = solver.dim_global_size(
+            'ntime', 'na', 'nbl', 'nchan', 'nbands', 'npol')
 
         self.log("Processing main table {n}.".format(
                     n=os.path.split(self.msfile)[1]))
@@ -160,15 +162,16 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Determine row increments in terms of a time increment
         # This is required for calculating per antenna UVW coordinates below
         time_inc = 1
+        nblbands = nbl*nbands
 
-        while nbl*time_inc < 5000:
+        while time_inc*nblbands < 5000:
             time_inc *= 2
 
-        row_inc = time_inc*nbl
+        row_inc = time_inc*nblbands
 
         self.log('Processing rows in increments of {ri} = '
-            '{ti} timesteps x {nbl} baselines.'.format(
-                ri=row_inc, ti=time_inc, nbl=nbl))
+            '{ti} timesteps x {nbl} baselines x {nb} bands.'.format(
+                ri=row_inc, ti=time_inc, nbl=nbl, nb=nbands))
 
         # Optionally loaded data
         data_present = False
@@ -177,8 +180,6 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Set up our weight vector loading strategy
         weight_strategy = self.weight_vector_strategy(solver,
             slvr_cfg.get(Options.INIT_WEIGHTS), column_names)
-
-        self.log_load(UVW, 'uvw')
 
         # Check for presence of visibilities
         if column_names.count(DATA) > 0:
@@ -192,21 +193,71 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
         weight_strategy.log_strategy()
 
+        self.log_load(UVW, 'uvw')
         self.log_load(ANTENNA1, 'antenna1')
         self.log_load(ANTENNA2, 'antenna2')
 
         # Iterate over the main MS rows
-        for start in range(0, msrows, row_inc):
+        for start in xrange(0, msrows, row_inc):
+            nrows = min(row_inc, msrows - start)
+            end = start + nrows
+
+            self.log('Loading rows {s} -- {e}.'.format(
+                s=start, e=end))
+
+            if data_present:
+                # Dump visibility data straight into the observed visibility array
+                observed_vis_view = solver.observed_vis.reshape(ntime*nbl*nbands, -1, npol)
+                tm.getcolnp(DATA, observed_vis_view[start:end,:,:],
+                    startrow=start, nrow=nrows)
+
+            if flag_present:
+                # getcolnp doesn't handle solver.flag's dtype of np.uint8
+                # Read into buffer and copy solver array
+                
+                # Get per polarisation flagging data
+                flag_buffer = tm.getcol(FLAG, startrow=start, nrow=nrows)
+
+                # Incorporate per visibility flagging into the buffer
+                flag_row = tm.getcol(FLAG_ROW, startrow=start, nrow=nrows)
+                flag_buffer = np.logical_or(flag_buffer,
+                    flag_row[:,np.newaxis,np.newaxis])
+
+                # Take a view of the solver array and copy the buffer in
+                flag_view = solver.flag.reshape(ntime*nbl*nbands, -1, npol)
+                flag_view[start:end,:,:] = flag_buffer.astype(solver.flag.dtype)
+
+            # Execute weight vector loading strategy
+            weight_strategy.load(start, nrows)
+
+        # If the main table has visibilities for multiple bands, then
+        # there will be multiple (duplicate) UVW, ANTENNA1 and ANTENNA2 values
+        # Ensure uniqueness to get a single value here
+        uvw_table = pt.taql('SELECT FROM $tm ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2')
+        msrows = uvw_table.nrows()
+        time_inc = 1
+
+        while time_inc*nbl < 5000:
+            time_inc *= 2
+
+        row_inc = time_inc*nbl
+
+        for start in xrange(0, msrows, row_inc):
             nrows = min(row_inc, msrows - start)
             end = start + nrows
             t_start = start // nbl
             t_end = end // nbl
 
-            self.log('Loading rows {s} -- {e}.'.format(
-                s=start, e=end))
+            ant_view = solver.antenna1.reshape(ntime*nbl)
+            uvw_table.getcolnp(ANTENNA1, ant_view[start:end],
+                startrow=start, nrow=nrows)
+
+            ant_view = solver.antenna2.reshape(ntime*nbl)
+            uvw_table.getcolnp(ANTENNA2, ant_view[start:end],
+                startrow=start, nrow=nrows)
 
             # Read UVW coordinates into a buffer
-            uvw_buffer = (tm.getcol(UVW, startrow=start, nrow=nrows)
+            uvw_buffer = (uvw_table.getcol(UVW, startrow=start, nrow=nrows)
                 .reshape(t_end - t_start, nbl, 3))
 
             # Create per antenna UVW coordinates.
@@ -227,49 +278,31 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             solver.uvw[t_start:t_end,1:na,:] = uvw_buffer[:,:na-1,:]
             solver.uvw[:,0,:] = 0
 
-            if data_present:
-                # Dump visibility data straight into the bayes data array
-                observed_vis_view = solver.observed_vis.reshape(ntime*nbl, nchan, npol)
-                tm.getcolnp(DATA, observed_vis_view[start:end,:,:],
-                    startrow=start, nrow=nrows)
-
-            if flag_present:
-                # getcolnp doesn't handle solver.flag's dtype of np.uint8
-                # Read into buffer and copy solver array
-                
-                # Get per polarisation flagging data
-                flag_buffer = tm.getcol(FLAG, startrow=start, nrow=nrows)
-
-                # Incorporate per visibility flagging into the buffer
-                flag_row = tm.getcol(FLAG_ROW, startrow=start, nrow=nrows)
-                flag_buffer = np.logical_or(flag_buffer,
-                    flag_row[:,np.newaxis,np.newaxis])
-
-                # Take a view of the solver array and copy the buffer in
-                flag_view = solver.flag.reshape(ntime*nbl, nchan, npol)
-                flag_view[start:end,:,:] = flag_buffer.astype(solver.flag.dtype)
-
-            ant_view = solver.antenna1.reshape(ntime*nbl)
-            tm.getcolnp(ANTENNA1, ant_view[start:end],
-                startrow=start, nrow=nrows)
-
-            ant_view = solver.antenna2.reshape(ntime*nbl)
-            tm.getcolnp(ANTENNA2, ant_view[start:end],
-                startrow=start, nrow=nrows)
-
-            # Execute weight vector loading strategy
-            weight_strategy.load(start, nrows)
-
         self.log("Processing frequency table {n}.".format(
             n=os.path.split(self.freqfile)[1]))
 
-        # Load the frequencies for the first spectral window (rownr=0) only
-        self.log_load(CHAN_FREQ+'[0]', 'frequency')
-        tf.getcellslicenp(CHAN_FREQ, solver.frequency, rownr=0, blc=(-1), trc=(-1))
+        # Offset of first channel in the band
+        band_ch0 = 0
 
-        # Load the reference frequency for the first spectral window only
-        self.log_load(REF_FREQUENCY+'[0]', 'ref_freq')
-        solver.set_ref_freq(tf.getcol(REF_FREQUENCY)[0])
+        # Iterate over each band
+        for b, (rf, bs) in enumerate(zip(tf.getcol(REF_FREQUENCY), tf.getcol(NUM_CHAN))):
+            # Transfer this band's frequencies into the solver's frequency array
+            from_str = ''.join([CHAN_FREQ, '[{b}][0:{bs}]'.format(b=b, bs=bs)])
+            to_str = 'frequency[{s}:{e}]'.format(s=band_ch0, e=band_ch0+bs)
+            self.log_load(from_str, to_str)
+            tf.getcellslicenp(CHAN_FREQ,
+                solver.frequency[band_ch0:band_ch0+bs],
+                rownr=b, blc=(-1), trc=(-1))
+
+            # Repeat this band's reference frequency in the solver's
+            # reference frequency array
+            from_str = ''.join([REF_FREQUENCY, '[{b}] == {rf}'.format(b=b, rf=rf)])
+            to_str = 'ref_frequency[{s}:{e}]'.format(s=band_ch0, e= band_ch0+bs)
+            self.log_load(from_str, to_str)
+            solver.ref_frequency[band_ch0:band_ch0+bs] = np.repeat(rf, bs)
+
+            # Next band
+            band_ch0 += bs
 
     def __enter__(solver):
         return super(MeasurementSetLoader,solver).__enter__()
