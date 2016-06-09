@@ -100,6 +100,7 @@ __global__ void rime_sum_coherencies(
         model_vis.y += J1.y;
     }
 
+    // Apply Direction Independent Effects if required
     if(apply_dies)
     {
         // Multiply the visibility by antenna 1's g term
@@ -119,8 +120,16 @@ __global__ void rime_sum_coherencies(
             model_vis, ant2_gterm);
     }
 
-    // Write out the model visibility
     i = (time*nbl + bl)*npolchan + polchan;
+
+    // If flags apply, zero out the polarisation
+    if(flag[i])
+    {
+        model_vis.x = 0.0;
+        model_vis.y = 0.0;
+    }
+    
+    // Write out the polarisation
     model_vis_out[i] = model_vis;
 }
 

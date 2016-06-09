@@ -100,6 +100,7 @@ public:
                         s3 += a2*b1 + a3*b3;
                     }
 
+                    // Apply Direction Independent Effects if required
                     if(apply_dies)
                     {
                         // Reference antenna 1 g terms
@@ -126,6 +127,12 @@ public:
                         s2 = r2*b0 + r3*b2;
                         s3 = r2*b1 + r3*b3;
                     }
+
+                    // If flags apply, zero out the polarisation
+                    if(flag(time, bl, chan, 0)) { s0 = {0.0, 0.0}; }
+                    if(flag(time, bl, chan, 1)) { s1 = {0.0, 0.0}; }
+                    if(flag(time, bl, chan, 2)) { s2 = {0.0, 0.0}; }
+                    if(flag(time, bl, chan, 3)) { s3 = {0.0, 0.0}; }
 
                     // Output accumulated model visibilities
                     model_vis_out(time, bl, chan, 0) = s0;
