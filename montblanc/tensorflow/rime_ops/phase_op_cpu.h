@@ -88,6 +88,7 @@ public:
 
         // Constant
         constexpr FT lightspeed = 299792458.0;
+        constexpr FT minus_two_pi_over_c = -2*M_PI/lightspeed;
 
 #if RIME_PHASE_CPU_STRATEGY == RIME_PHASE_LOOP_STRATEGY
         // Compute the complex phase
@@ -105,7 +106,7 @@ public:
                     FT v = uvw(time,antenna,1);
                     FT w = uvw(time,antenna,2);
 
-                    FT real_phase_base = FT(-2*M_PI)*(l*u + m*v + n*w)/lightspeed;
+                    FT real_phase_base = minus_two_pi_over_c*(l*u + m*v + n*w);
 
                     for(int chan=0; chan<nchan; ++chan)
                     {
