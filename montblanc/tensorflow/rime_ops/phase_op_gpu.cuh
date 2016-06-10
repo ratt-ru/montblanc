@@ -111,7 +111,7 @@ __global__ void rime_phase(
         CT cplx_phase;
         Po::sincos(real_phase, &cplx_phase.y, &cplx_phase.x);
 
-        int i = src*ntime*na*nchan + time*na*nchan + ant*nchan + chan;
+        int i = ((src*ntime + time)*na + ant)*nchan + chan;
         complex_phase[i] = cplx_phase;
     }
 }
