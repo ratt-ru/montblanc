@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 # Load the library containing the custom operation
-mod = tf.load_op_library('rime.so')
+rime = tf.load_op_library('rime.so')
 
 def complex_phase_op(lm, uvw, frequency):
     """
@@ -20,7 +20,7 @@ def complex_phase_op(lm, uvw, frequency):
     else:
         raise TypeError("Unhandled type '{t}'".format(t=lm.dtype))
 
-    return mod.rime_phase(lm, uvw, frequency, CT=CT)
+    return rime.phase(lm, uvw, frequency, CT=CT)
 
 def complex_phase(lm, uvw, frequency):
     """

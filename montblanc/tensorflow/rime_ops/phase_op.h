@@ -4,8 +4,8 @@
 namespace montblanc {
 namespace phase {
 
-// Declare the fully templated RimePhaseOp class type up front
-template <typename Device, typename FT, typename CT> class RimePhaseOp;
+// Declare the fully templated Phase class type up front
+template <typename Device, typename FT, typename CT> class Phase;
 
 } // namespace phase {
 } // namespace montblanc {

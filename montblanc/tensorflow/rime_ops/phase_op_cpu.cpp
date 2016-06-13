@@ -3,7 +3,7 @@
 namespace montblanc {
 namespace phase {
 
-REGISTER_OP("RimePhase")
+REGISTER_OP("Phase")
     .Input("lm: FT")
     .Input("uvw: FT")
     .Input("frequency: FT")
@@ -12,18 +12,18 @@ REGISTER_OP("RimePhase")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64");
 
 REGISTER_KERNEL_BUILDER(
-    Name("RimePhase")
+    Name("Phase")
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimePhaseOp<CPUDevice, float, tensorflow::complex64>);
+    Phase<CPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
-    Name("RimePhase")
+    Name("Phase")
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimePhaseOp<CPUDevice, double, tensorflow::complex128>);
+    Phase<CPUDevice, double, tensorflow::complex128>);
 
 } // namespace phase {
 } // namespace montblanc {

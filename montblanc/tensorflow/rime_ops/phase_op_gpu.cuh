@@ -116,11 +116,11 @@ __global__ void rime_phase(
     }
 }
 
-// Partially specialise RimePhaseOp for GPUDevice
+// Partially specialise Phase for GPUDevice
 template <typename FT, typename CT>
-class RimePhaseOp<GPUDevice, FT, CT> : public tensorflow::OpKernel {
+class Phase<GPUDevice, FT, CT> : public tensorflow::OpKernel {
 public:
-    explicit RimePhaseOp(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+    explicit Phase(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
     {

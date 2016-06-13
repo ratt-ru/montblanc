@@ -33,12 +33,12 @@ struct make_complex_functor
         { return std::complex<T>(real, imag); }
 };
 
-// Partially specialise RimePhaseOp for CPUDevice
+// Partially specialise Phase for CPUDevice
 template <typename FT, typename CT>
-class RimePhaseOp<CPUDevice, FT, CT> : public tensorflow::OpKernel
+class Phase<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 public:
-    explicit RimePhaseOp(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+    explicit Phase(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
     {

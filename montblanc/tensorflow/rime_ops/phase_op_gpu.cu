@@ -8,18 +8,18 @@ namespace montblanc {
 namespace phase {
 
 REGISTER_KERNEL_BUILDER(
-    Name("RimePhase")
+    Name("Phase")
     .Device(tensorflow::DEVICE_GPU)
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimePhaseOp<GPUDevice, float, tensorflow::complex64>);
+    Phase<GPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
-    Name("RimePhase")
+    Name("Phase")
     .Device(tensorflow::DEVICE_GPU)
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimePhaseOp<GPUDevice, double, tensorflow::complex128>);
+    Phase<GPUDevice, double, tensorflow::complex128>);
 
 } // namespace phase {
 } // namespace montblanc {
