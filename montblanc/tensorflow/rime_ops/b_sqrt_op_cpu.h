@@ -16,10 +16,10 @@ namespace bsqrt {
 typedef Eigen::ThreadPoolDevice CPUDevice;    
 
 template <typename FT, typename CT>
-class RimeBSqrt<CPUDevice, FT, CT> : public tensorflow::OpKernel
+class BSqrt<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 public:
-    explicit RimeBSqrt(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+    explicit BSqrt(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
     {

@@ -115,10 +115,10 @@ __global__ void rime_b_sqrt(
 }
 
 template <typename FT, typename CT>
-class RimeBSqrt<GPUDevice, FT, CT> : public tensorflow::OpKernel
+class BSqrt<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 public:
-    explicit RimeBSqrt(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+    explicit BSqrt(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
     {

@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 # Load the library containing the custom operation
-mod = tf.load_op_library('rime.so')
+rime = tf.load_op_library('rime.so')
 
 def b_sqrt_op(stokes, alpha, frequency, ref_freq):
     """
@@ -20,7 +20,7 @@ def b_sqrt_op(stokes, alpha, frequency, ref_freq):
     else:
         raise TypeError("Unhandled type '{t}'".format(t=stokes.dtype))
 
-    return mod.rime_b_sqrt(stokes, alpha, frequency, ref_freq, CT=CT)
+    return rime.b_sqrt(stokes, alpha, frequency, ref_freq, CT=CT)
 
 def b_sqrt_numpy(stokes, alpha, frequency, ref_freq):
     nsrc, ntime, _ = stokes.shape

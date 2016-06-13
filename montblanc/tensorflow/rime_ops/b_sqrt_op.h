@@ -4,7 +4,7 @@
 namespace montblanc {
 namespace bsqrt {
 
-template <typename Device, typename FT, typename CT> class RimeBSqrt;
+template <typename Device, typename FT, typename CT> class BSqrt;
 
 }
 }
