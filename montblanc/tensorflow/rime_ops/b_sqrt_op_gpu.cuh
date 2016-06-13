@@ -174,11 +174,11 @@ public:
         dim3 grid(montblanc::grid_from_thread_block(
             blocks, npolchan, ntime, nsrc));
 
-        printf("Threads per block: X %d Y %d Z %d\n",
-            blocks.x, blocks.y, blocks.z);
+        //printf("Threads per block: X %d Y %d Z %d\n",
+        //    blocks.x, blocks.y, blocks.z);
 
-        printf("Grid: X %d Y %d Z %d\n",
-            grid.x, grid.y, grid.z);
+        //printf("Grid: X %d Y %d Z %d\n",
+        //    grid.x, grid.y, grid.z);
 
         // Get the device pointers of our GPU memory arrays
         auto stokes = reinterpret_cast<const typename Tr::stokes_type *>(
