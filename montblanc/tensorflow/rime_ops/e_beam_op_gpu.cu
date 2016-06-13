@@ -4,7 +4,7 @@ namespace montblanc {
 namespace ebeam {
 
 REGISTER_KERNEL_BUILDER(
-    Name("RimeEBeam")
+    Name("EBeam")
     .Device(tensorflow::DEVICE_GPU)
     .HostMemory("parallactic_angle")
     .HostMemory("beam_ll")
@@ -13,10 +13,10 @@ REGISTER_KERNEL_BUILDER(
     .HostMemory("beam_um")
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimeEBeam<GPUDevice, float, tensorflow::complex64>);
+    EBeam<GPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
-    Name("RimeEBeam")
+    Name("EBeam")
     .Device(tensorflow::DEVICE_GPU)
     .HostMemory("parallactic_angle")
     .HostMemory("beam_ll")
@@ -25,7 +25,7 @@ REGISTER_KERNEL_BUILDER(
     .HostMemory("beam_um")
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimeEBeam<GPUDevice, double, tensorflow::complex128>);
+    EBeam<GPUDevice, double, tensorflow::complex128>);
 
 } // namespace ebeam {
 } // namespace montblanc {

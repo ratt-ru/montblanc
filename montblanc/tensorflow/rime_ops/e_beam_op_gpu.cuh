@@ -266,14 +266,14 @@ __global__ void rime_e_beam(
 }
 
 template <typename FT, typename CT>
-class RimeEBeam<GPUDevice, FT, CT> : public tensorflow::OpKernel
+class EBeam<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 private:
     // Pointer to constant memory on the device
     montblanc::ebeam::const_data * d_cdata;
 
 public:
-    explicit RimeEBeam(tensorflow::OpKernelConstruction * context) :
+    explicit EBeam(tensorflow::OpKernelConstruction * context) :
         tensorflow::OpKernel(context)
     {
         // Get device address of GPU constant data

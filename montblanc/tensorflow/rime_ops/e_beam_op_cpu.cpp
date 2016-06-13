@@ -2,7 +2,7 @@
 
 namespace montblanc {
 namespace ebeam {
-REGISTER_OP("RimeEBeam")
+REGISTER_OP("EBeam")
     .Input("lm: FT")
     .Input("point_errors: FT")
     .Input("antenna_scaling: FT")
@@ -17,18 +17,18 @@ REGISTER_OP("RimeEBeam")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64");
 
 REGISTER_KERNEL_BUILDER(
-    Name("RimeEBeam")
+    Name("EBeam")
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
-    RimeEBeam<CPUDevice, float, tensorflow::complex64>);
+    EBeam<CPUDevice, float, tensorflow::complex64>);
 
 REGISTER_KERNEL_BUILDER(
-    Name("RimeEBeam")
+    Name("EBeam")
     .Device(tensorflow::DEVICE_CPU)
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
-    RimeEBeam<CPUDevice, double, tensorflow::complex128>);
+    EBeam<CPUDevice, double, tensorflow::complex128>);
 
 } // namespace ebeam {
 } // namespace montblanc {

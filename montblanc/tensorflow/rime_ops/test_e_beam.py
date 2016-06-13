@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 # Load the library containing the custom operation
-mod = tf.load_op_library('rime.so')
+rime = tf.load_op_library('rime.so')
 
 def e_beam_op(lm, point_errors, antenna_scaling,
         e_beam, parallactic_angle,
@@ -22,7 +22,7 @@ def e_beam_op(lm, point_errors, antenna_scaling,
     else:
         raise TypeError("Unhandled type '{t}'".format(t=lm.dtype))
 
-    return mod.rime_e_beam(lm, point_errors, antenna_scaling,
+    return rime.e_beam(lm, point_errors, antenna_scaling,
         e_beam, parallactic_angle,
         beam_ll, beam_lm, beam_ul, beam_um)
 

@@ -33,10 +33,10 @@ trilinear_interpolate(
 }
 
 template <typename FT, typename CT>
-class RimeEBeam<CPUDevice, FT, CT> : public tensorflow::OpKernel
+class EBeam<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 public:
-    explicit RimeEBeam(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+    explicit EBeam(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
