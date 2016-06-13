@@ -149,8 +149,8 @@ with tf.device('/gpu:0'):
     b_sqrt_op_gpu = b_sqrt_op(stokes, alpha, frequency, ref_freq)
 
 # Get an expression for the complex phase op on the GPU
-with tf.device('/gpu:0'):
-    b_sqrt_expr_gpu = b_sqrt(stokes, alpha, frequency, ref_freq)
+with tf.device('/cpu:0'):
+    b_sqrt_expr_cpu = b_sqrt(stokes, alpha, frequency, ref_freq)
 
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
@@ -168,7 +168,7 @@ with tf.Session() as S:
 
     # Evaluate and time tensorflow CPU
     start = timeit.default_timer()
-    tf_b_expr_cpu, tf_b_sqrt_expr_gpu = S.run(b_sqrt_expr_gpu)
+    tf_b_expr_cpu, tf_b_sqrt_expr_cpu = S.run(b_sqrt_expr_cpu)
     print 'Tensorflow expression CPU time %f' % (timeit.default_timer() - start)
 
     start = timeit.default_timer()
@@ -181,7 +181,7 @@ with tf.Session() as S:
     assert np.allclose(tf_b_sqrt_op_cpu, np_b_sqrt)
     assert np.allclose(tf_b_sqrt_op_gpu, np_b_sqrt, rtol=1e-3)
     assert np.allclose(tf_b_expr_cpu, np_b)
-    assert np.allclose(tf_b_sqrt_expr_gpu, np_b_sqrt)
+    assert np.allclose(tf_b_sqrt_expr_cpu, np_b_sqrt)
 
     # Reshape for 2x2 jones multiply below
     np_b_flat = np_b.reshape(-1,2,2)
