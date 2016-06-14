@@ -17,8 +17,9 @@ rf = lambda *s: np.random.random(size=s).astype(dtype)
 rc = lambda *s: rf(*s) + rf(*s)*1j
 
 # Problem dimensions
-ntime, na, nchan = 50, 64, 64
+ntime, na, nchan = 25, 64, 64
 src_counts = npsrc, ngsrc, nssrc = 5, 6, 7
+src_types = POINT, GAUSS, SERSIC = 'point', 'gauss', 'sersic'
 nsrc = sum(src_counts)
 nbl = na*(na-1)//2
 npol = 4
@@ -26,21 +27,12 @@ beam_lw = beam_mh = beam_nud = 100
 
 D = AttrDict()
 
-# lm coordinates scaled around (0,0)
-D.lm = (rf(nsrc, 2) - 0.5)*0.1
 # uvw coordinates
 D.uvw = rf(ntime, na, 3)
 
 # frequency and referency frequency
 D.frequency = np.linspace(1.4e9, 1.6e9, nchan, dtype=dtype)
 D.ref_freq = np.array([1.5e9], dtype=dtype)
-
-# Stokes and alpha
-D.stokes = rf(nsrc, ntime, npol)
-Q, U, V = D.stokes[:,:,1], D.stokes[:,:,2], D.stokes[:,:,3]
-# Need I**2 = Q**2 + U**2 + V**2 + noise**2
-D.stokes[:,:,0] = Q**2 + U**2 + V**2 + (rf(nsrc, ntime)*0.1)**2
-D.alpha = rf(nsrc, ntime)*0.8
 
 # Pointing errors, scaled around (0,0)
 D.point_errors = (rf(ntime, na, nchan, 2) - 0.5)*0.01
@@ -57,34 +49,64 @@ D.ant1, D.ant2 = (np.tile(D.ant1, ntime).reshape(ntime, nbl),
 
 # Flags, g term and model visibilities
 D.flag = np.random.randint(0, 1,
-    size=(ntime, nbl, nchan, 4), dtype=np.uint8)
+    size=(ntime, nbl, nchan, npol), dtype=np.uint8)
 D.gterm = rc(ntime, na, nchan, npol)
-
-# Shape parameters
-D.gauss_param = rf(3, ngsrc)*dtype([0.1,0.1,1])[:,np.newaxis]
-D.sersic_param = rf(3, nssrc)*dtype([1,1,np.pi/648000])[:,np.newaxis]
 
 # Create tensorflow variables from numpy arrays
 args = AttrDict((n,tf.Variable(v, name=n)) for n, v in D.iteritems())
 
+def get_src_vars(nsrc, src_type=None):
+    """ Get lm, stokes, alpha and shape arrays for given src_type """
+    src_type = src_type or POINT
+
+    # lm coordinates
+    lm = (rf(nsrc, 2) - 0.5)*0.1
+    lm = tf.Variable(lm, name='lm_{t}'.format(t=src_type))
+
+    # Stokes parameters
+    # Need I**2 = Q**2 + U**2 + V**2 + noise**2
+    stokes = rf(nsrc, ntime, npol)
+    Q, U, V = stokes[:,:,1], stokes[:,:,2], stokes[:,:,3]
+    stokes[:,:,0] = Q**2 + U**2 + V**2 + (rf(nsrc, ntime)*0.1)**2
+    stokes = tf.Variable(stokes, name='stokes_{t}'.format(t=src_type))
+
+    # Alpha
+    alpha = rf(nsrc, ntime)*0.8
+    alpha = tf.Variable(alpha, name='alpha_{t}'.format(t=src_type))
+
+    # Shape parameters
+    if src_type == POINT:
+        shape = tf.ones((nsrc, ntime, nbl, nchan),
+            dtype=dtype, name='{t}_shape'.format(t=POINT))
+    elif src_type == GAUSS:
+        # Shape parameters
+        gauss_param = rf(3, nsrc)*dtype([0.1,0.1,1])[:,np.newaxis]
+        gauss_param = tf.Variable(gauss_param, name='gauss_param')
+
+        shape = rime.gauss_shape(args.uvw, args.ant1, args.ant2,
+            args.frequency, gauss_param,
+            name='{t}_shape'.format(t=GAUSS))
+    elif src_type == SERSIC:
+        sersic_param = rf(3, nsrc)*dtype([1,1,np.pi/648000])[:,np.newaxis]
+        sersic_param = tf.Variable(sersic_param, name='sersic_param')
+
+        shape = rime.sersic_shape(args.uvw, args.ant1, args.ant2,
+            args.frequency, sersic_param,
+            name='{t}_shape'.format(t=SERSIC))
+    else:
+        raise ValueError("Unknown source type {t}.".format(t=src_type))
+
+    return lm, stokes, alpha, shape
+
+
 # Create some model visibilities
 model_vis = tf.Variable(rc(ntime, nbl, nchan, npol), name='model_vis')
 
-shape_map = [
-    lambda: tf.ones((npsrc, ntime, na, nchan), dtype=dtype),
-    lambda: rime.gauss_shape(args.uvw, args.ant1, args.ant2,
-        args.frequency, args.gauss_param),
-    lambda: rime.sersic_shape(args.uvw, args.ant1, args.ant2,
-        args.frequency, args.sersic_param),
-]
-
 base = 0
-for scount, shape_fn in zip(src_counts, shape_map):
+for scount, stype in zip(src_counts, src_types):
     # Slice our source arrays
     with tf.control_dependencies([model_vis]):
-        lm =     tf.slice(args.lm,     (base, 0   ), (scount, -1    ))
-        stokes = tf.slice(args.stokes, (base, 0, 0), (scount, -1, -1))
-        alpha =  tf.slice(args.alpha,  (base, 0   ), (scount, -1    ))
+        lm, stokes, alpha, shape = get_src_vars(scount, stype)
 
     # Compute the complex phase
     with tf.control_dependencies([lm, stokes, alpha]):
@@ -109,7 +131,7 @@ for scount, shape_fn in zip(src_counts, shape_map):
 
     # Sum coherencies over this source type
     with tf.control_dependencies([ant_jones]):
-        model_vis = rime.sum_coherencies(args.ant1, args.ant2, shape_fn(),
+        model_vis = rime.sum_coherencies(args.ant1, args.ant2, shape,
                 ant_jones, args.flag, args.gterm, model_vis, False)
 
     # Increase base offset by source count
