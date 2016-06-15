@@ -105,46 +105,40 @@ for src_count, src_type in zip(src_counts, src_types):
         alpha = tf.Variable(np_alpha[i:chunk_end])
 
         # Compute the complex phase
-        with tf.control_dependencies([lm, stokes, alpha]):
-            cplx_phase = rime.phase(lm, args.uvw,
-                args.frequency, CT=ctype)
+        cplx_phase = rime.phase(lm, args.uvw,
+            args.frequency, CT=ctype)
 
             # Compute the brightness square root
-        with tf.control_dependencies([cplx_phase]):
-            bsqrt = rime.b_sqrt(stokes, alpha, args.frequency,
-                args.ref_freq, CT=ctype)
+        bsqrt = rime.b_sqrt(stokes, alpha, args.frequency,
+            args.ref_freq, CT=ctype)
 
         # Compute the ejones from the beam cube
-        with tf.control_dependencies([bsqrt]):
-            ejones = rime.e_beam(lm, args.point_errors,
-                args.antenna_scaling, args.ebeam, args.parallactic_angle,
-                args.beam_ll, args.beam_lm,
-                args.beam_ul, args.beam_um)
+        ejones = rime.e_beam(lm, args.point_errors,
+            args.antenna_scaling, args.ebeam, args.parallactic_angle,
+            args.beam_ll, args.beam_lm,
+            args.beam_ul, args.beam_um)
             
         # Compute per antenna jones terms    
-        with tf.control_dependencies([ejones]):
-            ant_jones = rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=dtype)
+        ant_jones = rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=dtype)
 
         # Compute shape parameters
-        with tf.control_dependencies([ant_jones]):
-            if src_type == POINT:
-                shape = tf.ones([chunk_end-i, ntime, nbl, nchan], dtype=dtype)
-            elif src_type == GAUSS:
-                gauss_param = tf.Variable(np_param[:,i:chunk_end])
-                shape = rime.gauss_shape(args.uvw, args.ant1, args.ant2,
-                    args.frequency, gauss_param,
-                    name='{t}_shape'.format(t=GAUSS))
-            elif src_type == SERSIC:
-                sersic_param = tf.Variable(np_param[:,i:chunk_end])
-                shape = rime.sersic_shape(args.uvw, args.ant1, args.ant2,
-                    args.frequency, sersic_param,
-                    name='{t}_shape'.format(t=SERSIC))
+        if src_type == POINT:
+            shape = tf.ones([chunk_end-i, ntime, nbl, nchan], dtype=dtype)
+        elif src_type == GAUSS:
+            gauss_param = tf.Variable(np_param[:,i:chunk_end])
+            shape = rime.gauss_shape(args.uvw, args.ant1, args.ant2,
+                args.frequency, gauss_param,
+                name='{t}_shape'.format(t=GAUSS))
+        elif src_type == SERSIC:
+            sersic_param = tf.Variable(np_param[:,i:chunk_end])
+            shape = rime.sersic_shape(args.uvw, args.ant1, args.ant2,
+                args.frequency, sersic_param,
+                name='{t}_shape'.format(t=SERSIC))
 
 
         # Sum coherencies over this source type
-        with tf.control_dependencies([shape]):
-            model_vis = rime.sum_coherencies(args.ant1, args.ant2, shape,
-                    ant_jones, args.flag, args.gterm, model_vis, False)
+        model_vis = rime.sum_coherencies(args.ant1, args.ant2, shape,
+                ant_jones, args.flag, args.gterm, model_vis, False)
 
     # Increase base offset by source count
     base += src_count
