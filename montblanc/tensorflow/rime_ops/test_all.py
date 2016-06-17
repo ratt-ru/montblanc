@@ -77,11 +77,9 @@ def get_src_vars(nsrc, src_type=None):
         param = None
     elif src_type == GAUSS:
         # Shape parameters
-        gauss_param = rf(3, nsrc)*dtype([0.1,0.1,1])[:,np.newaxis]
-        param = gauss_param
+        param = rf(3, nsrc)*dtype([0.1,0.1,1])[:,np.newaxis]
     elif src_type == SERSIC:
-        sersic_param = rf(3, nsrc)*dtype([1,1,np.pi/648000])[:,np.newaxis]
-        param = sersic_param
+        param = rf(3, nsrc)*dtype([1,1,np.pi/648000])[:,np.newaxis]
     else:
         raise ValueError("Unknown source type {t}.".format(t=src_type))
 

@@ -146,3 +146,6 @@ def rime_solver(slvr_cfg):
     import montblanc.factory
 
     return montblanc.factory.rime_solver(slvr_cfg)
+
+def tf_rime_graph(slvr_cfg):
+    pass

@@ -168,6 +168,8 @@ def rime_solver(slvr_cfg):
         from montblanc.impl.rime.v5.CompositeRimeSolver \
         import CompositeRimeSolver as RimeSolver
         slvr_cfg[Options.CONTEXT] = __contexts
+    elif version == Options.VERSION_TENSORFLOW:
+        from montblanc.impl.rime.tensorflow.RimeSolver import RimeSolver
     else:
         raise ValueError('Invalid version %s' % version)
 
