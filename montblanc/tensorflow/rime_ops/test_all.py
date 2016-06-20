@@ -49,7 +49,7 @@ D.ant1, D.ant2 = (np.tile(D.ant1, ntime).reshape(ntime, nbl),
                     np.tile(D.ant2, ntime).reshape(ntime, nbl))
 
 # Flags, g term and model visibilities
-D.flag = np.random.randint(0, 1,
+D.flag = np.random.randint(0, 2,
     size=(ntime, nbl, nchan, npol), dtype=np.uint8)
 D.gterm = rc(ntime, na, nchan, npol)
 

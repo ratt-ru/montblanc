@@ -18,7 +18,7 @@ np_ant1, np_ant2 = (np.tile(np_ant1, ntime).reshape(ntime, nbl),
     np.tile(np_ant2, ntime).reshape(ntime,nbl))
 np_shape = rf(nsrc, ntime, nbl, nchan)
 np_ant_jones = rf(nsrc, ntime, na, nchan, 4) + rf(nsrc, ntime, na, nchan, 4)*1j
-np_flag = np.random.randint(0, 1, size=(ntime, nbl, nchan, 4), dtype=np.uint8)
+np_flag = np.random.randint(0, 2, size=(ntime, nbl, nchan, 4), dtype=np.uint8)
 np_gterm = rf(ntime, na, nchan, 4) + rf(ntime, na, nchan, 4)*1j
 np_model_vis = rf(ntime, nbl, nchan, 4) + rf(ntime, nbl, nchan, 4)*1j
 
