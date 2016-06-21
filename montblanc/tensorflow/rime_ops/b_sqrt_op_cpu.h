@@ -92,33 +92,36 @@ public:
                 FT trace = 2.0*I;
                 FT det = I*I - Q*Q - U*U - V*V;
 
+                // Compute s and t, used to find matrix roots
+                FT s = std::sqrt(det);
+                FT t = std::sqrt(trace + 2.0*s);
+
+                // Set t to 1.0 to avoid nans/infs in the output
+                // t == 0.0 (and s == 0.0) imply a zero matrix
+                // in any case
+                if(t == 0.0)
+                    { t = 1.0; }
+
+                // Create common sub-expressions
+                FT Is_add_Q = I + s + Q;
+                FT Is_sub_Q = I + s - Q;
+
                 for(int chan=0; chan < nchan; ++chan)
                 {
                     // Compute spectral index
                     FT power = std::pow(frequency(chan)/ref_freq,
                         alpha(src, time));
 
-                    // Compute s and t, used to find matrix roots
-                    FT s = std::sqrt(det);
-                    FT t = std::sqrt(trace + 2.0*s);
-
-                    // Set t to 1.0 to avoid nans/infs in the output
-                    // t == 0.0 (and s == 0.0) imply a zero matrix
-                    // in any case
-                    if(t == 0.0)
-                        { t = 1.0; }
-
                     // Create some common sub-expressions here
-                    FT Is = I + s;
                     FT pst = std::sqrt(power)/t;
                     FT Utmp = U*pst;
                     FT Vtmp = V*pst;
 
                     // Assign square root of the brightness matrix
-                    b_sqrt(src, time, chan, XX) = CT(pst*(Is + Q), 0    );
+                    b_sqrt(src, time, chan, XX) = CT(pst*Is_add_Q, 0    );
                     b_sqrt(src, time, chan, XY) = CT(Utmp        , Vtmp );
                     b_sqrt(src, time, chan, YX) = CT(Utmp        , -Vtmp);
-                    b_sqrt(src, time, chan, YY) = CT(pst*(Is - Q), 0    );
+                    b_sqrt(src, time, chan, YY) = CT(pst*Is_sub_Q, 0    );
                 }
             }
         }
