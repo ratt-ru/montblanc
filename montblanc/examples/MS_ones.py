@@ -46,15 +46,14 @@ if __name__ == '__main__':
     # Get the solver.
     with montblanc.rime_solver(slvr_cfg) as slvr:
         nsrc = slvr.dim_global_size('nsrc')
-        # Create point sources at zeros
-        l=slvr.ft(np.zeros(nsrc))
-        m=slvr.ft(np.zeros(nsrc))
-        lm=mbu.shape_list([l,m], shape=slvr.lm.shape, dtype=slvr.lm.dtype)
-
-        slvr.transfer_lm(lm)
-
+    
         # Create 1Jy point sources
-        if args.version in [Options.VERSION_TWO]:
+        if args.version == Options.VERSION_TWO:
+            lm = np.empty(shape=slvr.lm.shape, dtype=slvr.lm.dtype)
+            lm[0,:] = 0  # Set all l = 0
+            lm[1,:] = 0  # Set all m = 0
+            slvr.transfer_lm(lm)
+
             brightness = np.empty(shape=slvr.brightness.shape, dtype=slvr.brightness.dtype)
             brightness[0,:,:] = 1
             brightness[1,:,:] = 0
@@ -62,7 +61,16 @@ if __name__ == '__main__':
             brightness[3,:,:] = 0
             brightness[4,:,:] = 0
             slvr.transfer_brightness(brightness)            
-        elif args.version in [Options.VERSION_FOUR, Options.VERSION_FIVE]:
+
+            # Solve the RIME
+            slvr.solve()    
+            model_vis = slvr.retrieve_model_vis()
+        elif args.version == Options.VERSION_FOUR:
+            lm = np.empty(shape=slvr.lm.shape, dtype=slvr.lm.dtype)
+            lm[:,0] = 0  # Set all l = 0
+            lm[:,1] = 0  # Set all m = 0
+            slvr.transfer_lm(lm)
+
             stokes = np.empty(shape=slvr.stokes.shape, dtype=slvr.stokes.dtype)
             stokes[:,:,0] = 1
             stokes[:,:,1] = 0
@@ -70,9 +78,25 @@ if __name__ == '__main__':
             stokes[:,:,3] = 0
             slvr.transfer_stokes(stokes)
             slvr.transfer_alpha(np.zeros(shape=slvr.alpha.shape, dtype=slvr.alpha.dtype))
-    
-        # Solve the RIME
-        slvr.solve()
 
-        print slvr.retrieve_model_vis()
+            # Solve the RIME
+            slvr.solve()    
+            model_vis = slvr.retrieve_model_vis()
+        elif args.version == Options.VERSION_FIVE:
+            slvr.lm[:,0] = 0  # Set all l = 0 for all sources
+            slvr.lm[:,1] = 0  # Set all m = 0 for all sources
+
+            slvr.stokes[:,:,0] = 1 # Set I = 1Jy for all sources at all times
+            slvr.stokes[:,:,1] = 0 # Set Q = 0 for all sources at all times
+            slvr.stokes[:,:,2] = 0 # Set U = 0 for all sources at all times
+            slvr.stokes[:,:,3] = 0 # Set V = 0 for all sources at all times
+
+            slvr.alpha[:,:] = 0  # Set spectral index to 0 for all sources at all times
+
+            # Solve the RIME
+            slvr.solve()    
+            model_vis = slvr.model_vis
+
+
+        print model_vis
         print slvr
