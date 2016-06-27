@@ -15,7 +15,7 @@ MS_TO_NP_TYPE_MAP = {
 
 QUEUE_SIZE = 10
 
-class VisibilityChunk(object):
+class RimeChunk(object):
     __slots__ = ['_time', '_bl', '_chan']
 
     def __init__(self, time, bl, chan):
@@ -42,10 +42,10 @@ class VisibilityChunk(object):
     def chan(self):
         return self._chan
 
-class VisibilityDataFeeder(object):
+class RimeDataFeeder(object):
     def __init__(self, chunk):
         self._chunk = chunk
-        self._queue = tf.FIFOQueue(QUEUE_SIZE, self._queue_dtypes())
+        self._queue = tf.FIFOQueue(QUEUE_SIZE, tuple(self._queue_dtypes()))
         self._placeholders = self._queue_placeholders()
 
         self._enqueue_op = self._queue.enqueue(tuple(self._placeholders))
@@ -54,6 +54,10 @@ class VisibilityDataFeeder(object):
     @property
     def chunk(self):
         return self._chunk
+
+    @property
+    def queue(self):
+        return self._queue
     
     @property
     def enqueue_op(self):
@@ -67,7 +71,7 @@ class VisibilityDataFeeder(object):
     def placeholders(self):
         return self._placeholders
     
-    def feed(self, session):
+    def feed(self, coordinator, session):
         raise NotImplementedError()
 
     def _queue_placeholders(self):
@@ -77,15 +81,16 @@ class VisibilityDataFeeder(object):
     def _queue_dtypes(self):
         raise NotImplementedError()
 
-class NumpyVisibilityDataFeeder(VisibilityDataFeeder):
+class NumpyRimeDataFeeder(RimeDataFeeder):
     def __init__(self, chunk, arrays):
         self._arrays = arrays
-        super(NumpyVisibilityDataFeeder, self).__init__(chunk)
+        super(NumpyRimeDataFeeder, self).__init__(chunk)
 
     def _queue_dtypes(self):
         return [a.dtype.type for a in self._arrays.itervalues()]
 
 MAIN_TABLE = 'MAIN'
+ORDERED_MAIN_TABLE = 'ORDERED_MAIN'
 
 # Measurement Set sub-tables
 ANTENNA_TABLE = 'ANTENNA'
@@ -104,7 +109,7 @@ def subtable_name(msname, subtable=None):
 def open_table(msname, subtable=None):
     return pt.table(subtable_name(msname, subtable), ack=False)
 
-class MSVisibilityDataFeeder(VisibilityDataFeeder):
+class MSRimeDataFeeder(RimeDataFeeder):
     def __init__(self, chunk, msname):
         self._msname = msname
         self._columns = REQUESTED
@@ -136,7 +141,7 @@ class MSVisibilityDataFeeder(VisibilityDataFeeder):
         self.nbands = len(chan_per_band)
         self.nchan = sum(chan_per_band)
 
-        if ddesc.nrows() != ddesc.nrows():
+        if ddesc.nrows() != spec.nrows():
             raise ValueError("DATA_DESCRIPTOR.nrows() "
                 "!= SPECTRAL_WINDOW.nrows()")
 
@@ -154,7 +159,8 @@ class MSVisibilityDataFeeder(VisibilityDataFeeder):
             "[SELECT SPECTRAL_WINDOW_ID FROM ::DATA_DESCRIPTION][DATA_DESC_ID]"])
 
         # Store the main table
-        self._tables[MAIN_TABLE] = ms = pt.taql(ordering_query)
+        self._tables[MAIN_TABLE] = ms
+        self._tables[ORDERED_MAIN_TABLE] = pt.taql(ordering_query)
 
         self.nrows = ms.nrows()
         self.na = ant.nrows()
@@ -165,24 +171,22 @@ class MSVisibilityDataFeeder(VisibilityDataFeeder):
         bl_query = "SELECT FROM $ms ORDERBY UNIQUE ANTENNA1, ANTENNA2"
         self.nbl = pt.taql(bl_query).nrows()
 
-        super(MSVisibilityDataFeeder, self).__init__(chunk)
+        super(MSRimeDataFeeder, self).__init__(chunk)
 
     def _queue_dtypes(self):
-        ms = self._tables[MAIN_TABLE]
+        ms = self._tables[ORDERED_MAIN_TABLE]
+        # Descriptor dtype is np.int32
         return [np.int32] + [MS_TO_NP_TYPE_MAP[ms.getcoldesc(col)['valueType']]
             for col in self._columns]
 
-    def _queue_shapes(self):
-        return [(1,)] + [(self.chunk.time, self.chunk.bl, self.chunk.chan) for col in self._columns]
-
-    def feed(self, session):
+    def feed(self, coordinator, session):
         chunk = self.chunk
-        ms = self._tables[MAIN_TABLE]
+        ordered_ms = self._tables[ORDERED_MAIN_TABLE]
 
         # This query removes entries associated with different DATA_DESCRIPTORS
         # for each time and baseline. We assume that UVW coordinates
         # are the same for these entries
-        uvw_ms = pt.taql('SELECT FROM $ms ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2')
+        uvw_ms = pt.taql('SELECT FROM $ordered_ms ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2')
 
         for time in xrange(0, self.ntime, chunk.time):
             time_end = min(time + chunk.time, self.ntime)
@@ -201,13 +205,14 @@ class MSVisibilityDataFeeder(VisibilityDataFeeder):
                 startrow *= self.nbands
                 nrows *= self.nbands
 
-                data = ms.getcol('DATA', startrow=startrow, nrow=nrows)
-                flag = ms.getcol('FLAG', startrow=startrow, nrow=nrows)
-                weight = ms.getcol('WEIGHT', startrow=startrow, nrow=nrows)
+                data = ordered_ms.getcol('DATA', startrow=startrow, nrow=nrows)
+                flag = ordered_ms.getcol('FLAG', startrow=startrow, nrow=nrows)
+                weight = ordered_ms.getcol('WEIGHT', startrow=startrow, nrow=nrows)
 
-                variables = [np.int32([0]), ant1, ant2, uvw, data, flag, weight]
+                descriptor = np.int32([0, time, time_end, self.ntime,
+                    bl, bl_end, self.nbl])
 
-                #print [v.shape for v in variables]
+                variables = [descriptor, ant1, ant2, uvw, data, flag, weight]
 
                 print 'Enqueueing {t} {bl}'.format(t=time, bl=bl)
                 # Enqueue data from this 
@@ -215,44 +220,59 @@ class MSVisibilityDataFeeder(VisibilityDataFeeder):
                     for p, a in zip(self.placeholders, variables) })
 
         # Enqueue eof
-        variables = [np.ones(shape=(1,), dtype=dt) for sh, dt
-            in zip(self._queue_shapes(), self._queue_dtypes())]
-
+        descriptor[0] = 1
+        variables = [descriptor, ant1, ant2, uvw, data, flag, weight]
         session.run(self.enqueue_op, feed_dict={ p: a
             for p, a in zip(self.placeholders, variables) })
+
+    def close(self):
+        for table in self._tables.itervalues():
+            table.close()
 
     def __enter__(self):
         return self
 
     def __exit__(self, etype, evalue, etraceback):
-        for table in self._tables.itervalues():
-            table.close()
+        self.close()
 
-vis_chunk = VisibilityChunk(1, 91, 64)
+vis_chunk = RimeChunk(1, 91, 64)
 
+init_op = tf.initialize_all_variables()
+
+feeder = MSRimeDataFeeder(vis_chunk, '/home/sperkins/data/WSRT.MS')
+
+# While loop condition
+cond = lambda eof, i: tf.not_equal(eof, 1)
+
+# While loop body
+def body(eof, i):
+    descriptor, ant1, ant2, uvw, data, flag, weight = feeder.queue.dequeue()
+    descriptor = tf.Print(descriptor, [descriptor], message='Descriptor ', summarize=10)
+    return descriptor[0], i+1
+
+# While loop
+W = tf.while_loop(cond, body, [tf.constant(0), tf.constant(0)])
 
 config = tf.ConfigProto()
-#config.operation_timeout_in_ms=5000  # for debugging queue hangs
+#config.operation_timeout_in_ms=10000  # for debugging queue hangs
 
-with tf.Session(config=config) as S, \
-    MSVisibilityDataFeeder(vis_chunk, '/home/sperkins/data/WSRT.MS') as feeder:
+with tf.Session(config=config) as S:
+    S.run(init_op)
 
-    read_thread = threading.Thread(target=lambda: feeder.feed(S),
+    C = tf.train.Coordinator()
+
+    read_thread = threading.Thread(
+        target=lambda: feeder.feed(C, S),
         name='feed-thread')
+    read_thread.daemon = False
     read_thread.start()
 
-    cond = lambda eof, i: tf.not_equal(eof, 1)
-
-    def body(eof, i):
-        EOF, ant1, ant2, uvw, data, flag, weight = feeder._queue.dequeue()
-        return EOF[0], i+1
-
-    W = tf.while_loop(cond, body, [tf.constant(0), tf.constant(0)])
-
-    print S.run(feeder._queue.size())
     print 'Running while loop'
     eof, i = S.run(W)
 
     print eof, i
 
-feeder = NumpyVisibilityDataFeeder(vis_chunk, {'DATA' : np.empty(shape=(10,10),dtype=np.complex128)})
+    C.join([read_thread])
+    feeder.close()
+
+feeder = NumpyRimeDataFeeder(vis_chunk, {'DATA' : np.empty(shape=(10,10),dtype=np.complex128)})
