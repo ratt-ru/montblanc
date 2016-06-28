@@ -48,10 +48,14 @@ class MeasurementSetLoader(BaseLoader):
         # Open the main table
         ms = pt.table(self.msfile, ack=False)
 
-        # Create an ordered view over the MS
+        # Create a view over the MS, ordered by
+        # (1) time (TIME)
+        # (2) baseline (ANTENNA1, ANTENNA2)
+        # (3) band (SPECTRAL_WINDOW_ID via DATA_DESC_ID)
         ordering_query = ' '.join(["SELECT FROM $ms",
             "" if auto_correlations else "WHERE ANTENNA1 != ANTENNA2",
-            "ORDERBY TIME, ANTENNA1, ANTENNA2"])
+            "ORDERBY TIME, ANTENNA1, ANTENNA2, "
+            "[SELECT SPECTRAL_WINDOW_ID FROM ::DATA_DESCRIPTION][DATA_DESC_ID]"])
 
         ordered_ms = pt.taql(ordering_query)
 
