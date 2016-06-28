@@ -31,8 +31,6 @@ from montblanc.config import (RimeSolverConfig as Options)
 
 from montblanc.pipeline import Pipeline
 
-__MB_DEVICE_ENV_VAR = 'MONTBLANC_CUDA_DEVICES'
-
 # PyCUDA device and context variables
 __devices = None
 __contexts = None
@@ -55,42 +53,9 @@ def get_contexts_per_device():
         if nr_devices == 0:
             raise RuntimeError('Montblanc found no CUDA devices!')
 
-        device_str = os.getenv(__MB_DEVICE_ENV_VAR, '')
-        device_str_list = device_str.split()
-
-        # If some valid device string list exists,
-        # iterate through it, marking valid devices
-        if len(device_str_list) > 0:
-            valid_devices = [False for d in range(nr_devices)]
-
-            for i, s in enumerate(device_str_list):
-                try:
-                    device_nr = int(s)
-                    valid_devices[device_nr] = True
-                except (ValueError, IndexError) as e:
-                    montblanc.log.warn(('The environment variable '
-                        '"%s=%s", contains an invalid device number '
-                        '"%s" at position %d.') % (__MB_DEVICE_ENV_VAR,
-                            device_str, s, i))
-
-            # Are there any valid devices?
-            if not np.any(valid_devices):
-                montblanc.log.warn(('The environment variable '
-                    '"%s=%s", contains no valid device number''s. '
-                    'All devices will be selected.') % (
-                        __MB_DEVICE_ENV_VAR, device_str))
-
-                valid_devices = [True for d in range(nr_devices)]
-    
-        # Otherwise, assume every device is valid
-        else:
-            valid_devices = [True for d in range(nr_devices)]
-
-        # Create the valid devices
+        # Create the devices
         try:
-            __devices = [cuda.Device(d)
-                for i, d in enumerate(range(nr_devices))
-                if valid_devices[i]]
+            __devices = [cuda.Device(d) for d in range(nr_devices)]
         except:
             raise RuntimeError('Montblanc was unable '
                 'to create PyCUDA device objects: %s' % repr(e))
