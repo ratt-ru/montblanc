@@ -37,7 +37,6 @@ class RimeChunk(object):
     def bl(self):
         return self._bl
 
-
     @property
     def chan(self):
         return self._chan
@@ -49,7 +48,6 @@ class RimeDataFeeder(object):
         self._placeholders = self._queue_placeholders()
 
         self._enqueue_op = self._queue.enqueue(tuple(self._placeholders))
-        self._dequeue_op = self._queue.dequeue()
 
     @property
     def chunk(self):
@@ -62,11 +60,7 @@ class RimeDataFeeder(object):
     @property
     def enqueue_op(self):
         return self._enqueue_op
-    
-    @property
-    def dequeue_op(self):
-        return self._dequeue_op
-    
+        
     @property
     def placeholders(self):
         return self._placeholders
@@ -189,10 +183,28 @@ class MSRimeDataFeeder(RimeDataFeeder):
         uvw_ms = pt.taql('SELECT FROM $ordered_ms ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2')
 
         for time in xrange(0, self.ntime, chunk.time):
-            time_end = min(time + chunk.time, self.ntime)
+            time_end, last_time = time + chunk.time, False
+
+            # Clamp and mark if we're at the end of a time chunk
+            if time_end >= self.ntime:
+                last_time = True
+                time_end = self.ntime
 
             for bl in xrange(0, self.nbl, chunk.bl):
-                bl_end = min(bl + chunk.bl, self.nbl)
+                bl_end, last_bl = bl + chunk.bl, False
+
+                # Clamp and mark if we're at the end of a baseline chunk
+                if bl_end >= self.nbl:
+                    last_bl = True
+                    bl_end = self.nbl
+
+                # Is the the last chunk of all?
+                eof = 1 if last_time and last_bl else 0
+
+                # Constructor a descriptor the current chunk
+                descriptor = np.int32([eof,
+                    time, time_end, self.ntime,
+                    bl, bl_end, self.nbl])
 
                 startrow=time*self.nbl + bl
                 nrows=chunk.time*chunk.bl
@@ -209,9 +221,6 @@ class MSRimeDataFeeder(RimeDataFeeder):
                 flag = ordered_ms.getcol('FLAG', startrow=startrow, nrow=nrows)
                 weight = ordered_ms.getcol('WEIGHT', startrow=startrow, nrow=nrows)
 
-                descriptor = np.int32([0, time, time_end, self.ntime,
-                    bl, bl_end, self.nbl])
-
                 variables = [descriptor, ant1, ant2, uvw, data, flag, weight]
 
                 print 'Enqueueing {t} {bl}'.format(t=time, bl=bl)
@@ -219,11 +228,8 @@ class MSRimeDataFeeder(RimeDataFeeder):
                 session.run(self.enqueue_op, feed_dict={ p: a
                     for p, a in zip(self.placeholders, variables) })
 
-        # Enqueue eof
-        descriptor[0] = 1
-        variables = [descriptor, ant1, ant2, uvw, data, flag, weight]
-        session.run(self.enqueue_op, feed_dict={ p: a
-            for p, a in zip(self.placeholders, variables) })
+        # Close the queue
+        session.run(self.queue.close())
 
     def close(self):
         for table in self._tables.itervalues():
