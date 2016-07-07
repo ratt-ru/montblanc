@@ -45,10 +45,12 @@ class BiroSolverConfigurationOptions(Options):
         'Governs the level of discretisation of '
         'the nu (frequency) dimension.')
 
-    NPARAMS = 'nparams'
-    DEFAULT_NPARAMS = 0
-    NPARAMS_DESCRIPTION = (
-        'X2 gradient size.')
+    # Enabling chi squared gradient computation with respect Sersic parameters
+    SERSIC_GRADIENT = 'sersic_gradient'
+    DEFAULT_SERSIC_GRADIENT = False
+    VALID_SERSIC_GRADIENT = [True, False]
+    SERSIC_GRADIENT_DESCRIPTION = (
+        "If True, chi_squared gradient is computed with respect to the sersic parameters for each source.")
 
     # Should a weight vector (sigma) be used to
     # when calculating the chi-squared values?
@@ -86,7 +88,7 @@ class BiroSolverConfigurationOptions(Options):
 
     descriptions = {
         WEIGHT_VECTOR: {
-            Options.DESCRIPTION: WEIGHT_VECTOR,
+            Options.DESCRIPTION: WEIGHT_VECTOR_DESCRIPTION,
             Options.VALID: VALID_WEIGHT_VECTOR,
             Options.DEFAULT: DEFAULT_WEIGHT_VECTOR,
             Options.REQUIRED: True
@@ -124,10 +126,11 @@ class BiroSolverConfigurationOptions(Options):
             Options.REQUIRED: True
         },
 
-        NPARAMS: {
-            Options.DESCRIPTION: NPARAMS_DESCRIPTION,
-            Options.DEFAULT: DEFAULT_NPARAMS,
-            Options.REQUIRED: False
+        SERSIC_GRADIENT: {
+            Options.DESCRIPTION: SERSIC_GRADIENT_DESCRIPTION,
+            Options.VALID: VALID_SERSIC_GRADIENT,
+            Options.DEFAULT: DEFAULT_SERSIC_GRADIENT,
+            Options.REQUIRED: True
         },
 
     }

@@ -31,24 +31,25 @@ from montblanc.impl.biro.v4.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.biro.v4.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.biro.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.biro.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
-from montblanc.impl.biro.v4.gpu.RimeSumCoherenciesWithGradient import RimeSumCoherenciesWithGradient
+from montblanc.impl.biro.v4.gpu.SersicChiSquaredGradient import SersicChiSquaredGradient
 
 from montblanc.pipeline import Pipeline
 from montblanc.util import random_like as rary
 
 def get_pipeline(slvr_cfg):
     wv = slvr_cfg.get(Options.WEIGHT_VECTOR, False)
-    npar = slvr_cfg.get(Options.NPARAMS, 0)
-    if (npar == 0):
+    sersic_grad = slvr_cfg.get(Options.SERSIC_GRADIENT, False)
+    if (sersic_grad):
         return Pipeline([RimeBSqrt(),
             RimeEBeam(),
             RimeEKBSqrt(),
-            RimeSumCoherencies(weight_vector=wv)])
+            RimeSumCoherencies(weight_vector=wv),
+            SersicChiSquaredGradient()])
     else:
         return Pipeline([RimeBSqrt(),
             RimeEBeam(),
             RimeEKBSqrt(),
-            RimeSumCoherenciesWithGradient(weight_vector=wv)])
+            RimeSumCoherencies(weight_vector=wv)])
 
 def ary_dict(name,shape,dtype,cpu=True,gpu=True, **kwargs):
     D = {
@@ -210,10 +211,10 @@ A = [
     ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct', cpu=False),
     ary_dict('vis', ('ntime','nbl','nchan',4), 'ct', cpu=False),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', cpu=False),
-    ary_dict('chi_sqrd_result_grad',('nparams','ntime','nbl','nchan'),'ft', cpu=False),
+#    ary_dict('chi_sqrd_result_grad',('nparams','ntime','nbl','nchan'),'ft', cpu=False),
 
     ary_dict('X2', (1, ), 'ft', cpu=False, gpu=False),
-    ary_dict('X2_grad',('nparams', ), 'ft', cpu=False, gpu=False),
+    ary_dict('X2_grad',(3,'nssrc', ), 'ft', cpu=False, gpu=False),
 ]
 
 class BiroSolver(BaseSolver):
@@ -249,10 +250,10 @@ class BiroSolver(BaseSolver):
             description='E Beam cube height in nu coords')
 
         # Configure the dimensions of the chi squared gradient
-        self.register_dimension('nparams',
-            slvr_cfg[Options.NPARAMS],
-            zero_valid=True,
-            description='dimension of chi squared gradient')
+        #self.register_dimension('nparams',
+        #    slvr_cfg[Options.NPARAMS],
+        #    zero_valid=True,
+        #    description='dimension of chi squared gradient')
 
         self.register_properties(P)
         self.register_arrays(A)
