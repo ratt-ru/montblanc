@@ -42,16 +42,16 @@ class RimeChunk(object):
         return self._chan
 
 class RimeDataFeeder(object):
-    def __init__(self, chunk):
-        self._chunk = chunk
+    def __init__(self, cube):
+        self._cube = cube
         self._queue = tf.FIFOQueue(QUEUE_SIZE, tuple(self._queue_dtypes()))
         self._placeholders = self._queue_placeholders()
 
         self._enqueue_op = self._queue.enqueue(tuple(self._placeholders))
 
     @property
-    def chunk(self):
-        return self._chunk
+    def cube(self):
+        return self._cube
 
     @property
     def queue(self):
@@ -76,9 +76,9 @@ class RimeDataFeeder(object):
         raise NotImplementedError()
 
 class NumpyRimeDataFeeder(RimeDataFeeder):
-    def __init__(self, chunk, arrays):
+    def __init__(self, cube, arrays):
         self._arrays = arrays
-        super(NumpyRimeDataFeeder, self).__init__(chunk)
+        super(NumpyRimeDataFeeder, self).__init__(cube)
 
     def _queue_dtypes(self):
         return [a.dtype.type for a in self._arrays.itervalues()]
@@ -92,8 +92,10 @@ SPECTRAL_WINDOW_TABLE = 'SPECTRAL_WINDOW'
 DATA_DESCRIPTION_TABLE = 'DATA_DESCRIPTION'
 POLARIZATION_TABLE = 'POLARIZATION'
 
-SUBTABLE_KEYS = (ANTENNA_TABLE, SPECTRAL_WINDOW_TABLE,
-    DATA_DESCRIPTION_TABLE, POLARIZATION_TABLE)
+SUBTABLE_KEYS = (ANTENNA_TABLE,
+    SPECTRAL_WINDOW_TABLE,
+    DATA_DESCRIPTION_TABLE,
+    POLARIZATION_TABLE)
 
 REQUESTED = ['ANTENNA1', 'ANTENNA2', 'UVW', 'DATA', 'FLAG', 'WEIGHT']
 
@@ -104,7 +106,7 @@ def open_table(msname, subtable=None):
     return pt.table(subtable_name(msname, subtable), ack=False)
 
 class MSRimeDataFeeder(RimeDataFeeder):
-    def __init__(self, chunk, msname):
+    def __init__(self, cube, msname):
         self._msname = msname
         self._columns = REQUESTED
         # Create dictionary of tables
@@ -112,7 +114,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
         # Open the main measurement set
         ms = open_table(msname)
- 
+
         # Access individual tables
         ant, spec, ddesc, pol = (self._tables[k] for k in SUBTABLE_KEYS)
 
@@ -165,7 +167,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
         bl_query = "SELECT FROM $ms ORDERBY UNIQUE ANTENNA1, ANTENNA2"
         self.nbl = pt.taql(bl_query).nrows()
 
-        super(MSRimeDataFeeder, self).__init__(chunk)
+        super(MSRimeDataFeeder, self).__init__(cube)
 
     def _queue_dtypes(self):
         ms = self._tables[ORDERED_MAIN_TABLE]
@@ -174,7 +176,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
             for col in self._columns]
 
     def feed(self, coordinator, session):
-        chunk = self.chunk
+        cube = self.cube
         ordered_ms = self._tables[ORDERED_MAIN_TABLE]
 
         # This query removes entries associated with different DATA_DESCRIPTORS
@@ -182,32 +184,32 @@ class MSRimeDataFeeder(RimeDataFeeder):
         # are the same for these entries
         uvw_ms = pt.taql('SELECT FROM $ordered_ms ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2')
 
-        for time in xrange(0, self.ntime, chunk.time):
-            time_end, last_time = time + chunk.time, False
+        for time in xrange(0, self.ntime, cube.time):
+            time_end, last_time = time + cube.time, False
 
-            # Clamp and mark if we're at the end of a time chunk
+            # Clamp and mark if we're at the end of a time cube
             if time_end >= self.ntime:
                 last_time = True
                 time_end = self.ntime
 
-            for bl in xrange(0, self.nbl, chunk.bl):
-                bl_end, last_bl = bl + chunk.bl, False
+            for bl in xrange(0, self.nbl, cube.bl):
+                bl_end, last_bl = bl + cube.bl, False
 
-                # Clamp and mark if we're at the end of a baseline chunk
+                # Clamp and mark if we're at the end of a baseline cube
                 if bl_end >= self.nbl:
                     last_bl = True
                     bl_end = self.nbl
 
-                # Is the the last chunk of all?
+                # Is the the last cube of all?
                 eof = 1 if last_time and last_bl else 0
 
-                # Constructor a descriptor the current chunk
+                # Constructor a descriptor the current cube
                 descriptor = np.int32([eof,
                     time, time_end, self.ntime,
                     bl, bl_end, self.nbl])
 
                 startrow=time*self.nbl + bl
-                nrows=chunk.time*chunk.bl
+                nrows=cube.time*cube.bl
 
                 ant1 = uvw_ms.getcol('ANTENNA1', startrow=startrow, nrow=nrows)
                 ant2 = uvw_ms.getcol('ANTENNA2', startrow=startrow, nrow=nrows)
@@ -241,11 +243,12 @@ class MSRimeDataFeeder(RimeDataFeeder):
     def __exit__(self, etype, evalue, etraceback):
         self.close()
 
-vis_chunk = RimeChunk(1, 91, 64)
+
+vis_cube = RimeChunk(1, 91, 64)
 
 init_op = tf.initialize_all_variables()
 
-feeder = MSRimeDataFeeder(vis_chunk, '/home/sperkins/data/WSRT.MS')
+feeder = MSRimeDataFeeder(vis_cube, '/home/sperkins/data/WSRT.MS')
 
 # While loop condition
 cond = lambda eof, i: tf.not_equal(eof, 1)
@@ -281,4 +284,4 @@ with tf.Session(config=config) as S:
     C.join([read_thread])
     feeder.close()
 
-feeder = NumpyRimeDataFeeder(vis_chunk, {'DATA' : np.empty(shape=(10,10),dtype=np.complex128)})
+feeder = NumpyRimeDataFeeder(vis_cube, {'DATA' : np.empty(shape=(10,10),dtype=np.complex128)})
