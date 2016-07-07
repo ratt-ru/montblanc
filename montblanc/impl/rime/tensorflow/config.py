@@ -52,8 +52,6 @@ fwhm2int = 1.0/np.sqrt(np.log(256))
 
 # List of properties
 P = [
-    prop_dict('gauss_scale', 'ft', fwhm2int*np.sqrt(2)*np.pi/montblanc.constants.C),
-    prop_dict('two_pi_over_c', 'ft', 2*np.pi/montblanc.constants.C),
     prop_dict('sigma_sqrd', 'ft', 1.0),
     prop_dict('X2', 'ft', 0.0),
 
@@ -235,7 +233,7 @@ A = [
             minval=0, maxval=2, dtype=np.int32)),
 
     # Observed Visibility Data
-    ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft',
+    ary_dict('weight', ('ntime','nbl','nchan',4), 'ft',
         default = lambda s, a: tf.ones(a.shape, a.dtype),
         test    = lambda s, a: rf(a.shape, a.dtype)),
     ary_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
