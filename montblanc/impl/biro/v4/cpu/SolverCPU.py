@@ -661,65 +661,60 @@ class SolverCPU(object):
             assert u1.shape == (nssrc, ntime, nbl)
             assert v1.shape == (nssrc, ntime, nbl)
 
-            scale_uv = (slvr.two_pi_over_c * slvr.frequency_cpu)\
-                [np.newaxis, np.newaxis, np.newaxis, :]
-            e12 = (1 / (1 - e1 * e1 - e2 * e2))**3
+            e12 = 1 - e1 * e1 - e2 * e2
 
-            den1 = ne.evaluate('(u1*scale_uv*R)**2 + (v1*scale_uv*R)**2',
+            de1 = ne.evaluate('u1*(u_e12+2*e1_u1) + v1*(2*e1_v1-v_e12)',
                 local_dict={
-                    'u1': u1[:, :, :, np.newaxis],
-                    'v1': v1[:, :, :, np.newaxis],
-                    'scale_uv': scale_uv,
-                    'R': (R / (1 - e1 * e1 - e2 * e2))
-                        [:,np.newaxis,np.newaxis,np.newaxis]})
+                    'u_e12': np.outer(e12, u),\
+                    'v_e12': np.outer(e12, v),\
+                    'e1_u1': np.outer(e1, u1),\
+                    'e1_v1': np.outer(e1, v1)}).reshape(nssrc, ntime,nbl)
 
-            assert den1.shape == (nssrc, ntime, nbl, nchan)
+            de2 = ne.evaluate('u1*(v_e12+2*e2_u1) + v1*(2*e2_v1-u_e12)',
+                local_dict={
+                    'u_e12': np.outer(e12, u),\
+                    'v_e12': np.outer(e12, v),\
+                    'e2_u1': np.outer(e2, u1),\
+                    'e2_v1': np.outer(e2, v1)}).reshape(nssrc, ntime,nbl)
 
-            den = (1+den1)*np.sqrt(1+den1)
+            wavenum = (slvr.two_pi_over_c * slvr.frequency_cpu)\
+                [np.newaxis, np.newaxis, np.newaxis, :]
+
+            temp = ne.evaluate('wavenum*wavenum*R*R*(u1*u1+v1*v1)',
+                {
+                  'u1' : u1[:,:,:,np.newaxis],\
+                  'v1' : v1[:,:,:,np.newaxis],\
+                  'R'  : R[:,np.newaxis,np.newaxis,np.newaxis],\
+                  'wavenum': wavenum}).\
+			reshape(nssrc,ntime,nbl,nchan)
+
+            sfactor = ne.evaluate('(wavenum*R/e12)**2/(e12*temp_1)',
+                {
+                  'e12' : e12[:,np.newaxis,np.newaxis,np.newaxis],\
+                  'wavenum': wavenum
+                  'R'   : R[:,np.newaxis,np.newaxis,np.newaxis]
+                  'temp_1' : 1+temp }).reshape(nssrc,ntime,nbl,nchan)
 
             sersic_deriv = np.empty((3,nssrc,ntime,nbl,nchan))
-
-            # partial derivative with respect to e1
-            num = ne.evaluate('(u1*(u_ex+v_2e1e2)+v1*(u_2e1e2+v_ex))*e12', 
-                local_dict={
-                    'u1': u1[:, :, :],
-                    'v1': v1[:, :, :],
-                    'u_ex': np.outer(1 + e1*e1 - e2*e2 + 2*e1, u).reshape(nssrc,ntime,nbl),
-                    'v_2e1e2': np.outer(2*e1*e2, v).reshape(nssrc,ntime,nbl),
-                    'u_2e1e2': np.outer(2*e1*e2, u).reshape(nssrc,ntime,nbl),
-                    'v_ex': np.outer(e2*e2 - e1*e1 + 2*e1 - 1, v).reshape(nssrc,ntime,nbl),
-                    'e12': e12[:,np.newaxis,np.newaxis]})
-
-
-            sersic_deriv[0] = ne.evaluate('num*(scaleR)**2/den',
+          
+            # partial derivatives with respect to e1
+            sersic_deriv[0] = ne.evaluate('de1*sfactor',
                 { 
-                  'scaleR': scale_uv*R[:,np.newaxis,np.newaxis,np.newaxis],
-                  'num' : num[:,:,:,np.newaxis],
-                  'den' : den }) 
+                  'de1' : de1[:,:,:,np.newaxis],\
+                  'sfactor': sfactor }).reshape(nssrc,ntime,nbl,nchan)
 
-            # partial derivative with respect to e2
-            num = ne.evaluate('(u1*(u_2e1e2+v_ex)+v1*(u_ex+v_2e1e2))*e12', 
-                local_dict={
-                    'u1': u1[:, :, :],
-                    'v1': v1[:, :, :],
-                    'u_2e1e2': np.outer(2*(e2+e1*e2),u).reshape(nssrc,ntime,nbl),
-                    'v_ex': np.outer(1 - e1*e1 + e2*e2,v).reshape(nssrc,ntime,nbl),
-                    'v_2e1e2': np.outer(2*(e2 - e1*e2),v).reshape(nssrc,ntime,nbl),
-                    'u_ex': np.outer(1 - e1*e1 + e2*e2,u).reshape(nssrc,ntime,nbl),
-                    'e12': e12[:,np.newaxis,np.newaxis]})
-
-            sersic_deriv[1] = ne.evaluate('num*(scaleR)**2/den',
+            # partial derivatives with respect to e2
+            sersic_deriv[1] = ne.evaluate('de2*sfactor',
                 {
-                  'scaleR' : scale_uv*R[:,np.newaxis,np.newaxis,np.newaxis],
-                  'num' : num[:,:,:,np.newaxis],
-                  'den' : den })
+                  'de2' : de2[:,:,:,np.newaxis],\
+                  'sfactor': sfactor }).reshape(nssrc,ntime,nbl,nchan)
 
             # partial derivatives with respect to scalelength
-            sersic_deriv[2] = ne.evaluate('den1/(R*den)',
+            sersic_deriv[2] = ne.evaluate('temp/(R*temp_1)',
                 {
-                  'R' : R[:,np.newaxis,np.newaxis,np.newaxis],
-                  'den1' : den1,
-                  'den' : den })
+                  'R' : R[:,np.newaxis,np.newaxis,np.newaxis],\
+                  'temp' : temp,\
+                  'temp_1' : 1+temp })
 
             return sersic_deriv
 
@@ -899,7 +894,7 @@ class SolverCPU(object):
 
             # Take the difference between the visibilities and the model
             # (4,nbl,nchan,ntime)
-            d = ne.evaluate('vis - bayes', {
+            d = ne.evaluate('bayes - vis', {
                 'vis': vis,
                 'bayes': bayes_data })
             assert d.shape == (ntime, nbl, nchan, 4)
@@ -924,12 +919,12 @@ class SolverCPU(object):
             im_sum = ne.evaluate('sum(im,5)', {'im': vis_grad.imag})
             chi_sqrd_grad_terms = ne.evaluate('re_sum + im_sum',
                 {'re_sum': re_sum, 'im_sum': im_sum})
-            assert chi_sqrd_grad_terms.shape == (nparams,nssrc,ntime, nbl, nchan)
+            assert chi_sqrd_grad_terms.shape == (3, nssrc, ntime, nbl, nchan)
 
-            term_sum = -2*np.sum(chi_sqrd_grad_terms,(2,3,4)).reshape(3*nssrc)
+            slvr.X2_grad_cpu = 6*np.sum(chi_sqrd_grad_terms,(2,3,4)).reshape(3,nssrc)
            
-            return term_sum if weight_vector is True \
-                else term_sum / slvr.sigma_sqrd
+            return slvr.X2_grad_cpu if weight_vector is True \
+                else slvr.X2_grad_cpu / slvr.sigma_sqrd
            
         except AttributeError as e:
             mbu.rethrow_attribute_exception(e)
