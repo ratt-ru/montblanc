@@ -651,70 +651,68 @@ class SolverCPU(object):
             # u1 = u*(1+e1) - v*e2
             # v1 = u*e2 + v*(1-e1)
             u1 = ne.evaluate('u_1_e1 + v_e2',
-                {'u_1_e1': np.outer(1+e1, u), 'v_e2' : np.outer(e2, v)})\
-                .reshape(nssrc, ntime,nbl)
+                {'u_1_e1': np.outer(1+e1, u), 'v_e2' : np.outer(e2, v)})
             v1 = ne.evaluate('u_e2 + v_1_e1', {
-                'u_e2' : np.outer(e2, u), 'v_1_e1' : np.outer(1-e1,v)})\
-                .reshape(nssrc, ntime,nbl)
+                'u_e2' : np.outer(e2, u), 'v_1_e1' : np.outer(1-e1,v)})
 
             # Obvious given the above reshape
-            assert u1.shape == (nssrc, ntime, nbl)
-            assert v1.shape == (nssrc, ntime, nbl)
+            assert u1.shape == (nssrc, ntime*nbl)
+            assert v1.shape == (nssrc, ntime*nbl)
 
             e12 = 1 - e1 * e1 - e2 * e2
 
-            de1 = ne.evaluate('u1*(u_e12+2*e1_u1) + v1*(2*e1_v1-v_e12)',
+            de1 = ne.evaluate('u1*(u_e12+2*e1*u1) + v1*(2*e1*v1-v_e12)',
                 local_dict={
+                    'u1'   : u1,  'v1': v1,\
                     'u_e12': np.outer(e12, u),\
                     'v_e12': np.outer(e12, v),\
-                    'e1_u1': np.outer(e1, u1),\
-                    'e1_v1': np.outer(e1, v1)}).reshape(nssrc, ntime,nbl)
+                    'e1': e1[:,np.newaxis]}).reshape(nssrc, ntime,nbl)
 
-            de2 = ne.evaluate('u1*(v_e12+2*e2_u1) + v1*(2*e2_v1-u_e12)',
+            de2 = ne.evaluate('u1*(v_e12+2*e2*u1) + v1*(2*e2*v1+u_e12)',
                 local_dict={
+                    'u1'   : u1,  'v1': v1,\
                     'u_e12': np.outer(e12, u),\
                     'v_e12': np.outer(e12, v),\
-                    'e2_u1': np.outer(e2, u1),\
-                    'e2_v1': np.outer(e2, v1)}).reshape(nssrc, ntime,nbl)
+                    'e2': e2[:,np.newaxis]}).reshape(nssrc, ntime,nbl)
 
-            wavenum = (slvr.two_pi_over_c * slvr.frequency_cpu)\
-                [np.newaxis, np.newaxis, np.newaxis, :]
+            wavenum = (slvr.two_pi_over_c * slvr.frequency_cpu)
 
-            temp = ne.evaluate('wavenum*wavenum*R*R*(u1*u1+v1*v1)',
+            temp = ne.evaluate('(wavenum*R/e12)**2',
                 {
-                  'u1' : u1[:,:,:,np.newaxis],\
-                  'v1' : v1[:,:,:,np.newaxis],\
-                  'R'  : R[:,np.newaxis,np.newaxis,np.newaxis],\
-                  'wavenum': wavenum}).\
+                  'R'  : R[:,np.newaxis],\
+                  'e12': e12[:,np.newaxis],\
+                  'wavenum': wavenum[np.newaxis,:]}).\
+                        reshape(nssrc,nchan)
+
+            sfactor = ne.evaluate('1+temp*(u1*u1+v1*v1)',
+                {
+                  'u1' : u1[:,:,np.newaxis],\
+                  'v1' : v1[:,:,np.newaxis],\
+                  'temp'  : temp[:,np.newaxis,:]}).\
 			reshape(nssrc,ntime,nbl,nchan)
-
-            sfactor = ne.evaluate('(wavenum*R/e12)**2/(e12*temp_1)',
-                {
-                  'e12' : e12[:,np.newaxis,np.newaxis,np.newaxis],\
-                  'wavenum': wavenum
-                  'R'   : R[:,np.newaxis,np.newaxis,np.newaxis]
-                  'temp_1' : 1+temp }).reshape(nssrc,ntime,nbl,nchan)
 
             sersic_deriv = np.empty((3,nssrc,ntime,nbl,nchan))
           
-            # partial derivatives with respect to e1
-            sersic_deriv[0] = ne.evaluate('de1*sfactor',
+            # partial derivatives with respect to e1 and e2
+            sersic_deriv[0] = ne.evaluate('de1*temp/(sfactor*e12)',
                 { 
                   'de1' : de1[:,:,:,np.newaxis],\
+                  'temp': temp[:,np.newaxis,np.newaxis,:],\
+                  'e12' : e12[:,np.newaxis,np.newaxis,np.newaxis],\
                   'sfactor': sfactor }).reshape(nssrc,ntime,nbl,nchan)
 
-            # partial derivatives with respect to e2
-            sersic_deriv[1] = ne.evaluate('de2*sfactor',
+            sersic_deriv[1] = ne.evaluate('de2*temp/(sfactor*e12)',
                 {
                   'de2' : de2[:,:,:,np.newaxis],\
+                  'temp': temp[:,np.newaxis,np.newaxis,:], \
+                  'e12' : e12[:,np.newaxis,np.newaxis,np.newaxis],\
                   'sfactor': sfactor }).reshape(nssrc,ntime,nbl,nchan)
 
             # partial derivatives with respect to scalelength
-            sersic_deriv[2] = ne.evaluate('temp/(R*temp_1)',
+            sersic_deriv[2] = ne.evaluate('(sfactor-1)/(sfactor*R)',
                 {
                   'R' : R[:,np.newaxis,np.newaxis,np.newaxis],\
-                  'temp' : temp,\
-                  'temp_1' : 1+temp })
+                  'sfactor' : sfactor }).reshape(nssrc,ntime,nbl,nchan)
 
             return sersic_deriv
 
@@ -726,7 +724,7 @@ class SolverCPU(object):
         """
         Computes the gradient of the complex visibilities with respect to the sersic parameters.
 
-        Returns a (3,nssrc,ntime,nbl,nchan,4) matrix of complex scalars (nparams=3).
+        Returns a (3,nssrc,ntime,nbl,nchan,4) matrix of complex scalars.
         """
 
         slvr = self.solver
@@ -878,10 +876,10 @@ class SolverCPU(object):
                 True if the chi squared test
                 should be computed with a noise vector
 
-        Returns a (nparams,nssrc) matrix of real values
+        Returns a (3,nssrc) matrix of real values
         """
         slvr = self.solver
-        nparams, nssrc, ntime, nbl, nchan = slvr.dim_local_size('nparams', 'nssrc', 'ntime', 'nbl', 'nchan')
+        nssrc, ntime, nbl, nchan = slvr.dim_local_size('nssrc', 'ntime', 'nbl', 'nchan')
 
         # Do the chi squared gradient on the CPU.
         # If we're not using the weight vector, sum and
