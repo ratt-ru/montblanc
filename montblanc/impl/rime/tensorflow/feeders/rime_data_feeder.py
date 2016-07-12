@@ -1,7 +1,19 @@
+import collections
+import copy
+import threading
+import types
+
 import pyrap.tables as pt
 import numpy as np
+import hypercube as hc
 import tensorflow as tf
-import threading
+
+class RimeDataFeeder(object):
+    pass
+    
+class NumpyRimeDataFeeder(RimeDataFeeder):
+    def __init__(self, arrays):
+        pass
 
 # Map MS column string types to numpy types
 MS_TO_NP_TYPE_MAP = {
@@ -13,80 +25,12 @@ MS_TO_NP_TYPE_MAP = {
     'dcomplex' : np.complex128
 }
 
-QUEUE_SIZE = 10
-
-class RimeChunk(object):
-    __slots__ = ['_time', '_bl', '_chan']
-
-    def __init__(self, time, bl, chan):
-        if bl == 1:
-            assert time == 1
-
-        if chan == 1:
-            assert bl == 1
-
-        self._time = time
-        self._bl = bl
-        self._chan = chan
-
-    @property
-    def time(self):
-        return self._time
-    
-    @property
-    def bl(self):
-        return self._bl
-
-    @property
-    def chan(self):
-        return self._chan
-
-class RimeDataFeeder(object):
-    def __init__(self, cube):
-        self._cube = cube
-        self._queue = tf.FIFOQueue(QUEUE_SIZE, tuple(self._queue_dtypes()))
-        self._placeholders = self._queue_placeholders()
-
-        self._enqueue_op = self._queue.enqueue(tuple(self._placeholders))
-
-    @property
-    def cube(self):
-        return self._cube
-
-    @property
-    def queue(self):
-        return self._queue
-    
-    @property
-    def enqueue_op(self):
-        return self._enqueue_op
-        
-    @property
-    def placeholders(self):
-        return self._placeholders
-    
-    def feed(self, coordinator, session):
-        raise NotImplementedError()
-
-    def _queue_placeholders(self):
-        return map(lambda (i, dt): tf.placeholder(dt,name="ph_{i}".format(i=i)),
-            enumerate(self._queue_dtypes()))
-
-    def _queue_dtypes(self):
-        raise NotImplementedError()
-
-class NumpyRimeDataFeeder(RimeDataFeeder):
-    def __init__(self, cube, arrays):
-        self._arrays = arrays
-        super(NumpyRimeDataFeeder, self).__init__(cube)
-
-    def _queue_dtypes(self):
-        return [a.dtype.type for a in self._arrays.itervalues()]
-
+# Key names for main and taql selected tables
 MAIN_TABLE = 'MAIN'
 ORDERED_MAIN_TABLE = 'ORDERED_MAIN'
+ORDERED_UVW_TABLE = 'ORDERED_UVW'
 
-# Measurement Set sub-tables
+# Measurement Set sub-table name string constants
 ANTENNA_TABLE = 'ANTENNA'
 SPECTRAL_WINDOW_TABLE = 'SPECTRAL_WINDOW'
 DATA_DESCRIPTION_TABLE = 'DATA_DESCRIPTION'
@@ -97,7 +41,49 @@ SUBTABLE_KEYS = (ANTENNA_TABLE,
     DATA_DESCRIPTION_TABLE,
     POLARIZATION_TABLE)
 
-REQUESTED = ['ANTENNA1', 'ANTENNA2', 'UVW', 'DATA', 'FLAG', 'WEIGHT']
+# String constants for column names
+TIME = 'TIME'
+ANTENNA1 = 'ANTENNA1'
+ANTENNA2 = 'ANTENNA2'
+UVW = 'UVW'
+DATA = 'DATA'
+FLAG = 'FLAG'
+WEIGHT = 'WEIGHT'
+
+# Columns used in select statement
+SELECTED = [TIME, ANTENNA1, ANTENNA2, UVW, DATA, FLAG, WEIGHT]
+
+# Named tuple defining a mapping from MS row to dimension
+OrderbyMap = collections.namedtuple("OrderbyMap", "dimension orderby")
+
+# Mappings for time, baseline and band
+TIME_MAP = OrderbyMap("ntime", "TIME")
+BASELINE_MAP = OrderbyMap("nbl", "ANTENNA1, ANTENNA2")
+BAND_MAP = OrderbyMap("nbands", "[SELECT SPECTRAL_WINDOW_ID "
+        "FROM ::DATA_DESCRIPTION][DATA_DESC_ID]")
+
+# Place mapping in a list
+MS_ROW_MAPPINGS = [
+    TIME_MAP,
+    BASELINE_MAP,
+    BAND_MAP
+]
+
+# Main measurement set ordering dimensions
+MS_DIM_ORDER = ('ntime', 'nbl', 'nbands')
+# UVW measurement set ordering dimensions
+UVW_DIM_ORDER = ('ntime', 'nbl')
+DUMMY_CACHE_VALUE = (-1, None)
+
+def orderby_clause(*dimensions, **kwargs):
+    columns = ", ".join(m.orderby for m
+        in MS_ROW_MAPPINGS if m.dimension in dimensions)
+    
+    clause = ("ORDERBY",
+        "UNIQUE" if kwargs.get('unique', False) else "",
+        columns)
+
+    return " ".join(clause)
 
 def subtable_name(msname, subtable=None):
     return '::'.join((msname, subtable)) if subtable else msname
@@ -106,11 +92,13 @@ def open_table(msname, subtable=None):
     return pt.table(subtable_name(msname, subtable), ack=False)
 
 class MSRimeDataFeeder(RimeDataFeeder):
-    def __init__(self, cube, msname):
+    def __init__(self, msname):
+        super(MSRimeDataFeeder, self).__init__()
+
         self._msname = msname
-        self._columns = REQUESTED
         # Create dictionary of tables
         self._tables = { k: open_table(msname, k) for k in SUBTABLE_KEYS }
+        self._cube = cube = hc.HyperCube()
 
         # Open the main measurement set
         ms = open_table(msname)
@@ -122,7 +110,9 @@ class MSRimeDataFeeder(RimeDataFeeder):
         if pol.nrows() > 1:
             raise ValueError("Multiple polarization configurations!")
 
-        if pol.getcol('NUM_CORR') != 4:
+        npol = pol.getcol('NUM_CORR')
+
+        if npol != 4:
             raise ValueError('Expected four polarizations')
 
         # Number of channels per band
@@ -133,14 +123,11 @@ class MSRimeDataFeeder(RimeDataFeeder):
             raise ValueError('Channels per band {cpb} are not equal!'
                 .format(cpb=chan_per_band))
 
-        # Number of channels equal to sum of channels per band
-        self.nbands = len(chan_per_band)
-        self.nchan = sum(chan_per_band)
-
         if ddesc.nrows() != spec.nrows():
             raise ValueError("DATA_DESCRIPTOR.nrows() "
                 "!= SPECTRAL_WINDOW.nrows()")
 
+        # Hard code auto-correlations and field_id 0
         auto_correlations = True
         field_id = 0
 
@@ -148,90 +135,169 @@ class MSRimeDataFeeder(RimeDataFeeder):
         # (1) time (TIME)
         # (2) baseline (ANTENNA1, ANTENNA2)
         # (3) band (SPECTRAL_WINDOW_ID via DATA_DESC_ID)
-        ordering_query = ' '.join(["SELECT FROM $ms "
-            "WHERE FIELD_ID={fid} ".format(fid=field_id),
-            "" if auto_correlations else "AND ANTENNA1 != ANTENNA2 ",
-            "ORDERBY TIME, ANTENNA1, ANTENNA2, "
-            "[SELECT SPECTRAL_WINDOW_ID FROM ::DATA_DESCRIPTION][DATA_DESC_ID]"])
+        ordering_query = " ".join((
+            "SELECT {r} FROM $ms".format(r=", ".join(SELECTED)),
+            "WHERE FIELD_ID={fid}".format(fid=field_id),
+            "" if auto_correlations else "AND ANTENNA1 != ANTENNA2",
+            orderby_clause(*MS_DIM_ORDER)
+        ))
+
+        # Ordered Measurement Set
+        oms = pt.taql(ordering_query)
+        # Measurement Set ordered by unique time and baseline
+        otblms = pt.taql("SELECT FROM $oms {c}".format(
+            c=orderby_clause(*UVW_DIM_ORDER, unique=True)))
 
         # Store the main table
         self._tables[MAIN_TABLE] = ms
-        self._tables[ORDERED_MAIN_TABLE] = pt.taql(ordering_query)
+        self._tables[ORDERED_MAIN_TABLE] = oms
+        self._tables[ORDERED_UVW_TABLE] = otblms
 
-        self.nrows = ms.nrows()
-        self.na = ant.nrows()
         # Count distinct timesteps in the MS
-        t_query = "SELECT FROM $ms ORDERBY UNIQUE TIME"
-        self.ntime = pt.taql(t_query).nrows()
+        t_orderby = orderby_clause('ntime', unique=True)
+        t_query = "SELECT FROM $otblms {c}".format(c=t_orderby)
+        ntime = pt.taql(t_query).nrows()
+        
         # Count number of baselines in the MS
-        bl_query = "SELECT FROM $ms ORDERBY UNIQUE ANTENNA1, ANTENNA2"
-        self.nbl = pt.taql(bl_query).nrows()
+        bl_orderby = orderby_clause('nbl', unique=True)
+        bl_query = "SELECT FROM $otblms {c}".format(c=bl_orderby)
+        nbl = pt.taql(bl_query).nrows()
 
-        super(MSRimeDataFeeder, self).__init__(cube)
+        # Register dimensions on the cube
+        cube.register_dimension('npol', npol,
+            description='Polarisations')
+        cube.register_dimension('nbands', len(chan_per_band),
+            description='Bands')
+        cube.register_dimension('nchan', sum(chan_per_band),
+            description='Channels')
+        cube.register_dimension('nchanperband', chan_per_band[0],
+            description='Channels-per-band')
+        cube.register_dimension('nrows', ms.nrows(),
+            description='Main MS rows')
+        cube.register_dimension('nuvwrows', otblms.nrows(),
+            description='UVW sub-MS rows')
+        cube.register_dimension('na', ant.nrows(),
+            description='Antenna')
+        cube.register_dimension('ntime', ntime,
+            description='Timesteps')
+        cube.register_dimension('nbl', nbl,
+            description='Baselines')
 
-    def _queue_dtypes(self):
-        ms = self._tables[ORDERED_MAIN_TABLE]
-        # Descriptor dtype is np.int32
-        return [np.int32] + [MS_TO_NP_TYPE_MAP[ms.getcoldesc(col)['valueType']]
-            for col in self._columns]
+        def _cube_row_update_function(self):
+            # Update main measurement set rows
+            shape = self.dim_global_size(*MS_DIM_ORDER)
+            lower = self.dim_lower_extent(*MS_DIM_ORDER)
+            upper = tuple(u-1 for u in self.dim_upper_extent(*MS_DIM_ORDER))
 
-    def feed(self, coordinator, session):
-        cube = self.cube
-        ordered_ms = self._tables[ORDERED_MAIN_TABLE]
+            self.update_dimension(name='nrows',
+                lower_extent=np.ravel_multi_index(lower, shape),
+                upper_extent=np.ravel_multi_index(upper, shape)+1)
 
-        # This query removes entries associated with different DATA_DESCRIPTORS
-        # for each time and baseline. We assume that UVW coordinates
-        # are the same for these entries
-        uvw_ms = pt.taql('SELECT FROM $ordered_ms ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2')
+            shape = self.dim_global_size(*UVW_DIM_ORDER)
+            lower = self.dim_lower_extent(*UVW_DIM_ORDER)
+            upper = tuple(u-1 for u in self.dim_upper_extent(*UVW_DIM_ORDER))
 
-        for time in xrange(0, self.ntime, cube.time):
-            time_end, last_time = time + cube.time, False
+            self.update_dimension(name='nuvwrows',
+                lower_extent=np.ravel_multi_index(lower, shape),
+                upper_extent=np.ravel_multi_index(upper, shape)+1)
 
-            # Clamp and mark if we're at the end of a time cube
-            if time_end >= self.ntime:
-                last_time = True
-                time_end = self.ntime
+        self._cube.update_row_dimensions = types.MethodType(
+            _cube_row_update_function, self._cube)
 
-            for bl in xrange(0, self.nbl, cube.bl):
-                bl_end, last_bl = bl + cube.bl, False
+        # Temporary, need to get these arrays from elsewhere
+        cube.register_array('uvw', ('ntime', 'na', 3), np.float64)
+        cube.register_array('antenna1', ('ntime', 'nbl'), np.int32)
+        cube.register_array('antenna2', ('ntime', 'nbl'), np.int32)
+        cube.register_array('observed_vis', ('ntime', 'nbl', 'nchan', 'npol'), np.complex64)
+        cube.register_array('weight', ('ntime', 'nbl', 'nchan', 'npol'), np.float32)
+        cube.register_array('flag', ('ntime', 'nbl', 'nchan', 'npol'), np.bool)
 
-                # Clamp and mark if we're at the end of a baseline cube
-                if bl_end >= self.nbl:
-                    last_bl = True
-                    bl_end = self.nbl
+        self._cache = {}
 
-                # Is the the last cube of all?
-                eof = 1 if last_time and last_bl else 0
+    @property
+    def mscube(self):
+        return self._cube
+    
+    def uvw(self, cube, array_descriptor):
+        lrow = cube.dim_lower_extent('nuvwrows')
 
-                # Constructor a descriptor the current cube
-                descriptor = np.int32([eof,
-                    time, time_end, self.ntime,
-                    bl, bl_end, self.nbl])
+        # Attempt to return a cached value if possible
+        cached_uvw = self._cache.get(UVW, DUMMY_CACHE_VALUE)
+        if cached_uvw[0] == lrow:
+            return cached_uvw[1]
 
-                startrow=time*self.nbl + bl
-                nrows=cube.time*cube.bl
+        urow = cube.dim_upper_extent('nuvwrows')
+        ntime, nbl, na = cube.dim_extent_size(
+            'ntime', 'nbl', 'na')
 
-                ant1 = uvw_ms.getcol('ANTENNA1', startrow=startrow, nrow=nrows)
-                ant2 = uvw_ms.getcol('ANTENNA2', startrow=startrow, nrow=nrows)
-                uvw = uvw_ms.getcol('UVW', startrow=startrow, nrow=nrows)
+        bl_uvw = self._tables[ORDERED_UVW_TABLE].getcol(UVW,
+            startrow=lrow, nrow=urow-lrow).reshape(ntime, nbl, 3)
 
-                # Multiply up by number of bands
-                startrow *= self.nbands
-                nrows *= self.nbands
+        ant_uvw = np.empty(shape=(ntime, na, 3),dtype=bl_uvw.dtype)
+        ant_uvw[:,1:na,:] = bl_uvw[:,:na-1,:]
+        ant_uvw[:,0,:] = 0
 
-                data = ordered_ms.getcol('DATA', startrow=startrow, nrow=nrows)
-                flag = ordered_ms.getcol('FLAG', startrow=startrow, nrow=nrows)
-                weight = ordered_ms.getcol('WEIGHT', startrow=startrow, nrow=nrows)
+        self._cache[UVW] = (lrow, ant_uvw)
+        
+        return ant_uvw
 
-                variables = [descriptor, ant1, ant2, uvw, data, flag, weight]
+    def antenna1(self, cube, array_descriptor):
+        lrow = cube.dim_lower_extent('nuvwrows')
 
-                print 'Enqueueing {t} {bl}'.format(t=time, bl=bl)
-                # Enqueue data from this 
-                session.run(self.enqueue_op, feed_dict={ p: a
-                    for p, a in zip(self.placeholders, variables) })
+        cached_ant1 = self._cache.get(ANTENNA1, DUMMY_CACHE_VALUE)
+        if cached_ant1[0] == lrow:
+            return cached_ant1[1]
 
-        # Close the queue
-        session.run(self.queue.close())
+        urow = cube.dim_upper_extent('nuvwrows')
+        antenna1 = self._tables[ORDERED_MAIN_TABLE].getcol(
+            ANTENNA1, startrow=lrow, nrow=urow-lrow)
+
+        self._cache[ANTENNA1] = (lrow, antenna1)
+        return antenna1.reshape(array_descriptor.shape)
+
+    def antenna2(self, cube, array_descriptor):
+        lrow = cube.dim_lower_extent('nuvwrows')
+
+        cached_ant2 = self._cache.get(ANTENNA2, DUMMY_CACHE_VALUE)
+        if cached_ant2[0] == lrow:
+            return cached_ant2[1]
+
+        urow = cube.dim_upper_extent('nuvwrows')
+        antenna2 = self._tables[ORDERED_MAIN_TABLE].getcol(
+            ANTENNA2, startrow=lrow, nrow=urow-lrow)
+
+        self._cache[ANTENNA2] = (lrow, antenna2)
+        return antenna2.reshape(array_descriptor.shape)
+
+    def observed_vis(self, cube, array_descriptor):
+        lrow = cube.dim_lower_extent('nrows')
+        urow = cube.dim_upper_extent('nrows')
+
+        data = self._tables[ORDERED_MAIN_TABLE].getcol(
+            DATA, startrow=lrow, nrow=urow-lrow)
+
+        return data.reshape(array_descriptor.shape)
+
+    def flag(self, cube, array_descriptor):
+        lrow = cube.dim_lower_extent('nrows')
+        urow = cube.dim_upper_extent('nrows')
+
+        flag = self._tables[ORDERED_MAIN_TABLE].getcol(
+            FLAG, startrow=lrow, nrow=urow-lrow)
+
+        return flag.reshape(array_descriptor.shape)
+
+    def weight(self, cube, array_descriptor):
+        lrow = cube.dim_lower_extent('nrows')
+        urow = cube.dim_upper_extent('nrows')
+        nchan = cube.dim_extent_size('nchanperband')
+
+        weight = self._tables[ORDERED_MAIN_TABLE].getcol(
+            WEIGHT, startrow=lrow, nrow=urow-lrow)
+
+        # WEIGHT is applied across all channels
+        weight = np.repeat(weight, nchan, 0)
+        return weight.reshape(array_descriptor.shape)
 
     def close(self):
         for table in self._tables.itervalues():
@@ -243,45 +309,29 @@ class MSRimeDataFeeder(RimeDataFeeder):
     def __exit__(self, etype, evalue, etraceback):
         self.close()
 
+import argparse
 
-vis_cube = RimeChunk(1, 91, 64)
+parser = argparse.ArgumentParser()
+parser.add_argument('msfile')
+args = parser.parse_args()
 
-init_op = tf.initialize_all_variables()
+feeder = MSRimeDataFeeder(args.msfile)
+cube = copy.deepcopy(feeder.mscube)
 
-feeder = MSRimeDataFeeder(vis_cube, '/home/sperkins/data/WSRT.MS')
+row_iter_sizes = [10] + cube.dim_global_size('nbl', 'nbands')
+dim_iter_args = zip(MS_DIM_ORDER, row_iter_sizes)
 
-# While loop condition
-cond = lambda eof, i: tf.not_equal(eof, 1)
+for dims in cube.dim_iter(*dim_iter_args, update_local_size=True):
+    cube.update_dimensions(dims)
+    cube.update_row_dimensions()
+    arrays = cube.arrays(reify=True)
 
-# While loop body
-def body(eof, i):
-    descriptor, ant1, ant2, uvw, data, flag, weight = feeder.queue.dequeue()
-    descriptor = tf.Print(descriptor, [descriptor], message='Descriptor ', summarize=10)
-    return descriptor[0], i+1
+    # Passing in the arrays should be automated...
+    ant1 = feeder.antenna1(cube, arrays['antenna1'])
+    ant2 = feeder.antenna2(cube, arrays['antenna2'])
+    uvw = feeder.uvw(cube, arrays['uvw'])
+    observed_vis = feeder.observed_vis(cube, arrays['observed_vis'])
+    flag = feeder.flag(cube, arrays['flag'])
+    weight = feeder.weight(cube, arrays['weight'])
 
-# While loop
-W = tf.while_loop(cond, body, [tf.constant(0), tf.constant(0)])
-
-config = tf.ConfigProto()
-#config.operation_timeout_in_ms=10000  # for debugging queue hangs
-
-with tf.Session(config=config) as S:
-    S.run(init_op)
-
-    C = tf.train.Coordinator()
-
-    read_thread = threading.Thread(
-        target=lambda: feeder.feed(C, S),
-        name='feed-thread')
-    read_thread.daemon = False
-    read_thread.start()
-
-    print 'Running while loop'
-    eof, i = S.run(W)
-
-    print eof, i
-
-    C.join([read_thread])
-    feeder.close()
-
-feeder = NumpyRimeDataFeeder(vis_cube, {'DATA' : np.empty(shape=(10,10),dtype=np.complex128)})
+    print ant1.nbytes, ant2.nbytes, uvw.nbytes, observed_vis.nbytes, flag.nbytes, weight.nbytes
