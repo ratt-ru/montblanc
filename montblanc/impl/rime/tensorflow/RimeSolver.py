@@ -26,10 +26,7 @@ import montblanc.util as mbu
 from montblanc.solvers import MontblancTensorflowSolver
 from montblanc.config import RimeSolverConfig as Options
 
-from montblanc.impl.rime.v4.gpu.RimeEBeam import RimeEBeam
-from montblanc.impl.rime.v4.gpu.RimeBSqrt import RimeBSqrt
-from montblanc.impl.rime.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
-from montblanc.impl.rime.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
+ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
@@ -67,15 +64,102 @@ class RimeSolver(MontblancTensorflowSolver):
 
         self.register_properties(P)
         self.register_arrays(A)
-        feed_dict = self.create_default_feed_dict()
 
-        import tensorflow as tf
+        # Find out which dimensions have been modified by budgeting
+        # and update them
+        modded_dims = self._budget(A, slvr_cfg)
 
-        expr = feed_dict.values()
+        for k, v in modded_dims.iteritems():
+            self.update_dimension(k, local_size=v,
+                lower_extent=0, upper_extent=v)
 
-        with tf.Session() as S:
-            S.run(tf.initialize_all_variables())
-            results = [v.flatten()[0:10] for v in S.run(expr)]
+        from montblanc.impl.rime.tensorflow.feeders.queue_wrapper import create_queue_wrapper
 
-            for k, r in zip(feed_dict.iterkeys(), results):
-                print k, r
+        # Get the data source (defaults or test data)
+        data_source = slvr_cfg.get(Options.DATA_SOURCE)
+
+        # Set up the queue data sources. Just take from
+        # the defaults if the original data source was MS
+        # we only want the data source types for configuring
+        # the queue
+        queue_data_source = (Options.DATA_SOURCE_DEFAULT
+            if data_source == Options.DATA_SOURCE_MS
+            else data_source)
+
+        montblanc.log.info("Taking queue defaults from data source '{ds}'"
+            .format(ds=queue_data_source))
+
+        # Obtain default data sources for each array,
+        # then update with any data sources supplied by the user
+        ds = { n: (a.get(queue_data_source), a.dtype)
+            for n, a in self.arrays().iteritems() }
+        ds.update(slvr_cfg.get('supplied', {}))
+
+        # Test data sources here
+        ary_descs = self.arrays(reify=True)
+
+        for n, (s, t) in ds.iteritems():
+            print 'Testing source {n} with shape {s}'.format(n=n, s=ary_descs[n].shape)
+            if s is not None:
+                a = s(self, ary_descs[n])
+                print a.flatten()[0:10]
+
+        QUEUE_SIZE = 10
+
+        self._uvw_queue = create_queue_wrapper(QUEUE_SIZE,
+            ['uvw', 'antenna1', 'antenna2'], ds)
+
+        self._observation_queue = create_queue_wrapper(QUEUE_SIZE,
+            ['observed_vis', 'flag', 'weight'], ds)
+
+        self._die_queue = create_queue_wrapper(QUEUE_SIZE,
+            ['gterm'], ds)
+
+        self._dde_queue = create_queue_wrapper(QUEUE_SIZE,
+            ['ebeam', 'antenna_scaling', 'point_errors'], ds)
+
+        self._output_queue = create_queue_wrapper(QUEUE_SIZE,
+            ['model_vis'], ds)
+
+    def _budget(self, arrays, slvr_cfg):
+        na = slvr_cfg.get(Options.NA)
+        nsrc = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
+        src_str_list = [Options.NSRC] + mbu.source_nr_vars()
+        src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
+            for nr_var in src_str_list])
+
+        mem__budget = slvr_cfg.get('mem__budget', 256*ONE_MB)
+        T = self.template_dict()
+
+        # Figure out a viable dimension configuration
+        # given the total problem size 
+        viable, modded_dims = mbu.viable_dim_config(
+            mem__budget, arrays, T, [src_reduction_str,
+                'ntime',
+                'nbl={na}&na={na}'.format(na=na)], 1)                
+
+        # Create property dictionary with updated dimensions.
+        # Determine memory required by our chunk size
+        mT = T.copy()
+        mT.update(modded_dims)
+        required_mem = mbu.dict_array_bytes_required(arrays, mT)
+
+        # Log some information about the memory _budget
+        # and dimension reduction
+        montblanc.log.info(("Selected a solver memory _budget of {rb} "
+            "given a hard limit of {mb}.").format(
+            rb=mbu.fmt_bytes(required_mem),
+            mb=mbu.fmt_bytes(mem__budget)))
+
+        montblanc.log.info((
+            "The following dimension reductions "
+            "have been applied:"))
+
+        for k, v in modded_dims.iteritems():
+            montblanc.log.info('{p}{d}: {id} => {rd}'.format
+                (p=' '*4, d=k, id=T[k], rd=v))
+
+        return modded_dims
+
+    def solve(self):
+        pass
