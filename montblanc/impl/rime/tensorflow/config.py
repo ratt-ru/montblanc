@@ -19,7 +19,6 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
-import tensorflow as tf
 
 import montblanc
 from montblanc.util import (
@@ -68,25 +67,21 @@ P = [
 def rand_uvw(slvr, ary):
     distance = 10
     ntime, na = slvr.dim_local_size('ntime', 'na')
-    # Distribute the antenna in a circular configuration
-    ant_angles = 2.*np.pi*tf.cast(tf.range(na), dtype=ary.dtype)/na
-    time_angles = tf.cast(tf.range(ntime), dtype=ary.dtype)/ntime
-    time_ant_angles = (
-        tf.reshape(time_angles, [ntime,1,1])*
-        tf.reshape(ant_angles, [1,na,1]))
+    # Distribute the antenna in a circle configuration
+    ant_angles = 2*np.pi*np.arange(na)/slvr.ft(na)
+    time_angle = np.arange(ntime)/slvr.ft(ntime)
+    time_ant_angles = time_angle[:,np.newaxis]*ant_angles[np.newaxis,:]
 
-    U = distance*tf.sin(time_ant_angles)
-    V = distance*tf.cos(time_ant_angles)
-    W = rf((ntime,na,1), U.dtype)
+    A = np.empty(ary.shape, ary.dtype)
+    U, V, W = A[:,:,0], A[:,:,1], A[:,:,2]
+    U[:] = distance*np.sin(time_ant_angles)
+    V[:] = distance*np.sin(time_ant_angles)
+    W[:] = np.random.random(size=(ntime,na))*0.1
 
     # All antenna zero coordinate are set to (0,0,0)
-    # These assigns need to part of the graph
-    # Rather use a tf.select here...
-    #Uassign = tf.slice(U, [0,0,0], [-1, 1, -1]).assign(0)
-    #Vassign = tf.slice(V, [0,0,0], [-1, 1, -1]).assign(0)
-    #Wassign = tf.slice(W, [0,0,0], [-1, 1, -1]).assign(0)
+    A[:,0,:] = 0
 
-    return tf.concat(2, [U, V, W])
+    return A
 
 def identity_on_pols(slvr, ary):
     """
@@ -96,9 +91,9 @@ def identity_on_pols(slvr, ary):
 
     reshape_shape = tuple(1 for a in ary.shape[:-1]) + (ary.shape[-1], )
     tile_shape = tuple(a for a in ary.shape[:-1]) + (1, )
-    R = tf.reshape([1,0,0,1], reshape_shape)
+    R = np.array([1,0,0,1], dtype=ary.dtype).reshape(reshape_shape)
 
-    return tf.tile(R, tile_shape)
+    return np.tile(R, tile_shape)
 
 def default_stokes(slvr, ary):
     """
@@ -108,67 +103,76 @@ def default_stokes(slvr, ary):
 
     reshape_shape = tuple(1 for a in ary.shape[:-1]) + (ary.shape[-1], )
     tile_shape = tuple(a for a in ary.shape[:-1]) + (1, )
-    R = tf.reshape([1,0,0,0], reshape_shape)
+    R = np.array([1,0,0,0], dtype=ary.dtype).reshape(reshape_shape)
 
-    return tf.tile(R, tile_shape)
+    return np.tile(R, tile_shape)
 
 def rand_stokes(slvr, ary):
     # Should be (nsrc, ntime, 4)
     assert len(ary.shape) == 3 and ary.shape[2] == 4
-    # Want (nsrc, ntime, 1) for the concatentation
-    shape = ary.shape[:-1] + (1,)
 
-    Q = rf(shape, ary.dtype) - 0.5
-    U = rf(shape, ary.dtype) - 0.5
-    V = rf(shape, ary.dtype) - 0.5
-    noise = rf(shape, ary.dtype)*0.1
-    I = tf.sqrt(Q**2 + U**2 + V**2 + noise)
+    A = np.empty(ary.shape, ary.dtype)
+    I, Q, U, V = A[:,:,0], A[:,:,1], A[:,:,2], A[:,:,3]
+    noise = rf(I.shape, ary.dtype)*0.1
+    Q[:] = rf(Q.shape, ary.dtype) - 0.5
+    U[:] = rf(U.shape, ary.dtype) - 0.5
+    V[:] = rf(V.shape, ary.dtype) - 0.5
+    I[:] = np.sqrt(Q**2 + U**2 + V**2 + noise)
 
-    return tf.concat(2, [I, Q, U, V])
+    return A
 
 def default_gauss_shape(slvr, ary):
     # Should be (3, ngsrc)
     assert len(ary.shape) == 2 and ary.shape[0] == 3
-    # Want (1, ngsrc) for the concatenation
-    shape = (1,) + ary.shape[1:]
 
-    el = tf.zeros(shape, ary.dtype)
-    em = tf.zeros(shape, ary.dtype)
-    eR = tf.ones(shape, ary.dtype)
+    A = np.empty(ary.shape, ary.dtype)
 
-    return tf.concat(0, [el, em, eR])
+    if A.size == 0:
+        return A
+
+    el, em, eR = A[:,0], A[:,1], A[:,2]
+    el[:] = np.zeros(el.shape, ary.dtype)
+    em[:] = np.zeros(em.shape, ary.dtype)
+    eR[:] = np.ones(eR.shape, ary.dtype)
+
+    return A
 
 def rand_gauss_shape(slvr, ary):
     # Should be (3, ngsrc)
     assert len(ary.shape) == 2 and ary.shape[0] == 3
-    # Want (1, ngsrc) for the concatenation
-    shape = (1,) + ary.shape[1:]
-    el = rf(shape, ary.dtype)
-    em = rf(shape, ary.dtype)
-    eR = rf(shape, ary.dtype)
 
-    return tf.concat(0, [el, em, eR])
+    A = np.empty(ary.shape, ary.dtype)
+
+    if A.size == 0:
+        return A
+
+    el, em, eR = A[0,:], A[1,:], A[2,:]
+    el[:] = np.random.random(size=el.shape)
+    em[:] = np.random.random(size=em.shape)
+    eR[:] = np.random.random(size=eR.shape)
+
+    return A
 
 def rand_sersic_shape(slvr, ary):
     # Should be (3, nssrc)
     assert len(ary.shape) == 2 and ary.shape[0] == 3
-    # Want (1, nssrc) for the concatenation
-    shape = (1,) + ary.shape[1:]
+
+    A = np.empty(ary.shape, ary.dtype)
+    e1, e2, eS = A[0,:], A[1,:], A[2,:]
     # Random values seem to create v. large discrepancies
     # between the CPU and GPU versions. Go with
     # non-random data here, as per Marzia's original code
+    e1[:] = 0
+    e2[:] = 0
+    eS[:] = np.pi/648000   # 1 arcsec
 
-    e1 = tf.zeros(shape, ary.dtype)
-    e2 = tf.zeros(shape, ary.dtype)
-    eS = tf.constant(np.pi/648000, shape=shape, dtype=ary.dtype)
-
-    return tf.concat(0, [e1, e2, eS])
+    return A
 
 # List of arrays
 A = [
     # Input Arrays
     ary_dict('uvw', ('ntime', 'na', 3), 'ft',
-        default = lambda s, a: tf.zeros(a.shape, a.dtype),
+        default = lambda s, a: np.zeros(a.shape, a.dtype),
         test    = rand_uvw),
 
     ary_dict('antenna1', ('ntime', 'nbl'), np.int32,
@@ -180,20 +184,20 @@ A = [
         test    = lambda s, a: s.default_ant_pairs()[1]),
 
     ary_dict('frequency', ('nchan',), 'ft',
-        default = lambda s, a: tf.linspace(1e9, 2e9, s.dim_local_size('nchan')),
-        test    = lambda s, a: tf.linspace(1e9, 2e9, s.dim_local_size('nchan'))),
+        default = lambda s, a: np.linspace(1e9, 2e9, s.dim_local_size('nchan')),
+        test    = lambda s, a: np.linspace(1e9, 2e9, s.dim_local_size('nchan'))),
 
     ary_dict('ref_frequency', ('nchan',), 'ft',
-        default = lambda s, a: tf.constant(1.5e9, shape=a.shape, dtype=a.dtype),
-        test    = lambda s, a: tf.constant(1.5e9, shape=a.shape, dtype=a.dtype)),
+        default = lambda s, a: np.full(fill_value=1.5e9, shape=a.shape, dtype=a.dtype),
+        test    = lambda s, a: np.full(fill_value=1.5e9, shape=a.shape, dtype=a.dtype)),
 
     # Holographic Beam
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',
-        default = lambda s, a: tf.zeros(a.shape, a.dtype),
+        default = lambda s, a: np.zeros(a.shape, a.dtype),
         test    = lambda s, a: (rf(a.shape, a.dtype)-0.5)*1e-2),
 
     ary_dict('antenna_scaling', ('na','nchan',2), 'ft',
-        default = lambda s, a: tf.ones(a.shape, a.dtype),
+        default = lambda s, a: np.ones(a.shape, a.dtype),
         test    = lambda s, a: rf(a.shape, a.dtype)),
 
     ary_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
@@ -207,7 +211,7 @@ A = [
 
     # Source Definitions
     ary_dict('lm', ('nsrc',2), 'ft',
-        default = lambda s, a: tf.zeros(a.shape, a.dtype),
+        default = lambda s, a: np.zeros(a.shape, a.dtype),
         test    = lambda s, a : (rf(a.shape, a.dtype)-0.5)*1e-1),
 
     ary_dict('stokes', ('nsrc','ntime', 4), 'ft',
@@ -215,7 +219,7 @@ A = [
         test    = rand_stokes),
 
     ary_dict('alpha', ('nsrc','ntime'), 'ft',
-        default = lambda s, a: tf.constant(0.8, shape=a.shape, dtype=a.dtype),
+        default = lambda s, a: np.full(fill_value=0.8, shape=a.shape, dtype=a.dtype),
         test    = lambda s, a: rf(a.shape, a.dtype)*0.1),
 
     ary_dict('gauss_shape', (3, 'ngsrc'), 'ft',
@@ -228,16 +232,16 @@ A = [
 
     # Visibility flagging arrays
     ary_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
-        default = lambda s, a: tf.zeros(a.shape, a.dtype),
-        test    = lambda s, a: tf.random_uniform(shape=a.shape,
-            minval=0, maxval=2, dtype=np.int32)),
+        default = lambda s, a: np.zeros(a.shape, a.dtype),
+        test    = lambda s, a: np.random.random_integers(0, 1,
+            size=a.shape).astype(np.uint8)),
 
     # Observed Visibility Data
     ary_dict('weight', ('ntime','nbl','nchan',4), 'ft',
-        default = lambda s, a: tf.ones(a.shape, a.dtype),
+        default = lambda s, a: np.ones(a.shape, a.dtype),
         test    = lambda s, a: rf(a.shape, a.dtype)),
     ary_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
-        default = lambda s, a: tf.zeros(a.shape, a.dtype),
+        default = lambda s, a: np.zeros(a.shape, a.dtype),
         test    = lambda s, a: rc(a.shape, a.dtype)),
 
     # Result arrays

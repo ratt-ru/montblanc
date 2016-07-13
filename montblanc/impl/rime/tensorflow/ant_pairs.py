@@ -19,7 +19,6 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
-import tensorflow as tf
 
 def default_ant_pairs(self):
     """
@@ -35,8 +34,8 @@ def default_ant_pairs(self):
     ant0, ant1 = (ant[0:nbl] for ant in self.default_base_ant_pairs())
 
     return (
-        tf.reshape(tf.tile(ant0, [ntime]), [ntime, nbl]),
-        tf.reshape(tf.tile(ant1, [ntime]), [ntime, nbl]))
+        np.tile(ant0, ntime).reshape(ntime, nbl),
+        np.tile(ant1, ntime).reshape(ntime, nbl))
 
 def monkey_patch_antenna_pairs(slvr):
     # Monkey patch these functions onto the solver object

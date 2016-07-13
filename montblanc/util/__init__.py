@@ -19,7 +19,6 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
-import tensorflow as tf
 
 import math
 import re
@@ -82,7 +81,7 @@ def array_bytes(shape, dtype):
     return np.product(shape)*np.dtype(dtype).itemsize
 
 def random_float(shape, dtype):
-    return tf.random_normal(shape=shape, dtype=dtype)
+    return np.random.random(size=shape).astype(dtype)
 
 def random_complex(shape, ctype):
     if ctype == np.complex64:
@@ -92,9 +91,7 @@ def random_complex(shape, ctype):
     else:
         raise TypeError("Invalid complex type {ct}".format(ct=ctype))
 
-    return tf.complex(
-        random_float(shape, dtype),
-        random_float(shape, dtype))
+    return random_float(shape, dtype) + 1j*random_float(shape, dtype)
 
 def random_like(ary=None, shape=None, dtype=None):
     """
