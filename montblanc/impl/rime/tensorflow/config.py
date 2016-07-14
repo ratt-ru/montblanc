@@ -121,7 +121,7 @@ def rand_stokes(slvr, ary):
 
     return A
 
-def default_gauss_shape(slvr, ary):
+def default_gaussian_shape(slvr, ary):
     # Should be (3, ngsrc)
     assert len(ary.shape) == 2 and ary.shape[0] == 3
 
@@ -137,7 +137,7 @@ def default_gauss_shape(slvr, ary):
 
     return A
 
-def rand_gauss_shape(slvr, ary):
+def rand_gaussian_shape(slvr, ary):
     # Should be (3, ngsrc)
     assert len(ary.shape) == 2 and ary.shape[0] == 3
 
@@ -153,7 +153,7 @@ def rand_gauss_shape(slvr, ary):
 
     return A
 
-def rand_sersic_shape(slvr, ary):
+def default_sersic_shape(slvr, ary):
     # Should be (3, nssrc)
     assert len(ary.shape) == 2 and ary.shape[0] == 3
 
@@ -170,7 +170,7 @@ def rand_sersic_shape(slvr, ary):
 
 # List of arrays
 A = [
-    # Input Arrays
+    # UVW Coordinates
     ary_dict('uvw', ('ntime', 'na', 3), 'ft',
         default = lambda s, a: np.zeros(a.shape, a.dtype),
         test    = rand_uvw),
@@ -183,6 +183,7 @@ A = [
         default = lambda s, a: s.default_ant_pairs()[1],
         test    = lambda s, a: s.default_ant_pairs()[1]),
 
+    # Frequency and Reference Frequency arrays
     ary_dict('frequency', ('nchan',), 'ft',
         default = lambda s, a: np.linspace(1e9, 2e9, s.dim_local_size('nchan')),
         test    = lambda s, a: np.linspace(1e9, 2e9, s.dim_local_size('nchan'))),
@@ -209,37 +210,57 @@ A = [
         default = identity_on_pols,
         test    = lambda s, a: rc(a.shape, a.dtype)),
 
-    # Source Definitions
-    ary_dict('lm', ('nsrc',2), 'ft',
+    # Point Source Definitions
+    ary_dict('point_lm', ('npsrc',2), 'ft',
         default = lambda s, a: np.zeros(a.shape, a.dtype),
         test    = lambda s, a : (rf(a.shape, a.dtype)-0.5)*1e-1),
-
-    ary_dict('stokes', ('nsrc','ntime', 4), 'ft',
+    ary_dict('point_stokes', ('npsrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes),
-
-    ary_dict('alpha', ('nsrc','ntime'), 'ft',
+    ary_dict('point_alpha', ('npsrc','ntime'), 'ft',
         default = lambda s, a: np.full(fill_value=0.8, shape=a.shape, dtype=a.dtype),
         test    = lambda s, a: rf(a.shape, a.dtype)*0.1),
 
-    ary_dict('gauss_shape', (3, 'ngsrc'), 'ft',
-        default = default_gauss_shape,
-        test    = rand_gauss_shape),
-    
-    ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
-        default = rand_sersic_shape,
-        test    = rand_sersic_shape),
+    # Gaussian Source Definitions
+    ary_dict('gaussian_lm', ('ngsrc',2), 'ft',
+        default = lambda s, a: np.zeros(a.shape, a.dtype),
+        test    = lambda s, a : (rf(a.shape, a.dtype)-0.5)*1e-1),
+    ary_dict('gaussian_stokes', ('ngsrc','ntime', 4), 'ft',
+        default = default_stokes,
+        test    = rand_stokes),
+    ary_dict('gaussian_alpha', ('ngsrc','ntime'), 'ft',
+        default = lambda s, a: np.full(fill_value=0.8, shape=a.shape, dtype=a.dtype),
+        test    = lambda s, a: rf(a.shape, a.dtype)*0.1),
+    ary_dict('gaussian_shape', (3, 'ngsrc'), 'ft',
+        default = default_gaussian_shape,
+        test    = rand_gaussian_shape),
 
-    # Visibility flagging arrays
+    # Sersic Source Definitions
+    ary_dict('sersic_lm', ('nssrc',2), 'ft',
+        default = lambda s, a: np.zeros(a.shape, a.dtype),
+        test    = lambda s, a : (rf(a.shape, a.dtype)-0.5)*1e-1),
+    ary_dict('sersic_stokes', ('nssrc','ntime', 4), 'ft',
+        default = default_stokes,
+        test    = rand_stokes),
+    ary_dict('sersic_alpha', ('nssrc','ntime'), 'ft',
+        default = lambda s, a: np.full(fill_value=0.8, shape=a.shape, dtype=a.dtype),
+        test    = lambda s, a: rf(a.shape, a.dtype)*0.1),
+    ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
+        default = default_sersic_shape,
+        test    = default_sersic_shape),
+
+    # Observation Data
+    
+    # Visibility flagging array
     ary_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
         default = lambda s, a: np.zeros(a.shape, a.dtype),
         test    = lambda s, a: np.random.random_integers(0, 1,
             size=a.shape).astype(np.uint8)),
-
-    # Observed Visibility Data
+    # Weight array
     ary_dict('weight', ('ntime','nbl','nchan',4), 'ft',
         default = lambda s, a: np.ones(a.shape, a.dtype),
         test    = lambda s, a: rf(a.shape, a.dtype)),
+    # Observed Visibilities
     ary_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
         default = lambda s, a: np.zeros(a.shape, a.dtype),
         test    = lambda s, a: rc(a.shape, a.dtype)),
