@@ -128,7 +128,7 @@ class RimeSolver(MontblancTensorflowSolver):
         src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
             for nr_var in src_str_list])
 
-        mem__budget = slvr_cfg.get('mem__budget', 256*ONE_MB)
+        mem__budget = slvr_cfg.get('mem_budget', 256*ONE_MB)
         T = self.template_dict()
 
         # Figure out a viable dimension configuration
