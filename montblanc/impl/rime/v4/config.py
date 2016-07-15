@@ -235,4 +235,6 @@ A = [
         classifiers=frozenset([Classifier.SIMULATOR_OUTPUT])),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft',
         classifiers=frozenset([Classifier.GPU_SCRATCH])),
+    ary_dict('X2_grad', (3,'nssrc',), 'ft',
+        classifiers=frozenset([Classifier.GPU_SCRATCH])),
 ]
