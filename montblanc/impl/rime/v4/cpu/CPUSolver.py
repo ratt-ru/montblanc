@@ -650,6 +650,144 @@ class CPUSolver(MontblancNumpySolver):
 
         return result
 
+
+    def compute_sersic_derivatives(self):
+        """
+        Compute the partial derivative values for the sersic (exponential) sources.
+        Returns a (nssrc, ntime, nbl, nchan) matrix of floating point scalars.
+        """
+
+        nssrc, ntime, nbl, nchan  = self.dim_local_size('nssrc', 'ntime', 'nbl', 'nchan')
+        ant0, ant1 = self.ap_idx()
+
+        # Calculate per baseline u from per antenna u
+        up, uq = self.uvw[:,:,0][ant0], self.uvw[:,:,0][ant1]
+        u = ne.evaluate('uq-up', {'up': up, 'uq': uq})
+
+        # Calculate per baseline v from per antenna v
+        vp, vq = self.uvw[:,:,1][ant0], self.uvw[:,:,1][ant1]
+        v = ne.evaluate('vq-vp', {'vp': vp, 'vq': vq})
+
+        # Calculate per baseline w from per antenna w
+        wp, wq = self.uvw[:,:,2][ant0], self.uvw[:,:,2][ant1]
+        w = ne.evaluate('wq-wp', {'wp': wp, 'wq': wq})
+
+        e1 = self.sersic_shape[0]
+        e2 = self.sersic_shape[1]
+        R = self.sersic_shape[2]
+
+        # OK, try obtain the same results with the fwhm factored out!
+        # u1 = u*(1+e1) - v*e2
+        # v1 = u*e2 + v*(1-e1)
+        u1 = ne.evaluate('u_1_e1 + v_e2',
+            { 'u_1_e1': np.outer(1+e1, u), 'v_e2' : np.outer(e2, v)})
+        v1 = ne.evaluate('u_e2 + v_1_e1', 
+            { 'u_e2' : np.outer(e2, u), 'v_1_e1' : np.outer(1-e1,v)})
+
+        assert u1.shape == (nssrc, ntime*nbl)
+        assert v1.shape == (nssrc, ntime*nbl)
+
+        e12 = 1 - e1 * e1 - e2 * e2
+
+        de1 = ne.evaluate('u1*(u_e12+2*e1*u1) + v1*(2*e1*v1-v_e12)',
+            local_dict={
+                'u1'   : u1,  'v1': v1,\
+                'u_e12': np.outer(e12, u),\
+                'v_e12': np.outer(e12, v),\
+                'e1': e1[:,np.newaxis]}).reshape(nssrc, ntime,nbl)
+
+        de2 = ne.evaluate('u1*(v_e12+2*e2*u1) + v1*(2*e2*v1+u_e12)',
+            local_dict={
+                'u1'   : u1,  'v1': v1,\
+                'u_e12': np.outer(e12, u),\
+                'v_e12': np.outer(e12, v),\
+                'e2': e2[:,np.newaxis]}).reshape(nssrc, ntime,nbl)
+
+        wavenum = (self.two_pi_over_c * self.frequency)
+
+        temp = ne.evaluate('(wavenum*R/e12)**2',
+            {
+              'R'  : R[:,np.newaxis],\
+              'e12': e12[:,np.newaxis],\
+              'wavenum': wavenum[np.newaxis,:]}).reshape(nssrc,nchan)
+
+        sfactor = ne.evaluate('1+temp*(u1*u1+v1*v1)',
+            {
+              'u1' : u1[:,:,np.newaxis],\
+              'v1' : v1[:,:,np.newaxis],\
+              'temp'  : temp[:,np.newaxis,:]}).reshape(nssrc,ntime,nbl,nchan)
+
+        sersic_deriv = np.empty((3,nssrc,ntime,nbl,nchan))
+          
+        # partial derivatives with respect to e1 and e2
+        sersic_deriv[0] = ne.evaluate('de1*temp/(sfactor*e12)',
+            { 
+              'de1' : de1[:,:,:,np.newaxis],\
+              'temp': temp[:,np.newaxis,np.newaxis,:],\
+              'e12' : e12[:,np.newaxis,np.newaxis,np.newaxis],\
+              'sfactor': sfactor }).reshape(nssrc,ntime,nbl,nchan)
+
+        sersic_deriv[1] = ne.evaluate('de2*temp/(sfactor*e12)',
+            {
+              'de2' : de2[:,:,:,np.newaxis],\
+              'temp': temp[:,np.newaxis,np.newaxis,:], \
+              'e12' : e12[:,np.newaxis,np.newaxis,np.newaxis],\
+              'sfactor': sfactor }).reshape(nssrc,ntime,nbl,nchan)
+
+        # partial derivatives with respect to scalelength
+        sersic_deriv[2] = ne.evaluate('(sfactor-1)/(sfactor*R)',
+            {
+              'R' : R[:,np.newaxis,np.newaxis,np.newaxis],\
+              'sfactor' : sfactor }).reshape(nssrc,ntime,nbl,nchan)
+
+        return sersic_deriv
+
+
+
+
+    def compute_gekb_vis_grad(self, ekb_jones=None):
+        """
+        Computes the gradient of the complex visibilities with respect to the sersic parameters.
+        Returns a (3,nssrc,ntime,nbl,nchan,4) matrix of complex scalars.
+        """
+
+        nssrc, npsrc, ngsrc, nsrc, ntime, nbl, nchan = self.dim_local_size('nssrc', 'npsrc', 'ngsrc', 'nsrc', 'ntime', 'nbl', 'nchan')
+
+        if ekb_jones is None:
+            ekb_jones = self.compute_ekb_jones_per_bl()
+
+        want_shape = (nsrc, ntime, nbl, nchan, 4)
+        assert ekb_jones.shape == want_shape, \
+            'Expected shape %s. Got %s instead.' % \
+            (want_shape, ekb_jones.shape)
+
+        ant0, ant1 = self.ap_idx(chan=True)
+        g_term_p = self.G_term[ant0]
+        g_term_q = self.G_term[ant1]
+
+        assert g_term_p.shape == (ntime, nbl, nchan, 4)
+
+        gekb_jones = np.empty([nssrc,ntime,nbl,nchan,4])
+        for i in range(nssrc):
+            gekb_jones[i] = (self.jones_multiply(g_term_p, ekb_jones[i])
+                .reshape(ntime, nbl, nchan, 4))
+            gekb_jones[i] = (self.jones_multiply(gekb_jones[i], g_term_q, hermitian=True)
+                .reshape(ntime, nbl, nchan, 4))
+
+        sersic_deriv = self.compute_sersic_derivatives()
+
+        src_beg = npsrc + ngsrc
+        src_end = npsrc + ngsrc + nssrc
+        vis_grad = np.empty((3,nssrc,ntime,nbl,nchan,4),dtype = np.complex)
+        vis_grad[0] = gekb_jones[src_beg:src_end]*sersic_deriv[0,:,:,:,:,np.newaxis]
+        vis_grad[1] = gekb_jones[src_beg:src_end]*sersic_deriv[1,:,:,:,:,np.newaxis]
+        vis_grad[2] = gekb_jones[src_beg:src_end]*sersic_deriv[2,:,:,:,:,np.newaxis]
+
+        assert vis_grad.shape == (3, nssrc, ntime, nbl, nchan, 4)
+
+        return vis_grad
+
+
     def compute_chi_sqrd_sum_terms(self, vis=None):
         """
         Computes the terms of the chi squared sum,
@@ -711,14 +849,72 @@ class CPUSolver(MontblancNumpySolver):
         return (term_sum if self.use_weight_vector() is True
             else term_sum / self.sigma_sqrd)
 
+
+    def compute_chi_sqrd_gradient(self, vis=None, vis_grad=None):
+        """ Computes the chi squared gradient with respect to Sersic parameters.
+        Parameters:
+            weight_vector : boolean
+                True if the chi squared test
+                should be computed with a noise vector
+        Returns a (3,nssrc) matrix of real values
+        """
+        nssrc, ntime, nbl, nchan = self.dim_local_size('nssrc', 'ntime', 'nbl', 'nchan')
+
+        # Do the chi squared gradient on the CPU.
+        # If we're not using the weight vector, sum and
+        # divide by the sigma squared.
+        # Otherwise, simply return the sum
+        if vis is None: vis = self.compute_gekb_vis()
+        if vis_grad is None: vis_grad = self.compute_gekb_vis_grad()
+
+
+        # Compute the residuals if this has not yet happened
+        if not self.outputs_residuals():
+            d = ne.evaluate('(ovis - mvis)*where(flag > 0, 0, 1)', {
+                'mvis': vis,
+                'ovis': self.observed_vis,
+                'flag' : self.flag })
+            assert d.shape == (ntime, nbl, nchan, 4)
+        else:
+            d = vis
+
+        re = d.real
+        im = d.imag
+        wv = self.weight_vector
+
+        # Multiply by the weight vector if required
+        if self.use_weight_vector() is True:
+            ne.evaluate('re*wv', {'re': re, 'wv': wv}, out=re)
+            ne.evaluate('im*wv', {'im': im, 'wv': wv}, out=im)       
+
+        # Multiply by the visibilities gradient
+        for p in xrange(3):
+            for s in xrange(nssrc):
+                vis_grad[p,s].real = ne.evaluate('re*dre', {'re': re, 'dre': vis_grad[p,s].real})
+                vis_grad[p,s].imag = ne.evaluate('im*dim', {'im': im, 'dim': vis_grad[p,s].imag})
+
+        # Sum the real and imaginary terms together
+        # for the final result.
+        re_sum = ne.evaluate('sum(re,5)', {'re': vis_grad.real})
+        im_sum = ne.evaluate('sum(im,5)', {'im': vis_grad.imag})
+        chi_sqrd_grad_terms = ne.evaluate('re_sum + im_sum',
+            {'re_sum': re_sum, 'im_sum': im_sum})
+        assert chi_sqrd_grad_terms.shape == (3, nssrc, ntime, nbl, nchan)
+
+        self.X2_grad = 6*np.sum(chi_sqrd_grad_terms,(2,3,4)).reshape(3,nssrc)
+           
+        return (self.X2_grad if self.use_weight_vector() is True \
+            else self.X2_grad / self.sigma_sqrd)
+
+
     def solve(self):
         """ Solve the RIME """
 
         self.jones[:] = self.compute_ekb_sqrt_jones_per_ant()
         
-        self.vis[:] = self.compute_gekb_vis()
+        self.model_vis[:] = self.compute_gekb_vis()
         
         self.chi_sqrd_result[:] = self.compute_chi_sqrd_sum_terms(
-            self.vis)
+            self.model_vis)
         
         self.set_X2(self.compute_chi_sqrd(self.chi_sqrd_result))
