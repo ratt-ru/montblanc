@@ -135,11 +135,6 @@ class TestRimeV4(unittest.TestCase):
         cpu_slvr.set_beam_ul(S)
         cpu_slvr.set_beam_um(S)
 
-        # Default parallactic angle is 0
-        # Set it to 1 degree so that our
-        # sources rotate through the cube.
-        cpu_slvr.set_parallactic_angle(np.deg2rad(1))
-
         copy_solver(cpu_slvr, gpu_slvr)
 
         # Call the GPU solver
@@ -374,10 +369,6 @@ class TestRimeV4(unittest.TestCase):
         cpu_slvr.set_beam_ul(S)
         cpu_slvr.set_beam_um(S)
 
-        # Default parallactic angle is 0
-        # Set it to 1 degree so that our
-        # sources rotate through the cube.
-        cpu_slvr.set_parallactic_angle(np.deg2rad(1))
         E_term_cpu = cpu_slvr.compute_E_beam()
 
         copy_solver(cpu_slvr, gpu_slvr)

@@ -30,6 +30,7 @@ from montblanc.api.loaders import BaseLoader
 
 ANTENNA_TABLE = 'ANTENNA'
 SPECTRAL_WINDOW = 'SPECTRAL_WINDOW'
+FIELD_TABLE = 'FIELD'
 
 class MeasurementSetLoader(BaseLoader):
     LOG_PREFIX = 'LOADER:'
@@ -39,8 +40,9 @@ class MeasurementSetLoader(BaseLoader):
 
         self.tables = {}
         self.msfile = msfile
-        self.antfile = '::'.join([self.msfile, ANTENNA_TABLE])
-        self.freqfile = '::'.join([self.msfile, SPECTRAL_WINDOW])
+        self.antfile = '::'.join((self.msfile, ANTENNA_TABLE))
+        self.freqfile = '::'.join((self.msfile, SPECTRAL_WINDOW))
+        self.fieldfile = '::'.join((self.msfile, FIELD_TABLE))
 
         montblanc.log.info("{lp} Opening Measurement Set {ms}.".format(
             lp=self.LOG_PREFIX, ms=self.msfile))
@@ -48,12 +50,16 @@ class MeasurementSetLoader(BaseLoader):
         # Open the main table
         ms = pt.table(self.msfile, ack=False)
 
+        # Hard-code the field ID for now
+        field_id = 0
+
         # Create a view over the MS, ordered by
         # (1) time (TIME)
         # (2) baseline (ANTENNA1, ANTENNA2)
         # (3) band (SPECTRAL_WINDOW_ID via DATA_DESC_ID)
         ordering_query = ' '.join(["SELECT FROM $ms",
-            "" if auto_correlations else "WHERE ANTENNA1 != ANTENNA2",
+            "WHERE FIELD_ID={fid}".format(fid=field_id),
+            "" if auto_correlations else "AND ANTENNA1 != ANTENNA2",
             "ORDERBY TIME, ANTENNA1, ANTENNA2, "
             "[SELECT SPECTRAL_WINDOW_ID FROM ::DATA_DESCRIPTION][DATA_DESC_ID]"])
 
@@ -63,6 +69,7 @@ class MeasurementSetLoader(BaseLoader):
         self.tables['main'] = ordered_ms
         self.tables['ant']  = at = pt.table(self.antfile, ack=False, readonly=True)
         self.tables['freq'] = ft = pt.table(self.freqfile, ack=False, readonly=True)
+        self.tables['field'] = fit = pt.table(self.fieldfile, ack=False, readonly=True)
 
         self.nrows = ordered_ms.nrows()
         self.na = at.nrows()

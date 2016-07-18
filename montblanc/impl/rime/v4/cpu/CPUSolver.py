@@ -373,8 +373,8 @@ class CPUSolver(MontblancNumpySolver):
             self.dim_local_size('nsrc', 'ntime', 'na', 'nchan',
                 'beam_lw', 'beam_mh', 'beam_nud'))
 
-        sint = np.sin(self.parallactic_angle*np.arange(ntime))
-        cost = np.cos(self.parallactic_angle*np.arange(ntime))
+        sint = np.sin(self.parallactic_angles)
+        cost = np.cos(self.parallactic_angles)
 
         assert sint.shape == (ntime,)
         assert cost.shape == (ntime,)

@@ -113,6 +113,7 @@ template <> class EBeamTraits<float>
 {
 public:
     typedef float2 LMType;
+    typedef float ParallacticAngleType;
     typedef float2 PointErrorType;
     typedef float2 AntennaScaleType;
 };
@@ -121,6 +122,7 @@ template <> class EBeamTraits<double>
 {
 public:
     typedef double2 LMType;
+    typedef double ParallacticAngleType;
     typedef double2 PointErrorType;
     typedef double2 AntennaScaleType;
 };
@@ -132,11 +134,11 @@ template <
 __device__
 void rime_jones_E_beam_impl(
     typename EBeamTraits<T>::LMType * lm,
+    typename EBeamTraits<T>::ParallacticAngleType * parallactic_angles,
     typename EBeamTraits<T>::PointErrorType * point_errors,
     typename EBeamTraits<T>::AntennaScaleType * antenna_scaling,
     typename Tr::ct * E_beam,
     typename Tr::ct * jones,
-    T parallactic_angle,
     T beam_ll, T beam_lm,
     T beam_ul, T beam_um)
 {
@@ -186,10 +188,12 @@ void rime_jones_E_beam_impl(
 
         __syncthreads();
 
+        T pa = parallactic_angles[TIME];
+
         // Figure out how far the source has
         // rotated within the beam
         T sint, cost;
-        Po::sincos(parallactic_angle*TIME, &sint, &cost);
+        Po::sincos(pa, &sint, &cost);
 
         // Rotate the source
         T l = s_lm0[threadIdx.z].x*cost - s_lm0[threadIdx.z].y*sint;
@@ -301,25 +305,26 @@ void rime_jones_E_beam_impl(
 
 extern "C" {
 
-#define stamp_jones_E_beam_fn(ft,ct,lm_type,pe_type,as_type) \
+#define stamp_jones_E_beam_fn(ft,ct,lm_type,pa_type,pe_type,as_type) \
 __global__ void \
 rime_jones_E_beam_ ## ft( \
     lm_type * lm, \
+    pa_type * parallactic_angles, \
     pe_type * point_errors, \
     as_type * antenna_scaling, \
     ct * E_beam, \
     ct * jones, \
-    ft parallactic_angle, \
     ft beam_ll, ft beam_lm, \
     ft beam_ul, ft beam_um) \
 { \
     rime_jones_E_beam_impl<ft>( \
-        lm, point_errors, antenna_scaling, E_beam, jones, \
-        parallactic_angle, beam_ll, beam_lm, beam_ul, beam_um); \
+        lm, parallactic_angles, point_errors, \
+        antenna_scaling, E_beam, jones, \
+        beam_ll, beam_lm, beam_ul, beam_um); \
 }
 
-stamp_jones_E_beam_fn(float,float2,float2,float2,float2);
-stamp_jones_E_beam_fn(double,double2,double2,double2,double2);
+stamp_jones_E_beam_fn(float,float2,float2,float,float2,float2);
+stamp_jones_E_beam_fn(double,double2,double2,double,double2,double2);
 
 } // extern "C" {
 """)
@@ -395,10 +400,9 @@ class RimeEBeam(Node):
                 self.rime_const_data[0],
                 slvr.const_data().ndary())
 
-        self.kernel(slvr.lm,
+        self.kernel(slvr.lm, slvr.parallactic_angles,
             slvr.point_errors, slvr.antenna_scaling,
             slvr.E_beam, slvr.jones,
-            slvr.parallactic_angle,
             slvr.beam_ll, slvr.beam_lm,
             slvr.beam_ul, slvr.beam_um,
             stream=stream, **self.launch_params)
