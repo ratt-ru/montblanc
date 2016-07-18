@@ -20,7 +20,6 @@
 
 # Compare analytical chi squared gradient computation with respect to 
 # Sersic parameters with the numerical gradent computation. 
-# CPU and GPU solvers are also compared
  
 # Input: filename - Measurement Set file
 #        ns - number of sersic sources
