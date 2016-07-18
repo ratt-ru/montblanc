@@ -58,12 +58,14 @@ P = [
     prop_dict('X2', 'ft', 0.0),
 
     # Width of the beam cube dimension. l, m and lambda
-    # Lower l and m coordinates of the beam cube
+    # Lower l, m and frequency coordinates of the beam cube
     prop_dict('beam_ll', 'ft', -0.5),
     prop_dict('beam_lm', 'ft', -0.5),
-    # Upper l and m coordinates of the beam cube
+    prop_dict('beam_lfreq', 'ft', 1.3e9),
+    # Upper l, m and frequency coordinates of the beam cube
     prop_dict('beam_ul', 'ft', 0.5),
     prop_dict('beam_um', 'ft', 0.5),
+    prop_dict('beam_ufreq', 'ft', 1.5e9),
 ]
 
 def rand_uvw(slvr, ary):
@@ -147,6 +149,7 @@ A = [
     # Frequency information
     ary_dict('frequency', ('nchan',), 'ft',
         classifiers=frozenset([Classifier.B_SQRT_INPUT,
+            Classifier.E_BEAM_INPUT,
             Classifier.EKB_SQRT_INPUT,
             Classifier.COHERENCIES_INPUT]),
         default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan')),
@@ -158,7 +161,7 @@ A = [
         test=1.4e9),
 
     # Reference antenna parallactic angle at each timestep
-    ary_dict('parallactic_angles', ('ntime',), 'ft',
+    ary_dict('parallactic_angles', ('ntime', 'na'), 'ft',
         classifiers=frozenset([Classifier.E_BEAM_INPUT]),
         default=0,
         test=lambda s, a: rary(a)*np.pi),

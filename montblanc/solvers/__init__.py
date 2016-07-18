@@ -57,6 +57,34 @@ def copy_solver(src_slvr, dest_slvr, safe=False):
             src_prop = getattr(src_slvr, p.name)
             setattr(dest_slvr, p.name, src_prop)
 
+    # CUDA to CPU case
+    elif (isinstance(src_slvr, MontblancCUDASolver) and
+        isinstance(dest_slvr, MontblancNumpySolver)):
+
+        sa, da = src_slvr.arrays(), dest_slvr.arrays()
+
+        # Transfer CPU arrays to the GPU
+        for a in sa.itervalues():
+            if not safe and a.name not in da:
+                continue
+
+            cpu_ary = getattr(dest_slvr, a.name)
+            retrieve_method_name = src_slvr.retrieve_method_name(a.name)
+            retrieve_method = getattr(src_slvr, retrieve_method_name)
+            cpu_ary[:] = retrieve_method()
+
+        sp, dp = src_slvr.properties(), dest_slvr.properties()
+
+        # Transfer properties over
+        for p in sp.itervalues():
+            if not safe and p.name not in dp:
+                continue
+
+            src_prop = getattr(src_slvr, p.name)
+            setattr(dest_slvr, p.name, src_prop)
+
+
+
     # Implement other combinations
     else:
         raise NotImplementedError('{s} to {d} copy not yet implemented'

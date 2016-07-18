@@ -411,7 +411,7 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
 
     return blockdimx, blockdimy, blockdimz
 
-def parallactic_angles(field_centre, ref_ant_position, times):
+def parallactic_angles(field_centre, antenna_positions, times):
     """
     Computes parallactic angles per timestep for the given
     reference antenna position and field centre.
@@ -419,12 +419,12 @@ def parallactic_angles(field_centre, ref_ant_position, times):
     Arguments:
         field_centre : ndarray of shape (2,)
             Field centre, should be obtained from MS PHASE_DIR
-        ref_ant_position: ndarray of shape (3,)
-            Reference antenna position, obtained from POSITION
+        antenna_positions: ndarray of shape (na, 3)
+            Antenna positions, obtained from POSITION
             column of MS ANTENNA sub-table
         times: ndarray
-            Array of unique times, obtained from TIME
-            column of MS table
+            Array of unique times with shape (ntime,),
+            obtained from TIME column of MS table
 
     Returns:
         An array of parallactic angles per time-step
@@ -435,30 +435,31 @@ def parallactic_angles(field_centre, ref_ant_position, times):
 
     pm = pyrap.measures.measures()
 
-    # make measure for zenith
-    zenith = pm.direction('AZEL','0deg','90deg')
-    # make position measure from reference antenna
-    # NB: in the future we may want to treat position of each antenna separately. For
-    # a large enough array, the PA w.r.t. each antenna may change! But for now, use
-    # the PA of the first antenna for all calculations
-    reference_position = pm.position('itrf',
-        *(pq.quantity(x,'m') for x in ref_ant_position)) 
+    ntime = times.shape[0]
+    na = antenna_positions.shape[0]
 
-    # make direction measure from field centre
-    field_centre = pm.direction('J2000',
-        pq.quantity(field_centre[0], "rad"),
-        pq.quantity(field_centre[1], "rad"))    
+    # Create direction measure for the zenith
+    zenith = pm.direction('AZEL','0deg','90deg')
+
+    # Create position measures for each antenna
+    reference_positions = [pm.position('itrf',
+        *(pq.quantity(x,'m') for x in pos))
+        for pos in antenna_positions]
+
+    # Compute field centre in radians
+    fc_rad = pm.direction('J2000',
+        *(pq.quantity(f,'rad') for f in field_centre))
 
     parallactic_angles = np.asarray([ 
-        # use ref_ant_position as reference frame.
-        # NB: in the future may want to do it per antenna
-        pm.do_frame(reference_position) and 
-        # put time into reference frame
+        # Set antenna position as the reference frame
+        pm.do_frame(rp) and 
+        # Set current time as the reference frame
         pm.do_frame(pm.epoch("UTC",pq.quantity(t,"s"))) and
-        # compute PA 
-        pm.posangle(field_centre, zenith).get_value("rad") for t in times])
+        # Now compute the parallactic angle
+        pm.posangle(fc_rad, zenith).get_value("rad")
+        for t in times for rp in reference_positions])
 
-    return parallactic_angles
+    return parallactic_angles.reshape(ntime, na)
 
 class ContextWrapper(object):
     """ Context Manager Wrapper for CUDA Contexts! """

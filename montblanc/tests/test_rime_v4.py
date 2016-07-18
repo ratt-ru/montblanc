@@ -176,7 +176,7 @@ class TestRimeV4(unittest.TestCase):
         gpu_slvr, cpu_slvr = solvers(slvr_cfg)
 
         with gpu_slvr, cpu_slvr:
-            self.EKBSqrt_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-5})
+            self.EKBSqrt_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-4})
 
     def sum_coherencies_test_impl(self, gpu_slvr,
         cpu_slvr, cmp=None):
@@ -375,7 +375,7 @@ class TestRimeV4(unittest.TestCase):
             cmp=None):
 
         if cmp is None:
-            cmp = {'rtol':1e-5}
+            cmp = {}
 
         slvr_cfg = montblanc.rime_solver_cfg(na=32, ntime=50, nchan=64,
             sources=montblanc.sources(point=10, gaussian=10),
@@ -391,7 +391,7 @@ class TestRimeV4(unittest.TestCase):
             self.assertTrue(cpu_slvr.E_beam.shape == 
                 (beam_lw, beam_mh, beam_nud, 4))
 
-            self.E_beam_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-4})
+            self.E_beam_test_impl(gpu_slvr, cpu_slvr, cmp=cmp)
 
     def test_E_beam_float(self):
         """ Test the E Beam float kernel """
@@ -400,11 +400,11 @@ class TestRimeV4(unittest.TestCase):
         beam_mh = np.random.randint(50, 60)
         beam_nud = np.random.randint(50, 60)
         self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
-            Options.DTYPE_FLOAT)
+            Options.DTYPE_FLOAT, cmp={'rtol': 1e-4})
 
         beam_lw, beam_mh, beam_nud = 2, 2, 2
         self.E_beam_test_helper(beam_lw, beam_mh, beam_nud,
-            Options.DTYPE_DOUBLE)
+            Options.DTYPE_FLOAT, cmp={'rtol': 1e-4})
 
     def test_E_beam_double(self):
         """ Test the E Beam double kernel """
