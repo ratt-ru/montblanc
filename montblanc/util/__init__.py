@@ -411,6 +411,55 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
 
     return blockdimx, blockdimy, blockdimz
 
+def parallactic_angles(field_centre, ref_ant_position, times):
+    """
+    Computes parallactic angles per timestep for the given
+    reference antenna position and field centre.
+
+    Arguments:
+        field_centre : ndarray of shape (2,)
+            Field centre, should be obtained from MS PHASE_DIR
+        ref_ant_position: ndarray of shape (3,)
+            Reference antenna position, obtained from POSITION
+            column of MS ANTENNA sub-table
+        times: ndarray
+            Array of unique times, obtained from TIME
+            column of MS table
+
+    Returns:
+        An array of parallactic angles per time-step
+
+    """
+    import pyrap.measures
+    import pyrap.quanta as pq
+
+    pm = pyrap.measures.measures()
+
+    # make measure for zenith
+    zenith = pm.direction('AZEL','0deg','90deg')
+    # make position measure from reference antenna
+    # NB: in the future we may want to treat position of each antenna separately. For
+    # a large enough array, the PA w.r.t. each antenna may change! But for now, use
+    # the PA of the first antenna for all calculations
+    reference_position = pm.position('itrf',
+        *(pq.quantity(x,'m') for x in ref_ant_position)) 
+
+    # make direction measure from field centre
+    field_centre = pm.direction('J2000',
+        pq.quantity(field_centre[0], "rad"),
+        pq.quantity(field_centre[1], "rad"))    
+
+    parallactic_angles = np.asarray([ 
+        # put antenna0 position as reference frame.
+        # NB: in the future may want to do it per antenna
+        pm.do_frame(reference_position) and 
+        # put time into reference frame
+        pm.do_frame(pm.epoch("UTC",pq.quantity(t,"s"))) and
+        # compute PA 
+        pm.posangle(field_centre, zenith).get_value("deg") for t in times])
+
+    return parallactic_angles
+
 class ContextWrapper(object):
     """ Context Manager Wrapper for CUDA Contexts! """
     def __init__(self, context):
@@ -423,5 +472,4 @@ class ContextWrapper(object):
 
     def __exit__(self,type,value,traceback):
         """ Pop when we're done """
-        import pycuda.driver as cuda
-        cuda.Context.pop()
+        self.context.pop()
