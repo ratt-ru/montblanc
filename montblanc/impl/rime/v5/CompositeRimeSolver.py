@@ -263,8 +263,9 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
             # Get the source slice ranges for each individual
             # source type, and update the CPU dictionary with them
-            cpu_slice.update(mbu.source_range_slices(
-                src, src_end, src_nr_var_counts))
+            src_range_slices = mbu.source_range_slices(
+                src, src_end, src_nr_var_counts)
+            cpu_slice.update(src_range_slices)
 
             # and configure the same for GPU slices
             for s in src_nr_vars:
@@ -447,8 +448,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
         cache_idx = dirty.get(r.name, None)
 
         if cache_idx and cache_idx == cpu_idx:
-            montblanc.log.debug("Cache hit on {n} index {i} "
-                    .format(n=r.name, i=cpu_idx))
+            #montblanc.log.debug("Cache hit on {n} index {i} "
+            #        .format(n=r.name, i=cpu_idx))
 
             return None
 
@@ -713,6 +714,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # Mutex for guarding the memory pools
         pool_lock = threading.Lock()
 
+        # Dirty index, indicating the CPU index of the
+        # data currently on the GPU, used for avoiding
+        # array transfer
+        self.thread_local.dirty = {}
+
         # Configure thread local storage
         # Number of solvers in this thread
         self.thread_local.nsolvers = nsolvers
@@ -792,15 +798,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # Estimate number of kernels for constant data
         nkernels = len(classifiers)
 
+        # Detect already transferred array chunks
+        dirty = {}
+
         # Get the first chunk of the visibility space
         cpu_slice_map, gpu_slice_map = self._gen_vis_slices().next()
 
         for i, subslvr in enumerate(self.thread_local.solvers):
             # For the maximum number of visibility chunks that can be enqueued
             for T in range(self.throttle_factor):
-                # Detect already transferred array chunks
-                dirty = {}
-
                 # For each source batch within the visibility chunk
                 for cpu_src_slice_map, gpu_src_slice_map in self._gen_source_slices():
                     cpu_slice_map.update(cpu_src_slice_map)
@@ -843,6 +849,16 @@ class CompositeRimeSolver(MontblancNumpySolver):
         for a in device_pool_refs:
             a.free()
 
+    def _thread_start_solving(self):
+        """
+        Contains enqueue thread functionality that needs to
+        take place at the start of each solution
+        """
+
+        # Clear the dirty dictionary to force each array to be
+        # transferred at least once. e.g. the beam cube
+        self.thread_local.dirty.clear()
+
     def _thread_enqueue_solve_batch(self, cpu_slice_map, gpu_slice_map, **kwargs):
         """
         Enqueue CUDA memory transfer and kernel execution operations on a CUDA stream.
@@ -866,9 +882,9 @@ class CompositeRimeSolver(MontblancNumpySolver):
         pool_refs = []
 
         # Cache keyed by array names and contained indices
-        # This is used to determine if the array has already
-        # been transferred to the card on this batch
-        dirty = {}
+        # This is used to avoid unnecessary CPU to GPU copies
+        # by caching the last index of the CPU array
+        dirty = tl.dirty
 
         # Guard pool allocations with a coarse-grained mutex
         with subslvr.pool_lock:
@@ -1040,6 +1056,14 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         # For easier typing
         C = CompositeRimeSolver
+
+        # Perform any initialisation required by each
+        # thread prior to solving
+        futures = [ex.submit(self._thread_start_solving)
+            for ex in self.enqueue_executors]
+
+        for f in cf.as_completed(futures):
+            f.result()
 
         # Create an iterator that cycles through each device's
         # executors, also returning the device index (enumerate)
