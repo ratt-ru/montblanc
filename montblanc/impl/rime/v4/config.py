@@ -159,7 +159,7 @@ A = [
 
     # Reference antenna parallactic angle at each timestep
     ary_dict('parallactic_angles', ('ntime',), 'ft',
-        classifiers=frozenset(),
+        classifiers=frozenset([Classifier.E_BEAM_INPUT]),
         default=0,
         test=lambda s, a: rary(a)*np.pi),
 
