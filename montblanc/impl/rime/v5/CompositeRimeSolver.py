@@ -1180,6 +1180,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
         def _shutdown_func():
             for i, subslvr in enumerate(self.thread_local.solvers):
                 subslvr.shutdown()
+                subslvr.dev_mem_pool.stop_holding()
+                subslvr.pinned_mem_pool.stop_holding()
 
             self._thread_shutdown()
 
