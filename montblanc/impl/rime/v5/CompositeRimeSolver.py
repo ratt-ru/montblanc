@@ -31,6 +31,8 @@ import threading
 import pycuda.driver as cuda
 import pycuda.tools
 
+import hypercube.util as hcu
+
 import montblanc
 import montblanc.util as mbu
 
@@ -1195,7 +1197,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
     def _thread_property_setter(self, name, value):
         for subslvr in self.thread_local.solvers:
-            setter_method_name = self.setter_name(name)
+            setter_method_name = hcu.setter_name(name)
             setter_method = getattr(subslvr, setter_method_name)
             setter_method(value)
 
