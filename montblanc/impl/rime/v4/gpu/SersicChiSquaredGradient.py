@@ -277,7 +277,7 @@ void sersic_chi_squared_gradient_impl(
         dev_vis[1].y = ant_one.y*dev_e2;
         dev_vis[2].x = ant_one.x*dev_scale;
         dev_vis[2].y = ant_one.y*dev_scale;
-  /* 
+   
         for (int p = 0; p < 3; p++)
         {
           // Multiply the visibility derivative by antenna 1's g term
@@ -291,7 +291,7 @@ void sersic_chi_squared_gradient_impl(
           montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, ant2_g_term);    
           dev_vis[p] = ant1_g_term;
         }
-   */
+   
     
         // Write partial derivative with respect to sersic parameters
         for (int p=0; p<3; p++)
