@@ -16,7 +16,7 @@ Montblanc contributors (sorted alphabetically)
 * **[Marzia Rivi](http://github.com/marziarivi)**
  
   * Added Sersic profiles
-  * Chi squared gradient computation with respect to Sersic parameters
+  * Analytical chi squared gradient computation with respect to Sersic parameters
 
 * **[Oleg Smirnov](https://github.com/o-smirnov)**
 
