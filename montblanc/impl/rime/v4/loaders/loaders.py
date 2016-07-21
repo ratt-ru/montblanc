@@ -120,6 +120,10 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         ref_ant_position = ta.getcol(POSITION, startrow=0, nrow=1)[0]
         phase_dir = tfi.getcol(PHASE_DIR)[0][0]
 
+        # Handle negative right ascension
+        if phase_dir[0] < 0:
+            phase_dir[0] += 2*np.pi
+
         parallactic_angles = mbu.parallactic_angles(phase_dir, ref_ant_position, times)
         solver.transfer_parallactic_angles(parallactic_angles)
 

@@ -450,13 +450,13 @@ def parallactic_angles(field_centre, ref_ant_position, times):
         pq.quantity(field_centre[1], "rad"))    
 
     parallactic_angles = np.asarray([ 
-        # put antenna0 position as reference frame.
+        # use ref_ant_position as reference frame.
         # NB: in the future may want to do it per antenna
         pm.do_frame(reference_position) and 
         # put time into reference frame
         pm.do_frame(pm.epoch("UTC",pq.quantity(t,"s"))) and
         # compute PA 
-        pm.posangle(field_centre, zenith).get_value("deg") for t in times])
+        pm.posangle(field_centre, zenith).get_value("rad") for t in times])
 
     return parallactic_angles
 
