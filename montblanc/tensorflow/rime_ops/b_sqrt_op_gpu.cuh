@@ -65,8 +65,8 @@ __global__ void rime_b_sqrt(
     const typename Traits::stokes_type * stokes,
     const typename Traits::alpha_type * alpha,
     const typename Traits::frequency_type * frequency,
+    const typename Traits::frequency_type * ref_freq,
     typename Traits::B_sqrt_type * B_sqrt,
-    typename Traits::FT ref_freq,
     int nsrc, int ntime, int npolchan)
 {
     // Simpler float and complex types
@@ -83,22 +83,22 @@ __global__ void rime_b_sqrt(
     if(SRC >= nsrc || TIME >= ntime || POLCHAN >= npolchan)
         { return; }
 
-    __shared__  FT freq[LTr::BLOCKDIMX];
+    __shared__  FT freq_ratio[LTr::BLOCKDIMX];
 
     // TODO. Using 3 times more shared memory than we
     // really require here, since there's only
     // one frequency per channel.
     if(threadIdx.y == 0 && threadIdx.z == 0)
     {
-        freq[threadIdx.x] = frequency[POLCHAN >> 2];
+        freq_ratio[threadIdx.x] = (frequency[POLCHAN >> 2] /
+            ref_freq[POLCHAN >>2]);
     }
 
     __syncthreads();
 
     // Calculate the power term
     int i = SRC*ntime + TIME;
-    FT freq_ratio = freq[threadIdx.x]/ref_freq;
-    FT power = Po::pow(freq_ratio, alpha[i]);
+    FT power = Po::pow(freq_ratio[threadIdx.x], alpha[i]);
 
     // Read in the stokes parameter,
     // multiplying it by the power term
@@ -142,9 +142,9 @@ public:
             tf::errors::InvalidArgument(
                 "frequency should be of shape (nchan)"))
 
-        OP_REQUIRES(context, in_ref_freq.dims() == 1 && in_ref_freq.dim_size(0) == 1,
+        OP_REQUIRES(context, in_ref_freq.dims() == 1,
             tf::errors::InvalidArgument(
-                "ref_freq should be a scalar"))
+                "ref_freq should be of shape (nchan)"))
 
         // Extract problem dimensions
         int nsrc = in_stokes.dim_size(0);
@@ -187,18 +187,15 @@ public:
             in_alpha.flat<FT>().data());
         auto frequency = reinterpret_cast<const typename Tr::frequency_type *>(
             in_frequency.flat<FT>().data());
+        auto ref_freq = reinterpret_cast<const typename Tr::frequency_type *>(
+            in_ref_freq.flat<FT>().data());
         auto b_sqrt = reinterpret_cast<typename Tr::B_sqrt_type *>(
             b_sqrt_ptr->flat<CT>().data());
-
-        // By contrast we can access ref_freq on the host 
-        // because of the .HostMemory("ref_freq") directive
-        // used in REGISTER_KERNEL_BUILDER
-        FT ref_freq = in_ref_freq.tensor<FT, 1>()(0);
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
         rime_b_sqrt<Tr> <<<grid, blocks, 0, stream>>>(
-            stokes, alpha, frequency, b_sqrt, ref_freq,
+            stokes, alpha, frequency, ref_freq, b_sqrt,
             nsrc, ntime, npolchan);
     }
 };

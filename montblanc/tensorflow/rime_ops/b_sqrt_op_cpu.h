@@ -43,10 +43,9 @@ public:
             tf::errors::InvalidArgument(
                 "frequency should be of shape (nchan)"))
 
-        OP_REQUIRES(context, in_ref_freq.dims() == 1 && in_ref_freq.dim_size(0) == 1,
+        OP_REQUIRES(context, in_ref_freq.dims() == 1,
             tf::errors::InvalidArgument(
-                "ref_freq should be a scalar"))
-
+                "ref_frequency should be of shape (nchan)"))
 
         // Extract problem dimensions
         int nsrc = in_stokes.dim_size(0);
@@ -69,7 +68,7 @@ public:
         auto stokes = in_stokes.tensor<FT, 3>();
         auto alpha = in_alpha.tensor<FT, 2>();
         auto frequency = in_frequency.tensor<FT, 1>();
-        FT ref_freq = in_ref_freq.tensor<FT, 1>()(0);
+        auto ref_freq = in_ref_freq.tensor<FT, 1>();
         auto b_sqrt = b_sqrt_ptr->tensor<CT, 4>();
 
         enum { iI, iQ, iU, iV };
@@ -109,7 +108,8 @@ public:
                 for(int chan=0; chan < nchan; ++chan)
                 {
                     // Compute spectral index
-                    FT power = std::pow(frequency(chan)/ref_freq,
+                    FT power = std::pow(
+                        frequency(chan)/ref_freq(chan),
                         alpha(src, time));
 
                     // Create some common sub-expressions here

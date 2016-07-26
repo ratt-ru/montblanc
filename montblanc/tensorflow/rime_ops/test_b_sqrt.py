@@ -32,7 +32,7 @@ def b_sqrt_numpy(stokes, alpha, frequency, ref_freq):
     V = stokes[:,:,3].reshape(nsrc, ntime, 1)
 
     # Compute the spectral index
-    freq_ratio = frequency[np.newaxis,np.newaxis,:]/np.asscalar(ref_freq)
+    freq_ratio = (frequency/ref_freq)[np.newaxis,np.newaxis,:]
     power = np.power(freq_ratio, alpha[:,:,np.newaxis])
 
     # Compute the brightness matrix
@@ -82,8 +82,9 @@ def b_sqrt(stokes, alpha, frequency, ref_freq):
 
     # Compute the spectral index
     frequency = tf.reshape(frequency, freq_shape)
+    ref_freq = tf.reshape(ref_freq, freq_shape)
     alpha = tf.reshape(alpha, src_shape)
-    power = tf.pow(frequency/ref_freq[0], alpha)
+    power = tf.pow(frequency/ref_freq, alpha)
 
     # Compute the brightness matrix
     XX = tf.complex(power*(I+Q), dtype(0.0))
@@ -119,7 +120,7 @@ def b_sqrt(stokes, alpha, frequency, ref_freq):
     return B, B_sqrt
 
 dtype, ctype = np.float64, np.complex128
-nsrc, ntime, na, nchan = 100, 50, 64, 128
+nsrc, ntime, na, nchan = 10, 50, 27, 32
 
 # Set up our numpy input arrays
 np_stokes = np.empty(shape=(nsrc, ntime, 4), dtype=dtype)
@@ -132,7 +133,7 @@ np_stokes[:,:,0] = np.sqrt(Q**2 + U**2 + V**2 + noise)
 
 np_alpha = np.random.random(size=(nsrc, ntime)).astype(dtype)*0.8
 np_frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=dtype)
-np_ref_freq = np.array([1.4e9], dtype=dtype)
+np_ref_freq = np.full_like(np_frequency, 1.4e9)
 
 # Create tensorflow arrays from the numpy arrays
 stokes = tf.Variable(np_stokes, name='stokes')

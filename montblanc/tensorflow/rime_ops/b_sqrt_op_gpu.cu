@@ -8,7 +8,6 @@ namespace bsqrt {
 REGISTER_KERNEL_BUILDER(
     Name("BSqrt")
     .Device(tensorflow::DEVICE_GPU)
-    .HostMemory("ref_freq")
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
     BSqrt<GPUDevice, float, tensorflow::complex64>);
@@ -16,7 +15,6 @@ REGISTER_KERNEL_BUILDER(
 REGISTER_KERNEL_BUILDER(
     Name("BSqrt")
     .Device(tensorflow::DEVICE_GPU)
-    .HostMemory("ref_freq")
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
     BSqrt<GPUDevice, double, tensorflow::complex128>);
