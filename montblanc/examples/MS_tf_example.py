@@ -44,9 +44,10 @@ if __name__ == '__main__':
         type=lambda v: v.lower() in ("yes", "true", "t", "1"),
         choices=[True, False], default=False,
         help='Handle auto-correlations')
-    parser.add_argument('-v','--version',dest='version',
-        type=str, default=Options.VERSION_TENSORFLOW,
-        choices=[Options.VERSION_TENSORFLOW], help='RIME Pipeline Version.')
+    parser.add_argument('-v','--version',dest='version', type=str,
+        default=Options.VERSION_TENSORFLOW,
+        choices=[Options.VERSION_TENSORFLOW],
+        help='RIME Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -54,7 +55,8 @@ if __name__ == '__main__':
     montblanc.log.setLevel(logging.INFO)
 
     slvr_cfg = montblanc.rime_solver_cfg(
-        data_source=Options.DATA_SOURCE_TEST,
+        ntime=10000, na=3000, nchan=128,
+        data_source=Options.DATA_SOURCE_DEFAULT,
         sources=montblanc.sources(point=args.npsrc,
             gaussian=args.ngsrc,
             sersic=args.nssrc),
@@ -64,4 +66,4 @@ if __name__ == '__main__':
         version=args.version)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
-        pass
+        slvr.solve()
