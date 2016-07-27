@@ -66,16 +66,21 @@ __global__ void rime_ekb_sqrt(
 
     for(int src=0; src < nsrc; ++ src)
     {
-        // Load in the complex phase
-        i = ((src*ntime + time)*na + ant)*nchan + chan;
-        CT cplx_phase = complex_phase[i];
-        i = (src*na + ant)*npolchan + polchan;
+        // Load in bsqrt
+        int src_time = src*ntime + time;
+        i = src_time*npolchan + polchan;
         CT brightness_sqrt = bsqrt[i];
-        i = ((src*ntime + time)*na + ant)*npolchan + polchan;
-        CT E = ejones[i];      
+
+        // Load in the complex phase
+        int src_time_ant = src_time*na + ant;
+        i = src_time_ant*nchan + chan;
+        CT cplx_phase = complex_phase[i];
 
         // Load in the brightness square root and multiply the phase in
         montblanc::complex_multiply_in_place<FT>(cplx_phase, brightness_sqrt);
+
+        i = src_time_ant*npolchan + polchan;
+        CT E = ejones[i];      
 
         // Load in the E Beam and multiply by KB
         montblanc::jones_multiply_4x4_in_place<FT>(E, cplx_phase);
@@ -109,6 +114,23 @@ public:
         int nchan = in_complex_phase.dim_size(3);
         int npol = in_bsqrt.dim_size(3);
         int npolchan = nchan*npol;
+
+        OP_REQUIRES(context, in_bsqrt.dims() == 4 &&
+            in_bsqrt.dim_size(0) == nsrc &&
+            in_bsqrt.dim_size(1) == ntime &&
+            in_bsqrt.dim_size(2) == nchan &&
+            in_bsqrt.dim_size(3) == npol,
+            tf::errors::InvalidArgument(
+                "bsqrt should be of shape (nsrc,ntime,nchan,npol)"))
+
+        OP_REQUIRES(context, in_ejones.dims() == 5 &&
+            in_ejones.dim_size(0) == nsrc &&
+            in_ejones.dim_size(1) == ntime &&
+            in_ejones.dim_size(2) == na &&
+            in_ejones.dim_size(3) == nchan &&
+            in_ejones.dim_size(4) == npol,
+            tf::errors::InvalidArgument(
+                "ejones should be of shape (nsrc,ntime,na,nchan,npol)"))
 
         tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
 

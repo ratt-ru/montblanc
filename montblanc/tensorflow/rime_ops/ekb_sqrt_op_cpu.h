@@ -39,6 +39,23 @@ public:
         int nchan = in_complex_phase.dim_size(3);
         int npol = in_bsqrt.dim_size(3);
 
+        OP_REQUIRES(context, in_bsqrt.dims() == 4 &&
+            in_bsqrt.dim_size(0) == nsrc &&
+            in_bsqrt.dim_size(1) == ntime &&
+            in_bsqrt.dim_size(2) == nchan &&
+            in_bsqrt.dim_size(3) == npol,
+            tf::errors::InvalidArgument(
+                "bsqrt should be of shape (nsrc,ntime,nchan,npol)"))
+
+        OP_REQUIRES(context, in_ejones.dims() == 5 &&
+            in_ejones.dim_size(0) == nsrc &&
+            in_ejones.dim_size(1) == ntime &&
+            in_ejones.dim_size(2) == na &&
+            in_ejones.dim_size(3) == nchan &&
+            in_ejones.dim_size(4) == npol,
+            tf::errors::InvalidArgument(
+                "ejones should be of shape (nsrc,ntime,na,nchan,npol)"))
+
         tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
 
         // Allocate an output tensor
@@ -64,10 +81,10 @@ public:
                         const CT & cp = complex_phase(src, time, ant, chan);
 
                         // Multiply brightness square root by complex phase
-                        const CT b0 = cp*bsqrt(src, ant, chan, 0);
-                        const CT b1 = cp*bsqrt(src, ant, chan, 1);
-                        const CT b2 = cp*bsqrt(src, ant, chan, 2);
-                        const CT b3 = cp*bsqrt(src, ant, chan, 3);
+                        const CT b0 = cp*bsqrt(src, time, chan, 0);
+                        const CT b1 = cp*bsqrt(src, time, chan, 1);
+                        const CT b2 = cp*bsqrt(src, time, chan, 2);
+                        const CT b3 = cp*bsqrt(src, time, chan, 3);
 
                         // Reference ejones matrix
                         const CT & a0 = ejones(src, time, ant, chan, 0);

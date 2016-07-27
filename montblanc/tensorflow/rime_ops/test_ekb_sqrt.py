@@ -13,7 +13,7 @@ rc = lambda *s: rf(*s) + rf(*s)*1j
 nsrc, ntime, na, nchan, npol = 10, 20, 7, 16, 4
 
 np_complex_phase = rc(nsrc, ntime, na, nchan);
-np_bsqrt = rc(nsrc, na, nchan, npol)
+np_bsqrt = rc(nsrc, ntime, nchan, npol)
 np_ejones = rc(nsrc, ntime, na, nchan, npol)
 
 args = map(lambda v, n: tf.Variable(v, name=n),
@@ -22,7 +22,7 @@ args = map(lambda v, n: tf.Variable(v, name=n),
 
 def ekb_sqrt(complex_phase, bsqrt, ejones):
     from montblanc.impl.rime.v4.cpu.CPUSolver import CPUSolver
-    tmp = bsqrt[:,np.newaxis,:,:,:]*complex_phase[:,:,:,:,np.newaxis]
+    tmp = bsqrt[:,:,np.newaxis,:,:]*complex_phase[:,:,:,:,np.newaxis]
     result = CPUSolver.jones_multiply(ejones, tmp)
     return result.reshape(nsrc, ntime, na, nchan, npol)
 
