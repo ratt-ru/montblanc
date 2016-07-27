@@ -44,12 +44,15 @@ class QueueWrapper(object):
         return self._queue
 
     @property
-    def value_names(self):
+    def fed_arrays(self):
         return self._fed_arrays
 
     def placeholder_enqueue_op(self):
         """ Return a placeholder op for injecting into the Graph """
         return self.queue.enqueue(self.placeholders)
+
+    def dequeue_op(self):
+        return self.queue.dequeue()
 
     def __str__(self):
         return 'Queue of size {s} with with types {t}'.format(
