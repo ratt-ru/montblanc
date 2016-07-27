@@ -36,14 +36,14 @@ public:
         const tf::Tensor & in_model_vis_in = context->input(6);
         const tf::Tensor & in_apply_dies = context->input(7);
 
-        int ntime = in_antenna1.dim_size(0);
-        int nbl = in_antenna1.dim_size(1);
-        int na = in_ant_jones.dim_size(2);
         int nsrc = in_shape.dim_size(0);
-        int nchan = in_model_vis_in.dim_size(2);
-        int npol = in_model_vis_in.dim_size(3);
+        int ntime = in_shape.dim_size(1);
+        int nbl = in_shape.dim_size(2);
+        int nchan = in_shape.dim_size(3);
+        int na = in_ant_jones.dim_size(2);
+        int npol = in_ant_jones.dim_size(4);
         int npolchan = nchan*npol;
-
+        
         // Allocate an output tensor
         tf::Tensor * model_vis_out_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
