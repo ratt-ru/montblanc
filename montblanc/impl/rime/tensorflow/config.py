@@ -203,7 +203,7 @@ A = [
 
     ary_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
-        test    = lambda s, a : rc(a.shape, a.dtype)),
+        test    = lambda s, a: rc(a.shape, a.dtype)),
 
     # Direction-Independent Effects
     ary_dict('gterm', ('ntime', 'na', 'nchan', 4), 'ct',
@@ -218,13 +218,13 @@ A = [
         default = default_stokes,
         test    = rand_stokes),
     ary_dict('point_alpha', ('npsrc','ntime'), 'ft',
-        default = lambda s, a: np.full(fill_value=0.8, shape=a.shape, dtype=a.dtype),
+        default = lambda s, a: np.full(fill_value=0.0, shape=a.shape, dtype=a.dtype),
         test    = lambda s, a: rf(a.shape, a.dtype)*0.1),
 
     # Gaussian Source Definitions
     ary_dict('gaussian_lm', ('ngsrc',2), 'ft',
         default = lambda s, a: np.zeros(a.shape, a.dtype),
-        test    = lambda s, a : (rf(a.shape, a.dtype)-0.5)*1e-1),
+        test    = lambda s, a: (rf(a.shape, a.dtype)-0.5)*1e-1),
     ary_dict('gaussian_stokes', ('ngsrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes),
@@ -238,7 +238,7 @@ A = [
     # Sersic Source Definitions
     ary_dict('sersic_lm', ('nssrc',2), 'ft',
         default = lambda s, a: np.zeros(a.shape, a.dtype),
-        test    = lambda s, a : (rf(a.shape, a.dtype)-0.5)*1e-1),
+        test    = lambda s, a: (rf(a.shape, a.dtype)-0.5)*1e-1),
     ary_dict('sersic_stokes', ('nssrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes),
