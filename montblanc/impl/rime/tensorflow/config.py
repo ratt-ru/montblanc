@@ -272,6 +272,8 @@ A = [
 
     # Result arrays
     ary_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', temporary=True),
+    ary_dict('cplx_phase', ('nsrc','ntime','na','nchan'), 'ct', temporary=True),
+    ary_dict('ejones', ('nsrc','ntime','na','nchan',4), 'ct', temporary=True),
     ary_dict('ant_jones', ('nsrc','ntime','na','nchan',4), 'ct', temporary=True),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', temporary=True),
 ]
