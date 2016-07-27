@@ -75,10 +75,10 @@ __global__ void rime_ekb_sqrt(
         CT E = ejones[i];      
 
         // Load in the brightness square root and multiply the phase in
-        montblanc::complex_multiply_in_place<FT>(brightness_sqrt, cplx_phase);
+        montblanc::complex_multiply_in_place<FT>(cplx_phase, brightness_sqrt);
 
         // Load in the E Beam and multiply by KB
-        montblanc::jones_multiply_4x4_in_place<FT>(E, brightness_sqrt);
+        montblanc::jones_multiply_4x4_in_place<FT>(E, cplx_phase);
 
         // Output it
         ant_jones[i] = E;

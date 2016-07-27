@@ -64,10 +64,10 @@ public:
                         const CT & cp = complex_phase(src, time, ant, chan);
 
                         // Multiply brightness square root by complex phase
-                        const CT b0 = bsqrt(src, ant, chan, 0)*cp;
-                        const CT b1 = bsqrt(src, ant, chan, 1)*cp;
-                        const CT b2 = bsqrt(src, ant, chan, 2)*cp;
-                        const CT b3 = bsqrt(src, ant, chan, 3)*cp;
+                        const CT b0 = cp*bsqrt(src, ant, chan, 0);
+                        const CT b1 = cp*bsqrt(src, ant, chan, 1);
+                        const CT b2 = cp*bsqrt(src, ant, chan, 2);
+                        const CT b3 = cp*bsqrt(src, ant, chan, 3);
 
                         // Reference ejones matrix
                         const CT & a0 = ejones(src, time, ant, chan, 0);
