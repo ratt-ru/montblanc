@@ -222,11 +222,9 @@ void sersic_chi_squared_gradient_impl(
             i = SRC - SRC_START;                 shared.e1 = sersic_shape[i];
             i += DEXT(nssrc);                    shared.e2 = sersic_shape[i];
             i += DEXT(nssrc);                    shared.sersic_scale = sersic_shape[i];
-
-            shared.X2_grad_part[0] = 0.;
-            shared.X2_grad_part[1] = 0.;
-            shared.X2_grad_part[2] = 0.;
         }
+        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z < 3)
+            shared.X2_grad_part[threadIdx.z] = 0.;
 
         __syncthreads();
 
@@ -277,7 +275,7 @@ void sersic_chi_squared_gradient_impl(
         dev_vis[1].y = ant_one.y*dev_e2;
         dev_vis[2].x = ant_one.x*dev_scale;
         dev_vis[2].y = ant_one.y*dev_scale;
-   
+   /*
         for (int p = 0; p < 3; p++)
         {
           // Multiply the visibility derivative by antenna 1's g term
@@ -292,7 +290,7 @@ void sersic_chi_squared_gradient_impl(
           dev_vis[p] = ant1_g_term;
         }
    
-    
+    */
         // Write partial derivative with respect to sersic parameters
         for (int p=0; p<3; p++)
         {
@@ -323,14 +321,11 @@ void sersic_chi_squared_gradient_impl(
         __syncthreads();
         
         //atomic addition to avoid concurrent access in the device memory (contribution for a single particle)
-        if (threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+        // 3 different threads writes each a different component to avoid serialisation
+        if (threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z < 3)
         {
-            i = SRC - DEXT(npsrc) - DEXT(ngsrc);
-            atomicAdd(&(X2_grad[i]), shared.X2_grad_part[0]);
-            i += DEXT(nssrc);
-            atomicAdd(&(X2_grad[i]), shared.X2_grad_part[1]);
-            i += DEXT(nssrc);
-            atomicAdd(&(X2_grad[i]), shared.X2_grad_part[2]);
+            i = SRC - DEXT(npsrc) - DEXT(ngsrc) + threadIdx.z*DEXT(nssrc);
+            atomicAdd(&(X2_grad[i]), shared.X2_grad_part[threadIdx.z]);
         }
     }
 }
@@ -378,7 +373,7 @@ class SersicChiSquaredGradient(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-        ntime, nbl, npolchan = slvr.dim_local_size('ntime', 'nbl', 'npolchan')
+        nssrc, ntime, nbl, npolchan = slvr.dim_local_size('nssrc','ntime', 'nbl', 'npolchan')
 
           # Get a property dictionary off the solver
         D = slvr.template_dict()
@@ -409,6 +404,11 @@ class SersicChiSquaredGradient(Node):
             options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
+
+        if slvr.is_float():
+            self.gradient = gpuarray.zeros((3*nssrc,),dtype=np.float32)
+        else:
+            self.gradient = gpuarray.zeros((3*nssrc,),dtype=np.float64)
 
         self.rime_const_data_gpu = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
@@ -451,20 +451,17 @@ class SersicChiSquaredGradient(Node):
 
         sersic = np.intp(0) if np.product(slvr.sersic_shape.shape) == 0 \
             else slvr.sersic_shape
-       
-        if slvr.is_float(): 
-            gradient = gpuarray.zeros((3*nssrc,),dtype=np.float32)
-        else:
-            gradient = gpuarray.zeros((3*nssrc,),dtype=np.float64)
+
+        self.gradient.fill(0.) 
 
         self.kernel(slvr.uvw, sersic,
             slvr.frequency, slvr.antenna1, slvr.antenna2,
             slvr.jones, slvr.flag, slvr.weight_vector,
             slvr.observed_vis, slvr.G_term,
-            slvr.model_vis, gradient,
+            slvr.model_vis, self.gradient,
             stream=stream, **self.launch_params)
 
-        slvr.X2_grad = 6*gradient.get().reshape(3,nssrc)
+        slvr.X2_grad = 6*((self.gradient).get().reshape(3,nssrc))
 
         if not self.weight_vector:
             slvr.X2_grad = slvr.X2_grad/slvr.sigma_sqrd
