@@ -407,9 +407,9 @@ class SersicChiSquaredGradient(Node):
             no_extern_c=True)
 
         if slvr.is_float():
-            self.gradient = gpuarray.zeros((3*nssrc,),dtype=np.float32)
+            self.gradient = gpuarray.zeros((3,nssrc,),dtype=np.float32)
         else:
-            self.gradient = gpuarray.zeros((3*nssrc,),dtype=np.float64)
+            self.gradient = gpuarray.zeros((3,nssrc,),dtype=np.float64)
 
         self.rime_const_data_gpu = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
@@ -438,7 +438,6 @@ class SersicChiSquaredGradient(Node):
 
     def execute(self, solver, stream=None):
         slvr = solver
-        nssrc = slvr.dim_local_size('nssrc')
 
         if stream is not None:
             cuda.memcpy_htod_async(
@@ -462,7 +461,7 @@ class SersicChiSquaredGradient(Node):
             slvr.model_vis, self.gradient,
             stream=stream, **self.launch_params)
 
-        slvr.X2_grad = (self.gradient).get().reshape(3,nssrc)
+        slvr.X2_grad = self.gradient.get() 
 
         if not self.weight_vector:
             slvr.X2_grad = slvr.X2_grad/slvr.sigma_sqrd
