@@ -315,6 +315,7 @@ void sersic_chi_squared_gradient_impl(
 
             //atomic addition to avoid concurrent access in the shared memory
             dev_vis[p].x += dev_vis[p].y;
+            dev_vis[p].x *= 6;
             atomicAdd(&(shared.X2_grad_part[p]), dev_vis[p].x);
           }
         }
@@ -322,10 +323,10 @@ void sersic_chi_squared_gradient_impl(
         
         //atomic addition to avoid concurrent access in the device memory (contribution for a single particle)
         // 3 different threads writes each a different component to avoid serialisation
-        if (threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z < 3)
+        if (threadIdx.x < 3 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC - DEXT(npsrc) - DEXT(ngsrc) + threadIdx.z*DEXT(nssrc);
-            atomicAdd(&(X2_grad[i]), shared.X2_grad_part[threadIdx.z]);
+            i = SRC - DEXT(npsrc) - DEXT(ngsrc) + threadIdx.x*DEXT(nssrc);
+            atomicAdd(&(X2_grad[i]), shared.X2_grad_part[threadIdx.x]);
         }
     }
 }
@@ -461,7 +462,7 @@ class SersicChiSquaredGradient(Node):
             slvr.model_vis, self.gradient,
             stream=stream, **self.launch_params)
 
-        slvr.X2_grad = 6*((self.gradient).get().reshape(3,nssrc))
+        slvr.X2_grad = (self.gradient).get().reshape(3,nssrc)
 
         if not self.weight_vector:
             slvr.X2_grad = slvr.X2_grad/slvr.sigma_sqrd
