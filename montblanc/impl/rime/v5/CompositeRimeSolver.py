@@ -1049,8 +1049,13 @@ class CompositeRimeSolver(MontblancNumpySolver):
             model_vis_idx = [cpu[s] if s in cpu else ALL_SLICE
                 for s in model_vis_sshape]
 
+            # Infer proper model visibility shape, this may
+            # have been squeezed when enqueueing the slice
+            model_vis_shape = tuple(cpu[s].stop - cpu[s].start
+                if s in cpu else s for s in model_vis_sshape)
+
             X2 = pinned_X2.copy()
-            model_vis = pinned_model_vis.copy()
+            model_vis = pinned_model_vis.copy().reshape(model_vis_shape)
 
             _free_pool_allocs(pool_refs, pool_lock)
 
