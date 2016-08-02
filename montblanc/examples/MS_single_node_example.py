@@ -51,9 +51,9 @@ if __name__ == '__main__':
     parser.add_argument('-np','--npsrc',dest='npsrc',
         type=int, default=10, help='Number of Point Sources')
     parser.add_argument('-ng','--ngsrc',dest='ngsrc',
-        type=int, default=0, help='Number of Gaussian Sources')
+        type=int, default=10, help='Number of Gaussian Sources')
     parser.add_argument('-ns','--nssrc',dest='nssrc',
-        type=int, default=0, help='Number of Sersic Sources')
+        type=int, default=10, help='Number of Sersic Sources')
     parser.add_argument('-c','--count',dest='count',
         type=int, default=10, help='Number of Iterations')
     parser.add_argument('-ac','--auto-correlations',dest='auto_correlations',
@@ -101,7 +101,12 @@ if __name__ == '__main__':
         # If there are gaussian sources, create their
         # shape matrix and transfer it.
         if slvr.dim_global_size('ngsrc') > 0:
-            slvr.gauss.shape[:] = mbu.random_like(slvr.gauss.shape)*0.1
+            slvr.gauss_shape[:] = mbu.random_like(slvr.gauss_shape)*0.1
+
+        # If there are sersic sources, create their
+        # shape matrix and transfer it.
+        if slvr.dim_global_size('nssrc') > 0:
+            slvr.sersic_shape[:] = mbu.random_like(slvr.sersic_shape)*0.1
 
         # Create observed visibilities and upload them to the GPU
         slvr.observed_vis[:] = mbu.random_like(slvr.observed_vis)
