@@ -411,7 +411,7 @@ class SersicChiSquaredGradient(Node):
         else:
             self.gradient = gpuarray.zeros((3,nssrc,),dtype=np.float64)
 
-        self.rime_const_data_gpu = self.mod.get_global('C')
+        self.rime_const_data = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
         self.launch_params = self.get_launch_params(slvr, D)
 
@@ -441,12 +441,12 @@ class SersicChiSquaredGradient(Node):
 
         if stream is not None:
             cuda.memcpy_htod_async(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 slvr.const_data().ndary(),
                 stream=stream)
         else:
             cuda.memcpy_htod(
-                self.rime_const_data_gpu[0],
+                self.rime_const_data[0],
                 slvr.const_data().ndary())
 
         sersic = np.intp(0) if np.product(slvr.sersic_shape.shape) == 0 \
