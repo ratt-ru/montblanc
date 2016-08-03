@@ -54,11 +54,9 @@ class SersicChiSquaredGradient(montblanc.impl.rime.v4.gpu.SersicChiSquaredGradie
         sersic = np.intp(0) if np.product(slvr.sersic_shape.shape) == 0 \
             else slvr.sersic_shape
 
-        print slvr.X2_grad
         self.kernel(slvr.uvw, sersic,
             slvr.frequency, slvr.antenna1, slvr.antenna2,
             slvr.jones, slvr.flag, slvr.weight_vector,
             slvr.observed_vis, slvr.G_term,
             slvr.model_vis, slvr.X2_grad,
             stream=stream, **self.launch_params)
-        print slvr.X2_grad
