@@ -943,15 +943,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
                             lower_extent=slice_.start,
                             upper_extent=slice_.stop)
     
-                    # Enqueue Sersic gradient
-                    kernel = subslvr.rime_sersic_gradient
-                    pool_refs.extend(self._enqueue_array(
-                        subslvr, cpu_slice_map, gpu_slice_map,
-                        direction=ASYNC_HTOD, dirty=dirty,
-                        classifiers=[Classifier.COHERENCIES_INPUT]))
-                    pool_refs.append(self._enqueue_const_data_htod(
-                        subslvr, kernel.rime_const_data[0]))
-                    kernel.execute(subslvr, subslvr.stream)
+                # Enqueue Sersic gradient
+                kernel = subslvr.rime_sersic_gradient
+                pool_refs.extend(self._enqueue_array(
+                    subslvr, cpu_slice_map, gpu_slice_map,
+                    direction=ASYNC_HTOD, dirty=dirty,
+                    classifiers=[Classifier.COHERENCIES_INPUT]))
+                pool_refs.append(self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0]))
+                kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue chi-squared term reduction and return the
             # GPU array allocated to it
@@ -1102,7 +1102,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         X2_sum = self.ft(0.0)
         if self.enable_sersic_grad:
             nssrc = self.dim_local_size('nssrc')
-            self.X2_grad = self.ft(np.zeros((3,nssrc)))
+            X2_grad = self.ft(np.zeros((3,nssrc)))
 
         # Sets of return value futures for each executor
         value_futures = [set() for ex in self.enqueue_executors]
@@ -1141,6 +1141,9 @@ class CompositeRimeSolver(MontblancNumpySolver):
                     if nvalues > self.throttle_factor:
                         continue
 
+                    if self.enable_sersic_grad:
+                        self.X2_grad = self.ft(np.zeros((3,nssrc)))
+
                     # Enqueue CUDA operations for solving
                     # this visibility chunk. 
                     enqueue_future = enq_ex.submit(
@@ -1176,7 +1179,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
                         # Get chi-squared and model visibilities (and X2 gradient)
                         if self.enable_sersic_grad:
                             X2, pinned_model_vis, model_vis_idx, pinned_X2_grad = f.result()
-                            self.X2_grad += pinned_X2_grad
+                            X2_grad += pinned_X2_grad
                         else:
                             X2, pinned_model_vis, model_vis_idx = f.result()
                         # Sum X2
@@ -1199,7 +1202,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # Get chi-squared and model visibilities (and X2 gradient)
             if self.enable_sersic_grad:
                 X2, pinned_model_vis, model_vis_idx, pinned_X2_grad = f.result()
-                self.X2_grad += pinned_X2_grad
+                X2_grad += pinned_X2_grad
             else:
                 X2, pinned_model_vis, model_vis_idx = f.result()
             # Sum X2
@@ -1213,7 +1216,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
             self.set_X2(X2_sum)
         else:
             self.set_X2(X2_sum/self.sigma_sqrd)
-            self.X2_grad = self.X2_grad/self.sigma_sqrd
+            self.X2_grad = X2_grad/self.sigma_sqrd
 
     def shutdown(self):
         """ Shutdown the solver """
