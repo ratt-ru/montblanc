@@ -935,7 +935,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
                     # Update our maps with source slice information
                     cpu_slice_map.update(src_cpu_slice_map)
                     gpu_slice_map.update(src_gpu_slice_map)
-
+           
                     # Configure dimension extents and global size on the sub-solver
                     for name, slice_ in cpu_slice_map.iteritems():
                         subslvr.update_dimension(name=name,
@@ -943,15 +943,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
                             lower_extent=slice_.start,
                             upper_extent=slice_.stop)
     
-                # Enqueue Sersic gradient
-                kernel = subslvr.rime_sersic_gradient
-                pool_refs.extend(self._enqueue_array(
-                    subslvr, cpu_slice_map, gpu_slice_map,
-                    direction=ASYNC_HTOD, dirty=dirty,
-                    classifiers=[Classifier.COHERENCIES_INPUT]))
-                pool_refs.append(self._enqueue_const_data_htod(
-                    subslvr, kernel.rime_const_data[0]))
-                kernel.execute(subslvr, subslvr.stream)
+                    # Enqueue Sersic gradient
+                    kernel = subslvr.rime_sersic_gradient
+                    pool_refs.extend(self._enqueue_array(
+                        subslvr, cpu_slice_map, gpu_slice_map,
+                        direction=ASYNC_HTOD, dirty=dirty,
+                        classifiers=[Classifier.COHERENCIES_INPUT]))
+                    pool_refs.append(self._enqueue_const_data_htod(
+                        subslvr, kernel.rime_const_data[0]))
+                    kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue chi-squared term reduction and return the
             # GPU array allocated to it
