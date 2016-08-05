@@ -143,21 +143,7 @@ class TestRimeV4(unittest.TestCase):
         ekb_cpu = cpu_slvr.compute_ekb_sqrt_jones_per_ant()
         ekb_gpu = gpu_slvr.retrieve_jones()
 
-        # Some proportion of values will be out due to
-        # discrepancies on the CPU and GPU when computing
-        # the E beam (See E_beam_test_impl below)
-        proportion_acceptable = 1e-2
-        d = np.invert(np.isclose(ekb_cpu, ekb_gpu, **cmp))
-        incorrect = d.sum()
-        proportion_incorrect = incorrect / float(d.size)
-        self.assertTrue(proportion_incorrect < proportion_acceptable,
-            ('Proportion of incorrect EKB %s '
-            '(%d out of %d) '
-            'is greater than the accepted tolerance %s.') %
-                (proportion_incorrect,
-                incorrect,
-                d.size,
-                proportion_acceptable))
+        self.assertTrue(np.allclose(ekb_cpu, ekb_gpu, **cmp))
 
         # Test that at a decent proportion of
         # the calculated EKB terms are non-zero
@@ -177,7 +163,7 @@ class TestRimeV4(unittest.TestCase):
         gpu_slvr, cpu_slvr = solvers(slvr_cfg)
 
         with gpu_slvr, cpu_slvr:
-            self.EKBSqrt_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-4})
+            self.EKBSqrt_test_impl(gpu_slvr, cpu_slvr, cmp={'rtol': 1e-3})
 
     def test_EKBSqrt_double(self):
         """ Double precision EKBSqrt test """
@@ -376,32 +362,7 @@ class TestRimeV4(unittest.TestCase):
         gpu_slvr.solve()
         E_term_gpu = gpu_slvr.retrieve_jones()
 
-        # After extensive debugging and attempts get a nice
-        # solution, it has to be accepted that a certain
-        # (small) proportion of values will be different.
-        # These discrepancies are caused by taking the floor
-        # of floating point grid positions that lie very close
-        # to integral values. For example, the l position may
-        # be 24.9999 on the CPU and 25.0000 on the GPU
-        # (or vice-versa). I've made attempts to detect this
-        # and get the CPU and the GPU to agree
-        # e.g. np.abs(np.round(l) - l) < 1e-5
-        # but whichever epsilon is chosen, one can still get
-        # a discrepancy. e.g 24.990 vs 24.999
-
-        # Hence, we choose a very low ratio of unnacceptable values
-        proportion_acceptable = 1e-4
-        d = np.invert(np.isclose(E_term_cpu, E_term_gpu, **cmp))
-        incorrect = d.sum()
-        proportion_incorrect = incorrect / float(d.size)
-        self.assertTrue(proportion_incorrect < proportion_acceptable,
-            ('Proportion of incorrect E beam values %s '
-            '(%d out of %d) '
-            'is greater than the accepted tolerance %s.') %
-                (proportion_incorrect,
-                incorrect,
-                d.size,
-                proportion_acceptable))
+        self.assertTrue(np.allclose(E_term_cpu, E_term_gpu, **cmp))
 
         # Test that at a decent proportion of
         # the calculated E terms are non-zero
