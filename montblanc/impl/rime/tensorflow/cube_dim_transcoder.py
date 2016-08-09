@@ -2,6 +2,7 @@ import itertools
 
 import numpy as np
 
+# These are hypercube dimension attributes
 DEFAULT_SCHEMA = ['lower_extent', 'upper_extent', 'local_size', 'global_size']
 
 class CubeDimensionTranscoder(object):
@@ -22,19 +23,27 @@ class CubeDimensionTranscoder(object):
     >>> print time, chan
     """
     def __init__(self, dimensions, schema=None):
-        self._dimensions = dimensions
-
         if schema is None:
             schema = DEFAULT_SCHEMA
         elif not all([s in DEFAULT_SCHEMA for s in schema]):
             raise ValueError("Schema '{s}' contains invalid attributes. "
                 "Valid attributes are '{v}'".format(s=schema, v=DEFAULT_SCHEMA))
 
-        self._schema = schema
+        self._dimensions = dimensions
+        self._schema = tuple(schema)
+
+    @property
+    def dimensions(self):
+        return self._dimensions
+    
+    @property
+    def schema(self):
+        return self._schema
 
     def encode(self, cube_dimensions):
         """
-        Produces a numpy array of integers which transcode the supplied cube dimensions
+        Produces a numpy array of integers which encode
+        the supplied cube dimensions.
         """
         return np.asarray([getattr(cube_dimensions[d], s)
             for d in self._dimensions
@@ -42,11 +51,13 @@ class CubeDimensionTranscoder(object):
                 dtype=np.int32)
 
     def decode(self, descriptor):
-        """ Yield tuples for each dimension in this transcoder """
+        """ Yield dictionaries for each dimension in this transcoder """
         i = iter(descriptor)
         n = len(self._schema)
-        piece = tuple(itertools.islice(i, n))
-        while piece:
-            yield piece
-            piece = tuple(itertools.islice(i, n))
 
+        # Add the name key to our schema
+        schema = self._schema + ('name',)
+
+        for d in self._dimensions:
+            t = tuple(itertools.islice(i, n)) + (d, )
+            yield { k: v for k, v in zip(schema, t) }

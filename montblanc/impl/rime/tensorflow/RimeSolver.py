@@ -29,8 +29,9 @@ from tensorflow.python.client import timeline
 
 import montblanc
 import montblanc.util as mbu
+from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
 
-
+from hypercube import HyperCube
 import hypercube.util as hcu
 
 from montblanc.solvers import MontblancTensorflowSolver
@@ -177,10 +178,12 @@ class RimeSolver(MontblancTensorflowSolver):
         self._output_queue = create_queue_wrapper(QUEUE_SIZE,
             ['model_vis'], ds)
 
+        self._parameter_queue = create_queue_wrapper(QUEUE_SIZE,
+            ['parameters'], { 'parameters' : (None, tf.int32) })
+
         #======================
         # Thread pool executors
         #======================
-
         self._parameter_executor = cf.ThreadPoolExecutor(1)
         self._feed_executor = cf.ThreadPoolExecutor(1)
         self._compute_executor = cf.ThreadPoolExecutor(1)
@@ -189,8 +192,13 @@ class RimeSolver(MontblancTensorflowSolver):
         # Tensorflow initialisation
         #==========================
         self._tf_expr = self._construct_tensorflow_expression()
-            
         self._tf_session.run(tf.initialize_all_variables())
+
+        #================
+        # Cube Transcoder
+        #================
+        self._iter_dims = ['ntime', 'nbl']
+        self._transcoder = CubeDimensionTranscoder(self._iter_dims)
 
     def _budget(self, arrays, slvr_cfg):
         na = slvr_cfg.get(Options.NA)
@@ -217,7 +225,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Log some information about the memory _budget
         # and dimension reduction
-        montblanc.log.info(("Selected a solver memory _budget of {rb} "
+        montblanc.log.info(("Selected a solver memory budget of {rb} "
             "given a hard limit of {mb}.").format(
             rb=mbu.fmt_bytes(required_mem),
             mb=mbu.fmt_bytes(mem__budget)))
@@ -240,7 +248,26 @@ class RimeSolver(MontblancTensorflowSolver):
             raise
 
     def _parameters_impl(self):
-        pass
+        session = self._tf_session
+
+        # Copy dimensions of the main cube
+        cube = HyperCube()
+        cube.register_dimensions(self.dimensions())
+
+        # Iterate over time and baseline
+        iter_strides = cube.dim_local_size(*self._iter_dims)
+        iter_args = zip(self._iter_dims, iter_strides)
+
+        # Iterate through the hypercube space
+        for i, d in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
+            cube.update_dimensions(d)
+            descriptor = self._transcoder.encode(cube.dimensions())
+            montblanc.log.info('Encoding {d}'.format(d=descriptor))
+            session.run(self._parameter_queue.enqueue_op,
+                feed_dict={self._parameter_queue.placeholders[0] : descriptor })
+
+        # Close the queue
+        session.run(self._parameter_queue.close())
 
     def _feed(self):
         """ Feed stub """
@@ -255,6 +282,11 @@ class RimeSolver(MontblancTensorflowSolver):
         session = self._tf_session
         data_sources = self._data_sources
 
+        # Maintain a hypercube based on the main cube
+        cube = HyperCube()
+        cube.register_dimensions(self.dimensions())
+        cube.register_arrays(self.arrays())
+
         # Queues to be fed on each iteration
         iter_queues = tuple((self._input_queue,
             self._frequency_queue,
@@ -263,31 +295,38 @@ class RimeSolver(MontblancTensorflowSolver):
             self._die_queue,
             self._dde_queue))
 
-        # Iterate over time and baseline
-        iter_dims = 'ntime', 'nbl'
-        iter_strides = self.dim_local_size(*iter_dims)
-        iter_args = zip(iter_dims, iter_strides)
+        chunks_read = 0
 
-        # Iterate through the hypercube space
-        for i, d in enumerate(self.dim_iter(*iter_args, update_local_size=True)):
-            self.update_dimensions(d)
-            array_descriptors = self.arrays(reify=True)
+        while True:
+            try:
+                # Get the descriptor describing a portion of the RIME
+                descriptor = session.run(self._parameter_queue.dequeue_op)
+
+                # Decode the descriptor and update our cube dimensions
+                dimensions = self._transcoder.decode(descriptor)
+                cube.update_dimensions(dimensions)
+                chunks_read += 1
+
+            except tf.errors.OutOfRangeError:
+                montblanc.log.info('Read {n} chunks'.format(n=chunks_read))
+                return
+
+            array_descriptors = cube.arrays(reify=True)
 
             # Create a feed dictionary from all arrays in the feed queues
             feed_dict = { ph: data_sources[a][0](self, array_descriptors[a])
                 for q in iter_queues
                 for ph, a in zip(q.placeholders, q.fed_arrays) }
 
-            montblanc.log.info("Enqueueing chunk {i} Start".format(i=i))
+            montblanc.log.info("Enqueueing chunk {i} {d}".format(
+                i=chunks_read, d=descriptor))
 
             session.run([q.enqueue_op for q in iter_queues],
                 feed_dict=feed_dict)
 
-            montblanc.log.info("Enqueueing chunk {i} End".format(i=i))        
-
             # Now enqueue source chunks
-            for ds in self.dim_iter(('npsrc', self.dim_local_size('npsrc')), update_local_size=True):
-                self.update_dimensions(ds)
+            for ds in cube.dim_iter(('npsrc', self.dim_local_size('npsrc')), update_local_size=True):
+                cube.update_dimensions(ds)
 
                 montblanc.log.info("Enqueueing {s} point sources".format(s=ds[0]['local_size']))
 
