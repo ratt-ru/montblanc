@@ -154,6 +154,7 @@ class RimeSolver(MontblancTensorflowSolver):
             ['model_vis'], ds)
 
         self._data_sources = ds
+        self._parameter_executor = cf.ThreadPoolExecutor(1)
         self._feed_executor = cf.ThreadPoolExecutor(1)
         self._compute_executor = cf.ThreadPoolExecutor(1)
 
@@ -210,6 +211,16 @@ class RimeSolver(MontblancTensorflowSolver):
                 (p=' '*4, d=k, id=T[k], rd=v))
 
         return modded_dims
+
+    def _parameters(self):
+        try:
+            self._parameters_impl()
+        except Exception as e:
+            montblanc.log.exception("Parameter exception")
+            raise
+
+    def _parameters_impl(self):
+        pass
 
     def _feed(self):
         """ Feed stub """
@@ -369,6 +380,7 @@ class RimeSolver(MontblancTensorflowSolver):
         return M
 
     def solve(self):
+        p = self._parameter_executor.submit(self._parameters)
         f = self._feed_executor.submit(self._feed)
         c = self._compute_executor.submit(self._compute)
 
@@ -380,6 +392,7 @@ class RimeSolver(MontblancTensorflowSolver):
             print data.shape
 
     def close(self):
+        self._parameter_executor.shutdown()
         self._feed_executor.shutdown()
         self._compute_executor.shutdown()
         self._tf_session.close()
