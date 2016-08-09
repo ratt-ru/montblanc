@@ -26,10 +26,9 @@ class CubeDimensionTranscoder(object):
 
         if schema is None:
             schema = DEFAULT_SCHEMA
-        else:
-            if not all([s in DEFAULT_SCHEMA for s in schema]):
-                raise ValueError("Schema '{s}' contains invalid attributes. "
-                    "Valid attributes are '{v}'".format(s=schema, v=DEFAULT_SCHEMA))
+        elif not all([s in DEFAULT_SCHEMA for s in schema]):
+            raise ValueError("Schema '{s}' contains invalid attributes. "
+                "Valid attributes are '{v}'".format(s=schema, v=DEFAULT_SCHEMA))
 
         self._schema = schema
 
@@ -38,7 +37,7 @@ class CubeDimensionTranscoder(object):
         Produces a numpy array of integers which transcode the supplied cube dimensions
         """
         return np.asarray([getattr(cube_dimensions[d], s)
-            for d in eldself._dimensions
+            for d in self._dimensions
             for s in self._schema],
                 dtype=np.int32)
 
