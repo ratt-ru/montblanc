@@ -21,6 +21,8 @@
 import numpy as np
 
 import montblanc
+import montblanc.util as mbu
+
 from montblanc.util import (
     random_float as rf,
     random_complex as rc)
@@ -64,12 +66,41 @@ P = [
     prop_dict('parallactic_angle', 'ft', 0.0),
 ]
 
-def rand_uvw(slvr, ary):
+def default_base_ant_pairs(na, nbl):
+    """ Deduce base antenna pairs from antenna-baseline relation """
+
+    # Auto-correlated
+    if nbl == mbu.nr_of_baselines(na, True):
+        k = 0
+    # No auto-correlations?
+    elif nbl == mbu.nr_of_baselines(na, False):
+        k = 1
+    # TODO: handle this gracefully
+    else:
+        raise ValueError("Can't deduce default antenna pairs "
+            "from 'nbl' ({nbl}) and 'na' ({na})".format(
+                na=na, nbl=nbl))
+
+    return np.triu_indices(na, k)
+
+def default_antenna1(cube, ary):
+    ntime, na, nbl = cube.dim_global_size('ntime', 'na', 'nbl')
+    ant0, ant1 = default_base_ant_pairs(na, nbl)
+    ntime, nbl = cube.dim_local_size('ntime', 'nbl')
+    return np.tile(ant0[0:nbl], ntime).reshape(ntime, nbl)
+
+def default_antenna2(cube, ary):
+    ntime, na, nbl = cube.dim_global_size('ntime', 'na', 'nbl')
+    ant0, ant1 = default_base_ant_pairs(na, nbl)
+    ntime, nbl = cube.dim_local_size('ntime', 'nbl')
+    return np.tile(ant1[0:nbl], ntime).reshape(ntime, nbl)
+
+def rand_uvw(cube, ary):
     distance = 10
-    ntime, na = slvr.dim_local_size('ntime', 'na')
+    ntime, na = cube.dim_local_size('ntime', 'na')
     # Distribute the antenna in a circle configuration
-    ant_angles = 2*np.pi*np.arange(na)/slvr.ft(na)
-    time_angle = np.arange(ntime)/slvr.ft(ntime)
+    ant_angles = 2*np.pi*np.arange(na)/cube.ft(na)
+    time_angle = np.arange(ntime)/cube.ft(ntime)
     time_ant_angles = time_angle[:,np.newaxis]*ant_angles[np.newaxis,:]
 
     A = np.empty(ary.shape, ary.dtype)
@@ -83,7 +114,7 @@ def rand_uvw(slvr, ary):
 
     return A
 
-def identity_on_pols(slvr, ary):
+def identity_on_pols(cube, ary):
     """
     Returns [1, 0, 0, 1] tiled up to other dimensions
     """
@@ -95,7 +126,7 @@ def identity_on_pols(slvr, ary):
 
     return np.tile(R, tile_shape)
 
-def default_stokes(slvr, ary):
+def default_stokes(cube, ary):
     """
     Returns [1, 0, 0, 0] tiled up to other dimensions
     """
@@ -107,7 +138,7 @@ def default_stokes(slvr, ary):
 
     return np.tile(R, tile_shape)
 
-def rand_stokes(slvr, ary):
+def rand_stokes(cube, ary):
     # Should be (nsrc, ntime, 4)
     assert len(ary.shape) == 3 and ary.shape[2] == 4
 
@@ -121,7 +152,7 @@ def rand_stokes(slvr, ary):
 
     return A
 
-def default_gaussian_shape(slvr, ary):
+def default_gaussian_shape(cube, ary):
     # Should be (3, ngsrc)
     assert len(ary.shape) == 2 and ary.shape[0] == 3
 
@@ -137,7 +168,7 @@ def default_gaussian_shape(slvr, ary):
 
     return A
 
-def rand_gaussian_shape(slvr, ary):
+def rand_gaussian_shape(cube, ary):
     # Should be (3, ngsrc)
     assert len(ary.shape) == 2 and ary.shape[0] == 3
 
@@ -153,7 +184,7 @@ def rand_gaussian_shape(slvr, ary):
 
     return A
 
-def default_sersic_shape(slvr, ary):
+def default_sersic_shape(cube, ary):
     # Should be (3, nssrc)
     assert len(ary.shape) == 2 and ary.shape[0] == 3
 
@@ -172,79 +203,80 @@ def default_sersic_shape(slvr, ary):
 A = [
     # UVW Coordinates
     ary_dict('uvw', ('ntime', 'na', 3), 'ft',
-        default = lambda s, a: np.zeros(a.shape, a.dtype),
+        default = lambda c, a: np.zeros(a.shape, a.dtype),
         test    = rand_uvw),
 
     ary_dict('antenna1', ('ntime', 'nbl'), np.int32,
-        default = lambda s, a: s.default_ant_pairs()[0],
-        test    = lambda s, a: s.default_ant_pairs()[0]),
+        default = default_antenna1,
+        test    = default_antenna1),
 
     ary_dict('antenna2', ('ntime', 'nbl'), np.int32,
-        default = lambda s, a: s.default_ant_pairs()[1],
-        test    = lambda s, a: s.default_ant_pairs()[1]),
+        default = default_antenna2,
+        test    = default_antenna2),
 
     # Frequency and Reference Frequency arrays
+    # TODO: This is incorrect when channel local is not the same as channel global
     ary_dict('frequency', ('nchan',), 'ft',
-        default = lambda s, a: np.linspace(1e9, 2e9, s.dim_local_size('nchan')),
-        test    = lambda s, a: np.linspace(1e9, 2e9, s.dim_local_size('nchan'))),
+        default = lambda c, a: np.linspace(1e9, 2e9, a.shape[0]),
+        test    = lambda c, a: np.linspace(1e9, 2e9, a.shape[0])),
 
     ary_dict('ref_frequency', ('nchan',), 'ft',
-        default = lambda s, a: np.full(fill_value=1.5e9, shape=a.shape, dtype=a.dtype),
-        test    = lambda s, a: np.full(fill_value=1.5e9, shape=a.shape, dtype=a.dtype)),
+        default = lambda c, a: np.full(a.shape, 1.5e9, a.dtype),
+        test    = lambda c, a: np.full(a.shape, 1.5e9, a.dtype)),
 
     # Holographic Beam
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',
-        default = lambda s, a: np.zeros(a.shape, a.dtype),
-        test    = lambda s, a: (rf(a.shape, a.dtype)-0.5)*1e-2),
+        default = lambda c, a: np.zeros(a.shape, a.dtype),
+        test    = lambda c, a: (rf(a.shape, a.dtype)-0.5)*1e-2),
 
     ary_dict('antenna_scaling', ('na','nchan',2), 'ft',
-        default = lambda s, a: np.ones(a.shape, a.dtype),
-        test    = lambda s, a: rf(a.shape, a.dtype)),
+        default = lambda c, a: np.ones(a.shape, a.dtype),
+        test    = lambda c, a: rf(a.shape, a.dtype)),
 
     ary_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
-        test    = lambda s, a: rc(a.shape, a.dtype)),
+        test    = lambda c, a: rc(a.shape, a.dtype)),
 
     # Direction-Independent Effects
     ary_dict('gterm', ('ntime', 'na', 'nchan', 4), 'ct',
         default = identity_on_pols,
-        test    = lambda s, a: rc(a.shape, a.dtype)),
+        test    = lambda c, a: rc(a.shape, a.dtype)),
 
     # Point Source Definitions
     ary_dict('point_lm', ('npsrc',2), 'ft',
-        default = lambda s, a: np.zeros(a.shape, a.dtype),
+        default = lambda c, a: np.zeros(a.shape, a.dtype),
         test    = lambda s, a : (rf(a.shape, a.dtype)-0.5)*1e-1),
     ary_dict('point_stokes', ('npsrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes),
     ary_dict('point_alpha', ('npsrc','ntime'), 'ft',
-        default = lambda s, a: np.full(fill_value=0.0, shape=a.shape, dtype=a.dtype),
-        test    = lambda s, a: rf(a.shape, a.dtype)*0.1),
+        default = lambda c, a: np.full(a.shape, 0.0, a.dtype),
+        test    = lambda c, a: rf(a.shape, a.dtype)*0.1),
 
     # Gaussian Source Definitions
     ary_dict('gaussian_lm', ('ngsrc',2), 'ft',
-        default = lambda s, a: np.zeros(a.shape, a.dtype),
-        test    = lambda s, a: (rf(a.shape, a.dtype)-0.5)*1e-1),
+        default = lambda c, a: np.zeros(a.shape, a.dtype),
+        test    = lambda c, a: (rf(a.shape, a.dtype)-0.5)*1e-1),
     ary_dict('gaussian_stokes', ('ngsrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes),
     ary_dict('gaussian_alpha', ('ngsrc','ntime'), 'ft',
-        default = lambda s, a: np.full(fill_value=0.8, shape=a.shape, dtype=a.dtype),
-        test    = lambda s, a: rf(a.shape, a.dtype)*0.1),
+        default = lambda c, a: np.full(a.shape, 0.8, a.dtype),
+        test    = lambda c, a: rf(a.shape, a.dtype)*0.1),
     ary_dict('gaussian_shape', (3, 'ngsrc'), 'ft',
         default = default_gaussian_shape,
         test    = rand_gaussian_shape),
 
     # Sersic Source Definitions
     ary_dict('sersic_lm', ('nssrc',2), 'ft',
-        default = lambda s, a: np.zeros(a.shape, a.dtype),
-        test    = lambda s, a: (rf(a.shape, a.dtype)-0.5)*1e-1),
+        default = lambda c, a: np.zeros(a.shape, a.dtype),
+        test    = lambda c, a: (rf(a.shape, a.dtype)-0.5)*1e-1),
     ary_dict('sersic_stokes', ('nssrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes),
     ary_dict('sersic_alpha', ('nssrc','ntime'), 'ft',
-        default = lambda s, a: np.full(fill_value=0.8, shape=a.shape, dtype=a.dtype),
-        test    = lambda s, a: rf(a.shape, a.dtype)*0.1),
+        default = lambda c, a: np.full(a.shape, 0.8, a.dtype),
+        test    = lambda c, a: rf(a.shape, a.dtype)*0.1),
     ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
         default = default_sersic_shape,
         test    = default_sersic_shape),
@@ -253,22 +285,22 @@ A = [
     
     # Visibility flagging array
     ary_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
-        default = lambda s, a: np.zeros(a.shape, a.dtype),
-        test    = lambda s, a: np.random.random_integers(0, 1,
+        default = lambda c, a: np.zeros(a.shape, a.dtype),
+        test    = lambda c, a: np.random.random_integers(0, 1,
             size=a.shape).astype(np.uint8)),
     # Weight array
     ary_dict('weight', ('ntime','nbl','nchan',4), 'ft',
-        default = lambda s, a: np.ones(a.shape, a.dtype),
-        test    = lambda s, a: rf(a.shape, a.dtype)),
+        default = lambda c, a: np.ones(a.shape, a.dtype),
+        test    = lambda c, a: rf(a.shape, a.dtype)),
     # Observed Visibilities
     ary_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
-        default = lambda s, a: np.zeros(a.shape, a.dtype),
-        test    = lambda s, a: rc(a.shape, a.dtype)),
+        default = lambda c, a: np.zeros(a.shape, a.dtype),
+        test    = lambda c, a: rc(a.shape, a.dtype)),
 
     # Model Visibilities
     ary_dict('model_vis', ('ntime','nbl','nchan',4), 'ct',
-        default = lambda s, a: np.zeros(a.shape, a.dtype),
-        test    = lambda s, a: rc(a.shape, a.dtype)),
+        default = lambda c, a: np.zeros(a.shape, a.dtype),
+        test    = lambda c, a: rc(a.shape, a.dtype)),
 
     # Result arrays
     ary_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', temporary=True),
