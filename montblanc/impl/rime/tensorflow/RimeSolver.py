@@ -55,6 +55,10 @@ class RimeSolver(MontblancTensorflowSolver):
         """
         super(RimeSolver, self).__init__(slvr_cfg)
 
+        #=========================================
+        # Register hypercube Dimensions
+        #=========================================
+
         self.register_default_dimensions()
 
         # Configure the dimensions of the beam cube
@@ -73,19 +77,49 @@ class RimeSolver(MontblancTensorflowSolver):
         # Monkey patch these functions onto the object
         from montblanc.impl.rime.tensorflow.ant_pairs import monkey_patch_antenna_pairs
         monkey_patch_antenna_pairs(self)
+
+        #=========================================
+        # Register hypercube Arrays and Properties
+        #=========================================
    
         from montblanc.impl.rime.tensorflow.config import (A, P)
 
         self.register_properties(P)
         self.register_arrays(A)
 
-        # Find out which dimensions have been modified by budgeting
-        # and update them
+        #==================
+        # Memory Budgeting
+        #==================
+
+        # Attempt to fit arrays into memory budget by
+        # reducing dimension local_sizes
         modded_dims = self._budget(A, slvr_cfg)
 
+        # Update any dimensions
         for k, v in modded_dims.iteritems():
             self.update_dimension(k, local_size=v,
                 lower_extent=0, upper_extent=v)
+
+        #====================================
+        # Tensorflow Session and placeholders
+        #====================================
+
+        # Create the tensorflow session object
+        self._tf_session = tf.Session()
+
+        # Create placholder variables for source counts
+        self._src_ph_vars = AttrDict({
+            n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
+            for n in mbu.source_nr_vars() })
+
+        # Create placeholder variables for properties
+        self._property_ph_vars = AttrDict({
+            n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
+            for n, p in self.properties().iteritems() })
+
+        #================================
+        # Queue Data Source Configuration
+        #================================
 
         # Get the data source (defaults or test data)
         data_source = slvr_cfg.get(Options.DATA_SOURCE)
@@ -103,21 +137,11 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Obtain default data sources for each array,
         # then update with any data sources supplied by the user
-        ds = { n: (a.get(queue_data_source), a.dtype)
+        self._data_sources = ds = {
+            n: (a.get(queue_data_source), a.dtype)
             for n, a in self.arrays().iteritems() }
+
         ds.update(slvr_cfg.get('supplied', {}))
-
-        # Test data sources here
-        ary_descs = self.arrays(reify=True)
-
-        """
-        for n, (s, t) in ds.iteritems():
-            print "Testing source '{ds}' for array '{n}' with shape {s}".format(
-                n=n, ds=queue_data_source, s=ary_descs[n].shape)
-            if s is not None:
-                a = s(self, ary_descs[n])
-                print a.flatten()[0:10]
-        """
 
         QUEUE_SIZE = 10
 
@@ -153,21 +177,17 @@ class RimeSolver(MontblancTensorflowSolver):
         self._output_queue = create_queue_wrapper(QUEUE_SIZE,
             ['model_vis'], ds)
 
-        self._data_sources = ds
+        #======================
+        # Thread pool executors
+        #======================
+
         self._parameter_executor = cf.ThreadPoolExecutor(1)
         self._feed_executor = cf.ThreadPoolExecutor(1)
         self._compute_executor = cf.ThreadPoolExecutor(1)
 
-        self._tf_session = tf.Session()
-
-        self._src_ph_vars = AttrDict({
-            n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
-            for n in mbu.source_nr_vars() })
-
-        self._property_ph_vars = AttrDict({
-            n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
-            for n, p in self.properties().iteritems() })
-
+        #==========================
+        # Tensorflow initialisation
+        #==========================
         self._tf_expr = self._construct_tensorflow_expression()
             
         self._tf_session.run(tf.initialize_all_variables())
@@ -232,21 +252,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def _feed_impl(self):
         """ Implementation of queue feeding """
-        S = self._tf_session
-        DS = self._data_sources
-
-        def feed_one_queue(queue, session, data_source, array_descriptor):
-            feed_dict={
-                ph: data_source[n][0](self, array_descriptor[n])
-                for ph, n
-                in itertools.izip(queue.placeholders, queue.fed_arrays)}
-
-            total_bytes = np.sum(a.nbytes for a in feed_dict.itervalues())
-            montblanc.log.info('Feeding {b} into {a}'.format(
-                b=hcu.fmt_bytes(total_bytes),
-                a=queue.fed_arrays))
-
-            session.run(queue.placeholder_enqueue_op(), feed_dict=feed_dict)
+        session = self._tf_session
+        data_sources = self._data_sources
 
         # Queues to be fed on each iteration
         iter_queues = tuple((self._input_queue,
@@ -267,23 +274,14 @@ class RimeSolver(MontblancTensorflowSolver):
             array_descriptors = self.arrays(reify=True)
 
             # Create a feed dictionary from all arrays in the feed queues
-            feed_dict = { ph: DS[a][0](self, array_descriptors[a])
+            feed_dict = { ph: data_sources[a][0](self, array_descriptors[a])
                 for q in iter_queues
                 for ph, a in zip(q.placeholders, q.fed_arrays) }
 
             montblanc.log.info("Enqueueing chunk {i} Start".format(i=i))
 
-            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-            run_metadata = tf.RunMetadata()
-            S.run([q.placeholder_enqueue_op() for q in iter_queues],
-                feed_dict=feed_dict,
-                options=run_options,
-                run_metadata=run_metadata)
-
-            tl = timeline.Timeline(run_metadata.step_stats)
-            ctf = tl.generate_chrome_trace_format()
-            with open('feed-timeline.json', 'w') as f:
-                f.write(ctf)
+            session.run([q.enqueue_op for q in iter_queues],
+                feed_dict=feed_dict)
 
             montblanc.log.info("Enqueueing chunk {i} End".format(i=i))        
 
@@ -293,11 +291,11 @@ class RimeSolver(MontblancTensorflowSolver):
 
                 montblanc.log.info("Enqueueing {s} point sources".format(s=ds[0]['local_size']))
 
-                feed_dict = { ph: DS[a][0](self, array_descriptors[a])
+                feed_dict = { ph: data_sources[a][0](self, array_descriptors[a])
                     for q in (self._point_source_queue,)
                     for ph, a in zip(q.placeholders, q.fed_arrays) }
 
-                S.run(self._point_source_queue.placeholder_enqueue_op(),
+                session.run(self._point_source_queue.enqueue_op,
                     feed_dict=feed_dict)
 
     def _compute_impl(self):
@@ -338,12 +336,12 @@ class RimeSolver(MontblancTensorflowSolver):
         zero = tf.constant(0)
 
         # Pull RIME inputs out of the feed queues
-        frequency, ref_frequency = self._frequency_queue.queue.dequeue()
-        model_vis = self._input_queue.queue.dequeue()
-        uvw, antenna1, antenna2 = self._uvw_queue.queue.dequeue()
-        observed_vis, flag, weight = self._observation_queue.queue.dequeue()
-        ebeam, antenna_scaling, point_errors = self._dde_queue.queue.dequeue()        
-        gterm = self._die_queue.queue.dequeue()
+        frequency, ref_frequency = self._frequency_queue.dequeue_op
+        model_vis = self._input_queue.dequeue_op
+        uvw, antenna1, antenna2 = self._uvw_queue.dequeue_op
+        observed_vis, flag, weight = self._observation_queue.dequeue_op
+        ebeam, antenna_scaling, point_errors = self._dde_queue.dequeue_op
+        gterm = self._die_queue.dequeue_op
 
         # Infer chunk dimensions
         nchan = tf.shape(frequency)[0]
@@ -354,7 +352,7 @@ class RimeSolver(MontblancTensorflowSolver):
             return tf.less(npsrc, self._src_ph_vars.npsrc)
 
         def point_body(model_vis, npsrc):
-            lm, stokes, alpha = self._point_source_queue.queue.dequeue()
+            lm, stokes, alpha = self._point_source_queue.dequeue_op
             # Source batch size
             nsrc = tf.shape(lm)[0]
 

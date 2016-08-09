@@ -5,16 +5,15 @@ import types
 
 def _get_queue_types(fed_arrays, data_sources):
     """
-    Given a dictionaries of supplied and default arrays,
-    return a list of types associated with each array in fed_arrays.
+    Given a list of arrays to feed in fed_arrays, return
+    a list of associated queue types, obtained from tuples
+    in the data_sources dictionary
     """
-
-    # Preferably use supplied data else take from defaults
     try:
-        return [data_sources.get(n)[1] for n in fed_arrays]
+        return [data_sources[n][1] for n in fed_arrays]
     except KeyError as e:
-        raise ValueError("Array '{k}' was not provided in either "
-            "the 'supplied' or 'defaults' arrays".format(k=e.message))
+        raise ValueError("Array '{k}' has no data source!"
+            .format(k=e.message))
 
 class QueueWrapper(object):
     def __init__(self, queue_size, fed_arrays, data_sources):
@@ -30,6 +29,12 @@ class QueueWrapper(object):
 
         # Create a FIFOQueue of a given size with the supplied queue types
         self._queue = tf.FIFOQueue(queue_size, self._queue_types)
+
+        # Create enqueue operation using placeholders
+        self._enqueue_op = self._queue.enqueue(self.placeholders)
+
+        # And a dequeue op
+        self._dequeue_op = self._queue.dequeue()
 
     @property
     def queue_types(self):
@@ -47,12 +52,13 @@ class QueueWrapper(object):
     def fed_arrays(self):
         return self._fed_arrays
 
-    def placeholder_enqueue_op(self):
-        """ Return a placeholder op for injecting into the Graph """
-        return self.queue.enqueue(self.placeholders)
-
+    @property
+    def enqueue_op(self):
+        return self._enqueue_op
+    
+    @property    
     def dequeue_op(self):
-        return self.queue.dequeue()
+        return self._dequeue_op
 
     def __str__(self):
         return 'Queue of size {s} with with types {t}'.format(
