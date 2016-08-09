@@ -29,6 +29,7 @@ from tensorflow.python.client import timeline
 
 import montblanc
 import montblanc.util as mbu
+from montblanc.impl.rime.tensorflow.ant_pairs import monkey_patch_antenna_pairs
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
 
 from hypercube import HyperCube
@@ -76,7 +77,6 @@ class RimeSolver(MontblancTensorflowSolver):
             description='E Beam cube nu depth')
 
         # Monkey patch these functions onto the object
-        from montblanc.impl.rime.tensorflow.ant_pairs import monkey_patch_antenna_pairs
         monkey_patch_antenna_pairs(self)
 
         #=========================================
@@ -265,12 +265,12 @@ class RimeSolver(MontblancTensorflowSolver):
         for i, d in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
             cube.update_dimensions(d)
             descriptor = self._transcoder.encode(cube.dimensions())
-            montblanc.log.info('Encoding {d}'.format(d=descriptor))
-            session.run(self._parameter_queue.enqueue_op,
-                feed_dict={self._parameter_queue.placeholders[0] : descriptor })
+            feed_dict = {self._parameter_queue.placeholders[0] : descriptor }
+            montblanc.log.info('Encoding {i} {d}'.format(i=i, d=descriptor))
+            session.run(self._parameter_queue.enqueue_op, feed_dict=feed_dict)
 
         # Close the queue
-        session.run(self._parameter_queue.close())
+        session.run(self._parameter_queue.close_op)
 
     def _feed(self):
         """ Feed stub """
@@ -291,7 +291,7 @@ class RimeSolver(MontblancTensorflowSolver):
         cube.register_arrays(self.arrays())
 
         # Queues to be fed on each iteration
-        iter_queues = tuple((self._input_queue,
+        chunk_queues = tuple((self._input_queue,
             self._frequency_queue,
             self._uvw_queue,
             self._observation_queue,
@@ -310,35 +310,40 @@ class RimeSolver(MontblancTensorflowSolver):
                 cube.update_dimensions(dimensions)
                 chunks_read += 1
 
-            except tf.errors.OutOfRangeError:
+            except tf.errors.OutOfRangeError as e:
                 montblanc.log.info('Read {n} chunks'.format(n=chunks_read))
-                return
+                break
 
             array_descriptors = cube.arrays(reify=True)
 
             # Create a feed dictionary from all arrays in the feed queues
-            feed_dict = { ph: data_sources[a][0](self, array_descriptors[a])
-                for q in iter_queues
+            feed_dict = { ph: data_sources[a][0](cube, array_descriptors[a])
+                for q in chunk_queues
                 for ph, a in zip(q.placeholders, q.fed_arrays) }
 
             montblanc.log.info("Enqueueing chunk {i} {d}".format(
                 i=chunks_read, d=descriptor))
 
-            session.run([q.enqueue_op for q in iter_queues],
+            session.run([q.enqueue_op for q in chunk_queues],
                 feed_dict=feed_dict)
 
+            # Iterate over point sources
+            point_iter_args = ('npsrc', cube.dim_local_size('npsrc'))
+
             # Now enqueue source chunks
-            for ds in cube.dim_iter(('npsrc', self.dim_local_size('npsrc')), update_local_size=True):
+            for ds in cube.dim_iter(point_iter_args, update_local_size=True):
                 cube.update_dimensions(ds)
 
                 montblanc.log.info("Enqueueing {s} point sources".format(s=ds[0]['local_size']))
 
-                feed_dict = { ph: data_sources[a][0](self, array_descriptors[a])
+                feed_dict = { ph: data_sources[a][0](cube, array_descriptors[a])
                     for q in (self._point_source_queue,)
                     for ph, a in zip(q.placeholders, q.fed_arrays) }
 
                 session.run(self._point_source_queue.enqueue_op,
                     feed_dict=feed_dict)
+
+        montblanc.log.info('Done Feeding')
 
     def _compute_impl(self):
         """ Implementation of computation """
