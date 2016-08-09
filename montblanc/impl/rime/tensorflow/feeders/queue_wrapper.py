@@ -16,7 +16,8 @@ def _get_queue_types(fed_arrays, data_sources):
             .format(k=e.message))
 
 class QueueWrapper(object):
-    def __init__(self, queue_size, fed_arrays, data_sources):
+    def __init__(self, name, queue_size, fed_arrays, data_sources):
+        self._name = name
         self._fed_arrays = fed_arrays
         self._data_sources = data_sources
 
@@ -28,7 +29,7 @@ class QueueWrapper(object):
             for n, dt in zip(fed_arrays, self._queue_types)]
 
         # Create a FIFOQueue of a given size with the supplied queue types
-        self._queue = tf.FIFOQueue(queue_size, self._queue_types)
+        self._queue = tf.FIFOQueue(queue_size, self._queue_types, name=name)
 
         # Create enqueue operation using placeholders
         self._enqueue_op = self._queue.enqueue(self.placeholders)
@@ -36,6 +37,13 @@ class QueueWrapper(object):
         # And a dequeue op
         self._dequeue_op = self._queue.dequeue()
 
+        # And a close op
+        self._close_op = self._queue.close()
+
+    @property
+    def name(self):
+        return self._name
+    
     @property
     def queue_types(self):
         return self._queue_types
@@ -60,18 +68,27 @@ class QueueWrapper(object):
     def dequeue_op(self):
         return self._dequeue_op
 
+    @property
+    def close_op(self):
+        return self._close_op
+    
+
     def __str__(self):
         return 'Queue of size {s} with with types {t}'.format(
             s=len(self._queue_types),
             t=self._queue_types)
 
-def create_queue_wrapper(queue_size, fed_arrays, data_sources):
+def create_queue_wrapper(name, queue_size, fed_arrays, data_sources):
     """
     Arguments
+        name: string
+            Name of the queue
+        queue_size: integer
+            Size of the queue
         fed_arrays: list
             array names that will be fed by this queue
         data_sources: dict
             (lambda/method, dtype) tuples, keyed on array names
 
     """
-    return QueueWrapper(queue_size, fed_arrays, data_sources)
+    return QueueWrapper(name, queue_size, fed_arrays, data_sources)

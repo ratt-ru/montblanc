@@ -148,38 +148,41 @@ class RimeSolver(MontblancTensorflowSolver):
 
         from montblanc.impl.rime.tensorflow.feeders.queue_wrapper import create_queue_wrapper
 
-        self._uvw_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['uvw', 'antenna1', 'antenna2'], ds)
+        self._uvw_queue = create_queue_wrapper('uvw',
+            QUEUE_SIZE, ['uvw', 'antenna1', 'antenna2'], ds)
 
-        self._observation_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['observed_vis', 'flag', 'weight'], ds)
+        self._observation_queue = create_queue_wrapper('observation',
+            QUEUE_SIZE, ['observed_vis', 'flag', 'weight'], ds)
 
-        self._frequency_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['frequency', 'ref_frequency'], ds)
+        self._frequency_queue = create_queue_wrapper('frequency',
+            QUEUE_SIZE, ['frequency', 'ref_frequency'], ds)
 
-        self._die_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['gterm'], ds)
+        self._die_queue = create_queue_wrapper('gterm',
+            QUEUE_SIZE, ['gterm'], ds)
 
-        self._dde_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['ebeam', 'antenna_scaling', 'point_errors'], ds)
+        self._dde_queue = create_queue_wrapper('dde',
+            QUEUE_SIZE, ['ebeam', 'antenna_scaling', 'point_errors'], ds)
 
-        self._point_source_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['point_lm', 'point_stokes', 'point_alpha'], ds)
+        self._point_source_queue = create_queue_wrapper('point_source',
+            QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], ds)
 
-        self._gaussian_source_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha', 'gaussian_shape'], ds)
+        self._gaussian_source_queue = create_queue_wrapper('gaussian_source',
+            QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
+                'gaussian_shape'], ds)
 
-        self._sersic_source_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['sersic_lm', 'sersic_stokes', 'sersic_alpha', 'sersic_shape'], ds)
+        self._sersic_source_queue = create_queue_wrapper('sersic_source',
+            QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
+                'sersic_shape'], ds)
 
-        self._input_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['model_vis'], ds)
+        self._input_queue = create_queue_wrapper('input',
+            QUEUE_SIZE, ['model_vis'], ds)
 
-        self._output_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['model_vis'], ds)
+        self._output_queue = create_queue_wrapper('output',
+            QUEUE_SIZE, ['model_vis'], ds)
 
-        self._parameter_queue = create_queue_wrapper(QUEUE_SIZE,
-            ['parameters'], { 'parameters' : (None, tf.int32) })
+        self._parameter_queue = create_queue_wrapper('descriptors',
+            QUEUE_SIZE, ['parameters'],
+            { 'parameters' : (None, tf.int32) })
 
         #======================
         # Thread pool executors
