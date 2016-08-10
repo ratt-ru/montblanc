@@ -18,6 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import collections
 import itertools
 import os
 
@@ -43,6 +44,8 @@ ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 rime_lib_path = os.path.join(montblanc.get_montblanc_path(),
     'tensorflow', 'rime_ops', 'rime.so')
 rime = tf.load_op_library(rime_lib_path)
+
+DataSource = collections.namedtuple("DataSource", ['source', 'type'])
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
@@ -139,7 +142,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Obtain default data sources for each array,
         # then update with any data sources supplied by the user
         self._data_sources = ds = {
-            n: (a.get(queue_data_source), a.dtype)
+            n: DataSource(a.get(queue_data_source), a.dtype)
             for n, a in self.arrays().iteritems() }
 
         ds.update(slvr_cfg.get('supplied', {}))
