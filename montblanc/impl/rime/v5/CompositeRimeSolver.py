@@ -18,6 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+from collections import defaultdict
 from copy import (copy as shallowcopy, deepcopy)
 import functools
 import itertools
@@ -64,6 +65,10 @@ ORDERING_CONSTRAINTS.update({ 'nsrc' : 1,
 
 ORDERING_RANK = [' or '.join(['nsrc'] + mbu.source_nr_vars()),
     'ntime', ' or '.join(['nbl', 'na']), 'nchan']
+
+def _update_refs(pool, new_refs):
+    for key, value in new_refs.iteritems():
+        pool[key].extend(value)
 
 class CompositeRimeSolver(MontblancNumpySolver):
     """
@@ -515,7 +520,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         Returns a list of arrays allocated with pinned memory.
         Entries in this list may be None.
         """
-        pool_refs = []
+        pool_refs = defaultdict(list)
 
         if direction is None:
             direction = ASYNC_HTOD
@@ -570,7 +575,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx),
                 direction, dirty)
 
-            pool_refs.append(pinned_ary)
+            if pinned_ary is not None:
+                pool_refs[r.name].append(pinned_ary)
 
         return pool_refs
 
@@ -787,8 +793,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
         nsrc = self.dim_local_size('nsrc')
 
         # Retain references to pool allocations
-        pinned_pool_refs = []
-        device_pool_refs = []
+        pinned_pool_refs = defaultdict(list)
+        device_pool_refs = defaultdict(list)
         pinned_allocated = 0
 
         # Class of arrays that are to be transferred
@@ -820,22 +826,23 @@ class CompositeRimeSolver(MontblancNumpySolver):
                         cpu_slice_map, gpu_slice_map, 
                         direction=ASYNC_HTOD, dirty=dirty,
                         classifiers=classifiers)
-                    pinned_allocated += sum([r.nbytes for r in refs if r is not None])
-                    pinned_pool_refs.extend(refs)
+                    pinned_allocated += sum([r.nbytes
+                        for l in refs.values() for r in l])
+                    _update_refs(pinned_pool_refs, refs)
 
                     # Allocate pinned memory for constant memory transfers
                     cdata = subslvr.const_data().ndary()
 
                     for k in range(nkernels):
-                        ref = subslvr.pinned_mem_pool.allocate(
+                        cdata_ref = subslvr.pinned_mem_pool.allocate(
                             shape=cdata.shape, dtype=cdata.dtype)
-                        pinned_allocated += ref.nbytes
-                        pinned_pool_refs.append(ref)
+                        pinned_allocated += cdata_ref.nbytes
+                        pinned_pool_refs['cdata'].append(cdata_ref)
 
                     # Allocate device memory for arrays that need to be
                     # allocated from a pool by PyCUDA's reduction kernels
                     dev_ary = subslvr.dev_mem_pool.allocate(self.X2.nbytes)
-                    device_pool_refs.append(dev_ary)
+                    device_pool_refs['X2_gpu'].append(dev_ary)
 
         device = self.thread_local.context.get_device()
 
@@ -844,12 +851,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 d=device.name(), n=mbu.fmt_bytes(pinned_allocated)))
 
         # Now force return of memory to the pools
-        for a in pinned_pool_refs:
-            if a is not None:
-                a.base.free()
+        for key, array_list in pinned_pool_refs.iteritems():
+            [a.base.free() for a in array_list]
 
-        for a in device_pool_refs:
-            a.free()
+        for array_list in device_pool_refs.itervalues():
+            [a.free() for a in array_list]
 
     def _thread_start_solving(self):
         """
@@ -876,12 +882,12 @@ class CompositeRimeSolver(MontblancNumpySolver):
         tl = self.thread_local
         i, subslvr = tl.subslvr_gen.next()
 
-        # A list of references to memory pool allocated objects
+        # A dictionary of references to memory pool allocated objects
         # ensuring that said objects remained allocated until
         # after compute has been performed. Returned from
         # this function, this object should be discarded when
         # reading the result of the enqueued operations.
-        pool_refs = []
+        pool_refs = defaultdict(list)
 
         # Cache keyed by array names and contained indices
         # This is used to avoid unnecessary CPU to GPU copies
@@ -906,42 +912,50 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
                 # Enqueue E Beam
                 kernel = subslvr.rime_e_beam
-                pool_refs.extend(self._enqueue_array(
+                new_refs = self._enqueue_array(
                     subslvr, cpu_slice_map, gpu_slice_map,
                     direction=ASYNC_HTOD, dirty=dirty,
-                    classifiers=[Classifier.E_BEAM_INPUT]))
-                pool_refs.append(self._enqueue_const_data_htod(
-                    subslvr, kernel.rime_const_data[0]))
+                    classifiers=[Classifier.E_BEAM_INPUT])
+                cdata_ref = self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0])
+                _update_refs(pool_refs, new_refs)
+                _update_refs(pool_refs, {'cdata_ebeam' : [cdata_ref]})
                 kernel.execute(subslvr, subslvr.stream)
 
                 # Enqueue B Sqrt
                 kernel = subslvr.rime_b_sqrt
-                pool_refs.extend(self._enqueue_array(
+                new_refs = self._enqueue_array(
                     subslvr, cpu_slice_map, gpu_slice_map,
                     direction=ASYNC_HTOD, dirty=dirty,
-                    classifiers=[Classifier.B_SQRT_INPUT]))
-                pool_refs.append(self._enqueue_const_data_htod(
-                    subslvr, kernel.rime_const_data[0]))
+                    classifiers=[Classifier.B_SQRT_INPUT])
+                cdata_ref = self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0])
+                _update_refs(pool_refs, new_refs)
+                _update_refs(pool_refs, {'cdata_bsqrt' : [cdata_ref]})
                 kernel.execute(subslvr, subslvr.stream)
 
                 # Enqueue EKB Sqrt
                 kernel = subslvr.rime_ekb_sqrt
-                pool_refs.extend(self._enqueue_array(
+                new_refs = self._enqueue_array(
                     subslvr, cpu_slice_map, gpu_slice_map,
                     direction=ASYNC_HTOD, dirty=dirty,
-                    classifiers=[Classifier.EKB_SQRT_INPUT]))
-                pool_refs.append(self._enqueue_const_data_htod(
-                    subslvr, kernel.rime_const_data[0]))
+                    classifiers=[Classifier.EKB_SQRT_INPUT])
+                cdata_ref = self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0])
+                _update_refs(pool_refs, new_refs)
+                _update_refs(pool_refs, {'cdata_ekb' : [cdata_ref]})
                 kernel.execute(subslvr, subslvr.stream)
 
                 # Enqueue Sum Coherencies
                 kernel = subslvr.rime_sum
-                pool_refs.extend(self._enqueue_array(
+                new_refs = self._enqueue_array(
                     subslvr, cpu_slice_map, gpu_slice_map,
                     direction=ASYNC_HTOD, dirty=dirty,
-                    classifiers=[Classifier.COHERENCIES_INPUT]))
-                pool_refs.append(self._enqueue_const_data_htod(
-                    subslvr, kernel.rime_const_data[0]))
+                    classifiers=[Classifier.COHERENCIES_INPUT])
+                cdata_ref = self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0])
+                _update_refs(pool_refs, new_refs)
+                _update_refs(pool_refs, {'cdata_coherencies' : [cdata_ref]})
                 kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue chi-squared term reduction and return the
@@ -956,15 +970,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
             X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
 
             # Enqueue transfer of simulator output (model visibilities) to the CPU
-            refs = self._enqueue_array(subslvr, cpu_slice_map, gpu_slice_map,
-                direction=ASYNC_DTOH, dirty=dirty,
+            new_refs = self._enqueue_array(subslvr, cpu_slice_map, gpu_slice_map,
+                direction=ASYNC_DTOH, dirty={},
                 classifiers=[Classifier.SIMULATOR_OUTPUT])
 
         # Should only be model visibilities
-        assert len(refs) == 1, ('Expected one array (model visibilities), '
-            'received {l} instead.'.format(l=len(refs)))
+        assert len(new_refs) == 1, ('Expected one array (model visibilities), '
+            'received {l} instead.'.format(l=len(new_refs)))
 
-        model_vis = refs[0]
+        model_vis = new_refs['model_vis'][0]
 
         # Create and record an event directly after the chi-squared copy
         # We'll synchronise on this thread in our synchronisation executor
@@ -974,9 +988,9 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         # Retain references to CPU pinned  and GPU device memory
         # until the above enqueued operations have been performed.
-        pool_refs.append(X2_gpu_ary)
-        pool_refs.append(sub_X2)
-        pool_refs.append(model_vis)
+        pool_refs['X2_gpu'].append(X2_gpu_ary)
+        pool_refs['X2_cpu'].append(sub_X2)
+        pool_refs['model_vis_output'].append(model_vis)
 
         return (sync_event, sub_X2, model_vis,
             pool_refs, subslvr.pool_lock,
@@ -1009,10 +1023,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
             import pycuda.gpuarray as gpuarray
 
             with pool_lock:
-                for ref in pool_refs:
-                    if ref is None:
-                        continue
-                    elif isinstance(ref, np.ndarray):
+                for ref in (r for k, rl in pool_refs.iteritems() for r in rl):
+                    if isinstance(ref, np.ndarray):
                         ref.base.free()
                     elif isinstance(ref, (cuda.PooledDeviceAllocation, cuda.PooledHostAllocation)):
                         ref.free()
