@@ -1,10 +1,12 @@
+import os
+
 from attrdict import AttrDict
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
 
 # Load the shared library with the operation
-rime = tf.load_op_library('rime.so')
+rime = tf.load_op_library(os.path.join(os.getcwd(), 'rime.so'))
 
 dtype = np.float64
 np_apply_dies = np.bool(True)

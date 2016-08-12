@@ -1,10 +1,11 @@
+import os
 import timeit
 
 import numpy as np
 import tensorflow as tf
 
 # Load the library containing the custom operation
-rime = tf.load_op_library('rime.so')
+rime = tf.load_op_library(os.path.join(os.getcwd(), 'rime.so'))
 
 def b_sqrt_op(stokes, alpha, frequency, ref_freq):
     """

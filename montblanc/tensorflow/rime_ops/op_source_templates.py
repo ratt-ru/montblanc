@@ -266,11 +266,13 @@ ${project_namespace_stop}
 
 # Template for the python test code
 PYTHON_SOURCE_TEMPLATE = string.Template(
-"""import numpy as np
+"""import os
+
+import numpy as np
 import tensorflow as tf
 
 # Load the shared library with the operation
-rime = tf.load_op_library('${library}')
+${module} = tf.load_op_library(os.path.join(os.getcwd(),'${library}'))
 
 # Create some input and wrap it in a tensorflow Variable
 np_array = np.random.random(size=512*1024).astype(np.float32)
@@ -278,11 +280,11 @@ tf_array = tf.Variable(np_array)
 
 # Pin the compute to the CPU
 with tf.device('/cpu:0'):
-    expr_cpu = rime.${snake_case}(tf_array)
+    expr_cpu = ${module}.${snake_case}(tf_array)
 
 # Pin the compute to the GPU
 with tf.device('/gpu:0'):
-    expr_gpu = rime.${snake_case}(tf_array)
+    expr_gpu = ${module}.${snake_case}(tf_array)
 
 with tf.Session() as S:
     S.run(tf.initialize_all_variables())

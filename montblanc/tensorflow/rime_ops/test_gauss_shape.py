@@ -1,7 +1,9 @@
+import os
+
 import numpy as np
 import tensorflow as tf
 
-rime = tf.load_op_library('rime.so')
+rime = tf.load_op_library(os.path.join(os.getcwd(), 'rime.so'))
 
 dtype = np.float32
 ngsrc, ntime, na, nchan = 10, 15, 7, 16
