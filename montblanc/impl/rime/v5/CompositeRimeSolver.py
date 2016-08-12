@@ -922,6 +922,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 _update_refs(pool_refs, {'cdata_ebeam' : [cdata_ref]})
                 kernel.execute(subslvr, subslvr.stream)
 
+                debug_output_refs = self._enqueue_array(subslvr,
+                    cpu_slice_map, gpu_slice_map,
+                    direction=ASYNC_DTOH, dirty={},
+                    classifiers=[Classifier.DEBUG])
+
                 # Enqueue B Sqrt
                 kernel = subslvr.rime_b_sqrt
                 new_refs = self._enqueue_array(
@@ -980,7 +985,13 @@ class CompositeRimeSolver(MontblancNumpySolver):
             'Expected one array (model visibilities), '
             'received {l} instead.'.format(l=len(new_refs)))
 
+        # Should only be ebeam
+        assert len(debug_output_refs) == 1, (
+            'Expected one array (jones), '
+            'received {l} instead.'.format(l=len(debug_output_refs)))
+
         model_vis = sim_output_refs['model_vis'][0]
+        debug = debug_output_refs.values()[0][0]
 
         # Create and record an event directly after the chi-squared copy
         # We'll synchronise on this thread in our synchronisation executor
@@ -993,6 +1004,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         pool_refs['X2_gpu'].append(X2_gpu_ary)
         pool_refs['X2_cpu'].append(sub_X2)
         pool_refs['model_vis_output'].append(model_vis)
+        pool_refs['debug'].append(debug)
 
         return (sync_event, sub_X2, model_vis,
             pool_refs, subslvr.pool_lock,
@@ -1052,6 +1064,21 @@ class CompositeRimeSolver(MontblancNumpySolver):
             """
             cuda_event, pinned_X2, pinned_model_vis, \
                 pool_refs, pool_lock, cpu, gpu = future.result()
+
+            for ref in (r for k, rl in pool_refs.iteritems() for r in rl
+                            if k == 'debug'):
+                import json
+                # Format the slices nicely
+                nice_cpu = { k: '[{b}, {e}]'.format(b=s.start, e=s.stop)
+                    for k, s in cpu.iteritems() }
+
+                print 'CPU', json.dumps(nice_cpu, indent=2)
+
+                nans = np.isnan(ref)
+                valid = np.invert(nans)
+
+                print 'debug', np.any(nans), np.sum(ref), np.count_nonzero(nans), nans.size, type(ref)
+                #print np.argwhere(valid)
 
             try:
                 cuda_event.synchronize()

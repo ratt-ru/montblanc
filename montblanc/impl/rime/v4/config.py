@@ -124,6 +124,8 @@ class Classifier(Enum):
     E_BEAM_INPUT = 'e_beam_input'
     EKB_SQRT_INPUT = 'ekb_sqrt_input'
     COHERENCIES_INPUT = 'coherencies_input'
+    DEBUG = 'debug'
+
 
 # List of arrays
 A = [
@@ -148,7 +150,8 @@ A = [
     ary_dict('frequency', ('nchan',), 'ft',
         classifiers=frozenset([Classifier.B_SQRT_INPUT,
             Classifier.EKB_SQRT_INPUT,
-            Classifier.COHERENCIES_INPUT]),
+            Classifier.COHERENCIES_INPUT,
+            Classifier.DEBUG]),
         default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan')),
         test=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan'))),
 
