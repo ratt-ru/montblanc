@@ -3,6 +3,8 @@ TF_INC=$(shell python -c 'import tensorflow as tf; print tf.sysconfig.get_includ
 TF_CUDA=$(shell python -c 'import tensorflow as tf; print int(tf.test.is_built_with_cuda())')
 MB_INC=../../include
 
+TF_FLAGS=-D_MWAITXINTRIN_H_INCLUDED -D_FORCE_INLINES -D_GLIBCXX_USE_CXX11_ABI=0
+
 # Dependencies
 DEPDIR:=.d
 $(shell mkdir -p $(DEPDIR) >/dev/null)
@@ -15,8 +17,8 @@ LIBRARY=rime.so
 
 # Compiler flags
 INCLUDES= -I $(TF_INC) -I $(MB_INC)
-CPPFLAGS=-std=c++11 $(INCLUDES) -fPIC 
-NVCCFLAGS=-std=c++11 -D GOOGLE_CUDA=$(TF_CUDA) $(INCLUDES) \
+CPPFLAGS=-std=c++11 $(TF_FLAGS) $(INCLUDES) -fPIC 
+NVCCFLAGS=-std=c++11 -D GOOGLE_CUDA=$(TF_CUDA) $(TF_FLAGS) $(INCLUDES) \
 	-x cu --compiler-options "-fPIC" --gpu-architecture=sm_35
 
 # Compiler directives
