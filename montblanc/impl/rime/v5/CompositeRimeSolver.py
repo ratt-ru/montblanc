@@ -725,7 +725,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # Dirty index, indicating the CPU index of the
         # data currently on the GPU, used for avoiding
         # array transfer
-        self.thread_local.dirty = {}
+        self.thread_local.dirty = [{} for n in range(nsolvers)]
 
         # Configure thread local storage
         # Number of solvers in this thread
@@ -865,7 +865,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         # Clear the dirty dictionary to force each array to be
         # transferred at least once. e.g. the beam cube
-        self.thread_local.dirty.clear()
+        [d.clear for d in self.thread_local.dirty]
 
     def _thread_enqueue_solve_batch(self, cpu_slice_map, gpu_slice_map, **kwargs):
         """
@@ -892,7 +892,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # Cache keyed by array names and contained indices
         # This is used to avoid unnecessary CPU to GPU copies
         # by caching the last index of the CPU array
-        dirty = tl.dirty
+        dirty = tl.dirty[i]
 
         # Guard pool allocations with a coarse-grained mutex
         with subslvr.pool_lock:
@@ -970,15 +970,17 @@ class CompositeRimeSolver(MontblancNumpySolver):
             X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
 
             # Enqueue transfer of simulator output (model visibilities) to the CPU
-            new_refs = self._enqueue_array(subslvr, cpu_slice_map, gpu_slice_map,
+            sim_output_refs = self._enqueue_array(subslvr,
+                cpu_slice_map, gpu_slice_map,
                 direction=ASYNC_DTOH, dirty={},
                 classifiers=[Classifier.SIMULATOR_OUTPUT])
 
         # Should only be model visibilities
-        assert len(new_refs) == 1, ('Expected one array (model visibilities), '
+        assert len(sim_output_refs) == 1, (
+            'Expected one array (model visibilities), '
             'received {l} instead.'.format(l=len(new_refs)))
 
-        model_vis = new_refs['model_vis'][0]
+        model_vis = sim_output_refs['model_vis'][0]
 
         # Create and record an event directly after the chi-squared copy
         # We'll synchronise on this thread in our synchronisation executor
@@ -1022,17 +1024,26 @@ class CompositeRimeSolver(MontblancNumpySolver):
             import pycuda.driver as cuda
             import pycuda.gpuarray as gpuarray
 
+            cuda_types = (cuda.PooledDeviceAllocation, cuda.PooledHostAllocation)
+
+            debug_str_list = ['Pool de-allocations per array name',]
+            debug_str_list.extend('({k}, {l})'.format(k=k,l=len(v))
+                for k, v in pool_refs.iteritems())
+
+            montblanc.log.debug(' '.join(debug_str_list))
+
             with pool_lock:
-                for ref in (r for k, rl in pool_refs.iteritems() for r in rl):
+                for k, ref in ((k, r) for k, rl in pool_refs.iteritems()
+                                for r in rl):
                     if isinstance(ref, np.ndarray):
                         ref.base.free()
-                    elif isinstance(ref, (cuda.PooledDeviceAllocation, cuda.PooledHostAllocation)):
+                    elif isinstance(ref, cuda_types):
                         ref.free()
                     elif isinstance(ref, gpuarray.GPUArray):
                         ref.gpudata.free()
                     else:
-                        raise TypeError("Unable to release pool allocated "
-                            "object of type {t}.".format(t=type(ref)))
+                        raise TypeError("Don't know how to release pool allocated "
+                            "object '{n}'' of type {t}.".format(n=k, t=type(ref)))
 
         def _sync_wait(future):
             """
@@ -1046,15 +1057,14 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cuda_event.synchronize()
             except cuda.LogicError as e:
                 # Format the slices nicely
-                for k, s in cpu.iteritems():
-                    cpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
-
-                for k, s in gpu.iteritems():
-                    gpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
+                pretty_cpu = { k: '[{b}, {e}]'.format(b=s.start, e=s.stop) 
+                    for k, s in cpu.iteritems() }
+                pretty_gpu = { k: '[{b}, {e}]'.format(b=s.start, e=s.stop) 
+                    for k, s in gpu.iteritems() }
 
                 import json
-                print 'GPU', json.dumps(gpu, indent=2)
-                print 'CPU', json.dumps(cpu, indent=2)
+                print 'GPU', json.dumps(pretty_gpu, indent=2)
+                print 'CPU', json.dumps(pretty_cpu, indent=2)
                 raise e, None, sys.exc_info()[2]
 
             # Work out the CPU view in the model visibilities
