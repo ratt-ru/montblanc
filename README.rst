@@ -31,6 +31,30 @@ Pre-requisites
 
        $ sudo apt-get install libffi-dev
 
+-  `casacore <https://github.com/casacore/casacore>`__ and the `measures <ftp://ftp.astron.nl/outgoing/Measures/>`__ found in casacore-data. Gijs Molenaar has kindly packaged this on Ubuntu/Debian style systems.
+
+   On Ubuntu 14.04, these packages can be added from the `radio astronomy
+   PPA <https://launchpad.net/~radio-astro/+archive/main>`__ :
+
+   .. code:: bash
+
+       $ sudo apt-get install software-properties-common
+       $ sudo add-apt-repository ppa:radio-astro/main
+       $ sudo apt-get update
+       $ sudo apt-get install casacore21 casacore-data
+
+   On Ubuntu 16.04 these packages can be added from the `kernsuite PPA
+   <https://launchpad.net/~kernsuite/+archive/ubuntu/kern-1>`__:
+ 
+   .. code:: bash
+ 
+       $ sudo apt-get install software-properties-common
+       $ sudo add-apt-repository ppa:kernsuite/kern-1
+       $ sudo apt-get update
+       $ sudo apt-get install casacore-dev casacore-data
+
+   Otherwise, casacore and the measures tables will need to be manually installed.
+
 Installing the package
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -91,6 +115,7 @@ Possible Issues
    to check if your pycuda can talk to the NVIDIA driver. If not,
    manually download and install
    `PyCUDA <http://mathema.tician.de/software/pycuda/>`__.
+
 -  `cub 1.5.2 <https://github.com/nvlabs/cub>`__. setup.py will
    attempt to download this from github and install to the correct
    directory during install. If this fails do the following:
@@ -101,19 +126,7 @@ Possible Issues
        $ mv 1.5.2 cub.zip
        $ python setup.py install
 
--  Montblanc depends on `python-casacore <https://github.com/casacore/python-casacore>`__   which depends on
-   `casacore2 <https://github.com/casacore/casacore>`__. setup.py should install
-   python-casacore automatically. If this fails then, on Ubuntu 14.04,
-   these packages can be added from the `radio astronomy
-   PPA <https://launchpad.net/~radio-astro/+archive/main>`__ :
-
-   .. code:: bash
-
-       $ sudo apt-get install software-properties-common
-       $ sudo add-apt-repository ppa:radio-astro/main
-       $ sudo apt-get update
-       $ sudo apt-get install python-casacore
-
+-  `python-casacore <https://github.com/casacore/python-casacore/>`__ is specified as a dependency in setup.py. If install fails here, you will need to manually install it and point it at your casacore libraries.
 
 Running Tests
 -------------
