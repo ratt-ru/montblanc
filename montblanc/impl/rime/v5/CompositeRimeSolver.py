@@ -454,7 +454,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # we can ignore it
         cache_idx = dirty.get(r.name, None)
 
-        if cache_idx and cache_idx == cpu_idx:
+        if cache_idx is not None and cache_idx == cpu_idx:
             #montblanc.log.debug("Cache hit on {n} index {i} "
             #        .format(n=r.name, i=cpu_idx))
 
@@ -865,7 +865,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         # Clear the dirty dictionary to force each array to be
         # transferred at least once. e.g. the beam cube
-        [d.clear for d in self.thread_local.dirty]
+        [d.clear() for d in self.thread_local.dirty]
 
     def _thread_enqueue_solve_batch(self, cpu_slice_map, gpu_slice_map, **kwargs):
         """
@@ -1088,10 +1088,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         # Perform any initialisation required by each
         # thread prior to solving
-        futures = [ex.submit(self._thread_start_solving)
-            for ex in self.enqueue_executors]
-
-        for f in cf.as_completed(futures):
+        for f in cf.as_completed([ex.submit(self._thread_start_solving)
+                for ex in self.enqueue_executors]):
             f.result()
 
         # Create an iterator that cycles through each device's
