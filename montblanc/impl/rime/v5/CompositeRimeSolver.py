@@ -18,6 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+from collections import defaultdict
 from copy import (copy as shallowcopy, deepcopy)
 import functools
 import itertools
@@ -30,6 +31,8 @@ import threading
 
 import pycuda.driver as cuda
 import pycuda.tools
+
+import hypercube.util as hcu
 
 import montblanc
 import montblanc.util as mbu
@@ -62,6 +65,10 @@ ORDERING_CONSTRAINTS.update({ 'nsrc' : 1,
 
 ORDERING_RANK = [' or '.join(['nsrc'] + mbu.source_nr_vars()),
     'ntime', ' or '.join(['nbl', 'na']), 'nchan']
+
+def _update_refs(pool, new_refs):
+    for key, value in new_refs.iteritems():
+        pool[key].extend(value)
 
 class CompositeRimeSolver(MontblancNumpySolver):
     """
@@ -265,8 +272,9 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
             # Get the source slice ranges for each individual
             # source type, and update the CPU dictionary with them
-            cpu_slice.update(mbu.source_range_slices(
-                src, src_end, src_nr_var_counts))
+            src_range_slices = mbu.source_range_slices(
+                src, src_end, src_nr_var_counts)
+            cpu_slice.update(src_range_slices)
 
             # and configure the same for GPU slices
             for s in src_nr_vars:
@@ -449,8 +457,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
         cache_idx = dirty.get(r.name, None)
 
         if cache_idx and cache_idx == cpu_idx:
-            montblanc.log.debug("Cache hit on {n} index {i} "
-                    .format(n=r.name, i=cpu_idx))
+            #montblanc.log.debug("Cache hit on {n} index {i} "
+            #        .format(n=r.name, i=cpu_idx))
 
             return None
 
@@ -514,7 +522,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         Returns a list of arrays allocated with pinned memory.
         Entries in this list may be None.
         """
-        pool_refs = []
+        pool_refs = defaultdict(list)
 
         if direction is None:
             direction = ASYNC_HTOD
@@ -569,7 +577,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cpu_ary, cpu_idx, gpu_ary, tuple(gpu_idx),
                 direction, dirty)
 
-            pool_refs.append(pinned_ary)
+            if pinned_ary is not None:
+                pool_refs[r.name].append(pinned_ary)
 
         return pool_refs
 
@@ -715,6 +724,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # Mutex for guarding the memory pools
         pool_lock = threading.Lock()
 
+        # Dirty index, indicating the CPU index of the
+        # data currently on the GPU, used for avoiding
+        # array transfer
+        self.thread_local.dirty = [{} for n in range(nsolvers)]
+
         # Configure thread local storage
         # Number of solvers in this thread
         self.thread_local.nsolvers = nsolvers
@@ -781,8 +795,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
         nsrc = self.dim_local_size('nsrc')
 
         # Retain references to pool allocations
-        pinned_pool_refs = []
-        device_pool_refs = []
+        pinned_pool_refs = defaultdict(list)
+        device_pool_refs = defaultdict(list)
         pinned_allocated = 0
 
         # Class of arrays that are to be transferred
@@ -794,15 +808,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # Estimate number of kernels for constant data
         nkernels = len(classifiers)
 
+        # Detect already transferred array chunks
+        dirty = {}
+
         # Get the first chunk of the visibility space
         cpu_slice_map, gpu_slice_map = self._gen_vis_slices().next()
 
         for i, subslvr in enumerate(self.thread_local.solvers):
             # For the maximum number of visibility chunks that can be enqueued
             for T in range(self.throttle_factor):
-                # Detect already transferred array chunks
-                dirty = {}
-
                 # For each source batch within the visibility chunk
                 for cpu_src_slice_map, gpu_src_slice_map in self._gen_source_slices():
                     cpu_slice_map.update(cpu_src_slice_map)
@@ -814,22 +828,23 @@ class CompositeRimeSolver(MontblancNumpySolver):
                         cpu_slice_map, gpu_slice_map, 
                         direction=ASYNC_HTOD, dirty=dirty,
                         classifiers=classifiers)
-                    pinned_allocated += sum([r.nbytes for r in refs if r is not None])
-                    pinned_pool_refs.extend(refs)
+                    pinned_allocated += sum([r.nbytes
+                        for l in refs.values() for r in l])
+                    _update_refs(pinned_pool_refs, refs)
 
                     # Allocate pinned memory for constant memory transfers
                     cdata = subslvr.const_data().ndary()
 
                     for k in range(nkernels):
-                        ref = subslvr.pinned_mem_pool.allocate(
+                        cdata_ref = subslvr.pinned_mem_pool.allocate(
                             shape=cdata.shape, dtype=cdata.dtype)
-                        pinned_allocated += ref.nbytes
-                        pinned_pool_refs.append(ref)
+                        pinned_allocated += cdata_ref.nbytes
+                        pinned_pool_refs['cdata'].append(cdata_ref)
 
                     # Allocate device memory for arrays that need to be
                     # allocated from a pool by PyCUDA's reduction kernels
                     dev_ary = subslvr.dev_mem_pool.allocate(self.X2.nbytes)
-                    device_pool_refs.append(dev_ary)
+                    device_pool_refs['X2_gpu'].append(dev_ary)
 
         device = self.thread_local.context.get_device()
 
@@ -838,12 +853,23 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 d=device.name(), n=mbu.fmt_bytes(pinned_allocated)))
 
         # Now force return of memory to the pools
-        for a in pinned_pool_refs:
-            if a is not None:
-                a.base.free()
+        for key, array_list in pinned_pool_refs.iteritems():
+            [a.base.free() for a in array_list]      
 
-        for a in device_pool_refs:
-            a.free()
+        for array_list in device_pool_refs.itervalues():
+            [a.free() for a in array_list]
+
+
+    def _thread_start_solving(self):
+        """
+        Contains enqueue thread functionality that needs to
+        take place at the start of each solution
+        """
+
+        # Clear the dirty dictionary to force each array to be
+        # transferred at least once. e.g. the beam cube
+        [d.clear() for d in self.thread_local.dirty]
+
 
     def _thread_enqueue_solve_batch(self, cpu_slice_map, gpu_slice_map, **kwargs):
         """
@@ -860,17 +886,17 @@ class CompositeRimeSolver(MontblancNumpySolver):
         tl = self.thread_local
         i, subslvr = tl.subslvr_gen.next()
 
-        # A list of references to memory pool allocated objects
+        # A dictionary of references to memory pool allocated objects
         # ensuring that said objects remained allocated until
         # after compute has been performed. Returned from
         # this function, this object should be discarded when
         # reading the result of the enqueued operations.
-        pool_refs = []
+        pool_refs = defaultdict(list)
 
         # Cache keyed by array names and contained indices
-        # This is used to determine if the array has already
-        # been transferred to the card on this batch
-        dirty = {}
+        # This is used to avoid unnecessary CPU to GPU copies
+        # by caching the last index of the CPU array
+        dirty = tl.dirty[i]
 
         # Guard pool allocations with a coarse-grained mutex
         with subslvr.pool_lock:
@@ -890,42 +916,50 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
                 # Enqueue E Beam
                 kernel = subslvr.rime_e_beam
-                pool_refs.extend(self._enqueue_array(
+                new_refs = self._enqueue_array(
                     subslvr, cpu_slice_map, gpu_slice_map,
                     direction=ASYNC_HTOD, dirty=dirty,
-                    classifiers=[Classifier.E_BEAM_INPUT]))
-                pool_refs.append(self._enqueue_const_data_htod(
-                    subslvr, kernel.rime_const_data[0]))
+                    classifiers=[Classifier.E_BEAM_INPUT])
+                cdata_ref = self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0])
+                _update_refs(pool_refs, new_refs)
+                _update_refs(pool_refs, {'cdata_ebeam' : [cdata_ref]})
                 kernel.execute(subslvr, subslvr.stream)
 
                 # Enqueue B Sqrt
                 kernel = subslvr.rime_b_sqrt
-                pool_refs.extend(self._enqueue_array(
+                new_refs = self._enqueue_array(
                     subslvr, cpu_slice_map, gpu_slice_map,
                     direction=ASYNC_HTOD, dirty=dirty,
-                    classifiers=[Classifier.B_SQRT_INPUT]))
-                pool_refs.append(self._enqueue_const_data_htod(
-                    subslvr, kernel.rime_const_data[0]))
+                    classifiers=[Classifier.B_SQRT_INPUT])
+                cdata_ref = self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0])
+                _update_refs(pool_refs, new_refs)
+                _update_refs(pool_refs, {'cdata_bsqrt' : [cdata_ref]})
                 kernel.execute(subslvr, subslvr.stream)
 
                 # Enqueue EKB Sqrt
                 kernel = subslvr.rime_ekb_sqrt
-                pool_refs.extend(self._enqueue_array(
+                new_refs = self._enqueue_array(
                     subslvr, cpu_slice_map, gpu_slice_map,
                     direction=ASYNC_HTOD, dirty=dirty,
-                    classifiers=[Classifier.EKB_SQRT_INPUT]))
-                pool_refs.append(self._enqueue_const_data_htod(
-                    subslvr, kernel.rime_const_data[0]))
+                    classifiers=[Classifier.EKB_SQRT_INPUT])
+                cdata_ref = self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0])
+                _update_refs(pool_refs, new_refs)
+                _update_refs(pool_refs, {'cdata_ekb' : [cdata_ref]})
                 kernel.execute(subslvr, subslvr.stream)
 
                 # Enqueue Sum Coherencies
                 kernel = subslvr.rime_sum
-                pool_refs.extend(self._enqueue_array(
+                new_refs = self._enqueue_array(
                     subslvr, cpu_slice_map, gpu_slice_map,
                     direction=ASYNC_HTOD, dirty=dirty,
-                    classifiers=[Classifier.COHERENCIES_INPUT]))
-                pool_refs.append(self._enqueue_const_data_htod(
-                    subslvr, kernel.rime_const_data[0]))
+                    classifiers=[Classifier.COHERENCIES_INPUT])
+                cdata_ref = self._enqueue_const_data_htod(
+                    subslvr, kernel.rime_const_data[0])
+                _update_refs(pool_refs, new_refs)
+                _update_refs(pool_refs, {'cdata_coherencies' : [cdata_ref]})
                 kernel.execute(subslvr, subslvr.stream)
 
             # Iterate again for gradient computation requiring visibilities computed
@@ -945,12 +979,14 @@ class CompositeRimeSolver(MontblancNumpySolver):
     
                     # Enqueue Sersic gradient
                     kernel = subslvr.rime_sersic_gradient
-                    pool_refs.extend(self._enqueue_array(
+                    new_refs = self._enqueue_array(
                         subslvr, cpu_slice_map, gpu_slice_map,
                         direction=ASYNC_HTOD, dirty=dirty,
-                        classifiers=[Classifier.COHERENCIES_INPUT]))
-                    pool_refs.append(self._enqueue_const_data_htod(
-                        subslvr, kernel.rime_const_data[0]))
+                        classifiers=[Classifier.COHERENCIES_INPUT])
+                    cdata_ref = self._enqueue_const_data_htod(
+                        subslvr, kernel.rime_const_data[0])
+                    _update_refs(pool_refs, new_refs)
+                    _update_refs(pool_refs, {'cdata_gradient' : [cdata_ref]})
                     kernel.execute(subslvr, subslvr.stream)
 
             # Enqueue chi-squared term reduction and return the
@@ -965,20 +1001,21 @@ class CompositeRimeSolver(MontblancNumpySolver):
             X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
 
             # Enqueue transfer of simulator output (model visibilities) to the CPU
-            refs = self._enqueue_array(subslvr, cpu_slice_map, gpu_slice_map,
-                direction=ASYNC_DTOH, dirty=dirty,
+            sim_output_refs = self._enqueue_array(subslvr, 
+                cpu_slice_map, gpu_slice_map,
+                direction=ASYNC_DTOH, dirty={},
                 classifiers=[Classifier.SIMULATOR_OUTPUT])
 
         # Should only be model visibilities
         if self.enable_sersic_grad:
-            assert len(refs) == 2, ('Expected two arrays (model visibilities, X2_grad), '
+            assert len(sim_output_refs) == 2, ('Expected two arrays (model visibilities, X2_grad), '
                 'received {l} instead.'.format(l=len(refs)))
-            X2_grad = refs[1]
+            X2_grad = sim_output_refs['X2_grad'][0]
         else:
-            assert len(refs) == 1, ('Expected one array (model visibilities), '
+            assert len(sim_output_refs) == 1, ('Expected one array (model visibilities), '
                 'received {l} instead.'.format(l=len(refs)))
 
-        model_vis = refs[0]
+        model_vis = sim_output_refs['model_vis'][0]
 
         # Create and record an event directly after the chi-squared copy
         # We'll synchronise on this thread in our synchronisation executor
@@ -988,11 +1025,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         # Retain references to CPU pinned  and GPU device memory
         # until the above enqueued operations have been performed.
-        pool_refs.append(X2_gpu_ary)
-        pool_refs.append(sub_X2)
-        pool_refs.append(model_vis)
+        pool_refs['X2_gpu'].append(X2_gpu_ary)
+        pool_refs['X2_cpu'].append(sub_X2)
+        pool_refs['model_vis_output'].append(model_vis)
         if self.enable_sersic_grad:
-            pool_refs.append(X2_grad)
+            pool_refs['X2_grad'].append(X2_grad)
             return (sync_event, sub_X2, model_vis, X2_grad,
                 pool_refs, subslvr.pool_lock,
                 cpu_slice_map.copy(),
@@ -1028,19 +1065,26 @@ class CompositeRimeSolver(MontblancNumpySolver):
             import pycuda.driver as cuda
             import pycuda.gpuarray as gpuarray
 
+            cuda_types = (cuda.PooledDeviceAllocation, cuda.PooledHostAllocation)
+
+            debug_str_list = ['Pool de-allocations per array name',]
+            debug_str_list.extend('({k}, {l})'.format(k=k,l=len(v))
+                for k, v in pool_refs.iteritems())
+
+            montblanc.log.debug(' '.join(debug_str_list))
+
             with pool_lock:
-                for ref in pool_refs:
-                    if ref is None:
-                        continue
-                    elif isinstance(ref, np.ndarray):
+                for k, ref in ((k, r) for k, rl in pool_refs.iteritems()
+                                for r in rl):
+                    if isinstance(ref, np.ndarray):
                         ref.base.free()
-                    elif isinstance(ref, (cuda.PooledDeviceAllocation, cuda.PooledHostAllocation)):
+                    elif isinstance(ref, cuda_types):
                         ref.free()
                     elif isinstance(ref, gpuarray.GPUArray):
                         ref.gpudata.free()
                     else:
-                        raise TypeError("Unable to release pool allocated "
-                            "object of type {t}.".format(t=type(ref)))
+                        raise TypeError("Don't know how to release pool allocated "
+                            "object '{n}'' of type {t}.".format(n=k, t=type(ref)))
 
         def _sync_wait(future):
             """
@@ -1058,15 +1102,14 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 cuda_event.synchronize()
             except cuda.LogicError as e:
                 # Format the slices nicely
-                for k, s in cpu.iteritems():
-                    cpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
-
-                for k, s in gpu.iteritems():
-                    gpu[k] = '[{b}, {e}]'.format(b=s.start, e=s.stop)
+                pretty_cpu = { k: '[{b}, {e}]'.format(b=s.start, e=s.stop) 
+                    for k, s in cpu.iteritems() }
+                pretty_gpu = { k: '[{b}, {e}]'.format(b=s.start, e=s.stop) 
+                    for k, s in gpu.iteritems() }
 
                 import json
-                print 'GPU', json.dumps(gpu, indent=2)
-                print 'CPU', json.dumps(cpu, indent=2)
+                print 'GPU', json.dumps(pretty_gpu, indent=2)
+                print 'CPU', json.dumps(pretty_cpu, indent=2)
                 raise e, None, sys.exc_info()[2]
 
             # Work out the CPU view in the model visibilities
@@ -1092,6 +1135,12 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
         # For easier typing
         C = CompositeRimeSolver
+
+        # Perform any initialisation required by each
+        # thread prior to solving
+        for f in cf.as_completed([ex.submit(self._thread_start_solving)
+                for ex in self.enqueue_executors]):
+            f.result()
 
         # Create an iterator that cycles through each device's
         # executors, also returning the device index (enumerate)
@@ -1223,6 +1272,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
         def _shutdown_func():
             for i, subslvr in enumerate(self.thread_local.solvers):
                 subslvr.shutdown()
+                subslvr.dev_mem_pool.stop_holding()
+                subslvr.pinned_mem_pool.stop_holding()
 
             self._thread_shutdown()
 
@@ -1236,7 +1287,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
 
     def _thread_property_setter(self, name, value):
         for subslvr in self.thread_local.solvers:
-            setter_method_name = self.setter_name(name)
+            setter_method_name = hcu.setter_name(name)
             setter_method = getattr(subslvr, setter_method_name)
             setter_method(value)
 
