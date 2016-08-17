@@ -223,8 +223,8 @@ void sersic_chi_squared_gradient_impl(
             i += DEXT(nssrc);                    shared.e2 = sersic_shape[i];
             i += DEXT(nssrc);                    shared.sersic_scale = sersic_shape[i];
         }
-        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z < 3)
-            shared.X2_grad_part[threadIdx.z] = 0.;
+        if(threadIdx.x < 3 && threadIdx.y == 0 && threadIdx.z == 0)
+            shared.X2_grad_part[threadIdx.x] = 0.;
 
         __syncthreads();
 
@@ -325,7 +325,7 @@ void sersic_chi_squared_gradient_impl(
         // 3 different threads writes each a different component to avoid serialisation
         if (threadIdx.x < 3 && threadIdx.y == 0 && threadIdx.z == 0)
         {
-            i = SRC - DEXT(npsrc) - DEXT(ngsrc) + threadIdx.x*DEXT(nssrc);
+            i = SRC - SRC_START + threadIdx.x*NSSRC;
             atomicAdd(&(X2_grad[i]), shared.X2_grad_part[threadIdx.x]);
         }
     }
