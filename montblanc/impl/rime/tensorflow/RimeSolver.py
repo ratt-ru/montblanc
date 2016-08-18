@@ -269,11 +269,11 @@ class RimeSolver(MontblancTensorflowSolver):
             cube.update_dimensions(d)
             descriptor = self._transcoder.encode(cube.dimensions())
             feed_dict = {self._parameter_queue.placeholders[0] : descriptor }
-            montblanc.log.info('Encoding {i} {d}'.format(i=i, d=descriptor))
+            montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
             session.run(self._parameter_queue.enqueue_op, feed_dict=feed_dict)
 
         # Close the queue
-        session.run(self._parameter_queue.close_op)
+        session.run(self._parameter_queue.close())
 
     def _feed(self):
         """ Feed stub """
@@ -303,10 +303,15 @@ class RimeSolver(MontblancTensorflowSolver):
 
         chunks_read = 0
 
+        src_types = ('npsrc', 'ngsrc', 'nssrc')
+        src_queues = (self._point_source_queue,
+            self._gaussian_source_queue,
+            self._sersic_source_queue)
+
         while True:
             try:
                 # Get the descriptor describing a portion of the RIME
-                descriptor = session.run(self._parameter_queue.dequeue_op)
+                descriptor = session.run(self._parameter_queue.dequeue())
 
                 # Decode the descriptor and update our cube dimensions
                 dimensions = self._transcoder.decode(descriptor)
@@ -324,27 +329,26 @@ class RimeSolver(MontblancTensorflowSolver):
                 for q in chunk_queues
                 for ph, a in zip(q.placeholders, q.fed_arrays) }
 
-            montblanc.log.info("Enqueueing chunk {i} {d}".format(
+            montblanc.log.debug("Enqueueing chunk {i} {d}".format(
                 i=chunks_read, d=descriptor))
 
             session.run([q.enqueue_op for q in chunk_queues],
                 feed_dict=feed_dict)
 
-            # Iterate over point sources
-            point_iter_args = ('npsrc', cube.dim_local_size('npsrc'))
+            # Now feed our source queues
+            for src_type, queue in zip(src_types, src_queues):
+                iter_args = (src_type, cube.dim_local_size(src_type))
 
-            # Now enqueue source chunks
-            for ds in cube.dim_iter(point_iter_args, update_local_size=True):
-                cube.update_dimensions(ds)
+                for ds in cube.dim_iter(iter_args, update_local_size=True):
+                    cube.update_dimensions(ds)
 
-                montblanc.log.info("Enqueueing {s} point sources".format(s=ds[0]['local_size']))
+                    montblanc.log.info("Enqueueing '{s}' '{t}' sources".format(
+                        s=ds[0]['local_size'], t=src_type))
 
-                feed_dict = { ph: data_sources[a][0](cube, array_descriptors[a])
-                    for q in (self._point_source_queue,)
-                    for ph, a in zip(q.placeholders, q.fed_arrays) }
+                    feed_dict = { ph: data_sources[a][0](cube, array_descriptors[a])
+                        for ph, a in zip(queue.placeholders, queue.fed_arrays) }
 
-                session.run(self._point_source_queue.enqueue_op,
-                    feed_dict=feed_dict)
+                    session.run(queue.enqueue_op, feed_dict=feed_dict)
 
         montblanc.log.info('Done Feeding')
 
@@ -386,26 +390,23 @@ class RimeSolver(MontblancTensorflowSolver):
         zero = tf.constant(0)
 
         # Pull RIME inputs out of the feed queues
-        frequency, ref_frequency = self._frequency_queue.dequeue_op
-        model_vis = self._input_queue.dequeue_op
-        uvw, antenna1, antenna2 = self._uvw_queue.dequeue_op
-        observed_vis, flag, weight = self._observation_queue.dequeue_op
-        ebeam, antenna_scaling, point_errors = self._dde_queue.dequeue_op
-        gterm = self._die_queue.dequeue_op
+        frequency, ref_frequency = self._frequency_queue.dequeue()
+        model_vis = self._input_queue.dequeue()
+        uvw, antenna1, antenna2 = self._uvw_queue.dequeue()
+        observed_vis, flag, weight = self._observation_queue.dequeue()
+        ebeam, antenna_scaling, point_errors = self._dde_queue.dequeue()
+        gterm = self._die_queue.dequeue()
 
         # Infer chunk dimensions
         model_vis_shape = tf.shape(model_vis)
         ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
 
-        def point_cond(model_vis, npsrc):
-            return tf.less(npsrc, self._src_ph_vars.npsrc)
+        def antenna_jones(lm, stokes, alpha):
+            """
+            Compute the jones terms for each antenna.
 
-        def point_body(model_vis, npsrc):
-            lm, stokes, alpha = self._point_source_queue.dequeue_op
-            # Source batch size
-            nsrc = tf.shape(lm)[0]
-
-            # Accumulate visiblities for this source batch
+            lm, stokes and alpha are the source variables.
+            """
             cplx_phase = rime.phase(lm, uvw, frequency, CT=model_vis.dtype)
             bsqrt = rime.b_sqrt(stokes, alpha, frequency, ref_frequency)
             ejones = rime.e_beam(lm, point_errors, antenna_scaling, ebeam,
@@ -415,16 +416,70 @@ class RimeSolver(MontblancTensorflowSolver):
                 self._property_ph_vars.beam_ul,
                 self._property_ph_vars.beam_um)
 
-            ant_jones = rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=lm.dtype)
+            return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=lm.dtype)
+
+        # While loop condition for each point source type
+        def point_cond(model_vis, npsrc):
+            return tf.less(npsrc, self._src_ph_vars.npsrc)
+
+        def gaussian_cond(model_vis, ngsrc):
+            return tf.less(ngsrc, self._src_ph_vars.ngsrc)
+
+        def sersic_cond(model_vis, nssrc):
+            return tf.less(nssrc, self._src_ph_vars.nssrc)
+
+        # While loop bodies
+        def point_body(model_vis, npsrc):
+            """ Accumulate visiblities for point source batch """
+            lm, stokes, alpha = self._point_source_queue.dequeue()
+            nsrc = tf.shape(lm)[0]
+            ant_jones = antenna_jones(lm, stokes, alpha)
             shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=lm.dtype)    
             model_vis = rime.sum_coherencies(antenna1, antenna2,
                 shape, ant_jones, flag, gterm, model_vis, False)
 
             return model_vis, npsrc + nsrc
 
-        M, npsrc = tf.while_loop(point_cond, point_body, [model_vis, zero])
+        def gaussian_body(model_vis, ngsrc):
+            """ Accumulate visiblities for gaussian source batch """
+            lm, stokes, alpha, gauss_params = self._gaussian_source_queue.dequeue()
+            nsrc = tf.shape(lm)[0]
+            # Accumulate visiblities for this source batch
 
-        return M
+            ant_jones = antenna_jones(lm, stokes, alpha)
+            gauss_shape = rime.gauss_shape(uvw, antenna1, antenna1,
+                frequency, gauss_params)
+            model_vis = rime.sum_coherencies(antenna1, antenna2,
+                gauss_shape, ant_jones, flag, gterm, model_vis, False)
+
+            return model_vis, ngsrc + nsrc
+
+        def sersic_body(model_vis, nssrc):
+            """ Accumulate visiblities for sersic source batch """
+            lm, stokes, alpha, sersic_params = self._sersic_source_queue.dequeue()
+            nsrc = tf.shape(lm)[0]
+            # Accumulate visiblities for this source batch
+            ant_jones = antenna_jones(lm, stokes, alpha)
+            sersic_shape = rime.sersic_shape(uvw, antenna1, antenna1,
+                frequency, sersic_params)
+            model_vis = rime.sum_coherencies(antenna1, antenna2,
+                sersic_shape, ant_jones, flag, gterm, model_vis, False)
+
+            return model_vis, nssrc + nsrc
+
+        # Evaluate point sources
+        model_vis, npsrc = tf.while_loop(point_cond, point_body,
+            [model_vis, zero])
+
+        # Evaluate gaussians
+        model_vis, ngsrc = tf.while_loop(gaussian_cond, gaussian_body,
+            [model_vis, zero])
+
+        # Evaluate sersics
+        model_vis, nssrc = tf.while_loop(sersic_cond, sersic_body,
+            [model_vis, zero])
+
+        return model_vis
 
     def solve(self):
         p = self._parameter_executor.submit(self._parameters)
