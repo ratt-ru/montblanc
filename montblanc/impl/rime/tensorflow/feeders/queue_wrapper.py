@@ -34,12 +34,6 @@ class QueueWrapper(object):
         # Create enqueue operation using placeholders
         self._enqueue_op = self._queue.enqueue(self.placeholders)
 
-        # And a dequeue op
-        self._dequeue_op = self._queue.dequeue()
-
-        # And a close op
-        self._close_op = self._queue.close()
-
     @property
     def name(self):
         return self._name
@@ -63,15 +57,15 @@ class QueueWrapper(object):
     @property
     def enqueue_op(self):
         return self._enqueue_op
-    
-    @property    
-    def dequeue_op(self):
-        return self._dequeue_op
+        
+    def dequeue(self):
+        return self._queue.dequeue()
 
-    @property
-    def close_op(self):
-        return self._close_op
-    
+    def close(self):
+        return self._queue.close()
+
+    def size(self):
+        return self._queue.size()
 
     def __str__(self):
         return 'Queue of size {s} with with types {t}'.format(
