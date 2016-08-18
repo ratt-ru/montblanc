@@ -190,6 +190,18 @@ def default_sersic_shape(cube, ary):
 
     A = np.empty(ary.shape, ary.dtype)
     e1, e2, eS = A[0,:], A[1,:], A[2,:]
+    e1[:] = 0
+    e2[:] = 0
+    eS[:] = 1
+
+    return A
+
+def test_sersic_shape(cube, ary):
+    # Should be (3, nssrc)
+    assert len(ary.shape) == 2 and ary.shape[0] == 3
+
+    A = np.empty(ary.shape, ary.dtype)
+    e1, e2, eS = A[0,:], A[1,:], A[2,:]
     # Random values seem to create v. large discrepancies
     # between the CPU and GPU versions. Go with
     # non-random data here, as per Marzia's original code
@@ -261,7 +273,7 @@ A = [
         default = default_stokes,
         test    = rand_stokes),
     ary_dict('gaussian_alpha', ('ngsrc','ntime'), 'ft',
-        default = lambda c, a: np.full(a.shape, 0.8, a.dtype),
+        default = lambda c, a: np.full(a.shape, 0.0, a.dtype),
         test    = lambda c, a: rf(a.shape, a.dtype)*0.1),
     ary_dict('gaussian_shape', (3, 'ngsrc'), 'ft',
         default = default_gaussian_shape,
@@ -275,11 +287,11 @@ A = [
         default = default_stokes,
         test    = rand_stokes),
     ary_dict('sersic_alpha', ('nssrc','ntime'), 'ft',
-        default = lambda c, a: np.full(a.shape, 0.8, a.dtype),
+        default = lambda c, a: np.full(a.shape, 0.0, a.dtype),
         test    = lambda c, a: rf(a.shape, a.dtype)*0.1),
     ary_dict('sersic_shape', (3, 'nssrc'), 'ft',
         default = default_sersic_shape,
-        test    = default_sersic_shape),
+        test    = test_sersic_shape),
 
     # Observation Data
     
