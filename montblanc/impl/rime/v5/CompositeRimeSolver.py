@@ -965,6 +965,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # Iterate again for gradient computation requiring visibilities computed
             # for all source chuncks
             if self.enable_sersic_grad:
+                subslvr.X2_grad.fill(0, stream=subslvr.stream)
                 for src_cpu_slice_map, src_gpu_slice_map in self._gen_source_slices():
                     # Update our maps with source slice information
                     cpu_slice_map.update(src_cpu_slice_map)
@@ -1190,8 +1191,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
                     if nvalues > self.throttle_factor:
                         continue
 
-                    if self.enable_sersic_grad:
-                        self.X2_grad = self.ft(np.zeros((3,nssrc)))
+                    #if self.enable_sersic_grad:
+                    #    self.X2_grad = self.ft(np.zeros((3,nssrc)))
 
                     # Enqueue CUDA operations for solving
                     # this visibility chunk. 
