@@ -161,7 +161,7 @@ def default_gaussian_shape(cube, ary):
     if A.size == 0:
         return A
 
-    el, em, eR = A[:,0], A[:,1], A[:,2]
+    el, em, eR = A[0,:], A[1,:], A[2,:]
     el[:] = np.zeros(el.shape, ary.dtype)
     em[:] = np.zeros(em.shape, ary.dtype)
     eR[:] = np.ones(eR.shape, ary.dtype)
@@ -189,6 +189,10 @@ def default_sersic_shape(cube, ary):
     assert len(ary.shape) == 2 and ary.shape[0] == 3
 
     A = np.empty(ary.shape, ary.dtype)
+
+    if A.size == 0:
+        return A
+
     e1, e2, eS = A[0,:], A[1,:], A[2,:]
     e1[:] = 0
     e2[:] = 0
@@ -201,6 +205,10 @@ def test_sersic_shape(cube, ary):
     assert len(ary.shape) == 2 and ary.shape[0] == 3
 
     A = np.empty(ary.shape, ary.dtype)
+
+    if A.size == 0:
+        return A
+
     e1, e2, eS = A[0,:], A[1,:], A[2,:]
     # Random values seem to create v. large discrepancies
     # between the CPU and GPU versions. Go with
