@@ -394,9 +394,8 @@ class RimeSolver(MontblancTensorflowSolver):
         gterm = self._die_queue.dequeue_op
 
         # Infer chunk dimensions
-        nchan = tf.shape(frequency)[0]
-        ntime = tf.shape(antenna1)[0]
-        nbl = tf.shape(antenna1)[1]
+        model_vis_shape = tf.shape(model_vis)
+        ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
 
         def point_cond(model_vis, npsrc):
             return tf.less(npsrc, self._src_ph_vars.npsrc)
