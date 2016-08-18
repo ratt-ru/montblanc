@@ -374,7 +374,7 @@ class SersicChiSquaredGradient(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-        nssrc, ntime, nbl, npolchan = slvr.dim_local_size('nssrc','ntime', 'nbl', 'npolchan')
+        ntime, nbl, npolchan = slvr.dim_local_size('ntime', 'nbl', 'npolchan')
 
           # Get a property dictionary off the solver
         D = slvr.template_dict()
@@ -405,11 +405,6 @@ class SersicChiSquaredGradient(Node):
             options=['-lineinfo','-maxrregcount', regs],
             include_dirs=[montblanc.get_source_path()],
             no_extern_c=True)
-
-        if slvr.is_float():
-            self.gradient = gpuarray.zeros((3,nssrc,),dtype=np.float32)
-        else:
-            self.gradient = gpuarray.zeros((3,nssrc,),dtype=np.float64)
 
         self.rime_const_data = self.mod.get_global('C')
         self.kernel = self.mod.get_function(kname)
@@ -452,7 +447,11 @@ class SersicChiSquaredGradient(Node):
         sersic = np.intp(0) if np.product(slvr.sersic_shape.shape) == 0 \
             else slvr.sersic_shape
 
-        self.gradient.fill(0.) 
+        nssrc = slvr.dim_local_size('nssrc') 
+        if slvr.is_float():
+            self.gradient = gpuarray.zeros((3,nssrc,),dtype=np.float32)
+        else:
+            self.gradient = gpuarray.zeros((3,nssrc,),dtype=np.float64)
 
         self.kernel(slvr.uvw, sersic,
             slvr.frequency, slvr.antenna1, slvr.antenna2,
