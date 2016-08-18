@@ -1010,11 +1010,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # Should only be model visibilities
         if self.enable_sersic_grad:
             assert len(sim_output_refs) == 2, ('Expected two arrays (model visibilities, X2_grad), '
-                'received {l} instead.'.format(l=len(refs)))
+                'received {l} instead.'.format(l=len(new_refs)))
             X2_grad = sim_output_refs['X2_grad'][0]
         else:
             assert len(sim_output_refs) == 1, ('Expected one array (model visibilities), '
-                'received {l} instead.'.format(l=len(refs)))
+                'received {l} instead.'.format(l=len(new_refs)))
 
         model_vis = sim_output_refs['model_vis'][0]
 
@@ -1191,9 +1191,6 @@ class CompositeRimeSolver(MontblancNumpySolver):
                     if nvalues > self.throttle_factor:
                         continue
 
-                    #if self.enable_sersic_grad:
-                    #    self.X2_grad = self.ft(np.zeros((3,nssrc)))
-
                     # Enqueue CUDA operations for solving
                     # this visibility chunk. 
                     enqueue_future = enq_ex.submit(
@@ -1266,7 +1263,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
             self.set_X2(X2_sum)
         else:
             self.set_X2(X2_sum/self.sigma_sqrd)
-            self.X2_grad = X2_grad/self.sigma_sqrd
+            if self.enable_sersic_grad:
+                self.X2_grad = X2_grad/self.sigma_sqrd
 
     def shutdown(self):
         """ Shutdown the solver """
