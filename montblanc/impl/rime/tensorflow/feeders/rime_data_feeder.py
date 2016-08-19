@@ -250,6 +250,12 @@ class MSRimeDataFeeder(RimeDataFeeder):
     @property
     def mscube(self):
         return self._cube
+
+    def _hash_array_idx(self, name, cube):
+        D = cube.dimensions(copy=False)
+        idx = ((D[d].lower_extent, D[d].upper_extent) if d in D 
+            else (0, d) for d in cube.array(name).shape)
+        return hash(i for i in ((s[0], s[1]) for s in idx))
     
     def uvw(self, cube, array_descriptor):
         lrow, urow = cube.dim_extents('nuvwrows')
