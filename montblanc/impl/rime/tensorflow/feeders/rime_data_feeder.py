@@ -247,23 +247,13 @@ class MSRimeDataFeeder(RimeDataFeeder):
         cube.register_array('weight', ('ntime', 'nbl', 'nchan', 'npol'), np.float32)
         cube.register_array('flag', ('ntime', 'nbl', 'nchan', 'npol'), np.bool)
 
-        self._cache = {}
-
     @property
     def mscube(self):
         return self._cube
     
     def uvw(self, cube, array_descriptor):
-        lrow = cube.dim_lower_extent('nuvwrows')
-
-        # Attempt to return a cached value if possible
-        cached_uvw = self._cache.get(UVW, DUMMY_CACHE_VALUE)
-        if cached_uvw[0] == lrow:
-            return cached_uvw[1]
-
-        urow = cube.dim_upper_extent('nuvwrows')
-        ntime, nbl, na = cube.dim_extent_size(
-            'ntime', 'nbl', 'na')
+        lrow, urow = cube.dim_extents('nuvwrows')
+        ntime, nbl, na = cube.dim_extent_size('ntime', 'nbl', 'na')
 
         bl_uvw = self._tables[ORDERED_UVW_TABLE].getcol(UVW,
             startrow=lrow, nrow=urow-lrow).reshape(ntime, nbl, 3)
@@ -272,41 +262,24 @@ class MSRimeDataFeeder(RimeDataFeeder):
         ant_uvw[:,1:na,:] = bl_uvw[:,:na-1,:]
         ant_uvw[:,0,:] = 0
 
-        self._cache[UVW] = (lrow, ant_uvw)
-        
         return ant_uvw
 
     def antenna1(self, cube, array_descriptor):
-        lrow = cube.dim_lower_extent('nuvwrows')
-
-        cached_ant1 = self._cache.get(ANTENNA1, DUMMY_CACHE_VALUE)
-        if cached_ant1[0] == lrow:
-            return cached_ant1[1]
-
-        urow = cube.dim_upper_extent('nuvwrows')
+        lrow, urow = cube.dim_extents('nuvwrows')
         antenna1 = self._tables[ORDERED_MAIN_TABLE].getcol(
             ANTENNA1, startrow=lrow, nrow=urow-lrow)
 
-        self._cache[ANTENNA1] = (lrow, antenna1)
         return antenna1.reshape(array_descriptor.shape)
 
     def antenna2(self, cube, array_descriptor):
-        lrow = cube.dim_lower_extent('nuvwrows')
-
-        cached_ant2 = self._cache.get(ANTENNA2, DUMMY_CACHE_VALUE)
-        if cached_ant2[0] == lrow:
-            return cached_ant2[1]
-
-        urow = cube.dim_upper_extent('nuvwrows')
+        lrow, urow = cube.dim_extents('nuvwrows')
         antenna2 = self._tables[ORDERED_MAIN_TABLE].getcol(
             ANTENNA2, startrow=lrow, nrow=urow-lrow)
 
-        self._cache[ANTENNA2] = (lrow, antenna2)
         return antenna2.reshape(array_descriptor.shape)
 
     def observed_vis(self, cube, array_descriptor):
-        lrow = cube.dim_lower_extent('nrows')
-        urow = cube.dim_upper_extent('nrows')
+        lrow, urow = cube.dim_extents('nuvwrows')
 
         data = self._tables[ORDERED_MAIN_TABLE].getcol(
             DATA, startrow=lrow, nrow=urow-lrow)
@@ -314,8 +287,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
         return data.reshape(array_descriptor.shape)
 
     def flag(self, cube, array_descriptor):
-        lrow = cube.dim_lower_extent('nrows')
-        urow = cube.dim_upper_extent('nrows')
+        lrow, urow = cube.dim_extents('nuvwrows')
 
         flag = self._tables[ORDERED_MAIN_TABLE].getcol(
             FLAG, startrow=lrow, nrow=urow-lrow)
@@ -323,8 +295,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
         return flag.reshape(array_descriptor.shape)
 
     def weight(self, cube, array_descriptor):
-        lrow = cube.dim_lower_extent('nrows')
-        urow = cube.dim_upper_extent('nrows')
+        lrow, urow = cube.dim_extents('nuvwrows')
         nchan = cube.dim_extent_size('nchanperband')
 
         weight = self._tables[ORDERED_MAIN_TABLE].getcol(
