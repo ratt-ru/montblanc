@@ -1001,6 +1001,12 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # Enqueue chi-squared copy off the GPU onto the CPU
             X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
 
+            # Get pinned memory and copy from the GPU the partial X2_grad
+            if self.enable_sersic_grad:
+                X2_grad = subslvr.pinned_mem_pool.allocate(
+                    shape=subslvr.X2_grad.shape, dtype=subslvr.X2_grad.dtype)
+                subslvr.X2_grad.get_async(ary=X2_grad, stream=subslvr.stream)
+
             # Enqueue transfer of simulator output (model visibilities) to the CPU
             sim_output_refs = self._enqueue_array(subslvr, 
                 cpu_slice_map, gpu_slice_map,
@@ -1008,13 +1014,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 classifiers=[Classifier.SIMULATOR_OUTPUT])
 
         # Should only be model visibilities
-        if self.enable_sersic_grad:
-            assert len(sim_output_refs) == 2, ('Expected two arrays (model visibilities, X2_grad), '
-                'received {l} instead.'.format(l=len(new_refs)))
-            X2_grad = sim_output_refs['X2_grad'][0]
-        else:
-            assert len(sim_output_refs) == 1, ('Expected one array (model visibilities), '
-                'received {l} instead.'.format(l=len(new_refs)))
+        assert len(sim_output_refs) == 1, ('Expected one array (model visibilities), '
+            'received {l} instead.'.format(l=len(new_refs)))
 
         model_vis = sim_output_refs['model_vis'][0]
 
