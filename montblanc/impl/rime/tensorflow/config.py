@@ -23,6 +23,8 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 
+from montblanc.config import (RimeSolverConfig as Options)
+
 from montblanc.util import (
     random_float as rf,
     random_complex as rc)
@@ -66,46 +68,54 @@ P = [
     prop_dict('parallactic_angle', 'ft', 0.0),
 ]
 
-def default_base_ant_pairs(na, nbl):
-    """ Deduce base antenna pairs from antenna-baseline relation """
+def default_base_ant_pairs(ctx):
+    """ Compute base antenna pairs """
+    auto_correlations = ctx.cfg[Options.AUTO_CORRELATIONS]
 
     # Auto-correlated
-    if nbl == mbu.nr_of_baselines(na, True):
+    if auto_correlations == True:
         k = 0
     # No auto-correlations?
-    elif nbl == mbu.nr_of_baselines(na, False):
+    elif auto_correlations == False:
         k = 1
-    # TODO: handle this gracefully
     else:
-        raise ValueError("Can't deduce default antenna pairs "
-            "from 'nbl' ({nbl}) and 'na' ({na})".format(
-                na=na, nbl=nbl))
+        raise ValueError("Invalid value {ac}".format(ac=auto_correlations))
 
-    return np.triu_indices(na, k)
+    return np.triu_indices(ctx.dim_global_size('na'), k)
 
 def default_antenna1(ctx):
-    ntime, na, nbl = ctx.dim_global_size('ntime', 'na', 'nbl')
-    ant0, ant1 = default_base_ant_pairs(na, nbl)
-    ntime, nbl = ctx.dim_local_size('ntime', 'nbl')
-    return np.tile(ant0[0:nbl], ntime).reshape(ntime, nbl)
+    ant0, ant1 = default_base_ant_pairs(ctx)
+    nbl_l, nbl_u = ctx.dim_extents('nbl')
+    ntime = ctx.dim_local_size('ntime')
+    return np.tile(ant0[nbl_l:nbl_u], ntime).reshape(ntime, nbl_u-nbl_l)
 
 def default_antenna2(ctx):
-    ntime, na, nbl = ctx.dim_global_size('ntime', 'na', 'nbl')
-    ant0, ant1 = default_base_ant_pairs(na, nbl)
-    ntime, nbl = ctx.dim_local_size('ntime', 'nbl')
-    return np.tile(ant1[0:nbl], ntime).reshape(ntime, nbl)
+    ant0, ant1 = default_base_ant_pairs(ctx)
+    nbl_l, nbl_u = ctx.dim_extents('nbl')
+    ntime = ctx.dim_local_size('ntime')
+    return np.tile(ant1[nbl_l:nbl_u], ntime).reshape(ntime, nbl_u-nbl_l)
 
 def rand_uvw(ctx):
     distance = 10
-    ntime, na = ctx.dim_local_size('ntime', 'na')
+    (ntime_l, ntime_u), (na_l, na_u) = ctx.dim_extents('ntime', 'na')
+    ntime, na = ntime_u - ntime_l, na_u - na_l
+
     # Distribute the antenna in a circle configuration
-    ant_angles = 2*np.pi*np.arange(na)/ctx.ft(na)
-    time_angle = np.arange(ntime)/ctx.ft(ntime)
-    time_ant_angles = time_angle[:,np.newaxis]*ant_angles[np.newaxis,:]
+    ant_angles = 2*np.pi*np.arange(na_l, na_u)
+
+    # Angular difference between each antenna
+    ant_angle_diff = 2*np.pi/ctx.dim_global_size('na')
+
+    # Space the time offsets for each antenna
+    time_angle = (ant_angle_diff *
+        np.arange(ntime_l, ntime_u)/ctx.dim_global_size('ntime'))
+
+    # Compute offsets per antenna and timestep
+    time_ant_angles = ant_angles[np.newaxis,:]+time_angle[:,np.newaxis]
 
     A = np.empty(ctx.shape, ctx.dtype)
     U, V, W = A[:,:,0], A[:,:,1], A[:,:,2]
-    U[:] = distance*np.sin(time_ant_angles)
+    U[:] = distance*np.cos(time_ant_angles)
     V[:] = distance*np.sin(time_ant_angles)
     W[:] = np.random.random(size=(ntime,na))*0.1
 
