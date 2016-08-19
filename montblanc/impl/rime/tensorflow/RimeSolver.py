@@ -32,6 +32,7 @@ import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow.ant_pairs import monkey_patch_antenna_pairs
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
+from montblanc.impl.rime.tensorflow.feeders.feed_context import FeedContext
 
 from hypercube import HyperCube
 import hypercube.util as hcu
@@ -154,7 +155,7 @@ class RimeSolver(MontblancTensorflowSolver):
             raise KeyError("'descriptor' is reserved, "
                 "please use another array name.")
 
-        ds['descriptor'] = DataSource(None, np.int32)
+        ds['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32)
 
         QUEUE_SIZE = 10
 
@@ -254,14 +255,14 @@ class RimeSolver(MontblancTensorflowSolver):
 
         return modded_dims
 
-    def _parameters(self):
+    def _parameter_feed(self):
         try:
-            self._parameters_impl()
+            self._parameter_feed_impl()
         except Exception as e:
             montblanc.log.exception("Parameter exception")
             raise
 
-    def _parameters_impl(self):
+    def _parameter_feed_impl(self):
         session = self._tf_session
 
         # Copy dimensions of the main cube
@@ -302,19 +303,20 @@ class RimeSolver(MontblancTensorflowSolver):
         cube.register_arrays(self.arrays())
 
         # Queues to be fed on each iteration
-        chunk_queues = tuple((self._input_queue,
+        chunk_queues = (self._input_queue,
             self._frequency_queue,
             self._uvw_queue,
             self._observation_queue,
             self._die_queue,
-            self._dde_queue))
+            self._dde_queue)
 
         chunks_read = 0
 
-        src_types = ('npsrc', 'ngsrc', 'nssrc')
-        src_queues = (self._point_source_queue,
-            self._gaussian_source_queue,
-            self._sersic_source_queue)
+        src_queues  = {
+            'npsrc' : self._point_source_queue,
+            'ngsrc' : self._gaussian_source_queue,
+            'nssrc' : self._sersic_source_queue,
+        }
 
         while True:
             try:
@@ -330,17 +332,26 @@ class RimeSolver(MontblancTensorflowSolver):
                 montblanc.log.info('Read {n} chunks'.format(n=chunks_read))
                 break
 
+            # Determine array shapes and data types for this
+            # portion of the hypercube
             array_descriptors = cube.arrays(reify=True)
 
-            # Fiddle data sources and array descriptors for the
-            # descriptor queue items
+            # Inject data sources and array descriptors for the
+            # descriptor queue items. These aren't full on arrays per se
+            # but they need to work within the feeding framework
             array_descriptors['descriptor'] = descriptor
-            data_sources['descriptor'] = DataSource(lambda s, a: descriptor, np.int32)
+            data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32)
 
-            # Create a feed dictionary from all arrays in the feed queues
-            feed_dict = { ph: data_sources[a].source(cube, array_descriptors[a])
+            # Generate (name, placeholder, datasource, array descriptor)
+            # for the arrays required by each queue
+            gen = [(a, ph, data_sources[a], array_descriptors[a])
                 for q in chunk_queues
-                for ph, a in zip(q.placeholders, q.fed_arrays) }
+                for ph, a in zip(q.placeholders, q.fed_arrays)]
+
+            # Create a feed dictionary by calling the data source functors
+            feed_dict = { ph: ds.source(FeedContext(a, cube,
+                    self.config(), ad.shape, ad.dtype))
+                for (a, ph, ds, ad) in gen }
 
             montblanc.log.debug("Enqueueing chunk {i} {d}".format(
                 i=chunks_read, d=descriptor))
@@ -348,18 +359,26 @@ class RimeSolver(MontblancTensorflowSolver):
             session.run([q.enqueue_op for q in chunk_queues],
                 feed_dict=feed_dict)
 
-            # Now feed our source queues
-            for src_type, queue in zip(src_types, src_queues):
+            # For each source type, feed that source queue
+            for src_type, queue in src_queues.iteritems():
                 iter_args = (src_type, cube.dim_local_size(src_type))
 
-                for ds in cube.dim_iter(iter_args, update_local_size=True):
-                    cube.update_dimensions(ds)
+                # Iterate over local_size chunks of the source 
+                for dim_desc in cube.dim_iter(iter_args, update_local_size=True):
+                    cube.update_dimensions(dim_desc)
 
                     montblanc.log.info("Enqueueing '{s}' '{t}' sources".format(
-                        s=ds[0]['local_size'], t=src_type))
+                        s=dim_desc[0]['local_size'], t=src_type))
 
-                    feed_dict = { ph: data_sources[a].source(cube, array_descriptors[a])
-                        for ph, a in zip(queue.placeholders, queue.fed_arrays) }
+                    # Generate (name, placeholder, datasource, array descriptor)
+                    # for the arrays required by each queue
+                    gen = [(a, ph, data_sources[a], array_descriptors[a])
+                        for ph, a in zip(queue.placeholders, queue.fed_arrays)]
+
+                    # Create a feed dictionary by calling the data source functors
+                    feed_dict = { ph: ds.source(FeedContext(a, cube,
+                            self.config(), ad.shape, ad.dtype))
+                        for (a, ph, ds, ad) in gen }
 
                     session.run(queue.enqueue_op, feed_dict=feed_dict)
 
@@ -495,7 +514,7 @@ class RimeSolver(MontblancTensorflowSolver):
         return descriptor, model_vis
 
     def solve(self):
-        p = self._parameter_executor.submit(self._parameters)
+        p = self._parameter_executor.submit(self._parameter_feed)
         f = self._feed_executor.submit(self._feed)
         c = self._compute_executor.submit(self._compute)
 
