@@ -139,7 +139,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
         if pol.nrows() > 1:
             raise ValueError("Multiple polarization configurations!")
 
-        npol = pol.getcol('NUM_CORR')
+        npol = pol.getcol('NUM_CORR')[0]
 
         if npol != 4:
             raise ValueError('Expected four polarizations')
