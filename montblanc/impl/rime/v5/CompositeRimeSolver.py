@@ -181,6 +181,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
                     key=lambda T: T[1])
 
         P, M, mem = budgets[0]
+        #P[Options.NSRC] = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
 
         # Log some information about the memory budget
         # and dimension reduction
@@ -965,7 +966,12 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # Iterate again for gradient computation requiring visibilities computed
             # for all source chuncks
             if self.enable_sersic_grad:
-                subslvr.X2_grad.fill(0, stream=subslvr.stream)
+
+                # Get pinned memory to hold the full X2 gradient
+                nssrc = self.dim_local_size('nssrc')
+                sub_X2_grad = subslvr.pinned_mem_pool.allocate(
+                    shape=(3,nssrc), dtype=subslvr.X2_grad.dtype)
+
                 for src_cpu_slice_map, src_gpu_slice_map in self._gen_source_slices():
                     # Update our maps with source slice information
                     cpu_slice_map.update(src_cpu_slice_map)
@@ -977,7 +983,9 @@ class CompositeRimeSolver(MontblancNumpySolver):
                             global_size=self.dimension(name).global_size,
                             lower_extent=slice_.start,
                             upper_extent=slice_.stop)
-    
+
+                    subslvr.X2_grad.fill(0, stream=subslvr.stream)                   
+      
                     # Enqueue Sersic gradient
                     kernel = subslvr.rime_sersic_gradient
                     new_refs = self._enqueue_array(
@@ -990,6 +998,10 @@ class CompositeRimeSolver(MontblancNumpySolver):
                     _update_refs(pool_refs, {'cdata_gradient' : [cdata_ref]})
                     kernel.execute(subslvr, subslvr.stream)
 
+                    # Enqueue the X2 gradient slice opy off the GPU onto the CPU
+                    src_range = src_cpu_slice_map['nssrc']
+                    subslvr.X2_grad.get_async(ary=sub_X2_grad[:,src_range], stream=subslvr.stream)
+
             # Enqueue chi-squared term reduction and return the
             # GPU array allocated to it
             X2_gpu_ary = subslvr.rime_reduce.execute(subslvr, subslvr.stream)
@@ -1000,12 +1012,6 @@ class CompositeRimeSolver(MontblancNumpySolver):
         
             # Enqueue chi-squared copy off the GPU onto the CPU
             X2_gpu_ary.get_async(ary=sub_X2, stream=subslvr.stream)
-
-            # Get pinned memory and copy from the GPU the partial X2_grad
-            if self.enable_sersic_grad:
-                X2_grad = subslvr.pinned_mem_pool.allocate(
-                    shape=subslvr.X2_grad.shape, dtype=subslvr.X2_grad.dtype)
-                subslvr.X2_grad.get_async(ary=X2_grad, stream=subslvr.stream)
 
             # Enqueue transfer of simulator output (model visibilities) to the CPU
             sim_output_refs = self._enqueue_array(subslvr, 
@@ -1031,8 +1037,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
         pool_refs['X2_cpu'].append(sub_X2)
         pool_refs['model_vis_output'].append(model_vis)
         if self.enable_sersic_grad:
-            pool_refs['X2_grad'].append(X2_grad)
-            return (sync_event, sub_X2, model_vis, X2_grad,
+            pool_refs['X2_grad'].append(sub_X2_grad)
+            return (sync_event, sub_X2, model_vis, sub_X2_grad,
                 pool_refs, subslvr.pool_lock,
                 cpu_slice_map.copy(),
                 gpu_slice_map.copy())
