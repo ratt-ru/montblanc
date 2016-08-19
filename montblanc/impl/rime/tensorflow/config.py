@@ -280,7 +280,7 @@ A = [
         default = default_stokes,
         test    = rand_stokes),
     array_dict('point_alpha', ('npsrc','ntime'), 'ft',
-        default = lambda c: np.full(c.shape, 0.0, c.dtype),
+        default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: rf(c.shape, c.dtype)*0.1),
 
     # Gaussian Source Definitions
@@ -291,7 +291,7 @@ A = [
         default = default_stokes,
         test    = rand_stokes),
     array_dict('gaussian_alpha', ('ngsrc','ntime'), 'ft',
-        default = lambda c: np.full(c.shape, 0.0, c.dtype),
+        default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: rf(c.shape, c.dtype)*0.1),
     array_dict('gaussian_shape', (3, 'ngsrc'), 'ft',
         default = default_gaussian_shape,
@@ -305,7 +305,7 @@ A = [
         default = default_stokes,
         test    = rand_stokes),
     array_dict('sersic_alpha', ('nssrc','ntime'), 'ft',
-        default = lambda c: np.full(c.shape, 0.0, c.dtype),
+        default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: rf(c.shape, c.dtype)*0.1),
     array_dict('sersic_shape', (3, 'nssrc'), 'ft',
         default = default_sersic_shape,
