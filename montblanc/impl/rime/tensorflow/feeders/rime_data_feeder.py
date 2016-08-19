@@ -15,15 +15,27 @@ class NumpyRimeDataFeeder(RimeDataFeeder):
     def __init__(self, arrays):
         pass
 
+DOUBLE = 'double'
+SINGLE = 'single'
+
 # Map MS column string types to numpy types
 MS_TO_NP_TYPE_MAP = {
-    'int' : np.int32,
-    'float' : np.float32,
-    'double' : np.float64,
-    'boolean' : np.bool,
-    'complex' : np.complex64,
-    'dcomplex' : np.complex128
+    'INT' : np.int32,
+    'FLOAT' : np.float32,
+    'DOUBLE' : np.float64,
+    'BOOLEAN' : np.bool,
+    'COMPLEX' : np.complex64,
+    'DCOMPLEX' : np.complex128
 }
+
+SINGLE_TO_DOUBLE_CAST_MAP = {
+    'COMPLEX' : 'DCOMPLEX',
+    'FLOAT' : 'DOUBLE',
+}
+
+DOUBLE_TO_SINGLE_CAST_MAP = { v: k for
+    k, v in SINGLE_TO_DOUBLE_CAST_MAP.iteritems() }
+
 
 # Key names for main and taql selected tables
 MAIN_TABLE = 'MAIN'
@@ -75,15 +87,29 @@ MS_DIM_ORDER = ('ntime', 'nbl', 'nbands')
 UVW_DIM_ORDER = ('ntime', 'nbl')
 DUMMY_CACHE_VALUE = (-1, None)
 
-def orderby_clause(*dimensions, **kwargs):
+def orderby_clause(dimensions, unique=False):
     columns = ", ".join(m.orderby for m
         in MS_ROW_MAPPINGS if m.dimension in dimensions)
     
-    clause = ("ORDERBY",
-        "UNIQUE" if kwargs.get('unique', False) else "",
-        columns)
+    return " ".join(("ORDERBY", "UNIQUE" if unique else "", columns))
 
-    return " ".join(clause)
+def select_columns(dimensions, dtypes, precision=None):
+    """
+    Generate select columns. columns will be casted according
+    specified precision
+    """
+    if precision is None:
+        precision = DOUBLE
+
+    if precision == DOUBLE:
+        dtypes = [SINGLE_TO_DOUBLE_CAST_MAP.get(d, d) for d in dtypes]
+    elif precision == SINGLE:
+        dtypes = [DOUBLE_TO_SINGLE_CAST_MAP.get(d, d) for d in dtypes]
+    else:
+        raise ValueError("Invalid precision '{p}'".format(p=precision))
+
+    return ", ".join('{n} AS {n} {d}'.format(n=n, d=d)
+        for n, d in zip(dimensions, dtypes))
 
 def subtable_name(msname, subtable=None):
     return '::'.join((msname, subtable)) if subtable else msname
@@ -92,8 +118,11 @@ def open_table(msname, subtable=None):
     return pt.table(subtable_name(msname, subtable), ack=False)
 
 class MSRimeDataFeeder(RimeDataFeeder):
-    def __init__(self, msname):
+    def __init__(self, msname, precision=None):
         super(MSRimeDataFeeder, self).__init__()
+
+        if precision is None:
+            precision = DOUBLE
 
         self._msname = msname
         # Create dictionary of tables
@@ -131,22 +160,28 @@ class MSRimeDataFeeder(RimeDataFeeder):
         auto_correlations = True
         field_id = 0
 
+        select_cols = select_columns(SELECTED,
+            [ms.getcoldesc(c)["valueType"].upper() for c in SELECTED],
+            precision=precision)
+
+        print select_cols
+
         # Create a view over the MS, ordered by
         # (1) time (TIME)
         # (2) baseline (ANTENNA1, ANTENNA2)
         # (3) band (SPECTRAL_WINDOW_ID via DATA_DESC_ID)
         ordering_query = " ".join((
-            "SELECT {r} FROM $ms".format(r=", ".join(SELECTED)),
+            "SELECT {c} FROM $ms".format(c=select_cols),
             "WHERE FIELD_ID={fid}".format(fid=field_id),
             "" if auto_correlations else "AND ANTENNA1 != ANTENNA2",
-            orderby_clause(*MS_DIM_ORDER)
+            orderby_clause(MS_DIM_ORDER)
         ))
 
         # Ordered Measurement Set
         oms = pt.taql(ordering_query)
         # Measurement Set ordered by unique time and baseline
         otblms = pt.taql("SELECT FROM $oms {c}".format(
-            c=orderby_clause(*UVW_DIM_ORDER, unique=True)))
+            c=orderby_clause(UVW_DIM_ORDER, unique=True)))
 
         # Store the main table
         self._tables[MAIN_TABLE] = ms
@@ -154,12 +189,12 @@ class MSRimeDataFeeder(RimeDataFeeder):
         self._tables[ORDERED_UVW_TABLE] = otblms
 
         # Count distinct timesteps in the MS
-        t_orderby = orderby_clause('ntime', unique=True)
+        t_orderby = orderby_clause(['ntime'], unique=True)
         t_query = "SELECT FROM $otblms {c}".format(c=t_orderby)
         ntime = pt.taql(t_query).nrows()
         
         # Count number of baselines in the MS
-        bl_orderby = orderby_clause('nbl', unique=True)
+        bl_orderby = orderby_clause(['nbl'], unique=True)
         bl_query = "SELECT FROM $otblms {c}".format(c=bl_orderby)
         nbl = pt.taql(bl_query).nrows()
 
@@ -315,7 +350,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('msfile')
 args = parser.parse_args()
 
-feeder = MSRimeDataFeeder(args.msfile)
+feeder = MSRimeDataFeeder(args.msfile, precision=SINGLE)
 cube = copy.deepcopy(feeder.mscube)
 
 row_iter_sizes = [10] + cube.dim_global_size('nbl', 'nbands')
