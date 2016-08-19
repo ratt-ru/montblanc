@@ -267,7 +267,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Copy dimensions of the main cube
         cube = HyperCube()
-        cube.register_dimensions(self.dimensions())
+        cube.register_dimensions(self.dimensions(copy=False))
 
         # Iterate over time and baseline
         iter_strides = cube.dim_local_size(*self._iter_dims)
@@ -276,7 +276,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Iterate through the hypercube space
         for i, d in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
             cube.update_dimensions(d)
-            descriptor = self._transcoder.encode(cube.dimensions())
+            descriptor = self._transcoder.encode(cube.dimensions(copy=False))
             feed_dict = {self._parameter_queue.placeholders[0] : descriptor }
             montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
             session.run(self._parameter_queue.enqueue_op, feed_dict=feed_dict)
@@ -299,7 +299,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Maintain a hypercube based on the main cube
         cube = HyperCube()
-        cube.register_dimensions(self.dimensions())
+        cube.register_dimensions(self.dimensions(copy=False))
         cube.register_arrays(self.arrays())
 
         # Queues to be fed on each iteration
