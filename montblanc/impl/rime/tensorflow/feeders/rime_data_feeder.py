@@ -1,7 +1,7 @@
 import collections
 import copy
 import functools
-import threading
+import sys
 import time
 import types
 
@@ -15,8 +15,66 @@ class RimeDataFeeder(object):
     pass
     
 class NumpyRimeDataFeeder(RimeDataFeeder):
-    def __init__(self, arrays):
-        pass
+    """
+    Given a dictionary containing numpy arrays and keyed on array name,
+    provides feed functions for each array.
+
+
+    >>> feeder = NumpyRimeDataFeeder({
+        "uvw" : np.zeros(shape=(100,14,3),dtype=np.float64),
+        "antenna1" : np.zeros(shape=(100,351), dtype=np.int32)})
+
+    >>> context = FeedContext(...)
+    >>> feeder.uvw(context)
+    >>> feeder.antenna1(context)
+
+    """
+    def __init__(self, arrays, cube):
+        self._arrays = arrays
+
+        def _create_feed_function(name, array):
+            def _feed(self, context):
+                """ Generic feed function """
+                idx = context.slice_index(*context.array(name).shape)
+                return array[idx]
+
+            return _feed
+
+        # Create feed methods for each supplied array
+        for n, a in arrays.iteritems():
+            try:
+                array_schema = cube.array(n)
+            except KeyError as e:
+                # Ignore the array if it isn't defined on the cube
+                raise ValueError("Feed array '{n}' as is not defined "
+                    "on the hypercube.".format(n=n)), None, sys.exc_info()[2]
+
+            # Except the shape of the supplied array to be equal to
+            # the size of the global dimensions
+            shape = tuple(cube.dim_global_size(d) if isinstance(d, str)
+                else d for d in array_schema.shape)
+
+            if shape != a.shape:
+                raise ValueError("Shape of supplied array '{n}' "
+                    "does not match the global shape '{g}' "
+                    "of the array schema '{s}'.".format(
+                        n=n, g=shape, s=array_schema.shape))
+
+            # Create the feed function, update the wrapper,
+            # bind it to a method and set the attribute on the object
+            f = functools.update_wrapper(
+                _create_feed_function(n, a),
+                _create_feed_function)
+
+            f.__doc__ = "Feed function for array '{n}'".format(n=n)
+
+            method = types.MethodType(f, self)
+            setattr(self, n, method)
+            
+
+    @property
+    def arrays(self):
+        return self._arrays
 
 DOUBLE = 'double'
 SINGLE = 'single'
@@ -196,8 +254,6 @@ class MSRimeDataFeeder(RimeDataFeeder):
             [ms.getcoldesc(c)["valueType"].upper() for c in SELECTED],
             precision=precision)
 
-        print select_cols
-
         # Create a view over the MS, ordered by
         # (1) time (TIME)
         # (2) baseline (ANTENNA1, ANTENNA2)
@@ -376,14 +432,14 @@ dim_iter_args = zip(MS_DIM_ORDER, row_iter_sizes)
 array_names = ('antenna1', 'antenna2', 'uvw',
         'observed_vis', 'flag', 'weight')
 
-def read_ms():
+def feed(feeder, cube, array_names):
     for dims in cube.dim_iter(*dim_iter_args, update_local_size=True):
         cube.update_dimensions(dims)
         cube.update_row_dimensions()
-        arrays = cube.arrays(reify=True)
+        array_schemas = cube.arrays(reify=True)
 
-        feed_contexts = ((n, FeedContext(n,
-            cube, {}, arrays[n].shape, arrays[n].dtype))
+        feed_contexts = ((n, FeedContext(n, cube, {},
+            array_schemas[n].shape, array_schemas[n].dtype))
             for n in array_names)
 
         feed_arrays = ((n, getattr(feeder, n)(c)) for n, c in feed_contexts)
@@ -391,11 +447,25 @@ def read_ms():
         print ' '.join(['{n} {s}'.format(n=n,s=a.shape) for n, a in feed_arrays])
 
 start = time.clock()
-read_ms()
+feed(feeder, cube, array_names)
 print '{s}'.format(s=time.clock() - start)
 
 #feeder.clear_cache()
 
 start = time.clock()
-read_ms()
+feed(feeder, cube, array_names)
 print '{s}'.format(s=time.clock() - start)
+
+array_names = ('antenna1', 'antenna2', 'uvw',
+        'observed_vis', 'flag', 'weight')
+
+
+cube = copy.deepcopy(feeder.mscube)
+array_schemas = cube.arrays(reify=True)
+arrays = { a: np.zeros(s.shape, s.dtype) for (a, s) in
+    ((a, array_schemas[a]) for a in array_names) }
+
+print [(k, a.shape) for k, a in arrays.iteritems()]
+
+feeder = NumpyRimeDataFeeder(arrays, cube)
+feed(feeder, cube, array_names)
