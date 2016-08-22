@@ -293,9 +293,16 @@ class CompositeRimeSolver(MontblancNumpySolver):
             (nchan_lower, nchan_upper)) = self.dim_extents(
                 'ntime', 'nbl', 'na', 'nchan')
 
+        npol = self.dim_global_size('npol')
+
         # Create the slice dictionaries, which we use to index
         # dimensions of the CPU and GPU array.
         cpu_slice, gpu_slice = {}, {}
+
+        # Visibilities are a dependent, convenience dimension
+        # Set the slice to a noop
+        cpu_slice['nvis'] = slice(0, 0, 1)
+        gpu_slice['nvis'] = slice(0, 0, 1)
 
         montblanc.log.debug('Generating RIME slices')
 
@@ -323,6 +330,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
                     ch_diff = ch_end - ch
                     cpu_slice[Options.NCHAN] = slice(ch, ch_end, 1)
                     gpu_slice[Options.NCHAN] = slice(0, ch_diff, 1)
+
+                    # Polarised Channels are a dependent, convenience dimension
+                    # equal to number of channels x number of polarisations
+                    cpu_slice['npolchan'] = slice(ch*npol, ch_end*npol, 1)
+                    gpu_slice['npolchan'] = slice(0, ch_diff*npol, 1)
 
                     yield (cpu_slice.copy(), gpu_slice.copy())
 

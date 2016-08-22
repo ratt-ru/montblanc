@@ -125,15 +125,22 @@ class RIMESolver(HyperCube):
         ntime, na, nchan, npol = self.dim_local_size(
             'ntime', 'na', 'nchan', 'npol')
         
-        nbl_expr = 'na*(na+1)//2' if autocor else 'na*(na-1)//2'
-        nbl = self._slvr_cfg.get(Options.NBL, nbl_expr)
+        # Infer number of baselines from number of antenna,
+        # use this as the default value if not specific
+        # baseline numbers were provided
+        nbl = mbu.nr_of_baselines(na, autocor)
+        nbl = self._slvr_cfg.get(Options.NBL, nbl)
 
+        # Register the baseline dimension
         self.register_dimension('nbl', nbl,
             description=Options.NBL_DESCRIPTION)
 
-        self.register_dimension('npolchan', 'nchan*npol',
+        nbl = self.dim_local_size('nbl')
+
+        # Register dependent dimensions
+        self.register_dimension('npolchan', nchan*npol,
             description='Polarised channels')
-        self.register_dimension('nvis', 'ntime*nbl*nchan',
+        self.register_dimension('nvis', ntime*nbl*nchan,
             description='Visibilities')
 
         # Convert the source types, and their numbers
