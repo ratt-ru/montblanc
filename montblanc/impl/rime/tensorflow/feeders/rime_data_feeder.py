@@ -8,6 +8,8 @@ import numpy as np
 import hypercube as hc
 import tensorflow as tf
 
+from montblanc.impl.rime.tensorflow.feeders.feed_context import FeedContext
+
 class RimeDataFeeder(object):
     pass
     
@@ -257,9 +259,9 @@ class MSRimeDataFeeder(RimeDataFeeder):
             else (0, d) for d in cube.array(name).shape)
         return hash(i for i in ((s[0], s[1]) for s in idx))
     
-    def uvw(self, cube, array_descriptor):
-        lrow, urow = cube.dim_extents('nuvwrows')
-        ntime, nbl, na = cube.dim_extent_size('ntime', 'nbl', 'na')
+    def uvw(self, context):
+        lrow, urow = context.dim_extents('nuvwrows')
+        ntime, nbl, na = context.dim_extent_size('ntime', 'nbl', 'na')
 
         bl_uvw = self._tables[ORDERED_UVW_TABLE].getcol(UVW,
             startrow=lrow, nrow=urow-lrow).reshape(ntime, nbl, 3)
@@ -270,46 +272,46 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
         return ant_uvw
 
-    def antenna1(self, cube, array_descriptor):
-        lrow, urow = cube.dim_extents('nuvwrows')
+    def antenna1(self, context):
+        lrow, urow = context.dim_extents('nuvwrows')
         antenna1 = self._tables[ORDERED_MAIN_TABLE].getcol(
             ANTENNA1, startrow=lrow, nrow=urow-lrow)
 
-        return antenna1.reshape(array_descriptor.shape)
+        return antenna1.reshape(context.shape)
 
-    def antenna2(self, cube, array_descriptor):
-        lrow, urow = cube.dim_extents('nuvwrows')
+    def antenna2(self, context):
+        lrow, urow = context.dim_extents('nuvwrows')
         antenna2 = self._tables[ORDERED_MAIN_TABLE].getcol(
             ANTENNA2, startrow=lrow, nrow=urow-lrow)
 
-        return antenna2.reshape(array_descriptor.shape)
+        return antenna2.reshape(context.shape)
 
-    def observed_vis(self, cube, array_descriptor):
-        lrow, urow = cube.dim_extents('nuvwrows')
+    def observed_vis(self, context):
+        lrow, urow = context.dim_extents('nuvwrows')
 
         data = self._tables[ORDERED_MAIN_TABLE].getcol(
             DATA, startrow=lrow, nrow=urow-lrow)
 
-        return data.reshape(array_descriptor.shape)
+        return data.reshape(context.shape)
 
-    def flag(self, cube, array_descriptor):
-        lrow, urow = cube.dim_extents('nuvwrows')
+    def flag(self, context):
+        lrow, urow = context.dim_extents('nuvwrows')
 
         flag = self._tables[ORDERED_MAIN_TABLE].getcol(
             FLAG, startrow=lrow, nrow=urow-lrow)
 
-        return flag.reshape(array_descriptor.shape)
+        return flag.reshape(context.shape)
 
-    def weight(self, cube, array_descriptor):
-        lrow, urow = cube.dim_extents('nuvwrows')
-        nchan = cube.dim_extent_size('nchanperband')
+    def weight(self, context):
+        lrow, urow = context.dim_extents('nuvwrows')
+        nchan = context.dim_extent_size('nchanperband')
 
         weight = self._tables[ORDERED_MAIN_TABLE].getcol(
             WEIGHT, startrow=lrow, nrow=urow-lrow)
 
         # WEIGHT is applied across all channels
         weight = np.repeat(weight, nchan, 0)
-        return weight.reshape(array_descriptor.shape)
+        return weight.reshape(context.shape)
 
     def close(self):
         for table in self._tables.itervalues():
@@ -333,17 +335,20 @@ cube = copy.deepcopy(feeder.mscube)
 row_iter_sizes = [10] + cube.dim_global_size('nbl', 'nbands')
 dim_iter_args = zip(MS_DIM_ORDER, row_iter_sizes)
 
+# Arrays that we will feed
+array_names = ('antenna1', 'antenna2', 'uvw',
+        'observed_vis', 'flag', 'weight')
+
 for dims in cube.dim_iter(*dim_iter_args, update_local_size=True):
     cube.update_dimensions(dims)
     cube.update_row_dimensions()
     arrays = cube.arrays(reify=True)
 
-    # Passing in the arrays should be automated...
-    ant1 = feeder.antenna1(cube, arrays['antenna1'])
-    ant2 = feeder.antenna2(cube, arrays['antenna2'])
-    uvw = feeder.uvw(cube, arrays['uvw'])
-    observed_vis = feeder.observed_vis(cube, arrays['observed_vis'])
-    flag = feeder.flag(cube, arrays['flag'])
-    weight = feeder.weight(cube, arrays['weight'])
+    feed_contexts = ((n, FeedContext(n,
+        cube, {}, arrays[n].shape, arrays[n].dtype))
+        for n in array_names)
 
-    print ant1.nbytes, ant2.nbytes, uvw.nbytes, observed_vis.nbytes, flag.nbytes, weight.nbytes
+    feed_arrays = ((n, getattr(feeder, n)(c)) for n, c in feed_contexts)
+
+    print ' '.join(['{n} {s}'.format(n=n,s=a.shape) for n, a in feed_arrays])
+
