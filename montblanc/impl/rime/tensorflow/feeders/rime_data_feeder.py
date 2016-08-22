@@ -1,14 +1,15 @@
 import collections
 import copy
+import functools
 import threading
+import time
 import types
 
 import pyrap.tables as pt
+import montblanc
+from montblanc.impl.rime.tensorflow.feeders.feed_context import FeedContext
 import numpy as np
 import hypercube as hc
-import tensorflow as tf
-
-from montblanc.impl.rime.tensorflow.feeders.feed_context import FeedContext
 
 class RimeDataFeeder(object):
     pass
@@ -87,7 +88,36 @@ MS_ROW_MAPPINGS = [
 MS_DIM_ORDER = ('ntime', 'nbl', 'nbands')
 # UVW measurement set ordering dimensions
 UVW_DIM_ORDER = ('ntime', 'nbl')
-DUMMY_CACHE_VALUE = (-1, None)
+
+def cache_ms_read(method):
+    """
+    Decorator for caching MSRimeDataFeeder feeder function return values
+
+    Create a key index for the proxied array in the FeedContext.
+    Iterate over the array shape descriptor e.g. (ntime, nbl, 3)
+    returning tuples containing the lower and upper extents
+    of string dimensions. Takes (0, d) in the case of an integer
+    dimensions.
+    """
+
+    @functools.wraps(method)
+    def memoizer(self, context):
+        D = context.dimensions(copy=False)
+        # (lower, upper) else (0, d)
+        idx = ((D[d].lower_extent, D[d].upper_extent) if d in D 
+            else (0, d) for d in context.array(context.name).shape)
+        # Construct the key for the above index
+        key = tuple(i for t in idx for i in t)
+        # Access the sub-cache for this array
+        array_cache = self._cache[context.name]
+
+        # Cache miss, call the function
+        if key not in array_cache:
+            array_cache[key] = method(self, context)
+
+        return array_cache[key]
+
+    return memoizer
 
 def orderby_clause(dimensions, unique=False):
     columns = ", ".join(m.orderby for m
@@ -241,6 +271,8 @@ class MSRimeDataFeeder(RimeDataFeeder):
         self._cube.update_row_dimensions = types.MethodType(
             _cube_row_update_function, self._cube)
 
+        self._cache = collections.defaultdict(dict)
+
         # Temporary, need to get these arrays from elsewhere
         cube.register_array('uvw', ('ntime', 'na', 3), np.float64)
         cube.register_array('antenna1', ('ntime', 'nbl'), np.int32)
@@ -252,13 +284,8 @@ class MSRimeDataFeeder(RimeDataFeeder):
     @property
     def mscube(self):
         return self._cube
-
-    def _hash_array_idx(self, name, cube):
-        D = cube.dimensions(copy=False)
-        idx = ((D[d].lower_extent, D[d].upper_extent) if d in D 
-            else (0, d) for d in cube.array(name).shape)
-        return hash(i for i in ((s[0], s[1]) for s in idx))
     
+    @cache_ms_read
     def uvw(self, context):
         lrow, urow = context.dim_extents('nuvwrows')
         ntime, nbl, na = context.dim_extent_size('ntime', 'nbl', 'na')
@@ -272,6 +299,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
         return ant_uvw
 
+    @cache_ms_read
     def antenna1(self, context):
         lrow, urow = context.dim_extents('nuvwrows')
         antenna1 = self._tables[ORDERED_MAIN_TABLE].getcol(
@@ -279,6 +307,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
         return antenna1.reshape(context.shape)
 
+    @cache_ms_read
     def antenna2(self, context):
         lrow, urow = context.dim_extents('nuvwrows')
         antenna2 = self._tables[ORDERED_MAIN_TABLE].getcol(
@@ -286,6 +315,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
         return antenna2.reshape(context.shape)
 
+    @cache_ms_read
     def observed_vis(self, context):
         lrow, urow = context.dim_extents('nuvwrows')
 
@@ -294,6 +324,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
         return data.reshape(context.shape)
 
+    @cache_ms_read
     def flag(self, context):
         lrow, urow = context.dim_extents('nuvwrows')
 
@@ -302,6 +333,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
         return flag.reshape(context.shape)
 
+    @cache_ms_read
     def weight(self, context):
         lrow, urow = context.dim_extents('nuvwrows')
         nchan = context.dim_extent_size('nchanperband')
@@ -313,7 +345,12 @@ class MSRimeDataFeeder(RimeDataFeeder):
         weight = np.repeat(weight, nchan, 0)
         return weight.reshape(context.shape)
 
+    def clear_cache(self):
+        self._cache.clear()
+
     def close(self):
+        self.clear_cache()
+
         for table in self._tables.itervalues():
             table.close()
 
@@ -339,16 +376,26 @@ dim_iter_args = zip(MS_DIM_ORDER, row_iter_sizes)
 array_names = ('antenna1', 'antenna2', 'uvw',
         'observed_vis', 'flag', 'weight')
 
-for dims in cube.dim_iter(*dim_iter_args, update_local_size=True):
-    cube.update_dimensions(dims)
-    cube.update_row_dimensions()
-    arrays = cube.arrays(reify=True)
+def read_ms():
+    for dims in cube.dim_iter(*dim_iter_args, update_local_size=True):
+        cube.update_dimensions(dims)
+        cube.update_row_dimensions()
+        arrays = cube.arrays(reify=True)
 
-    feed_contexts = ((n, FeedContext(n,
-        cube, {}, arrays[n].shape, arrays[n].dtype))
-        for n in array_names)
+        feed_contexts = ((n, FeedContext(n,
+            cube, {}, arrays[n].shape, arrays[n].dtype))
+            for n in array_names)
 
-    feed_arrays = ((n, getattr(feeder, n)(c)) for n, c in feed_contexts)
+        feed_arrays = ((n, getattr(feeder, n)(c)) for n, c in feed_contexts)
 
-    print ' '.join(['{n} {s}'.format(n=n,s=a.shape) for n, a in feed_arrays])
+        print ' '.join(['{n} {s}'.format(n=n,s=a.shape) for n, a in feed_arrays])
 
+start = time.clock()
+read_ms()
+print '{s}'.format(s=time.clock() - start)
+
+#feeder.clear_cache()
+
+start = time.clock()
+read_ms()
+print '{s}'.format(s=time.clock() - start)
