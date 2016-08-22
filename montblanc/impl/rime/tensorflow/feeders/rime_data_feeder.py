@@ -302,7 +302,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
     @cache_ms_read
     def antenna1(self, context):
         lrow, urow = context.dim_extents('nuvwrows')
-        antenna1 = self._tables[ORDERED_MAIN_TABLE].getcol(
+        antenna1 = self._tables[ORDERED_UVW_TABLE].getcol(
             ANTENNA1, startrow=lrow, nrow=urow-lrow)
 
         return antenna1.reshape(context.shape)
@@ -310,7 +310,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
     @cache_ms_read
     def antenna2(self, context):
         lrow, urow = context.dim_extents('nuvwrows')
-        antenna2 = self._tables[ORDERED_MAIN_TABLE].getcol(
+        antenna2 = self._tables[ORDERED_UVW_TABLE].getcol(
             ANTENNA2, startrow=lrow, nrow=urow-lrow)
 
         return antenna2.reshape(context.shape)
