@@ -16,8 +16,9 @@ struct const_data {
     int nsrc;
     int ntime;
     int na;
-    dim_field nchan;
-    dim_field npolchan;
+    int nchan;
+    int npolchan;
+    int npol;
     int beam_lw;
     int beam_mh;
     int beam_nud;

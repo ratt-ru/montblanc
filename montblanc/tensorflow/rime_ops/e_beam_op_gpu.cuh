@@ -145,7 +145,7 @@ __global__ void rime_e_beam(
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
     constexpr int BLOCKCHANS = LTr::BLOCKDIMX >> 2;
 
-    if(TIME >= cdata->ntime || ANT >= cdata->na || POLCHAN >= cdata->npolchan.extent_size())
+    if(TIME >= cdata->ntime || ANT >= cdata->na || POLCHAN >= cdata->npolchan)
         { return; }
 
     __shared__ struct {
@@ -173,7 +173,7 @@ __global__ void rime_e_beam(
     // Pointing errors vary by time, antenna and channel,
     if(ebeam_pol() == 0)
     {
-        i = (TIME*cdata->na + ANT)*cdata->nchan.extent_size() + (POLCHAN >> 2);
+        i = (TIME*cdata->na + ANT)*cdata->nchan + (POLCHAN >> 2);
         shared.pe[threadIdx.z][threadIdx.y][thread_chan()] = point_errors[i];
     }
 
@@ -181,7 +181,7 @@ __global__ void rime_e_beam(
     // Antenna scaling factors vary by antenna and channel, but not timestep
     if(threadIdx.z == 0 && ebeam_pol() == 0)
     {
-        i = ANT*cdata->nchan.extent_size() + (POLCHAN >> 2);
+        i = ANT*cdata->nchan + (POLCHAN >> 2);
         shared.as[threadIdx.y][thread_chan()] = antenna_scaling[i];
     }
 
@@ -195,7 +195,7 @@ __global__ void rime_e_beam(
         // clamp to grid edges
         chan = Po::clamp(chan, 0.0, cdata->beam_nud-1);
         // Snap to grid coordinate
-        shared.gchan[thread_chan()] = floor(chan);
+        shared.gchan[thread_chan()] = Po::floor(chan);
         // Offset of snapped coordinate from grid position
         shared.chd[thread_chan()] = chan - shared.gchan[thread_chan()];
     }
@@ -308,9 +308,12 @@ __global__ void rime_e_beam(
 
         // Normalise the angle and multiply in the absolute sum
         FT norm = Po::rsqrt(pol_sum.x*pol_sum.x + pol_sum.y*pol_sum.y);
+        if(!::isfinite(norm))
+            { norm = 1.0; }
+
         pol_sum.x *= norm * abs_sum;
         pol_sum.y *= norm * abs_sum;
-        i = ((SRC*cdata->ntime + TIME)*cdata->na + ANT)*cdata->npolchan.extent_size() + POLCHAN;
+        i = ((SRC*cdata->ntime + TIME)*cdata->na + ANT)*cdata->npolchan + POLCHAN;
         jones[i] = pol_sum;
     }        
 }
@@ -419,16 +422,9 @@ public:
         cdata_ptr->nsrc = nsrc;
         cdata_ptr->ntime = ntime;
         cdata_ptr->na = na;
-
-        cdata_ptr->nchan.global_size = nchan;
-        cdata_ptr->nchan.local_size = nchan;
-        cdata_ptr->nchan.lower_extent = 0;
-        cdata_ptr->nchan.upper_extent = nchan;
-
-        cdata_ptr->npolchan.global_size = npolchan;
-        cdata_ptr->npolchan.local_size = npolchan;
-        cdata_ptr->npolchan.lower_extent = 0;
-        cdata_ptr->npolchan.upper_extent = npolchan;
+        cdata_ptr->nchan = nchan;
+        cdata_ptr->npol = EBEAM_NPOL;
+        cdata_ptr->npolchan = npolchan;
 
         cdata_ptr->beam_lw = in_ebeam.dim_size(0);
         cdata_ptr->beam_mh = in_ebeam.dim_size(1);
@@ -459,22 +455,26 @@ public:
             blocks, npolchan, na, ntime));
 
         // Cast to the cuda types expected by the kernel
-        auto lm = reinterpret_cast<const typename Tr::lm_type *>(
-            in_lm.flat<FT>().data());
-        auto frequency = reinterpret_cast<const typename Tr::frequency_type *>(
-            in_frequency.flat<FT>().data());
+        auto lm = reinterpret_cast<
+            const typename Tr::lm_type *>(
+                in_lm.flat<FT>().data());
+        auto frequency = reinterpret_cast<
+            const typename Tr::frequency_type *>(
+                in_frequency.flat<FT>().data());
         auto point_errors = reinterpret_cast<
             const typename Tr::point_error_type *>(
                 in_point_errors.flat<FT>().data());
         auto antenna_scaling = reinterpret_cast<
             const typename Tr::antenna_scale_type *>(
                 in_antenna_scaling.flat<FT>().data());
-        auto ebeam = reinterpret_cast<const typename Tr::CT *>(
-            in_ebeam.flat<CT>().data());
+        auto ebeam = reinterpret_cast<
+            const typename Tr::CT *>(
+                in_ebeam.flat<CT>().data());
         auto jones = reinterpret_cast<typename Tr::CT *>(
-            jones_ptr->flat<CT>().data());
-        auto parallactic_angle = reinterpret_cast<const typename Tr::FT *>(
-            in_parallactic_angle.tensor<FT, 2>().data());
+                jones_ptr->flat<CT>().data());
+        auto parallactic_angle = reinterpret_cast<
+            const typename Tr::FT *>(
+                in_parallactic_angle.tensor<FT, 2>().data());
 
         rime_e_beam<Tr><<<grid, blocks, 0, stream>>>(
             lm, frequency, point_errors, antenna_scaling, 

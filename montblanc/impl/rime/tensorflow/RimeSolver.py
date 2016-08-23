@@ -440,10 +440,13 @@ class RimeSolver(MontblancTensorflowSolver):
 
             lm, stokes and alpha are the source variables.
             """
-            cplx_phase = rime.phase(lm, uvw, frequency, CT=model_vis.dtype)
-            bsqrt = rime.b_sqrt(stokes, alpha, frequency, ref_frequency)
-            ejones = rime.e_beam(lm, point_errors, antenna_scaling, ebeam,
-                parallactic_angles, beam_extents)
+            cplx_phase = rime.phase(lm, uvw, frequency,
+                CT=model_vis.dtype)
+            bsqrt = rime.b_sqrt(stokes, alpha, frequency, ref_frequency,
+                CT=model_vis.dtype)
+            ejones = rime.e_beam(lm, frequency,
+                point_errors, antenna_scaling,
+                parallactic_angles, beam_extents, ebeam)
 
             return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=lm.dtype)
 

@@ -17,7 +17,7 @@ typedef Eigen::ThreadPoolDevice CPUDevice;
 template <typename FT, typename CT>
 inline void
 trilinear_interpolate(
-    CT & sum,
+    CT & pol_sum,
     FT & abs_sum,
     typename tensorflow::TTypes<CT, 4>::ConstTensor & e_beam,
     float gl, float gm, float gchan,
@@ -29,7 +29,7 @@ trilinear_interpolate(
 
     CT data = e_beam(int(gl), int(gm), int(gchan), pol);
     abs_sum += weight*std::abs(data);
-    sum += data*FT(weight);
+    pol_sum += data*FT(weight);
 }
 
 template <typename FT, typename CT>
@@ -49,7 +49,7 @@ public:
         const tf::Tensor & in_antenna_scaling = context->input(3);
         const tf::Tensor & in_parallactic_angle = context->input(4);
         const tf::Tensor & in_beam_extents = context->input(5);
-        const tf::Tensor & in_E_beam = context->input(6);
+        const tf::Tensor & in_ebeam = context->input(6);
 
         OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
             tf::errors::InvalidArgument("lm should be of shape (nsrc, 2)"))
@@ -67,8 +67,8 @@ public:
             tf::errors::InvalidArgument("antenna_scaling should be of shape "
                                         "(na, nchan, 2)"))
 
-        OP_REQUIRES(context, in_E_beam.dims() == 4
-            && in_E_beam.dim_size(3) == 4,
+        OP_REQUIRES(context, in_ebeam.dims() == 4
+            && in_ebeam.dim_size(3) == 4,
             tf::errors::InvalidArgument("E_Beam should be of shape "
                                         "(beam_lw, beam_mh, beam_nud, 4)"))
 
@@ -89,19 +89,13 @@ public:
         cdata.ntime = in_point_errors.dim_size(0);
         cdata.na = in_point_errors.dim_size(1);
 
-        cdata.nchan.local_size = in_point_errors.dim_size(2);
-        cdata.nchan.global_size = cdata.nchan.local_size;
-        cdata.nchan.lower_extent = 0;
-        cdata.nchan.upper_extent = cdata.nchan.local_size;
+        cdata.nchan = in_point_errors.dim_size(2);
+        cdata.npol = EBEAM_NPOL;
+        cdata.npolchan = cdata.npol * cdata.nchan;
 
-        cdata.npolchan.local_size = cdata.nchan.local_size*EBEAM_NPOL;
-        cdata.npolchan.global_size = cdata.npolchan.local_size;
-        cdata.npolchan.lower_extent = 0;
-        cdata.npolchan.upper_extent = cdata.npolchan.local_size;
-
-        cdata.beam_lw = in_E_beam.dim_size(0);
-        cdata.beam_mh = in_E_beam.dim_size(1);
-        cdata.beam_nud = in_E_beam.dim_size(2);
+        cdata.beam_lw = in_ebeam.dim_size(0);
+        cdata.beam_mh = in_ebeam.dim_size(1);
+        cdata.beam_nud = in_ebeam.dim_size(2);
 
         // Extract beam extents
         auto beam_extents = in_beam_extents.tensor<FT, 1>();
@@ -120,7 +114,7 @@ public:
         // Reason about our output shape
         tf::TensorShape jones_shape({cdata.nsrc,
             cdata.ntime, cdata.na,
-            cdata.nchan.local_size, EBEAM_NPOL});
+            cdata.nchan, EBEAM_NPOL});
 
         // Create a pointer for the jones result
         tf::Tensor * jones_ptr = nullptr;
@@ -137,10 +131,8 @@ public:
         auto point_errors = in_point_errors.tensor<FT, 4>();
         auto antenna_scaling = in_antenna_scaling.tensor<FT, 3>();
         auto parallactic_angle = in_parallactic_angle.tensor<FT, 2>();
-        auto e_beam = in_E_beam.tensor<CT, 4>();
+        auto e_beam = in_ebeam.tensor<CT, 4>();
         auto jones = jones_ptr->tensor<CT, 5>();
-
-        int chan_ext = cdata.nchan.extent_size();
 
         for(int time=0; time < cdata.ntime; ++time)
         {                
@@ -157,7 +149,7 @@ public:
                     FT l = lm(src,0)*cost - lm(src,1)*sint;
                     FT m = lm(src,0)*sint + lm(src,1)*cost;
 
-                    for(int chan=0; chan < chan_ext; chan++)
+                    for(int chan=0; chan < cdata.nchan; chan++)
                     {
                         // Offset lm coordinates by point errors
                         // and scale by antenna scaling
@@ -229,7 +221,10 @@ public:
                                 ld*md*chd);
 
                             // Normalising factor for the polarised sum
-                            FT norm = 1.0/std::abs(pol_sum);
+                            FT norm = 1.0 / std::abs(pol_sum);
+                            if(!std::isfinite(norm))
+                                { norm = 1.0; }
+
                             // Multiply in the absolute value
                             pol_sum.real(pol_sum.real() * norm * abs_sum);
                             pol_sum.imag(pol_sum.imag() * norm * abs_sum);

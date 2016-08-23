@@ -246,23 +246,30 @@ A = [
         test    = lambda c: np.full(c.shape, 1.5e9, c.dtype)),
 
     # Holographic Beam
+
+    # Pointing errors
     array_dict('point_errors', ('ntime','na','nchan',2), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-2),
 
+    # Antenna scaling factors
     array_dict('antenna_scaling', ('na','nchan',2), 'ft',
         default = lambda c: np.ones(c.shape, c.dtype),
         test    = lambda c: rf(c.shape, c.dtype)),
 
-    # Reference antenna parallactic angle at each timestep
+    # Parallactic angles at each timestep for each antenna
     array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
         default  = lambda c: np.zeros(c.shape, c.dtype),
-        test     = lambda c: rf(a.shape, a.dtype)*np.pi),
+        test     = lambda c: rf(c.shape, c.dtype)*np.pi),
 
+    # Extents of the beam.
+    # First 3 values are lower coordinate for (l, m, frequency)
+    # while the last 3 are the upper coordinates
     array_dict('beam_extents', (6,), 'ft',
         default  = lambda c: c.dtype([-1, -1, 1e9, 1, 1, 2e9]),
         test     = lambda c: c.dtype([-1, -1, 1e9, 1, 1, 2e9])),
 
+    # Beam cube
     array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
         test    = lambda c: rc(c.shape, c.dtype)),

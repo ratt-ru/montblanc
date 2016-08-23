@@ -112,7 +112,7 @@ for src_count, src_type in zip(src_counts, src_types):
             args.ref_freq, CT=ctype)
 
         # Compute the ejones from the beam cube
-        ejones = rime.e_beam(lm, args.point_errors,
+        ejones = rime.e_beam(lm, args.frequency, args.point_errors,
             args.antenna_scaling, args.parallactic_angles,
             args.beam_extents, args.ebeam)
             

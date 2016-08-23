@@ -61,7 +61,7 @@ if __name__ == '__main__':
             gaussian=args.ngsrc,
             sersic=args.nssrc),
         init_weights='weight', weight_vector=False,
-        dtype='float', auto_correlations=args.auto_correlations,
+        dtype='double', auto_correlations=args.auto_correlations,
         context='blah',
         version=args.version)
 

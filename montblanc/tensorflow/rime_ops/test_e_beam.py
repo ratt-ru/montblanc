@@ -40,7 +40,7 @@ np_frequency = np.linspace(1e9, 2e9, nchan)
 np_point_errors = (rf(ntime, na, nchan, 2)-0.5)*1e-2
 np_antenna_scaling = rf(na,nchan,2)
 np_parallactic_angle = np.deg2rad(rf(ntime, na)).astype(dtype)
-np_beam_extents = dtype([-1, -1, -1, 1, 1, 1])
+np_beam_extents = dtype([-1, -1, 1e9, 1, 1, 2e9])
 np_e_beam = (rf(beam_lw, beam_mh, beam_nud, 4) +
         1j*rf(beam_lw, beam_mh, beam_nud, 4)).astype(ctype)
 
