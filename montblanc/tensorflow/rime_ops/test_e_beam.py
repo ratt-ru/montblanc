@@ -7,7 +7,7 @@ import tensorflow as tf
 # Load the library containing the custom operation
 rime = tf.load_op_library(os.path.join(os.getcwd(), 'rime.so'))
 
-def e_beam_op(lm, point_errors, antenna_scaling,
+def e_beam_op(lm, frequency, point_errors, antenna_scaling,
         parallactic_angles, beam_extents, ebeam):
     """
     This function wraps rime_phase by deducing the
@@ -22,7 +22,7 @@ def e_beam_op(lm, point_errors, antenna_scaling,
     else:
         raise TypeError("Unhandled type '{t}'".format(t=lm.dtype))
 
-    return rime.e_beam(lm, point_errors, antenna_scaling,
+    return rime.e_beam(lm, frequency, point_errors, antenna_scaling,
         parallactic_angles, beam_extents, ebeam)
 
 dtype, ctype = np.float64, np.complex128
@@ -36,6 +36,7 @@ rf = lambda *s: np.random.random(size=s).astype(dtype)
 
 # Set up our numpy input arrays
 np_lm = (rf(nsrc,2)-0.5)*1e-1
+np_frequency = np.linspace(1e9, 2e9, nchan)
 np_point_errors = (rf(ntime, na, nchan, 2)-0.5)*1e-2
 np_antenna_scaling = rf(na,nchan,2)
 np_parallactic_angle = np.deg2rad(rf(ntime, na)).astype(dtype)
@@ -45,9 +46,9 @@ np_e_beam = (rf(beam_lw, beam_mh, beam_nud, 4) +
 
 # Create tensorflow variables
 args = map(lambda n, s: tf.Variable(n, name=s),
-    [np_lm, np_point_errors, np_antenna_scaling,
+    [np_lm, np_frequency, np_point_errors, np_antenna_scaling,
     np_parallactic_angle, np_beam_extents, np_e_beam],
-    ["lm", "point_errors", "antenna_scaling",
+    ["lm", "frequency", "point_errors", "antenna_scaling",
     "parallactic_angles", "beam_extents", "e_beam"])
 
 # Get an expression for the e beam op on the CPU

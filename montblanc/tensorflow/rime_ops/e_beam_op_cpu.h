@@ -44,14 +44,18 @@ public:
 
         // Sanity check the input tensors
         const tf::Tensor & in_lm = context->input(0);
-        const tf::Tensor & in_point_errors = context->input(1);
-        const tf::Tensor & in_antenna_scaling = context->input(2);
-        const tf::Tensor & in_parallactic_angle = context->input(3);
-        const tf::Tensor & in_beam_extents = context->input(4);
-        const tf::Tensor & in_E_beam = context->input(5);
+        const tf::Tensor & in_frequency = context->input(1);
+        const tf::Tensor & in_point_errors = context->input(2);
+        const tf::Tensor & in_antenna_scaling = context->input(3);
+        const tf::Tensor & in_parallactic_angle = context->input(4);
+        const tf::Tensor & in_beam_extents = context->input(5);
+        const tf::Tensor & in_E_beam = context->input(6);
 
         OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
             tf::errors::InvalidArgument("lm should be of shape (nsrc, 2)"))
+
+        OP_REQUIRES(context, in_frequency.dims() == 1,
+            tf::errors::InvalidArgument("frequency should be of shape (nchan,)"))
 
         OP_REQUIRES(context, in_point_errors.dims() == 4
             && in_point_errors.dim_size(3) == 2,
@@ -129,12 +133,12 @@ public:
             { return; }
 
         auto lm = in_lm.tensor<FT, 2>();
+        auto frequency = in_frequency.tensor<FT, 1>();
         auto point_errors = in_point_errors.tensor<FT, 4>();
         auto antenna_scaling = in_antenna_scaling.tensor<FT, 3>();
+        auto parallactic_angle = in_parallactic_angle.tensor<FT, 2>();
         auto e_beam = in_E_beam.tensor<CT, 4>();
         auto jones = jones_ptr->tensor<CT, 5>();
-
-        auto parallactic_angle = in_parallactic_angle.tensor<FT, 2>();
 
         int chan_ext = cdata.nchan.extent_size();
 
@@ -166,9 +170,11 @@ public:
                         // Change into the cube coordinate system
                         ol = lscale*(ol - cdata.ll);
                         om = mscale*(om - cdata.lm);
-                        FT ochan = fscale *
-                            FT(chan+cdata.nchan.lower_extent);
-                        ochan = 0.0;
+                        FT ochan = fscale*(frequency(chan) - cdata.lf);
+
+                        ol = std::max(FT(0.0), std::min(ol, FT(cdata.beam_lw-1)));
+                        om = std::max(FT(0.0), std::min(om, FT(cdata.beam_mh-1)));
+                        ochan = std::max(FT(0.0), std::min(ochan, FT(cdata.beam_nud-1)));
 
                         // Find the quantized grid coordinate of the offset coordinate
                         FT gl = std::floor(ol);
@@ -182,52 +188,52 @@ public:
 
                         for(int pol=0; pol<EBEAM_NPOL; ++pol)
                         {
-                            std::complex<FT> sum = {0.0, 0.0};
+                            std::complex<FT> pol_sum = {0.0, 0.0};
                             FT abs_sum = 0.0;
 
                             // Load in the complex values from the E beam
                             // at the supplied coordinate offsets.
-                            // Save the sum of abs in sum.real
-                            // and the sum of args in sum.imag
-                            trilinear_interpolate<FT, CT>(sum, abs_sum, e_beam,
+                            // Save the complex sum in pol_sum
+                            // and the sum of abs in abs_sum
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl + 0.0f, gm + 0.0f, gchan + 0.0f,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 (1.0f-ld)*(1.0f-md)*(1.0f-chd));
-                            trilinear_interpolate<FT, CT>(sum, abs_sum, e_beam,
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl + 1.0f, gm + 0.0f, gchan + 0.0f,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 ld*(1.0f-md)*(1.0f-chd));
-                            trilinear_interpolate<FT, CT>(sum, abs_sum, e_beam,
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl + 0.0f, gm + 1.0f, gchan + 0.0f,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 (1.0f-ld)*md*(1.0f-chd));
-                            trilinear_interpolate<FT, CT>(sum, abs_sum, e_beam,
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl + 1.0f, gm + 1.0f, gchan + 0.0f,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 ld*md*(1.0f-chd));
-                            trilinear_interpolate<FT, CT>(sum, abs_sum, e_beam,
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl + 0.0f, gm + 0.0f, gchan + 1.0f,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 (1.0f-ld)*(1.0f-md)*chd);
-                            trilinear_interpolate<FT, CT>(sum, abs_sum, e_beam,
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl + 1.0f, gm + 0.0f, gchan + 1.0f,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 ld*(1.0f-md)*chd);
-                            trilinear_interpolate<FT, CT>(sum, abs_sum, e_beam,
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl + 0.0f, gm + 1.0f, gchan + 1.0f,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 (1.0f-ld)*md*chd);
-                            trilinear_interpolate<FT, CT>(sum, abs_sum, e_beam,
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl + 1.0f, gm + 1.0f, gchan + 1.0f,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 ld*md*chd);
 
-                            // Find the angle for the given polarisation
-                            FT sum_angle = std::arg(sum);
-                            // The exponent of sum_angle*1j
-                            FT real = std::cos(sum_angle)*abs_sum;
-                            FT imag = std::sin(sum_angle)*abs_sum;
-                            jones(src,time,ant,chan,pol) = {real, imag};
+                            // Normalising factor for the polarised sum
+                            FT norm = 1.0/std::abs(pol_sum);
+                            // Multiply in the absolute value
+                            pol_sum.real(pol_sum.real() * norm * abs_sum);
+                            pol_sum.imag(pol_sum.imag() * norm * abs_sum);
+                            jones(src,time,ant,chan,pol) = pol_sum;
                         }
                     }
                 }

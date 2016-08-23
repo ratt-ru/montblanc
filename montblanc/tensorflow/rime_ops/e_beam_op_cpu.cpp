@@ -4,6 +4,7 @@ namespace montblanc {
 namespace ebeam {
 REGISTER_OP("EBeam")
     .Input("lm: FT")
+    .Input("frequency: FT")
     .Input("point_errors: FT")
     .Input("antenna_scaling: FT")
     .Input("parallactic_angle: FT")

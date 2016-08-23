@@ -94,9 +94,9 @@ __device__ __forceinline__ int thread_chan()
 template <typename Traits, typename Policies>
 __device__ __forceinline__
 void trilinear_interpolate(
-    typename Traits::CT & sum,
+    typename Traits::CT & pol_sum,
     typename Traits::FT & abs_sum,
-    const typename Traits::CT * E_beam,
+    const typename Traits::CT * ebeam,
     const typename Traits::FT gl,
     const typename Traits::FT gm,
     const typename Traits::FT gchan,
@@ -114,27 +114,31 @@ void trilinear_interpolate(
         int(gchan))*EBEAM_NPOL + ebeam_pol();
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
-    typename Traits::CT data = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
-    sum.x += weight*data.x;
-    sum.y += weight*data.y;
+    typename Traits::CT data = cub::ThreadLoad<cub::LOAD_LDG>(ebeam + i);
+    pol_sum.x += weight*data.x;
+    pol_sum.y += weight*data.y;
     abs_sum += weight*Policies::abs(data);
 }
 
 template <typename Traits>
 __global__ void rime_e_beam(
     const typename Traits::lm_type * lm,
+    const typename Traits::frequency_type * frequency,
     const typename Traits::point_error_type * point_errors,
     const typename Traits::antenna_scale_type * antenna_scaling,
     const typename Traits::FT * parallactic_angle,
-    const typename Traits::CT * e_beam,
+    const typename Traits::CT * ebeam,
     typename Traits::CT * jones)
 {
     // Simpler float and complex types
-    typedef typename Traits::FT FT;
-    typedef typename Traits::CT CT;
+    using FT = typename Traits::FT;
+    using CT = typename Traits::CT;
 
-    typedef typename montblanc::kernel_policies<FT> Po;
-    typedef typename montblanc::ebeam::LaunchTraits<FT> LTr;
+    using point_error_type = typename Traits::point_error_type;
+    using antenna_scale_type = typename Traits::antenna_scale_type;
+
+    using Po = typename montblanc::kernel_policies<FT>;
+    using LTr = typename montblanc::ebeam::LaunchTraits<FT>;
 
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
@@ -144,20 +148,33 @@ __global__ void rime_e_beam(
     if(TIME >= cdata->ntime || ANT >= cdata->na || POLCHAN >= cdata->npolchan.extent_size())
         { return; }
 
-    __shared__ FT s_pa_sin[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];
-    __shared__ FT s_pa_cos[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];
-    __shared__ typename Traits::point_error_type
-        s_lmd[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][BLOCKCHANS];
-    __shared__ typename Traits::antenna_scale_type
-        s_ab[LTr::BLOCKDIMY][BLOCKCHANS];
-
+    __shared__ struct {
+        FT lscale;             // l axis scaling factor
+        FT mscale;             // m axis scaling factor
+        FT pa_sin[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];  // sin of parallactic angle
+        FT pa_cos[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];  // cos of parallactic angle
+        FT gchan[BLOCKCHANS];  // channel grid position (snapped)
+        FT chd[BLOCKCHANS];    // difference between gchan and actual grid position
+        // pointing errors
+        point_error_type pe[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][BLOCKCHANS];
+        // antenna scaling        
+        antenna_scale_type as[LTr::BLOCKDIMY][BLOCKCHANS];
+    } shared;
     int i;
+
+
+    // Precompute l and m scaling factors in shared memory
+    if(threadIdx.z == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+    {
+        shared.lscale = FT(cdata->beam_lw - 1) / (cdata->ul - cdata->ll);
+        shared.mscale = FT(cdata->beam_mh - 1) / (cdata->um - cdata->lm);
+    }
 
     // Pointing errors vary by time, antenna and channel,
     if(ebeam_pol() == 0)
     {
         i = (TIME*cdata->na + ANT)*cdata->nchan.extent_size() + (POLCHAN >> 2);
-        s_lmd[threadIdx.z][threadIdx.y][thread_chan()] = point_errors[i];
+        shared.pe[threadIdx.z][threadIdx.y][thread_chan()] = point_errors[i];
     }
 
 
@@ -165,7 +182,22 @@ __global__ void rime_e_beam(
     if(threadIdx.z == 0 && ebeam_pol() == 0)
     {
         i = ANT*cdata->nchan.extent_size() + (POLCHAN >> 2);
-        s_ab[threadIdx.y][thread_chan()] = antenna_scaling[i];
+        shared.as[threadIdx.y][thread_chan()] = antenna_scaling[i];
+    }
+
+    // Frequency vary by channel, but not timestep or antenna
+    if(threadIdx.z == 0 && threadIdx.y == 0 && ebeam_pol() == 0)
+    {
+        // Channel coordinate
+        // channel grid position
+        FT freqscale = FT(cdata->beam_nud-1) / (cdata->uf - cdata->lf);
+        FT chan = freqscale * (frequency[POLCHAN >> 2] - cdata->lf);
+        // clamp to grid edges
+        chan = Po::clamp(chan, 0.0, cdata->beam_nud-1);
+        // Snap to grid coordinate
+        shared.gchan[thread_chan()] = floor(chan);
+        // Offset of snapped coordinate from grid position
+        shared.chd[thread_chan()] = chan - shared.gchan[thread_chan()];
     }
 
     // Parallactic angles vary by time and antenna, but not channel
@@ -174,8 +206,8 @@ __global__ void rime_e_beam(
         i = TIME*cdata->na + ANT;
         FT parangle = parallactic_angle[i];
         Po::sincos(parangle,
-            &s_pa_sin[threadIdx.z][threadIdx.y],
-            &s_pa_cos[threadIdx.z][threadIdx.y]);
+            &shared.pa_sin[threadIdx.z][threadIdx.y],
+            &shared.pa_cos[threadIdx.z][threadIdx.y]);
     }
 
     __syncthreads();
@@ -184,42 +216,42 @@ __global__ void rime_e_beam(
     {
         typename Traits::lm_type rlm = lm[SRC];
 
-        // Rotate the source
-        FT l = rlm.x*s_pa_cos[threadIdx.z][threadIdx.y]
-            - rlm.y*s_pa_sin[threadIdx.z][threadIdx.y];
-        FT m = rlm.x*s_pa_sin[threadIdx.z][threadIdx.y]
-            + rlm.y*s_pa_cos[threadIdx.z][threadIdx.y];
-
+       // L coordinate
+        // Rotate
+        FT l = rlm.x*shared.pa_cos[threadIdx.z][threadIdx.y] -
+            rlm.y*shared.pa_sin[threadIdx.z][threadIdx.y];
         // Add the pointing errors for this antenna.
-        l += s_lmd[threadIdx.z][threadIdx.y][thread_chan()].x;
-        m += s_lmd[threadIdx.z][threadIdx.y][thread_chan()].y;
-
-        // Multiply by the antenna scaling factors.
-        l *= s_ab[threadIdx.y][thread_chan()].x;
-        m *= s_ab[threadIdx.y][thread_chan()].y;
-
-        // Compute grid position and difference from
-        // actual position for the source at each channel
-        l = FT(cdata->beam_lw-1) * (l - cdata->ll) / (cdata->ul - cdata->ll);
+        l += shared.pe[threadIdx.z][threadIdx.y][thread_chan()].x;
+        // Scale by antenna scaling factors
+        l *= shared.as[threadIdx.y][thread_chan()].x;
+        // l grid position
+        l = shared.lscale * (l - cdata->ll);
+        // clamp to grid edges
+        l = Po::clamp(0.0, l, cdata->beam_lw-1);
+        // Snap to grid coordinate
         FT gl = Po::floor(l);
+        // Offset of snapped coordinate from grid position
         FT ld = l - gl;
-
-        m = FT(cdata->beam_mh-1) * (m - cdata->lm) / (cdata->um - cdata->lm);
+        
+        // M coordinate
+        // rotate
+        FT m = rlm.x*shared.pa_sin[threadIdx.z][threadIdx.y] +
+            rlm.y*shared.pa_cos[threadIdx.z][threadIdx.y];
+        // Add the pointing errors for this antenna.
+        m += shared.pe[threadIdx.z][threadIdx.y][thread_chan()].y;
+        // Scale by antenna scaling factors
+        m *= shared.as[threadIdx.y][thread_chan()].y;
+        // m grid position
+        m = shared.mscale * (m - cdata->lm);
+        // clamp to grid edges
+        m = Po::clamp(0.0, m, cdata->beam_mh-1);
+        // Snap to grid position
         FT gm = Po::floor(m);
+        // Offset of snapped coordinate from grid position
         FT md = m - gm;
 
-        // Work out where we are in the beam cube.
-        // POLCHAN >> 2 is our position in the local channel space
-        // Add this to the lower extent in the global channel space
-        FT chan = FT(cdata->beam_nud-1) * float(POLCHAN>>2 + cdata->nchan.lower_extent)
-            / (cdata->uf - cdata->lf);
-        chan = 0;
-        FT gchan = Po::floor(chan);
-        FT chd = chan - gchan;
-
-        CT sum = Po::make_ct(0.0, 0.0);
+        CT pol_sum = Po::make_ct(0.0, 0.0);
         FT abs_sum = FT(0.0);
-
         // A simplified bilinear weighting is used here. Given
         // point x between points x1 and x2, with function f
         // provided values f(x1) and f(x2) at these points.
@@ -247,49 +279,39 @@ __global__ void rime_e_beam(
         //
         // f(x,y,z) ~= f(x1,y1,z1)(1-(x-x1))(1-(y-y1))(1-(z-z1)) + ...
         //           + f(x2,y2,z2)   (x-x1)    (y-y1)    (z-z1)
-
         // Load in the complex values from the E beam
         // at the supplied coordinate offsets.
-        // Save the sum of abs in sum.real
-        // and the sum of args in sum.imag
-        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
-            gl + 0.0f, gm + 0.0f, gchan + 0.0f,
-            (1.0f-ld)*(1.0f-md)*(1.0f-chd));
-        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
-            gl + 1.0f, gm + 0.0f, gchan + 0.0f,
-            ld*(1.0f-md)*(1.0f-chd));
-        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
-            gl + 0.0f, gm + 1.0f, gchan + 0.0f,
-            (1.0f-ld)*md*(1.0f-chd));
-        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
-            gl + 1.0f, gm + 1.0f, gchan + 0.0f,
-            ld*md*(1.0f-chd));
+        trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
+            gl + 0.0f, gm + 0.0f, shared.gchan[thread_chan()] + 0.0f,
+            (1.0f-ld)*(1.0f-md)*(1.0f-shared.chd[thread_chan()]));
+        trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
+            gl + 1.0f, gm + 0.0f, shared.gchan[thread_chan()] + 0.0f,
+            ld*(1.0f-md)*(1.0f-shared.chd[thread_chan()]));
+        trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
+            gl + 0.0f, gm + 1.0f, shared.gchan[thread_chan()] + 0.0f,
+            (1.0f-ld)*md*(1.0f-shared.chd[thread_chan()]));
+        trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
+            gl + 1.0f, gm + 1.0f, shared.gchan[thread_chan()] + 0.0f,
+            ld*md*(1.0f-shared.chd[thread_chan()]));
+        trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
+            gl + 0.0f, gm + 0.0f, shared.gchan[thread_chan()] + 1.0f,
+            (1.0f-ld)*(1.0f-md)*shared.chd[thread_chan()]);
+        trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
+            gl + 1.0f, gm + 0.0f, shared.gchan[thread_chan()] + 1.0f,
+            ld*(1.0f-md)*shared.chd[thread_chan()]);
+        trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
+            gl + 0.0f, gm + 1.0f, shared.gchan[thread_chan()] + 1.0f,
+            (1.0f-ld)*md*shared.chd[thread_chan()]);
+        trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
+            gl + 1.0f, gm + 1.0f, shared.gchan[thread_chan()] + 1.0f,
+            ld*md*shared.chd[thread_chan()]);
 
-        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
-            gl + 0.0f, gm + 0.0f, gchan + 1.0f,
-            (1.0f-ld)*(1.0f-md)*chd);
-        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
-            gl + 1.0f, gm + 0.0f, gchan + 1.0f,
-            ld*(1.0f-md)*chd);
-        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
-            gl + 0.0f, gm + 1.0f, gchan + 1.0f,
-            (1.0f-ld)*md*chd);
-        trilinear_interpolate<Traits, Po>(sum, abs_sum, e_beam,
-            gl + 1.0f, gm + 1.0f, gchan + 1.0f,
-            ld*md*chd);
-
-        // Determine the normalised angle
-        FT angle = Po::arg(sum);
-
-        // Take the complex exponent of the angle
-        // and multiply by the sum of abs
-        CT value;
-        Po::sincos(angle, &value.y, &value.x);
-        value.x *= abs_sum;
-        value.y *= abs_sum;
-
+        // Normalise the angle and multiply in the absolute sum
+        FT norm = Po::rsqrt(pol_sum.x*pol_sum.x + pol_sum.y*pol_sum.y);
+        pol_sum.x *= norm * abs_sum;
+        pol_sum.y *= norm * abs_sum;
         i = ((SRC*cdata->ntime + TIME)*cdata->na + ANT)*cdata->npolchan.extent_size() + POLCHAN;
-        jones[i] = value;
+        jones[i] = pol_sum;
     }        
 }
 
@@ -318,14 +340,18 @@ public:
 
         // Sanity check the input tensors
         const tf::Tensor & in_lm = context->input(0);
-        const tf::Tensor & in_point_errors = context->input(1);
-        const tf::Tensor & in_antenna_scaling = context->input(2);
-        const tf::Tensor & in_parallactic_angle = context->input(3);
-        const tf::Tensor & in_beam_extents = context->input(4);
-        const tf::Tensor & in_E_beam = context->input(5);
+        const tf::Tensor & in_frequency = context->input(1);
+        const tf::Tensor & in_point_errors = context->input(2);
+        const tf::Tensor & in_antenna_scaling = context->input(3);
+        const tf::Tensor & in_parallactic_angle = context->input(4);
+        const tf::Tensor & in_beam_extents = context->input(5);
+        const tf::Tensor & in_ebeam = context->input(6);
 
         OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
             tf::errors::InvalidArgument("lm should be of shape (nsrc, 2)"))
+
+        OP_REQUIRES(context, in_frequency.dims() == 1,
+            tf::errors::InvalidArgument("frequency should be of shape (nchan,)"))
 
         OP_REQUIRES(context, in_point_errors.dims() == 4
             && in_point_errors.dim_size(3) == 2,
@@ -337,8 +363,8 @@ public:
             tf::errors::InvalidArgument("antenna_scaling should be of shape "
                                         "(na, nchan, 2)"))
 
-        OP_REQUIRES(context, in_E_beam.dims() == 4
-            && in_E_beam.dim_size(3) == 4,
+        OP_REQUIRES(context, in_ebeam.dims() == 4
+            && in_ebeam.dim_size(3) == 4,
             tf::errors::InvalidArgument("E_Beam should be of shape "
                                         "(beam_lw, beam_mh, beam_nud, 4)"))
 
@@ -404,9 +430,9 @@ public:
         cdata_ptr->npolchan.lower_extent = 0;
         cdata_ptr->npolchan.upper_extent = npolchan;
 
-        cdata_ptr->beam_lw = in_E_beam.dim_size(0);
-        cdata_ptr->beam_mh = in_E_beam.dim_size(1);
-        cdata_ptr->beam_nud = in_E_beam.dim_size(2);
+        cdata_ptr->beam_lw = in_ebeam.dim_size(0);
+        cdata_ptr->beam_mh = in_ebeam.dim_size(1);
+        cdata_ptr->beam_nud = in_ebeam.dim_size(2);
 
         // Extract beam extents
         auto beam_extents = in_beam_extents.tensor<FT, 1>();
@@ -435,22 +461,24 @@ public:
         // Cast to the cuda types expected by the kernel
         auto lm = reinterpret_cast<const typename Tr::lm_type *>(
             in_lm.flat<FT>().data());
+        auto frequency = reinterpret_cast<const typename Tr::frequency_type *>(
+            in_frequency.flat<FT>().data());
         auto point_errors = reinterpret_cast<
             const typename Tr::point_error_type *>(
                 in_point_errors.flat<FT>().data());
         auto antenna_scaling = reinterpret_cast<
             const typename Tr::antenna_scale_type *>(
                 in_antenna_scaling.flat<FT>().data());
-        auto E_beam = reinterpret_cast<const typename Tr::CT *>(
-            in_E_beam.flat<CT>().data());
+        auto ebeam = reinterpret_cast<const typename Tr::CT *>(
+            in_ebeam.flat<CT>().data());
         auto jones = reinterpret_cast<typename Tr::CT *>(
             jones_ptr->flat<CT>().data());
         auto parallactic_angle = reinterpret_cast<const typename Tr::FT *>(
             in_parallactic_angle.tensor<FT, 2>().data());
 
         rime_e_beam<Tr><<<grid, blocks, 0, stream>>>(
-            lm, point_errors, antenna_scaling, 
-            parallactic_angle, E_beam, jones);
+            lm, frequency, point_errors, antenna_scaling, 
+            parallactic_angle, ebeam, jones);
 
     }
 };
