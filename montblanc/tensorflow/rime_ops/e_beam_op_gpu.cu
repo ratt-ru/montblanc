@@ -6,11 +6,7 @@ namespace ebeam {
 REGISTER_KERNEL_BUILDER(
     Name("EBeam")
     .Device(tensorflow::DEVICE_GPU)
-    .HostMemory("parallactic_angle")
-    .HostMemory("beam_ll")
-    .HostMemory("beam_ul")
-    .HostMemory("beam_lm")
-    .HostMemory("beam_um")
+    .HostMemory("beam_extents")
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT"),
     EBeam<GPUDevice, float, tensorflow::complex64>);
@@ -18,11 +14,7 @@ REGISTER_KERNEL_BUILDER(
 REGISTER_KERNEL_BUILDER(
     Name("EBeam")
     .Device(tensorflow::DEVICE_GPU)
-    .HostMemory("parallactic_angle")
-    .HostMemory("beam_ll")
-    .HostMemory("beam_ul")
-    .HostMemory("beam_lm")
-    .HostMemory("beam_um")
+    .HostMemory("beam_extents")
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT"),
     EBeam<GPUDevice, double, tensorflow::complex128>);

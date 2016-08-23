@@ -11,7 +11,8 @@ template <typename Device, typename FT, typename CT> class EBeam;
 // Number of polarisations handled by this kernel
 constexpr int EBEAM_NPOL = 4;
 
-typedef struct {
+template <typename FT>
+struct const_data {
     int nsrc;
     int ntime;
     int na;
@@ -20,7 +21,9 @@ typedef struct {
     int beam_lw;
     int beam_mh;
     int beam_nud;
-} const_data;
+    FT ll, lm, lf;
+    FT ul, um, uf;
+};
 
 } // namespace ebeam {
 } // namespace montblanc {

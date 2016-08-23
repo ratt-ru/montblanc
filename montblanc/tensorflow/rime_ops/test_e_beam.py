@@ -9,7 +9,7 @@ rime = tf.load_op_library(os.path.join(os.getcwd(), 'rime.so'))
 
 def e_beam_op(lm, point_errors, antenna_scaling,
         e_beam, parallactic_angle,
-        beam_ll, beam_lm, beam_ul, beam_um):
+        beam_extents):
     """
     This function wraps rime_phase by deducing the
     complex output result type from the input
@@ -25,7 +25,7 @@ def e_beam_op(lm, point_errors, antenna_scaling,
 
     return rime.e_beam(lm, point_errors, antenna_scaling,
         e_beam, parallactic_angle,
-        beam_ll, beam_lm, beam_ul, beam_um)
+        beam_extents)
 
 dtype, ctype = np.float64, np.complex128
 nsrc, ntime, na, nchan = 20, 10, 7, 32
@@ -42,18 +42,17 @@ np_point_errors = (rf(ntime, na, nchan, 2)-0.5)*1e-2
 np_antenna_scaling = rf(na,nchan,2)
 np_e_beam = (rf(beam_lw, beam_mh, beam_nud, 4) +
         1j*rf(beam_lw, beam_mh, beam_nud, 4)).astype(ctype)
-np_parallactic_angle = np.deg2rad(1).astype(dtype)
-np_beam_ll, np_beam_ul, np_beam_lm, np_beam_um = dtype(
-    [-1, -1, 1, 1])
+np_parallactic_angle = np.deg2rad(rf(ntime, na)).astype(dtype)
+np_beam_extents = dtype([-1, -1, -1, 1, 1, 1])
 
 # Create tensorflow variables
 args = map(lambda n, s: tf.Variable(n, name=s),
     [np_lm, np_point_errors, np_antenna_scaling,
     np_e_beam, np_parallactic_angle,
-    np_beam_ll, np_beam_ul, np_beam_lm, np_beam_um],
+    np_beam_extents],
     ["lm", "point_errors", "antenna_scaling",
     "e_beam", "parallactic_angle",
-    "beam_ll", "beam_ul", "beam_lm", "beam_um"])
+    "beam_extents"])
 
 # Get an expression for the e beam op on the CPU
 with tf.device('/cpu:0'):

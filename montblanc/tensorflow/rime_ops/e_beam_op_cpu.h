@@ -48,10 +48,7 @@ public:
         const tf::Tensor & in_antenna_scaling = context->input(2);
         const tf::Tensor & in_E_beam = context->input(3);
         const tf::Tensor & in_parallactic_angle = context->input(4);
-        const tf::Tensor & in_beam_ll = context->input(5);
-        const tf::Tensor & in_beam_lm = context->input(6);
-        const tf::Tensor & in_beam_ul = context->input(7);
-        const tf::Tensor & in_beam_um = context->input(8);
+        const tf::Tensor & in_beam_extents = context->input(5);
 
         OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
             tf::errors::InvalidArgument("lm should be of shape (nsrc, 2)"))
@@ -71,33 +68,17 @@ public:
             tf::errors::InvalidArgument("E_Beam should be of shape "
                                         "(beam_lw, beam_mh, beam_nud, 4)"))
 
-        OP_REQUIRES(context, tf::TensorShapeUtils::IsScalar(
-                in_parallactic_angle.shape()),
-            tf::errors::InvalidArgument("parallactic_angle is not scalar: ",
-                in_parallactic_angle.shape().DebugString()))
+        OP_REQUIRES(context, in_parallactic_angle.dims() == 2,
+            tf::errors::InvalidArgument("parallactic_angle should be of shape "
+                                        "(ntime, na)"))
 
-        OP_REQUIRES(context, tf::TensorShapeUtils::IsScalar(
-                in_beam_ll.shape()),
-            tf::errors::InvalidArgument("in_beam_ll is not scalar: ",
-                in_beam_ll.shape().DebugString()))
-
-        OP_REQUIRES(context, tf::TensorShapeUtils::IsScalar(
-                in_beam_lm.shape()),
-            tf::errors::InvalidArgument("in_beam_lm is not scalar: ",
-                in_beam_lm.shape().DebugString()))
-
-        OP_REQUIRES(context, tf::TensorShapeUtils::IsScalar(
-                in_beam_ul.shape()),
-            tf::errors::InvalidArgument("in_beam_ul is not scalar: ",
-                in_beam_ul.shape().DebugString()))
-
-        OP_REQUIRES(context, tf::TensorShapeUtils::IsScalar(
-                in_beam_um.shape()),
-            tf::errors::InvalidArgument("in_beam_um is not scalar: ",
-                in_beam_um.shape().DebugString()))
+        OP_REQUIRES(context, in_beam_extents.dims() == 1
+            && in_beam_extents.dim_size(0) == 6,
+            tf::errors::InvalidArgument("beam_extents should be of shape "
+                                        "(6,)"))
 
         // Constant data structure
-        montblanc::ebeam::const_data cdata;
+        montblanc::ebeam::const_data<FT> cdata;
 
         // Extract problem dimensions
         cdata.nsrc = in_lm.dim_size(0);
@@ -117,6 +98,20 @@ public:
         cdata.beam_lw = in_E_beam.dim_size(0);
         cdata.beam_mh = in_E_beam.dim_size(1);
         cdata.beam_nud = in_E_beam.dim_size(2);
+
+        // Extract beam extents
+        auto beam_extents = in_beam_extents.tensor<FT, 1>();
+
+        cdata.ll = beam_extents(0); // Lower l
+        cdata.lm = beam_extents(1); // Lower m
+        cdata.lf = beam_extents(2); // Lower frequency
+        cdata.ul = beam_extents(3); // Upper l
+        cdata.um = beam_extents(4); // Upper m
+        cdata.uf = beam_extents(5); // Upper frequency
+
+        FT lscale = FT(cdata.beam_lw-1)/(cdata.ul - cdata.ll);
+        FT mscale = FT(cdata.beam_mh-1)/(cdata.um - cdata.lm);
+        FT fscale = FT(cdata.beam_nud-1)/(cdata.uf - cdata.lf);
 
         // Reason about our output shape
         tf::TensorShape jones_shape({cdata.nsrc,
@@ -139,29 +134,25 @@ public:
         auto e_beam = in_E_beam.tensor<CT, 4>();
         auto jones = jones_ptr->tensor<CT, 5>();
 
-        FT parallactic_angle = in_parallactic_angle.tensor<FT, 0>()(0);
-        FT beam_ll = in_beam_ll.tensor<FT, 0>()(0);
-        FT beam_lm = in_beam_lm.tensor<FT, 0>()(0);
-        FT beam_ul = in_beam_ul.tensor<FT, 0>()(0);
-        FT beam_um = in_beam_um.tensor<FT, 0>()(0);
+        auto parallactic_angle = in_parallactic_angle.tensor<FT, 2>();
 
         int chan_ext = cdata.nchan.extent_size();
 
         for(int time=0; time < cdata.ntime; ++time)
-        {
-            // Rotation angle
-            FT angle = parallactic_angle*time;
-            FT sint = std::sin(angle);
-            FT cost = std::cos(angle);
-
-            for(int src=0; src < cdata.nsrc; ++src)
+        {                
+            for(int ant=0; ant < cdata.na; ++ant)
             {
-                // Rotate lm coordinate angle
-                FT l = lm(src,0)*cost - lm(src,1)*sint;
-                FT m = lm(src,0)*sint + lm(src,1)*cost;
-                
-                for(int ant=0; ant < cdata.na; ++ant)
+                // Rotation angle
+                FT angle = parallactic_angle(time, ant);
+                FT sint = std::sin(angle);
+                FT cost = std::cos(angle);
+
+                for(int src=0; src < cdata.nsrc; ++src)
                 {
+                    // Rotate lm coordinate angle
+                    FT l = lm(src,0)*cost - lm(src,1)*sint;
+                    FT m = lm(src,0)*sint + lm(src,1)*cost;
+
                     for(int chan=0; chan < chan_ext; chan++)
                     {
                         // Offset lm coordinates by point errors
@@ -173,21 +164,21 @@ public:
                         om *= antenna_scaling(ant, chan, 1);
 
                         // Change into the cube coordinate system
-                        ol = FT(cdata.beam_lw-1)*(ol - beam_ll)/(beam_ul - beam_ll);
-                        om = FT(cdata.beam_mh-1)*(om - beam_lm)/(beam_um - beam_lm);
-                        float ochan = float(cdata.beam_nud-1) *
-                            float(chan+cdata.nchan.lower_extent) /
-                            float(cdata.nchan.global_size);
+                        ol = lscale*(ol - cdata.ll);
+                        om = mscale*(om - cdata.lm);
+                        FT ochan = fscale *
+                            FT(chan+cdata.nchan.lower_extent);
+                        ochan = 0.0;
 
                         // Find the quantized grid coordinate of the offset coordinate
-                        float gl = std::floor(ol);
-                        float gm = std::floor(om);
-                        float gchan = std::floor(ochan);
+                        FT gl = std::floor(ol);
+                        FT gm = std::floor(om);
+                        FT gchan = std::floor(ochan);
 
                         // Difference between grid and offset coordinates
-                        float ld = ol - gl;
-                        float md = om - gm;
-                        float chd = ochan - gchan;
+                        FT ld = ol - gl;
+                        FT md = om - gm;
+                        FT chd = ochan - gchan;
 
                         for(int pol=0; pol<EBEAM_NPOL; ++pol)
                         {
