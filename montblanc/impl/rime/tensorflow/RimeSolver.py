@@ -46,7 +46,7 @@ rime_lib_path = os.path.join(montblanc.get_montblanc_path(),
     'tensorflow', 'rime_ops', 'rime.so')
 rime = tf.load_op_library(rime_lib_path)
 
-DataSource = collections.namedtuple("DataSource", ['source', 'type'])
+DataSource = collections.namedtuple("DataSource", ['source', 'dtype'])
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """

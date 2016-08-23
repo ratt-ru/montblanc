@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import pyrap.tables as pt
+import sys
 import types
 
 def _get_queue_types(fed_arrays, data_sources):
@@ -10,10 +11,10 @@ def _get_queue_types(fed_arrays, data_sources):
     in the data_sources dictionary
     """
     try:
-        return [data_sources[n][1] for n in fed_arrays]
+        return [data_sources[n].dtype for n in fed_arrays]
     except KeyError as e:
         raise ValueError("Array '{k}' has no data source!"
-            .format(k=e.message))
+            .format(k=e.message)), None, sys.exc_info()[2]
 
 class QueueWrapper(object):
     def __init__(self, name, queue_size, fed_arrays, data_sources):
