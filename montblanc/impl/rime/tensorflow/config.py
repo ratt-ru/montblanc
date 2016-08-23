@@ -57,15 +57,6 @@ fwhm2int = 1.0/np.sqrt(np.log(256))
 P = [
     prop_dict('sigma_sqrd', 'ft', 1.0),
     prop_dict('X2', 'ft', 0.0),
-
-    # Width of the beam cube dimension. l, m and lambda
-    # Lower l and m coordinates of the beam cube
-    prop_dict('beam_ll', 'ft', -0.5),
-    prop_dict('beam_lm', 'ft', -0.5),
-    # Upper l and m coordinates of the beam cube
-    prop_dict('beam_ul', 'ft', 0.5),
-    prop_dict('beam_um', 'ft', 0.5),
-    prop_dict('parallactic_angle', 'ft', 0.0),
 ]
 
 def default_base_ant_pairs(ctx):
@@ -262,6 +253,15 @@ A = [
     array_dict('antenna_scaling', ('na','nchan',2), 'ft',
         default = lambda c: np.ones(c.shape, c.dtype),
         test    = lambda c: rf(c.shape, c.dtype)),
+
+    # Reference antenna parallactic angle at each timestep
+    array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
+        default  = lambda c: np.zeros(c.shape, c.dtype),
+        test     = lambda c: rf(a.shape, a.dtype)*np.pi),
+
+    array_dict('beam_extents', (6,), 'ft',
+        default  = lambda c: c.dtype([-1, -1, 1e9, 1, 1, 2e9]),
+        test     = lambda c: c.dtype([-1, -1, 1e9, 1, 1, 2e9])),
 
     array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,

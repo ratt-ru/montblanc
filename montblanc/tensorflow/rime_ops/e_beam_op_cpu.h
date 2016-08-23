@@ -46,9 +46,9 @@ public:
         const tf::Tensor & in_lm = context->input(0);
         const tf::Tensor & in_point_errors = context->input(1);
         const tf::Tensor & in_antenna_scaling = context->input(2);
-        const tf::Tensor & in_E_beam = context->input(3);
-        const tf::Tensor & in_parallactic_angle = context->input(4);
-        const tf::Tensor & in_beam_extents = context->input(5);
+        const tf::Tensor & in_parallactic_angle = context->input(3);
+        const tf::Tensor & in_beam_extents = context->input(4);
+        const tf::Tensor & in_E_beam = context->input(5);
 
         OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
             tf::errors::InvalidArgument("lm should be of shape (nsrc, 2)"))

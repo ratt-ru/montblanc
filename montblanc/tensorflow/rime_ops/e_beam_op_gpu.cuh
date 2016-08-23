@@ -125,8 +125,8 @@ __global__ void rime_e_beam(
     const typename Traits::lm_type * lm,
     const typename Traits::point_error_type * point_errors,
     const typename Traits::antenna_scale_type * antenna_scaling,
-    const typename Traits::CT * e_beam,
     const typename Traits::FT * parallactic_angle,
+    const typename Traits::CT * e_beam,
     typename Traits::CT * jones)
 {
     // Simpler float and complex types
@@ -320,9 +320,9 @@ public:
         const tf::Tensor & in_lm = context->input(0);
         const tf::Tensor & in_point_errors = context->input(1);
         const tf::Tensor & in_antenna_scaling = context->input(2);
-        const tf::Tensor & in_E_beam = context->input(3);
-        const tf::Tensor & in_parallactic_angle = context->input(4);
-        const tf::Tensor & in_beam_extents = context->input(5);
+        const tf::Tensor & in_parallactic_angle = context->input(3);
+        const tf::Tensor & in_beam_extents = context->input(4);
+        const tf::Tensor & in_E_beam = context->input(5);
 
         OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
             tf::errors::InvalidArgument("lm should be of shape (nsrc, 2)"))
@@ -449,8 +449,8 @@ public:
             in_parallactic_angle.tensor<FT, 2>().data());
 
         rime_e_beam<Tr><<<grid, blocks, 0, stream>>>(
-            lm, point_errors, antenna_scaling, E_beam,
-            parallactic_angle, jones);
+            lm, point_errors, antenna_scaling, 
+            parallactic_angle, E_beam, jones);
 
     }
 };

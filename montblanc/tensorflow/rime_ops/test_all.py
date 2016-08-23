@@ -41,9 +41,8 @@ D.ref_freq = np.array([1.5e9], dtype=dtype)
 D.point_errors = (rf(ntime, na, nchan, 2) - 0.5)*0.01
 D.antenna_scaling = rf(na, nchan, 2)
 D.ebeam = rc(beam_lw, beam_mh, beam_nud, npol)
-D.parallactic_angle = dtype(np.deg2rad(1))
-D.beam_ll, D.beam_lm, D.beam_ul, D.beam_um = dtype(
-    [-1, -1, 1, 1])
+D.parallactic_angles = np.deg2rad(rf(ntime, na)).astype(dtype)
+D.beam_extents = dtype([-1, -1, -1, 1, 1, 1])
 
 # Antenna pairs
 D.ant1, D.ant2 = map(lambda x: np.int32(x), np.triu_indices(na, 1))
@@ -114,9 +113,8 @@ for src_count, src_type in zip(src_counts, src_types):
 
         # Compute the ejones from the beam cube
         ejones = rime.e_beam(lm, args.point_errors,
-            args.antenna_scaling, args.ebeam, args.parallactic_angle,
-            args.beam_ll, args.beam_lm,
-            args.beam_ul, args.beam_um)
+            args.antenna_scaling, args.parallactic_angles,
+            args.beam_extents, args.ebeam)
             
         # Compute per antenna jones terms    
         ant_jones = rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=dtype)
