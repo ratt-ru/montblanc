@@ -65,8 +65,8 @@ __constant__ montblanc::ebeam::const_data<double> beam_constant;
 template <typename T> 
 struct holder
 {
-    typedef typename montblanc::ebeam::const_data<T> bc;
-    typedef typename montblanc::ebeam::const_data<T> * bc_ptr;
+    using bc = typename montblanc::ebeam::const_data<T>;
+    using bc_ptr = typename montblanc::ebeam::const_data<T> *;
 
     static __device__ __forceinline__ bc_ptr ptr () ;
 };
@@ -103,18 +103,14 @@ void trilinear_interpolate(
     const typename Traits::FT & weight)
 {
     // Simpler float and complex types
-    typedef typename Traits::FT FT;
-    typedef typename Traits::CT CT;
-
-    // If this source is outside the cube, do nothing
-    if(gl < 0 || gl >= cdata->beam_lw || gm < 0 || gm >= cdata->beam_mh)
-        { return; }
+    using FT = typename Traits::FT;
+    using CT = typename Traits::CT;
 
     int i = ((int(gl)*cdata->beam_mh + int(gm))*cdata->beam_nud +
         int(gchan))*EBEAM_NPOL + ebeam_pol();
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
-    typename Traits::CT data = cub::ThreadLoad<cub::LOAD_LDG>(ebeam + i);
+    CT data = cub::ThreadLoad<cub::LOAD_LDG>(ebeam + i);
     pol_sum.x += weight*data.x;
     pol_sum.y += weight*data.y;
     abs_sum += weight*Policies::abs(data);
@@ -134,6 +130,7 @@ __global__ void rime_e_beam(
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
 
+    using lm_type = typename Traits::lm_type;
     using point_error_type = typename Traits::point_error_type;
     using antenna_scale_type = typename Traits::antenna_scale_type;
 
@@ -153,8 +150,9 @@ __global__ void rime_e_beam(
         FT mscale;             // m axis scaling factor
         FT pa_sin[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];  // sin of parallactic angle
         FT pa_cos[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];  // cos of parallactic angle
-        FT gchan[BLOCKCHANS];  // channel grid position (snapped)
-        FT chd[BLOCKCHANS];    // difference between gchan and actual grid position
+        FT gchan0[BLOCKCHANS];  // channel grid position (snapped)
+        FT gchan1[BLOCKCHANS];  // channel grid position (snapped)
+        FT chd[BLOCKCHANS];    // difference between gchan0 and actual grid position
         // pointing errors
         point_error_type pe[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][BLOCKCHANS];
         // antenna scaling        
@@ -195,9 +193,11 @@ __global__ void rime_e_beam(
         // clamp to grid edges
         chan = Po::clamp(chan, 0.0, cdata->beam_nud-1);
         // Snap to grid coordinate
-        shared.gchan[thread_chan()] = Po::floor(chan);
+        shared.gchan0[thread_chan()] = Po::floor(chan);
+        shared.gchan1[thread_chan()] = Po::min(cdata->beam_nud-1,
+            shared.gchan0[thread_chan()] + 1.0);
         // Offset of snapped coordinate from grid position
-        shared.chd[thread_chan()] = chan - shared.gchan[thread_chan()];
+        shared.chd[thread_chan()] = chan - shared.gchan0[thread_chan()];
     }
 
     // Parallactic angles vary by time and antenna, but not channel
@@ -214,7 +214,7 @@ __global__ void rime_e_beam(
 
     for(int SRC=0; SRC < cdata->nsrc; ++SRC)
     {
-        typename Traits::lm_type rlm = lm[SRC];
+        lm_type rlm = lm[SRC];
 
        // L coordinate
         // Rotate
@@ -229,9 +229,10 @@ __global__ void rime_e_beam(
         // clamp to grid edges
         l = Po::clamp(0.0, l, cdata->beam_lw-1);
         // Snap to grid coordinate
-        FT gl = Po::floor(l);
+        FT gl0 = Po::floor(l);
+        FT gl1 = Po::min(gl0 + 1.0, cdata->beam_lw-1);
         // Offset of snapped coordinate from grid position
-        FT ld = l - gl;
+        FT ld = l - gl0;
         
         // M coordinate
         // rotate
@@ -246,13 +247,14 @@ __global__ void rime_e_beam(
         // clamp to grid edges
         m = Po::clamp(0.0, m, cdata->beam_mh-1);
         // Snap to grid position
-        FT gm = Po::floor(m);
+        FT gm0 = Po::floor(m);
+        FT gm1 = Po::min(gm0 + 1.0, cdata->beam_mh-1);
         // Offset of snapped coordinate from grid position
-        FT md = m - gm;
+        FT md = m - gm0;
 
         CT pol_sum = Po::make_ct(0.0, 0.0);
         FT abs_sum = FT(0.0);
-        // A simplified bilinear weighting is used here. Given
+        // A simplified trilinear weighting is used here. Given
         // point x between points x1 and x2, with function f
         // provided values f(x1) and f(x2) at these points.
         //
@@ -282,28 +284,29 @@ __global__ void rime_e_beam(
         // Load in the complex values from the E beam
         // at the supplied coordinate offsets.
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
-            gl + 0.0f, gm + 0.0f, shared.gchan[thread_chan()] + 0.0f,
+            gl0, gm0, shared.gchan0[thread_chan()],
             (1.0f-ld)*(1.0f-md)*(1.0f-shared.chd[thread_chan()]));
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
-            gl + 1.0f, gm + 0.0f, shared.gchan[thread_chan()] + 0.0f,
+            gl1, gm0, shared.gchan0[thread_chan()],
             ld*(1.0f-md)*(1.0f-shared.chd[thread_chan()]));
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
-            gl + 0.0f, gm + 1.0f, shared.gchan[thread_chan()] + 0.0f,
+            gl0, gm1, shared.gchan0[thread_chan()],
             (1.0f-ld)*md*(1.0f-shared.chd[thread_chan()]));
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
-            gl + 1.0f, gm + 1.0f, shared.gchan[thread_chan()] + 0.0f,
+            gl1, gm1, shared.gchan0[thread_chan()],
             ld*md*(1.0f-shared.chd[thread_chan()]));
+
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
-            gl + 0.0f, gm + 0.0f, shared.gchan[thread_chan()] + 1.0f,
+            gl0, gm0, shared.gchan1[thread_chan()],
             (1.0f-ld)*(1.0f-md)*shared.chd[thread_chan()]);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
-            gl + 1.0f, gm + 0.0f, shared.gchan[thread_chan()] + 1.0f,
+            gl1, gm0, shared.gchan1[thread_chan()],
             ld*(1.0f-md)*shared.chd[thread_chan()]);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
-            gl + 0.0f, gm + 1.0f, shared.gchan[thread_chan()] + 1.0f,
+            gl0, gm1, shared.gchan1[thread_chan()],
             (1.0f-ld)*md*shared.chd[thread_chan()]);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
-            gl + 1.0f, gm + 1.0f, shared.gchan[thread_chan()] + 1.0f,
+            gl1, gm1, shared.gchan1[thread_chan()],
             ld*md*shared.chd[thread_chan()]);
 
         // Normalise the angle and multiply in the absolute sum

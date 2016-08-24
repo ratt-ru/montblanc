@@ -20,9 +20,9 @@ trilinear_interpolate(
     CT & pol_sum,
     FT & abs_sum,
     typename tensorflow::TTypes<CT, 4>::ConstTensor & e_beam,
-    float gl, float gm, float gchan,
+    const FT & gl, const FT & gm, const FT & gchan,
     int beam_lw, int beam_mh, int beam_nud, int pol,
-    float weight)
+    const FT & weight)
 {
     if(gl < 0 || gl > beam_lw || gm < 0 || gm > beam_mh)
         { return; }
@@ -134,6 +134,11 @@ public:
         auto e_beam = in_ebeam.tensor<CT, 4>();
         auto jones = jones_ptr->tensor<CT, 5>();
 
+        FT lmax = FT(cdata.beam_lw-1);
+        FT mmax = FT(cdata.beam_mh-1);
+        FT fmax = FT(cdata.beam_nud-1);
+        constexpr FT zero = 0;
+
         for(int time=0; time < cdata.ntime; ++time)
         {                
             for(int ant=0; ant < cdata.na; ++ant)
@@ -153,30 +158,34 @@ public:
                     {
                         // Offset lm coordinates by point errors
                         // and scale by antenna scaling
-                        FT ol = l + point_errors(time, ant, chan, 0);
-                        FT om = m + point_errors(time, ant, chan, 1);
+                        FT vl = l + point_errors(time, ant, chan, 0);
+                        FT vm = m + point_errors(time, ant, chan, 1);
 
-                        ol *= antenna_scaling(ant, chan, 0);
-                        om *= antenna_scaling(ant, chan, 1);
+                        vl *= antenna_scaling(ant, chan, 0);
+                        vm *= antenna_scaling(ant, chan, 1);
 
-                        // Change into the cube coordinate system
-                        ol = lscale*(ol - cdata.ll);
-                        om = mscale*(om - cdata.lm);
-                        FT ochan = fscale*(frequency(chan) - cdata.lf);
+                        // Shift into the cube coordinate system
+                        vl = lscale*(vl - cdata.ll);
+                        vm = mscale*(vm - cdata.lm);
+                        FT vchan = fscale*(frequency(chan) - cdata.lf);
 
-                        ol = std::max(FT(0.0), std::min(ol, FT(cdata.beam_lw-1)));
-                        om = std::max(FT(0.0), std::min(om, FT(cdata.beam_mh-1)));
-                        ochan = std::max(FT(0.0), std::min(ochan, FT(cdata.beam_nud-1)));
+                        vl = std::max(zero, std::min(vl, lmax));
+                        vm = std::max(zero, std::min(vm, mmax));
+                        vchan = std::max(zero, std::min(vchan, fmax));
 
-                        // Find the quantized grid coordinate of the offset coordinate
-                        FT gl = std::floor(ol);
-                        FT gm = std::floor(om);
-                        FT gchan = std::floor(ochan);
+                        // Find the snapped grid coordinates
+                        FT gl0 = std::floor(vl);
+                        FT gm0 = std::floor(vm);
+                        FT gchan0 = std::floor(vchan);
+
+                        FT gl1 = std::min(FT(gl0+1.0), lmax);
+                        FT gm1 = std::min(FT(gm0+1.0), mmax);
+                        FT gchan1 = std::min(FT(gchan0+1.0), fmax);
 
                         // Difference between grid and offset coordinates
-                        FT ld = ol - gl;
-                        FT md = om - gm;
-                        FT chd = ochan - gchan;
+                        FT ld = vl - gl0;
+                        FT md = vm - gm0;
+                        FT chd = vchan - gchan0;
 
                         for(int pol=0; pol<EBEAM_NPOL; ++pol)
                         {
@@ -188,35 +197,35 @@ public:
                             // Save the complex sum in pol_sum
                             // and the sum of abs in abs_sum
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl + 0.0f, gm + 0.0f, gchan + 0.0f,
+                                gl0, gm0, gchan0,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 (1.0f-ld)*(1.0f-md)*(1.0f-chd));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl + 1.0f, gm + 0.0f, gchan + 0.0f,
+                                gl1, gm0, gchan0,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 ld*(1.0f-md)*(1.0f-chd));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl + 0.0f, gm + 1.0f, gchan + 0.0f,
+                                gl0, gm1, gchan0,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 (1.0f-ld)*md*(1.0f-chd));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl + 1.0f, gm + 1.0f, gchan + 0.0f,
+                                gl1, gm1, gchan0,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 ld*md*(1.0f-chd));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl + 0.0f, gm + 0.0f, gchan + 1.0f,
+                                gl0, gm0, gchan1,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 (1.0f-ld)*(1.0f-md)*chd);
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl + 1.0f, gm + 0.0f, gchan + 1.0f,
+                                gl1, gm0, gchan1,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 ld*(1.0f-md)*chd);
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl + 0.0f, gm + 1.0f, gchan + 1.0f,
+                                gl0, gm1, gchan1,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 (1.0f-ld)*md*chd);
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl + 1.0f, gm + 1.0f, gchan + 1.0f,
+                                gl1, gm1, gchan1,
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
                                 ld*md*chd);
 
