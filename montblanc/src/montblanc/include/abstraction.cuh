@@ -67,6 +67,14 @@ public:
 	Tr::ft max(const Tr::ft & lhs, const Tr::ft & rhs)
 		{ return ::fmaxf(lhs, rhs); }
 
+    __device__ __forceinline__ static
+    Tr::ft clamp(const Tr::ft & value, const Tr::ft & min, const Tr::ft & max)
+        { return Po::min(max, Po::max(value, min)); }
+
+    __device__ __forceinline__ static
+    Tr::ft floor(const Tr::ft & value)
+        { return ::floorf(value); }
+
 	__device__ __forceinline__ static
 	Tr::ft pow(const Tr::ft & value, const Tr::ft & exponent)
 		{ return ::powf(value, exponent); }
@@ -114,6 +122,10 @@ public:
     __device__ __forceinline__ static
     Tr::ft rint(const Tr::ft & value)
         { return ::rintf(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft rsqrt(const Tr::ft & value)
+        { return ::rsqrtf(value); }
 };
 
 template <>
@@ -149,6 +161,14 @@ public:
 	__device__ __forceinline__ static
 	Tr::ft max(const Tr::ft & lhs, const Tr::ft & rhs)
 		{ return ::fmax(lhs, rhs); }
+
+    __device__ __forceinline__ static
+    Tr::ft clamp(const Tr::ft & value, const Tr::ft & min, const Tr::ft & max)
+        { return Po::min(max, Po::max(value, min)); }
+
+    __device__ __forceinline__ static
+    Tr::ft floor(const Tr::ft & value)
+        { return ::floor(value); }
 
 	__device__ __forceinline__ static
 	Tr::ft pow(const Tr::ft & value, const Tr::ft & exponent)
@@ -197,6 +217,10 @@ public:
     __device__ __forceinline__ static
     Tr::ft rint(const Tr::ft & value)
         { return ::rint(value); }
+
+    __device__ __forceinline__ static
+    Tr::ft rsqrt(const Tr::ft & value)
+        { return ::rsqrt(value); }        
 };
 
 

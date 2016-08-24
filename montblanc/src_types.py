@@ -18,9 +18,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+from collections import OrderedDict
+
 import numpy as np
 
-from collections import OrderedDict
+import montblanc
 
 # List of source types and the variable names
 # referring to the number of sources for that type

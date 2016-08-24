@@ -296,9 +296,16 @@ class CompositeRimeSolver(MontblancNumpySolver):
             (nchan_lower, nchan_upper)) = self.dim_extents(
                 'ntime', 'nbl', 'na', 'nchan')
 
+        npol = self.dim_global_size('npol')
+
         # Create the slice dictionaries, which we use to index
         # dimensions of the CPU and GPU array.
         cpu_slice, gpu_slice = {}, {}
+
+        # Visibilities are a dependent, convenience dimension
+        # Set the slice to a noop
+        cpu_slice['nvis'] = slice(0, 0, 1)
+        gpu_slice['nvis'] = slice(0, 0, 1)
 
         montblanc.log.debug('Generating RIME slices')
 
@@ -326,6 +333,11 @@ class CompositeRimeSolver(MontblancNumpySolver):
                     ch_diff = ch_end - ch
                     cpu_slice[Options.NCHAN] = slice(ch, ch_end, 1)
                     gpu_slice[Options.NCHAN] = slice(0, ch_diff, 1)
+
+                    # Polarised Channels are a dependent, convenience dimension
+                    # equal to number of channels x number of polarisations
+                    cpu_slice['npolchan'] = slice(ch*npol, ch_end*npol, 1)
+                    gpu_slice['npolchan'] = slice(0, ch_diff*npol, 1)
 
                     yield (cpu_slice.copy(), gpu_slice.copy())
 
@@ -457,7 +469,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # we can ignore it
         cache_idx = dirty.get(r.name, None)
 
-        if cache_idx and cache_idx == cpu_idx:
+        if cache_idx is not None and cache_idx == cpu_idx:
             #montblanc.log.debug("Cache hit on {n} index {i} "
             #        .format(n=r.name, i=cpu_idx))
 
@@ -1020,7 +1032,8 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 classifiers=[Classifier.SIMULATOR_OUTPUT])
 
         # Should only be model visibilities
-        assert len(sim_output_refs) == 1, ('Expected one array (model visibilities), '
+        assert len(sim_output_refs) == 1, (
+            'Expected one array (model visibilities), '
             'received {l} instead.'.format(l=len(new_refs)))
 
         model_vis = sim_output_refs['model_vis'][0]

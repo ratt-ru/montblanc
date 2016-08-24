@@ -24,11 +24,13 @@ import numpy as np
 import pyrap.tables as pt
 
 import montblanc
+import montblanc.util as mbu
 import montblanc.impl.common.loaders
 
 from montblanc.config import (RimeSolverConfig as Options)
 
 # Measurement Set string constants
+TIME = 'TIME'
 UVW = 'UVW'
 CHAN_FREQ = 'CHAN_FREQ'
 NUM_CHAN='NUM_CHAN'
@@ -42,6 +44,9 @@ WEIGHT_SPECTRUM = 'WEIGHT_SPECTRUM'
 WEIGHT = 'WEIGHT'
 SIGMA_SPECTRUM = 'SIGMA_SPECTRUM'
 SIGMA = 'SIGMA'
+
+POSITION = 'POSITION'
+PHASE_DIR = 'PHASE_DIR'
 
 WEIGHT_VECTOR = 'weight_vector'
 
@@ -149,6 +154,7 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         tm = self.tables['main']
         ta = self.tables['ant']
         tf = self.tables['freq']
+        tfi = self.tables['field']
 
         ntime, na, nbl, nchan, nbands, npol = solver.dim_global_size(
             'ntime', 'na', 'nbl', 'nchan', 'nbands', 'npol')
@@ -233,7 +239,8 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # If the main table has visibilities for multiple bands, then
         # there will be multiple (duplicate) UVW, ANTENNA1 and ANTENNA2 values
         # Ensure uniqueness to get a single value here
-        uvw_table = pt.taql('SELECT FROM $tm ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2')
+        uvw_table = pt.taql("SELECT TIME, UVW, ANTENNA1, ANTENNA2 "
+            "FROM $tm ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2")
         msrows = uvw_table.nrows()
         time_inc = 1
 
@@ -278,6 +285,23 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             solver.uvw[t_start:t_end,1:na,:] = uvw_buffer[:,:na-1,:]
             solver.uvw[:,0,:] = 0
 
+        self.log('Computing parallactic angles')
+        # Compute parallactic angles
+        time_table = pt.taql('SELECT TIME FROM $tm ORDERBY UNIQUE TIME')
+        times = time_table.getcol(TIME)
+        antenna_positions = ta.getcol(POSITION)
+        phase_dir = tfi.getcol(PHASE_DIR)[0][0]
+
+        # Handle negative right ascension
+        if phase_dir[0] < 0:
+            phase_dir[0] += 2*np.pi
+
+        solver.parallactic_angles[:] = mbu.parallactic_angles(phase_dir,
+            antenna_positions, times)
+
+        time_table.close()
+        uvw_table.close()
+
         self.log("Processing frequency table {n}.".format(
             n=os.path.split(self.freqfile)[1]))
 
@@ -303,6 +327,9 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
 
             # Next band
             band_ch0 += bs
+
+        self.log("Processing antenna table {n}.".format(
+            n=os.path.split(self.freqfile)[1]))
 
     def __enter__(solver):
         return super(MeasurementSetLoader,solver).__enter__()

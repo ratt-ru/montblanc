@@ -48,10 +48,9 @@ class RimeEBeam(montblanc.impl.rime.v4.gpu.RimeEBeam.RimeEBeam):
     def execute(self, solver, stream=None):
         slvr = solver
 
-        self.kernel(slvr.lm,
-            slvr.point_errors, slvr.antenna_scaling,
+        self.kernel(slvr.lm, slvr.parallactic_angles,
+            slvr.point_errors, slvr.antenna_scaling, slvr.frequency,
             slvr.E_beam, slvr.jones,
-            slvr.parallactic_angle,
-            slvr.beam_ll, slvr.beam_lm,
-            slvr.beam_ul, slvr.beam_um,
+            slvr.beam_ll, slvr.beam_lm, slvr.beam_lfreq,
+            slvr.beam_ul, slvr.beam_um, slvr.beam_ufreq,
             stream=stream, **self.launch_params)

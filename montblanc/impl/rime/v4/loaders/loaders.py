@@ -22,11 +22,13 @@ import numpy as np
 import pyrap.tables as pt
 
 import montblanc
+import montblanc.util as mbu
 import montblanc.impl.common.loaders
 
 from montblanc.config import (RimeSolverConfig as Options)
 
 # Measurement Set string constants
+TIME = 'TIME'
 UVW = 'UVW'
 CHAN_FREQ = 'CHAN_FREQ'
 NUM_CHAN = 'NUM_CHAN'
@@ -41,6 +43,9 @@ WEIGHT = 'WEIGHT'
 SIGMA_SPECTRUM = 'SIGMA_SPECTRUM'
 SIGMA = 'SIGMA'
 
+POSITION = "POSITION"
+PHASE_DIR = 'PHASE_DIR'
+
 class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
     def load(self, solver, slvr_cfg):
         """
@@ -49,10 +54,10 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         tm = self.tables['main']
         ta = self.tables['ant']
         tf = self.tables['freq']
+        tfi = self.tables['field']
 
         ntime, na, nbl, nbands, nchan = solver.dim_global_size(
             'ntime', 'na', 'nbl', 'nbands', 'nchan')
-
 
         # Transfer frequencies
         freqs = (tf.getcol(CHAN_FREQ)
@@ -61,15 +66,19 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         solver.transfer_frequency(np.ascontiguousarray(freqs))
 
         # Transfer reference frequencies
+        ref_freqs = tf.getcol(REF_FREQUENCY).astype(solver.ref_frequency.dtype)
+        num_chans = tf.getcol(NUM_CHAN)
+
         ref_freqs_per_band = np.concatenate(
             [np.repeat(rf, size) for rf, size
-            in zip(tf.getcol(REF_FREQUENCY), tf.getcol(NUM_CHAN))], axis=0)
+            in zip(ref_freqs, num_chans)], axis=0)
         solver.transfer_ref_frequency(ref_freqs_per_band)
 
         # If the main table has visibilities for multiple bands, then
         # there will be multiple (duplicate) UVW, ANTENNA1 and ANTENNA2 values
         # Ensure uniqueness to get a single value here
-        uvw_table = pt.taql('SELECT FROM $tm ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2')
+        uvw_table = pt.taql("SELECT TIME, UVW, ANTENNA1, ANTENNA2 "
+            "FROM $tm ORDERBY UNIQUE TIME, ANTENNA1, ANTENNA2")
 
         # Check that we're getting the correct shape...
         uvw_shape = (ntime*nbl, 3)
@@ -108,6 +117,21 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         solver.transfer_antenna1(np.ascontiguousarray(ant1))
         solver.transfer_antenna2(np.ascontiguousarray(ant2))
 
+        # Compute parallactic angles
+        time_table = pt.taql('SELECT TIME FROM $tm ORDERBY UNIQUE TIME')
+        times = time_table.getcol(TIME)
+        antenna_positions = ta.getcol(POSITION)
+        phase_dir = tfi.getcol(PHASE_DIR)[0][0]
+
+        # Handle negative right ascension
+        if phase_dir[0] < 0:
+            phase_dir[0] += 2*np.pi
+
+        parallactic_angles = mbu.parallactic_angles(phase_dir,
+            antenna_positions, times)
+        solver.transfer_parallactic_angles(parallactic_angles.astype(solver.parallactic_angles.dtype))
+
+        time_table.close()
         uvw_table.close()
 
         # Load in visibility data, if it exists.

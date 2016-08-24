@@ -58,13 +58,14 @@ P = [
     prop_dict('X2', 'ft', 0.0),
 
     # Width of the beam cube dimension. l, m and lambda
-    # Lower l and m coordinates of the beam cube
+    # Lower l, m and frequency coordinates of the beam cube
     prop_dict('beam_ll', 'ft', -0.5),
     prop_dict('beam_lm', 'ft', -0.5),
-    # Upper l and m coordinates of the beam cube
+    prop_dict('beam_lfreq', 'ft', 1.3e9),
+    # Upper l, m and frequency coordinates of the beam cube
     prop_dict('beam_ul', 'ft', 0.5),
     prop_dict('beam_um', 'ft', 0.5),
-    prop_dict('parallactic_angle', 'ft', 0.0),
+    prop_dict('beam_ufreq', 'ft', 1.5e9),
 ]
 
 def rand_uvw(slvr, ary):
@@ -128,7 +129,7 @@ class Classifier(Enum):
 
 # List of arrays
 A = [
-    # Input Arrays
+    # UVW coordinates
     ary_dict('uvw', ('ntime', 'na', 3), 'ft',
         classifiers=frozenset([Classifier.EKB_SQRT_INPUT,
             Classifier.COHERENCIES_INPUT]),
@@ -145,8 +146,10 @@ A = [
         default=lambda slvr, ary: slvr.default_ant_pairs()[1],
         test=lambda slvr, ary: slvr.default_ant_pairs()[1]),
 
+    # Frequency information
     ary_dict('frequency', ('nchan',), 'ft',
         classifiers=frozenset([Classifier.B_SQRT_INPUT,
+            Classifier.E_BEAM_INPUT,
             Classifier.EKB_SQRT_INPUT,
             Classifier.COHERENCIES_INPUT]),
         default=lambda slvr, ary: np.linspace(1e9, 2e9, slvr.dim_local_size('nchan')),
@@ -156,6 +159,12 @@ A = [
         classifiers=frozenset([Classifier.B_SQRT_INPUT]),
         default=1.4e9,
         test=1.4e9),
+
+    # Reference antenna parallactic angle at each timestep
+    ary_dict('parallactic_angles', ('ntime', 'na'), 'ft',
+        classifiers=frozenset([Classifier.E_BEAM_INPUT]),
+        default=0,
+        test=lambda s, a: rary(a)*np.pi),
 
     # Holographic Beam
     ary_dict('point_errors', ('ntime','na','nchan',2), 'ft',

@@ -54,15 +54,19 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
             'ntime', 'na', 'nbl', 'nbands', 'nchan')
 
         # Transfer wavelengths
-        wavelength = (montblanc.constants.C/tf.getcol(CHAN_FREQ)
+        wavelength = ((montblanc.constants.C/tf.getcol(CHAN_FREQ))
             .reshape(solver.wavelength.shape)
             .astype(solver.wavelength.dtype))
         solver.transfer_wavelength(wavelength)
 
+        ref_waves = (montblanc.constants.C/tf.getcol(REF_FREQUENCY)).astype(
+            solver.ref_wavelength.dtype)
+        num_chans = tf.getcol(NUM_CHAN)
+
         # Transfer reference wavelengths
         ref_waves_per_band = np.concatenate(
-            [np.repeat(montblanc.constants.C/rf, size) for rf, size
-            in zip(tf.getcol(REF_FREQUENCY), tf.getcol(NUM_CHAN))], axis=0)
+            [np.repeat(rw, size) for rw, size
+            in zip(ref_waves, num_chans)], axis=0)
         solver.transfer_ref_wavelength(ref_waves_per_band)
 
         data_order = slvr_cfg.get(Options.DATA_ORDER, Options.DATA_ORDER_CASA)
