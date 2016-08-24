@@ -330,18 +330,9 @@ class CPUSolver(MontblancNumpySolver):
             self.dim_local_size('nsrc', 'ntime', 'na', 'nchan',
                 'beam_lw', 'beam_mh', 'beam_nud'))
 
-        # Does the source lie within the beam cube?
-        invalid_l = np.logical_or(gl < 0.0, gl >= beam_lw)
-        invalid_m = np.logical_or(gm < 0.0, gm >= beam_mh)
-        invalid_lm = np.logical_or.reduce((invalid_l, invalid_m))
-
-        assert invalid_lm.shape == (nsrc, ntime, na, nchan)
-
-        # Just set coordinates and weights to zero
-        # if they're outside the cube
-        gl[invalid_lm] = 0
-        gm[invalid_lm] = 0
-        weight[invalid_lm] = 0
+        gl = np.clip(gl, 0.0, beam_lw-1)
+        gm = np.clip(gm, 0.0, beam_mh-1)
+        gchan = np.clip(gchan, 0.0, beam_nud-1)
 
         # Indices within the cube
         l_idx = gl.astype(np.int32)
@@ -376,19 +367,20 @@ class CPUSolver(MontblancNumpySolver):
         sint = np.sin(self.parallactic_angles)
         cost = np.cos(self.parallactic_angles)
 
-        assert sint.shape == (ntime,)
-        assert cost.shape == (ntime,)
+        assert sint.shape == (ntime,na)
+        assert cost.shape == (ntime,na)
 
-        l0, m0 = self.lm[:,0], self.lm[:,1]
-        l = l0[:,np.newaxis]*cost[np.newaxis,:] - m0[:,np.newaxis]*sint[np.newaxis,:]
-        m = l0[:,np.newaxis]*sint[np.newaxis,:] + m0[:,np.newaxis]*cost[np.newaxis,:]
+        l0 = self.lm[:,0][:,np.newaxis,np.newaxis]
+        m0 = self.lm[:,1][:,np.newaxis,np.newaxis]
+        l = l0*cost[np.newaxis,:,:] - m0*sint[np.newaxis,:,:]
+        m = l0*sint[np.newaxis,:,:] + m0*cost[np.newaxis,:,:]
 
-        assert l.shape == (nsrc, ntime)
-        assert m.shape == (nsrc, ntime)
+        assert l.shape == (nsrc, ntime, na)
+        assert m.shape == (nsrc, ntime, na)
 
         ld, md = self.point_errors[:,:,:,0], self.point_errors[:,:,:,1]
-        l = l[:,:,np.newaxis,np.newaxis] + ld[np.newaxis,:,:,:]
-        m = m[:,:,np.newaxis,np.newaxis] + md[np.newaxis,:,:,:]
+        l = l[:,:,:,np.newaxis] + ld[np.newaxis,:,:,:]
+        m = m[:,:,:,np.newaxis] + md[np.newaxis,:,:,:]
 
         assert l.shape == (nsrc, ntime, na, nchan)
         assert m.shape == (nsrc, ntime, na, nchan)
@@ -399,38 +391,33 @@ class CPUSolver(MontblancNumpySolver):
 
         # Compute grid position and difference from
         # actual position for the source at each channel
-        l = (beam_lw-1) * (l-self.beam_ll) / (self.beam_ul-self.beam_ll)
+        vl = (beam_lw-1) * (l-self.beam_ll) / (self.beam_ul-self.beam_ll)
+        vl = np.clip(vl, 0.0, beam_lw-1)
         assert l.shape == (nsrc, ntime, na, nchan)
-        gl = np.floor(l)
-        ld = l - gl
+        gl0 = np.floor(vl)
+        gl1 = np.minimum(gl0 + 1.0, beam_lw-1)
+        ld = vl - gl0
 
-        m = (beam_mh-1) * (m-self.beam_lm) / (self.beam_um-self.beam_lm)
+        vm = (beam_mh-1) * (m-self.beam_lm) / (self.beam_um-self.beam_lm)
+        vm = np.clip(vm, 0.0, beam_mh-1)
         assert m.shape == (nsrc, ntime, na, nchan)
-        gm = np.floor(m)
-        md = m - gm
+        gm0 = np.floor(vm)
+        gm1 = np.minimum(gm0 + 1.0, beam_mh-1)
+        md = vm - gm0
 
-        # Work out where we are in the beam cube, relative
-        # the position in the global channel space.
-        # Get our problem extents and the global size of
-        # the channel dimension
-        chan_low, chan_high = self.dim_extents('nchan')
-        nchan_global = self.dim_global_size('nchan')
-
-        # Create the channel range from the extents
-        chan_range = np.arange(chan_low, chan_high).astype(np.float32)
-        # Divide channel range by global size and multiply
-        # to obtain position in the beam cube
-        chan = (np.float32(beam_nud-1)*chan_range /
-            np.float32(nchan_global))
-        assert chan.shape == (chan_high - chan_low, )
-        gchan = np.floor(chan)
-        chd = (chan - gchan)[np.newaxis,np.newaxis,np.newaxis,:]
+        vchan = ((beam_nud-1)*(self.frequency - self.beam_lfreq) /
+            (self.beam_ufreq - self.beam_lfreq))
+        vchan = np.clip(vchan, 0.0, beam_nud-1)
+        assert vchan.shape == self.frequency.shape
+        gchan0 = np.floor(vchan)
+        gchan1 = np.minimum(gchan0 + 1.0, beam_nud-1)
+        chd = (vchan - gchan0)[np.newaxis,np.newaxis,np.newaxis,:]
 
         # Initialise the sum to zero
-        sum = np.zeros_like(self.jones)
-        abs_sum = np.zeros(shape=sum.shape, dtype=self.ft)
+        pol_sum = np.zeros_like(self.jones)
+        abs_sum = np.zeros(shape=pol_sum.shape, dtype=self.ft)
 
-        # A simplified bilinear weighting is used here. Given
+        # A simplified trilinear weighting is used here. Given
         # point x between points x1 and x2, with function f
         # provided values f(x1) and f(x2) at these points.
         #
@@ -460,35 +447,73 @@ class CPUSolver(MontblancNumpySolver):
 
         # Load in the complex values from the E beam
         # at the supplied coordinate offsets.
-        # Save the sum of abs in sum.real
-        # and the sum of args in sum.imag
-        self.trilinear_interpolate(sum, abs_sum,
-            gl + 0, gm + 0, gchan + 0, (1-ld)*(1-md)*(1-chd))
-        self.trilinear_interpolate(sum, abs_sum,
-            gl + 1, gm + 0, gchan + 0, ld*(1-md)*(1-chd))
-        self.trilinear_interpolate(sum, abs_sum,
-            gl + 0, gm + 1, gchan + 0, (1-ld)*md*(1-chd))
-        self.trilinear_interpolate(sum, abs_sum,
-            gl + 1, gm + 1, gchan + 0, ld*md*(1-chd))
+        # Save sum of interpolated complex values in pol_sum
+        # Save sum of interpolated absolute values in abs_sum
+        self.trilinear_interpolate(pol_sum, abs_sum,
+            gl0, gm0, gchan0, (1-ld)*(1-md)*(1-chd))
+        self.trilinear_interpolate(pol_sum, abs_sum,
+            gl1, gm0, gchan0, ld*(1-md)*(1-chd))
+        self.trilinear_interpolate(pol_sum, abs_sum,
+            gl0, gm1, gchan0, (1-ld)*md*(1-chd))
+        self.trilinear_interpolate(pol_sum, abs_sum,
+            gl1, gm1, gchan0, ld*md*(1-chd))
 
-        self.trilinear_interpolate(sum, abs_sum,
-            gl + 0, gm + 0, gchan + 1, (1-ld)*(1-md)*chd)
-        self.trilinear_interpolate(sum, abs_sum,
-            gl + 1, gm + 0, gchan + 1, ld*(1-md)*chd)
-        self.trilinear_interpolate(sum, abs_sum,
-            gl + 0, gm + 1, gchan + 1, (1-ld)*md*chd)
-        self.trilinear_interpolate(sum, abs_sum,
-            gl + 1, gm + 1, gchan + 1, ld*md*chd)
+        self.trilinear_interpolate(pol_sum, abs_sum,
+            gl0, gm0, gchan1, (1-ld)*(1-md)*chd)
+        self.trilinear_interpolate(pol_sum, abs_sum,
+            gl1, gm0, gchan1, ld*(1-md)*chd)
+        self.trilinear_interpolate(pol_sum, abs_sum,
+            gl0, gm1, gchan1, (1-ld)*md*chd)
+        self.trilinear_interpolate(pol_sum, abs_sum,
+            gl1, gm1, gchan1, ld*md*chd)
 
-        # Determine the angle of the polarisation
-        angle = np.angle(sum)
+        # Normalise the polarisation
+        norm = 1.0/np.abs(pol_sum)
+        norm[np.logical_not(np.isfinite(norm))] = 1.0
+        pol_sum *= norm * abs_sum
 
-        assert angle.shape == (nsrc, ntime, na, nchan, 4)
-        assert abs_sum.shape == (nsrc, ntime, na, nchan, 4)
+        return pol_sum
 
-        # Take the complex exponent of the angle
-        # and multiply by the sum of abs
-        return abs_sum*np.exp(1j*angle)
+        import scipy.ndimage
+
+        coord_shape = (nsrc, ntime, na, nchan, 4)
+        bl = np.broadcast_to(vl[:,:,:,:,np.newaxis], coord_shape)
+        bm = np.broadcast_to(vm[:,:,:,:,np.newaxis], coord_shape) 
+        bch = np.broadcast_to(vchan[np.newaxis,np.newaxis,np.newaxis,:,np.newaxis], coord_shape)
+        bp = np.broadcast_to(np.arange(4), coord_shape)
+
+        coords = np.vstack([[bl], [bm], [bch], [bp]])
+
+        mc = scipy.ndimage.interpolation.map_coordinates
+        mc_kwargs = { 'order' : 1, 'mode' : 'nearest' }
+
+        re = mc(self.E_beam.real, coords, **mc_kwargs).reshape(coord_shape)
+        im = mc(self.E_beam.imag, coords, **mc_kwargs).reshape(coord_shape)
+        amp = mc(np.abs(self.E_beam), coords, **mc_kwargs).reshape(coord_shape)
+        
+        reim_abs = np.sqrt(re**2 + im**2)
+        reim_abs[np.logical_not(np.isfinite(reim_abs))] = 1.0
+        re = re * amp / reim_abs
+        im = im * amp / reim_abs
+
+        assert np.allclose(pol_sum.real, re)
+        assert np.allclose(pol_sum.imag, im)
+
+        l = np.broadcast_to(l[:,:,:,:,np.newaxis], coord_shape)
+        m = np.broadcast_to(m[:,:,:,:,np.newaxis], coord_shape)
+        freq = np.broadcast_to(self.frequency[np.newaxis,np.newaxis,np.newaxis,:,np.newaxis],
+            coord_shape)
+
+        with open('grid.txt', 'w') as f:
+            for s in np.ndindex(coord_shape):
+                f.write("{s} lm ({l:.20f}, {m:.20f}, {f}) "
+                    "lm grid ({vl:.10f}, {vm:.10f}, {vf:.10f}, {vp}) "
+                    "value ({re:.20f}, {im:.20f})\n".format(
+                        s=s, l=l[s], m=m[s], f=freq[s],
+                        vl=bl[s], vm=bm[s], vf=bch[s], vp=bp[s],
+                        re=re[s], im=im[s]))
+
+        return pol_sum
 
     @staticmethod
     def jones_multiply(A, B, hermitian=None, jones_shape=None):

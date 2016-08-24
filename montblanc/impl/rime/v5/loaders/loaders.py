@@ -289,14 +289,15 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Compute parallactic angles
         time_table = pt.taql('SELECT TIME FROM $tm ORDERBY UNIQUE TIME')
         times = time_table.getcol(TIME)
-        ref_ant_position = ta.getcol(POSITION, startrow=0, nrow=1)[0]
+        antenna_positions = ta.getcol(POSITION)
         phase_dir = tfi.getcol(PHASE_DIR)[0][0]
 
         # Handle negative right ascension
         if phase_dir[0] < 0:
             phase_dir[0] += 2*np.pi
 
-        solver.parallactic_angles[:] = mbu.parallactic_angles(phase_dir, ref_ant_position, times)
+        solver.parallactic_angles[:] = mbu.parallactic_angles(phase_dir,
+            antenna_positions, times)
 
         time_table.close()
         uvw_table.close()

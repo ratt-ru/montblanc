@@ -66,9 +66,12 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         solver.transfer_frequency(np.ascontiguousarray(freqs))
 
         # Transfer reference frequencies
+        ref_freqs = tf.getcol(REF_FREQUENCY).astype(solver.ref_frequency.dtype)
+        num_chans = tf.getcol(NUM_CHAN)
+
         ref_freqs_per_band = np.concatenate(
             [np.repeat(rf, size) for rf, size
-            in zip(tf.getcol(REF_FREQUENCY), tf.getcol(NUM_CHAN))], axis=0)
+            in zip(ref_freqs, num_chans)], axis=0)
         solver.transfer_ref_frequency(ref_freqs_per_band)
 
         # If the main table has visibilities for multiple bands, then
@@ -117,15 +120,16 @@ class MeasurementSetLoader(montblanc.impl.common.loaders.MeasurementSetLoader):
         # Compute parallactic angles
         time_table = pt.taql('SELECT TIME FROM $tm ORDERBY UNIQUE TIME')
         times = time_table.getcol(TIME)
-        ref_ant_position = ta.getcol(POSITION, startrow=0, nrow=1)[0]
+        antenna_positions = ta.getcol(POSITION)
         phase_dir = tfi.getcol(PHASE_DIR)[0][0]
 
         # Handle negative right ascension
         if phase_dir[0] < 0:
             phase_dir[0] += 2*np.pi
 
-        parallactic_angles = mbu.parallactic_angles(phase_dir, ref_ant_position, times)
-        solver.transfer_parallactic_angles(parallactic_angles)
+        parallactic_angles = mbu.parallactic_angles(phase_dir,
+            antenna_positions, times)
+        solver.transfer_parallactic_angles(parallactic_angles.astype(solver.parallactic_angles.dtype))
 
         time_table.close()
         uvw_table.close()
