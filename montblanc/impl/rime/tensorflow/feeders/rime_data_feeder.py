@@ -46,7 +46,7 @@ class NumpyRimeDataFeeder(RimeDataFeeder):
                 array_schema = cube.array(n)
             except KeyError as e:
                 # Ignore the array if it isn't defined on the cube
-                raise ValueError("Feed array '{n}' as is not defined "
+                raise ValueError("Feed array '{n}' is not defined "
                     "on the hypercube.".format(n=n)), None, sys.exc_info()[2]
 
             # Except the shape of the supplied array to be equal to
