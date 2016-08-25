@@ -408,7 +408,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
     @cache_ms_read
     def observed_vis(self, context):
-        lrow, urow = context.dim_extents('nuvwrows')
+        lrow, urow = context.dim_extents('nrows')
 
         data = self._tables[ORDERED_MAIN_TABLE].getcol(
             DATA, startrow=lrow, nrow=urow-lrow)
@@ -417,7 +417,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
     @cache_ms_read
     def flag(self, context):
-        lrow, urow = context.dim_extents('nuvwrows')
+        lrow, urow = context.dim_extents('nrows')
 
         flag = self._tables[ORDERED_MAIN_TABLE].getcol(
             FLAG, startrow=lrow, nrow=urow-lrow)
@@ -426,7 +426,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
     @cache_ms_read
     def weight(self, context):
-        lrow, urow = context.dim_extents('nuvwrows')
+        lrow, urow = context.dim_extents('nrows')
         nchan = context.dim_extent_size('nchanperband')
 
         weight = self._tables[ORDERED_MAIN_TABLE].getcol(
