@@ -1,15 +1,16 @@
 import collections
-import copy
 import functools
 import sys
 import time
 import types
 
 import pyrap.tables as pt
+import numpy as np
+
+import hypercube as hc
+
 import montblanc
 from montblanc.impl.rime.tensorflow.feeders.feed_context import FeedContext
-import numpy as np
-import hypercube as hc
 
 class RimeDataFeeder(object):
     pass
@@ -188,10 +189,7 @@ def select_columns(dimensions, dtypes, precision=None):
     Generate select columns. columns will be casted according
     specified precision
     """
-    if precision is None:
-        precision = DOUBLE
-
-    if precision == DOUBLE:
+    if precision is None or precision == DOUBLE:
         dtypes = [SINGLE_TO_DOUBLE_CAST_MAP.get(d, d) for d in dtypes]
     elif precision == SINGLE:
         dtypes = [DOUBLE_TO_SINGLE_CAST_MAP.get(d, d) for d in dtypes]
@@ -451,55 +449,60 @@ class MSRimeDataFeeder(RimeDataFeeder):
     def __exit__(self, etype, evalue, etraceback):
         self.close()
 
-import argparse
+def test():
+    import copy
+    import argparse
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument('msfile')
+    args = parser.parse_args()
 
-parser = argparse.ArgumentParser()
-parser.add_argument('msfile')
-args = parser.parse_args()
+    feeder = MSRimeDataFeeder(args.msfile, precision=SINGLE)
+    cube = copy.deepcopy(feeder.mscube)
 
-feeder = MSRimeDataFeeder(args.msfile, precision=SINGLE)
-cube = copy.deepcopy(feeder.mscube)
+    row_iter_sizes = [10] + cube.dim_global_size('nbl', 'nbands')
+    dim_iter_args = zip(MS_DIM_ORDER, row_iter_sizes)
 
-row_iter_sizes = [10] + cube.dim_global_size('nbl', 'nbands')
-dim_iter_args = zip(MS_DIM_ORDER, row_iter_sizes)
+    # Arrays that we will feed
+    array_names = ('antenna1', 'antenna2', 'uvw',
+            'observed_vis', 'flag', 'weight')
 
-# Arrays that we will feed
-array_names = ('antenna1', 'antenna2', 'uvw',
-        'observed_vis', 'flag', 'weight')
+    def feed(feeder, cube, array_names):
+        for dims in cube.dim_iter(*dim_iter_args, update_local_size=True):
+            cube.update_dimensions(dims)
+            cube.update_row_dimensions()
+            array_schemas = cube.arrays(reify=True)
 
-def feed(feeder, cube, array_names):
-    for dims in cube.dim_iter(*dim_iter_args, update_local_size=True):
-        cube.update_dimensions(dims)
-        cube.update_row_dimensions()
-        array_schemas = cube.arrays(reify=True)
+            feed_contexts = ((n, FeedContext(n, cube, {},
+                array_schemas[n].shape, array_schemas[n].dtype))
+                for n in array_names)
 
-        feed_contexts = ((n, FeedContext(n, cube, {},
-            array_schemas[n].shape, array_schemas[n].dtype))
-            for n in array_names)
+            feed_arrays = ((n, getattr(feeder, n)(c)) for n, c in feed_contexts)
 
-        feed_arrays = ((n, getattr(feeder, n)(c)) for n, c in feed_contexts)
+            print ' '.join(['{n} {s}'.format(n=n,s=a.shape) for n, a in feed_arrays])
 
-        print ' '.join(['{n} {s}'.format(n=n,s=a.shape) for n, a in feed_arrays])
+    start = time.clock()
+    feed(feeder, cube, array_names)
+    print '{s}'.format(s=time.clock() - start)
 
-start = time.clock()
-feed(feeder, cube, array_names)
-print '{s}'.format(s=time.clock() - start)
+    #feeder.clear_cache()
 
-#feeder.clear_cache()
+    start = time.clock()
+    feed(feeder, cube, array_names)
+    print '{s}'.format(s=time.clock() - start)
 
-start = time.clock()
-feed(feeder, cube, array_names)
-print '{s}'.format(s=time.clock() - start)
+    array_names = ('antenna1', 'antenna2', 'uvw',
+            'observed_vis', 'flag', 'weight')
 
-array_names = ('antenna1', 'antenna2', 'uvw',
-        'observed_vis', 'flag', 'weight')
+    cube = copy.deepcopy(feeder.mscube)
+    array_schemas = cube.arrays(reify=True)
+    arrays = { a: np.zeros(s.shape, s.dtype) for (a, s) in
+        ((a, array_schemas[a]) for a in array_names) }
 
-cube = copy.deepcopy(feeder.mscube)
-array_schemas = cube.arrays(reify=True)
-arrays = { a: np.zeros(s.shape, s.dtype) for (a, s) in
-    ((a, array_schemas[a]) for a in array_names) }
+    print [(k, a.shape) for k, a in arrays.iteritems()]
 
-print [(k, a.shape) for k, a in arrays.iteritems()]
+    feeder = NumpyRimeDataFeeder(arrays, cube)
+    feed(feeder, cube, array_names)
 
-feeder = NumpyRimeDataFeeder(arrays, cube)
-feed(feeder, cube, array_names)
+if __name__ == '__main__':
+    test()
