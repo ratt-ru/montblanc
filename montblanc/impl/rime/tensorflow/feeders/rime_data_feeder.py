@@ -343,15 +343,50 @@ class MSRimeDataFeeder(RimeDataFeeder):
     
     @cache_ms_read
     def uvw(self, context):
-        lrow, urow = context.dim_extents('nuvwrows')
-        ntime, nbl, na = context.dim_extent_size('ntime', 'nbl', 'na')
+        """ Special case for handling antenna uvw code """
 
-        bl_uvw = self._tables[ORDERED_UVW_TABLE].getcol(UVW,
-            startrow=lrow, nrow=urow-lrow).reshape(ntime, nbl, 3)
+        # Antenna reading code expects (ntime, nbl) ordering
+        if UVW_DIM_ORDER != ('ntime', 'nbl'):
+            raise ValueError("'{o}'' ordering expected for "
+                "antenna reading code.".format(o=UVW_DIM_ORDER))
 
-        ant_uvw = np.empty(shape=(ntime, na, 3),dtype=bl_uvw.dtype)
-        ant_uvw[:,1:na,:] = bl_uvw[:,:na-1,:]
+        (t_low, t_high) = context.dim_extents('ntime')
+        na = context.dim_global_size('na')
+
+        # We expect to handle all antenna at once
+        if context.shape != (t_high - t_low, na, 3):
+            raise ValueError("Received an unexpected shape "
+                "{s} in (ntime,na,3) antenna reading code".format(
+                    s=context.shape))
+
+        # Create per antenna UVW coordinates.
+        # u_01 = u_1 - u_0
+        # u_02 = u_2 - u_0
+        # ...
+        # u_0N = u_N - U_0
+        # where N = na - 1.
+
+        # Choosing u_0 = 0 we have:
+        # u_1 = u_01
+        # u_2 = u_02
+        # ...
+        # u_N = u_0N
+
+        # Then, other baseline values can be derived as
+        # u_21 = u_1 - u_2
+
+        # Allocate space for per-antenna UVW
+        ant_uvw = np.empty(shape=context.shape, dtype=context.dtype)
+        # Zero antenna 0
         ant_uvw[:,0,:] = 0
+
+        # Read in uvw[1:na] row at each timestep
+        for ti, t in enumerate(xrange(t_low, t_high)):
+            # Inspection confirms that this achieves the# same effect as 
+            # ant_uvw[ti,1:na,:] = ...getcol(UVW, ...).reshape(na-1, -1)
+            self._tables[ORDERED_UVW_TABLE].getcolnp(UVW,
+                ant_uvw[ti,1:na,:],
+                startrow=t*na+1, nrow=na-1)
 
         return ant_uvw
 
@@ -458,7 +493,6 @@ print '{s}'.format(s=time.clock() - start)
 
 array_names = ('antenna1', 'antenna2', 'uvw',
         'observed_vis', 'flag', 'weight')
-
 
 cube = copy.deepcopy(feeder.mscube)
 array_schemas = cube.arrays(reify=True)
