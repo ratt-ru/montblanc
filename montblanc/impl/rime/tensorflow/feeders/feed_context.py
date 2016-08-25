@@ -77,6 +77,12 @@ class FeedContext(object):
 
 	def __getattr__(self, name):
 		# Defer to the hypercube
-		return getattr(self._cube if name in self._cube_methods else self, name)
+		if name in self._cube_methods:
+			return getattr(self._cube, name)
+		# Avoid recursive calls to getattr
+		elif hasattr(self, name):
+			return getattr(self, name)
+		else:
+			raise AttributeError(name)
 
 _feed_context_methods = _get_public_methods(FeedContext)
