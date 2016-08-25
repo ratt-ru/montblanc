@@ -10,6 +10,7 @@ import numpy as np
 import hypercube as hc
 
 import montblanc
+import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow.feeders.feed_context import FeedContext
 
 class RimeDataFeeder(object):
@@ -103,19 +104,23 @@ DOUBLE_TO_SINGLE_CAST_MAP = { v: k for
 MAIN_TABLE = 'MAIN'
 ORDERED_MAIN_TABLE = 'ORDERED_MAIN'
 ORDERED_UVW_TABLE = 'ORDERED_UVW'
+ORDERED_TIME_TABLE = 'ORDERED_TIME'
+ORDERED_BASELINE_TABLE = 'ORDERED_BASELINE'
 
 # Measurement Set sub-table name string constants
 ANTENNA_TABLE = 'ANTENNA'
 SPECTRAL_WINDOW_TABLE = 'SPECTRAL_WINDOW'
 DATA_DESCRIPTION_TABLE = 'DATA_DESCRIPTION'
 POLARIZATION_TABLE = 'POLARIZATION'
+FIELD_TABLE = 'FIELD'
 
 SUBTABLE_KEYS = (ANTENNA_TABLE,
     SPECTRAL_WINDOW_TABLE,
     DATA_DESCRIPTION_TABLE,
-    POLARIZATION_TABLE)
+    POLARIZATION_TABLE,
+    FIELD_TABLE)
 
-# String constants for column names
+# Main MS column name constants
 TIME = 'TIME'
 ANTENNA1 = 'ANTENNA1'
 ANTENNA2 = 'ANTENNA2'
@@ -123,6 +128,12 @@ UVW = 'UVW'
 DATA = 'DATA'
 FLAG = 'FLAG'
 WEIGHT = 'WEIGHT'
+
+# Antenna sub-table column name constants
+POSITION = 'POSITION'
+
+# Field sub-table column name constants
+PHASE_DIR = 'PHASE_DIR'
 
 # Columns used in select statement
 SELECTED = [TIME, ANTENNA1, ANTENNA2, UVW, DATA, FLAG, WEIGHT]
@@ -221,7 +232,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
         ms = open_table(msname)
 
         # Access individual tables
-        ant, spec, ddesc, pol = (self._tables[k] for k in SUBTABLE_KEYS)
+        ant, spec, ddesc, pol, field = (self._tables[k] for k in SUBTABLE_KEYS)
 
         # Sanity check the polarizations
         if pol.nrows() > 1:
@@ -277,12 +288,28 @@ class MSRimeDataFeeder(RimeDataFeeder):
         # Count distinct timesteps in the MS
         t_orderby = orderby_clause(['ntime'], unique=True)
         t_query = "SELECT FROM $otblms {c}".format(c=t_orderby)
-        ntime = pt.taql(t_query).nrows()
+        self._tables[ORDERED_TIME_TABLE] = ot = pt.taql(t_query)
+        ntime = ot.nrows()
         
         # Count number of baselines in the MS
         bl_orderby = orderby_clause(['nbl'], unique=True)
         bl_query = "SELECT FROM $otblms {c}".format(c=bl_orderby)
-        nbl = pt.taql(bl_query).nrows()
+        self._tables[ORDERED_BASELINE_TABLE] = obl = pt.taql(bl_query)
+        nbl = obl.nrows()
+
+        # Cache columns on the object
+        # Handle these columns slightly differently
+        # They're used to compute the parallactic angle
+        # TODO: Fit them into the cache_ms_read strategy at some point
+
+        # Cache antenna positions
+        self._antenna_positions = ant.getcol(POSITION)
+
+        # Cache timesteps
+        self._times = ot.getcol(TIME)
+
+        # Cache the phase direction for the field
+        self._phase_dir = field.getcol(PHASE_DIR, startrow=field_id, nrow=1)[0][0]
 
         # Register dimensions on the cube
         cube.register_dimension('npol', npol,
@@ -334,6 +361,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
         cube.register_array('observed_vis', ('ntime', 'nbl', 'nchan', 'npol'), np.complex64)
         cube.register_array('weight', ('ntime', 'nbl', 'nchan', 'npol'), np.float32)
         cube.register_array('flag', ('ntime', 'nbl', 'nchan', 'npol'), np.bool)
+        cube.register_array('parallactic_angles', ('ntime', 'na'), np.float64)
 
     @property
     def mscube(self):
@@ -387,6 +415,15 @@ class MSRimeDataFeeder(RimeDataFeeder):
                 startrow=t*na+1, nrow=na-1)
 
         return ant_uvw
+
+    @cache_ms_read
+    def parallactic_angles(self, context):
+        # Time and antenna extents
+        (lt, ut), (la, ua) = context.dim_extents('ntime', 'na')
+
+        return mbu.parallactic_angles(self._phase_dir,
+            self._antenna_positions[la:ua],
+            self._times[lt:ut])
 
     @cache_ms_read
     def antenna1(self, context):
@@ -465,7 +502,7 @@ def test():
 
     # Arrays that we will feed
     array_names = ('antenna1', 'antenna2', 'uvw',
-            'observed_vis', 'flag', 'weight')
+            'observed_vis', 'flag', 'weight', 'parallactic_angles')
 
     def feed(feeder, cube, array_names):
         for dims in cube.dim_iter(*dim_iter_args, update_local_size=True):
@@ -492,7 +529,7 @@ def test():
     print '{s}'.format(s=time.clock() - start)
 
     array_names = ('antenna1', 'antenna2', 'uvw',
-            'observed_vis', 'flag', 'weight')
+            'observed_vis', 'flag', 'weight', 'parallactic_angles')
 
     cube = copy.deepcopy(feeder.mscube)
     array_schemas = cube.arrays(reify=True)
