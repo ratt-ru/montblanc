@@ -174,7 +174,10 @@ def rime_solver(slvr_cfg):
         raise ValueError('Invalid version %s' % version)
 
     if data_source == Options.DATA_SOURCE_MS:
-        return create_rime_solver_from_ms(RimeSolver, slvr_cfg)
+        if version == Options.VERSION_TENSORFLOW:
+            return RimeSolver(slvr_cfg)
+        else:
+            return create_rime_solver_from_ms(RimeSolver, slvr_cfg)
     elif data_source == Options.DATA_SOURCE_TEST:
         return RimeSolver(slvr_cfg)
     elif data_source == Options.DATA_SOURCE_DEFAULT:
