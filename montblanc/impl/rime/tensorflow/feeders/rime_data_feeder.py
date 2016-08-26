@@ -19,7 +19,8 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 class RimeDataFeeder(object):
-    pass
+    def clear_cache(self):
+    	raise NotImplementedError()
 
     def feeds(self):
         raise NotImplementedError()

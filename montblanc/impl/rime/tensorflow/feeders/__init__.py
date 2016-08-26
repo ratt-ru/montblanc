@@ -22,6 +22,7 @@ from montblanc.impl.rime.tensorflow.feeders.feed_context import FeedContext
 from montblanc.impl.rime.tensorflow.feeders.rime_data_feeder import RimeDataFeeder
 from montblanc.impl.rime.tensorflow.feeders.ms_data_feeder import MSRimeDataFeeder
 from montblanc.impl.rime.tensorflow.feeders.np_data_feeder import NumpyRimeDataFeeder
+from montblanc.impl.rime.tensorflow.feeders.fits_beam_data_feeder import FitsBeamDataFeeder
 
 def test():
     import argparse

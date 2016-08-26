@@ -25,7 +25,7 @@ import types
 
 import numpy as np
 
-import hypercube as hc
+from hypercube import HyperCube
 import pyrap.tables as pt
 
 import montblanc.util as mbu
@@ -121,7 +121,7 @@ def cache_ms_read(method):
     def memoizer(self, context):
         D = context.dimensions(copy=False)
         # (lower, upper) else (0, d)
-        idx = ((D[d].lower_extent, D[d].upper_extent) if d in D 
+        idx = ((D[d].lower_extent, D[d].upper_extent) if d in D
             else (0, d) for d in context.array(context.name).shape)
         # Construct the key for the above index
         key = tuple(i for t in idx for i in t)
@@ -139,7 +139,7 @@ def cache_ms_read(method):
 def orderby_clause(dimensions, unique=False):
     columns = ", ".join(m.orderby for m
         in MS_ROW_MAPPINGS if m.dimension in dimensions)
-    
+
     return " ".join(("ORDERBY", "UNIQUE" if unique else "", columns))
 
 def select_columns(dimensions, dtypes, precision=None):
@@ -178,7 +178,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
         self._msname = msname
         # Create dictionary of tables
         self._tables = { k: open_table(msname, k) for k in SUBTABLE_KEYS }
-        self._cube = cube = hc.HyperCube()
+        self._cube = cube = HyperCube()
 
         # Open the main measurement set
         ms = open_table(msname)
@@ -242,7 +242,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
         t_query = "SELECT FROM $otblms {c}".format(c=t_orderby)
         self._tables[ORDERED_TIME_TABLE] = ot = pt.taql(t_query)
         ntime = ot.nrows()
-        
+
         # Count number of baselines in the MS
         bl_orderby = orderby_clause(['nbl'], unique=True)
         bl_query = "SELECT FROM $otblms {c}".format(c=bl_orderby)
@@ -320,7 +320,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
     @property
     def mscube(self):
         return self._cube
-    
+
     @cache_ms_read
     def uvw(self, context):
         """ Special case for handling antenna uvw code """
@@ -362,7 +362,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
         # Read in uvw[1:na] row at each timestep
         for ti, t in enumerate(xrange(t_low, t_high)):
-            # Inspection confirms that this achieves the# same effect as 
+            # Inspection confirms that this achieves the# same effect as
             # ant_uvw[ti,1:na,:] = ...getcol(UVW, ...).reshape(na-1, -1)
             self._tables[ORDERED_UVW_TABLE].getcolnp(UVW,
                 ant_uvw[ti,1:na,:],
