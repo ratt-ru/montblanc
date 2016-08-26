@@ -79,7 +79,7 @@ class NumpyRimeDataFeeder(RimeDataFeeder):
         return self._arrays
 
 DOUBLE = 'double'
-SINGLE = 'single'
+FLOAT = 'float'
 
 # Map MS column string types to numpy types
 MS_TO_NP_TYPE_MAP = {
@@ -91,13 +91,13 @@ MS_TO_NP_TYPE_MAP = {
     'DCOMPLEX' : np.complex128
 }
 
-SINGLE_TO_DOUBLE_CAST_MAP = {
+FLOAT_TO_DOUBLE_CAST_MAP = {
     'COMPLEX' : 'DCOMPLEX',
     'FLOAT' : 'DOUBLE',
 }
 
-DOUBLE_TO_SINGLE_CAST_MAP = { v: k for
-    k, v in SINGLE_TO_DOUBLE_CAST_MAP.iteritems() }
+DOUBLE_TO_FLOAT_CAST_MAP = { v: k for
+    k, v in FLOAT_TO_DOUBLE_CAST_MAP.iteritems() }
 
 
 # Key names for main and taql selected tables
@@ -201,9 +201,9 @@ def select_columns(dimensions, dtypes, precision=None):
     specified precision
     """
     if precision is None or precision == DOUBLE:
-        dtypes = [SINGLE_TO_DOUBLE_CAST_MAP.get(d, d) for d in dtypes]
-    elif precision == SINGLE:
-        dtypes = [DOUBLE_TO_SINGLE_CAST_MAP.get(d, d) for d in dtypes]
+        dtypes = [FLOAT_TO_DOUBLE_CAST_MAP.get(d, d) for d in dtypes]
+    elif precision == FLOAT:
+        dtypes = [DOUBLE_TO_FLOAT_CAST_MAP.get(d, d) for d in dtypes]
     else:
         raise ValueError("Invalid precision '{p}'".format(p=precision))
 
@@ -494,7 +494,7 @@ def test():
     parser.add_argument('msfile')
     args = parser.parse_args()
 
-    feeder = MSRimeDataFeeder(args.msfile, precision=SINGLE)
+    feeder = MSRimeDataFeeder(args.msfile, precision=FLOAT)
     cube = copy.deepcopy(feeder.mscube)
 
     row_iter_sizes = [10] + cube.dim_global_size('nbl', 'nbands')
