@@ -217,6 +217,7 @@ setup(name='montblanc',
     license='GPL2',
     packages=find_packages(),
     install_requires=[
+        'astropy >= 1.2.1',
         'attrdict >= 2.0.0',
         'cffi >= 1.1.2',
         'enum34 >= 1.1.2',
