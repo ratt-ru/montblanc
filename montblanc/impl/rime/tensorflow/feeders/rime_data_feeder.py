@@ -21,6 +21,11 @@
 import inspect
 
 class AbstractRimeDataFeeder(object):
+
+    def close(self):
+        """ Perform any required cleanup """
+        raise NotImplementedError()
+
     def clear_cache(self):
         """ Clears any caches associated with the feed """
         raise NotImplementedError()
@@ -39,6 +44,14 @@ class AbstractRimeDataFeeder(object):
 
 class RimeDataFeeder(AbstractRimeDataFeeder):
     FEED_ARGSPEC = ['self', 'context']
+
+    def close(self):
+        """ Perform any required cleanup. """
+        pass
+
+    def clear_cache(self):
+        """ Clears any caches associated with the source """
+        pass
 
     def feeds(self):
         """
