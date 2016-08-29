@@ -25,35 +25,35 @@ import types
 import montblanc
 import montblanc.util as mbu
 
-from rime_data_feeder import RimeDataFeeder
+from rime_data_source import RimeDataSource
 
-class NumpyRimeDataFeeder(RimeDataFeeder):
+class NumpyRimeDataSource(RimeDataSource):
     """
     Given a dictionary containing numpy arrays and keyed on array name,
-    provides feed functions for each array.
+    provides source functions for each array.
 
 
-    >>> feeder = NumpyRimeDataFeeder({
+    >>> source = NumpyRimeDataSource({
         "uvw" : np.zeros(shape=(100,14,3),dtype=np.float64),
         "antenna1" : np.zeros(shape=(100,351), dtype=np.int32)})
 
-    >>> context = FeedContext(...)
-    >>> feeder.uvw(context)
-    >>> feeder.antenna1(context)
+    >>> context = SourceContext(...)
+    >>> source.uvw(context)
+    >>> source.antenna1(context)
 
     """
     def __init__(self, arrays, cube):
         self._arrays = arrays
 
-        def _create_feed_function(name, array):
-            def _feed(self, context):
-                """ Generic feed function """
+        def _create_source_function(name, array):
+            def _source(self, context):
+                """ Generic source function """
                 idx = context.slice_index(*context.array(name).shape)
                 return array[idx]
 
-            return _feed
+            return _source
 
-        # Create feed methods for each supplied array
+        # Create source methods for each supplied array
         for n, a in arrays.iteritems():
             try:
                 array_schema = cube.array(n)
@@ -73,11 +73,11 @@ class NumpyRimeDataFeeder(RimeDataFeeder):
                     "of the array schema '{s}'.".format(
                         n=n, g=shape, s=array_schema.shape))
 
-            # Create the feed function, update the wrapper,
+            # Create the source function, update the wrapper,
             # bind it to a method and set the attribute on the object
             f = functools.update_wrapper(
-                _create_feed_function(n, a),
-                _create_feed_function)
+                _create_source_function(n, a),
+                _create_source_function)
 
             f.__doc__ = "Feed function for array '{n}'".format(n=n)
 

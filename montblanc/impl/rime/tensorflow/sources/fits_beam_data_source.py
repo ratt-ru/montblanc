@@ -30,7 +30,7 @@ from hypercube import HyperCube
 
 import montblanc
 import montblanc.util as mbu
-from montblanc.impl.rime.tensorflow.feeders.rime_data_feeder import RimeDataFeeder
+from montblanc.impl.rime.tensorflow.sources.rime_data_source import RimeDataSource
 
 class FitsAxes(object):
     """
@@ -192,9 +192,9 @@ def _create_axes(file_dict):
 
 def cache_fits_read(method):
     """
-    Decorator for caching FitsBeamDataFeeder feeder function return values
+    Decorator for caching FitsBeamDataSource source function return values
 
-    Create a key index for the proxied array in the FeedContext.
+    Create a key index for the proxied array in the SourceContext.
     Iterate over the array shape descriptor e.g.
     (beam_lw, beam_mh, beam_nud, 4)
     returning tuples containing the lower and upper extents
@@ -222,7 +222,7 @@ def cache_fits_read(method):
     return memoizer
 
 
-class FitsBeamDataFeeder(RimeDataFeeder):
+class FitsBeamDataSource(RimeDataSource):
     """ Feeds holography cubes from FITS files """
     def __init__(self, base_beam_filename):
         self._base_beam_filename = base_beam_filename

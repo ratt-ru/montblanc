@@ -32,8 +32,8 @@ import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow.ant_pairs import monkey_patch_antenna_pairs
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
-from montblanc.impl.rime.tensorflow.feeders import (FeedContext,
-    MSRimeDataFeeder, FitsBeamDataFeeder)
+from montblanc.impl.rime.tensorflow.sources import (SourceContext,
+    MSRimeDataSource, FitsBeamDataSource)
 
 from hypercube import HyperCube
 import hypercube.util as hcu
@@ -124,52 +124,52 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.info("Data source '{ds}'".format(ds=data_source))
 
 
-        # Handle any specified feeders in the configuration
-        self._feeders = []
+        # Handle any specified sources in the configuration
+        self._sources = []
 
-        # Obtain feeds for data in FITS beam cubes
+        # Obtain sources for data in FITS beam cubes
         base_fits_name = slvr_cfg.get(Options.E_BEAM_BASE_FITS_NAME, '')
 
         if not base_fits_name:
             pass
         else:
-            # Create the FITS feeder and extract the feeds
-            fits_feeder = FitsBeamDataFeeder(base_fits_name)
-            feeds = fits_feeder.feeds()
+            # Create the FITS source and extract the sources
+            fits_source = FitsBeamDataSource(base_fits_name)
+            sources = fits_source.sources()
 
-            montblanc.log.info("Feeding arrays '{a}' from FITS files '{s}'"
-                .format(a=feeds.keys(), s=fits_feeder.filename_schema))
+            montblanc.log.info("Sourcing arrays '{a}' from FITS files '{s}'"
+                .format(a=sources.keys(), s=fits_source.filename_schema))
 
-            # Update dimensions with any new information from the feeder
-            self.update_dimensions(fits_feeder.updated_dimensions())
+            # Update dimensions with any new information from the source
+            self.update_dimensions(fits_source.updated_dimensions())
 
-            # Update data sources with the given feeds
+            # Update data sources with the given sources
             ds.update({k: DataSource(f, self.array(k).dtype) for k, f
-                in feeds.iteritems()})
+                in sources.iteritems()})
 
-            # Store feeder for close()
-            self._feeders.append(fits_feeder)
+            # Store source for close()
+            self._sources.append(fits_source)
 
-        # Obtain feeds for data in a MS
+        # Obtain sources for data in a MS
         if data_source == Options.DATA_SOURCE_MS:
-            # Create the MS and extract the feeds
+            # Create the MS and extract the sources
             msfile = slvr_cfg.get(Options.MS_FILE)
-            ms_feeder = MSRimeDataFeeder(msfile, self)
-            feeds = ms_feeder.feeds()
+            ms_source = MSRimeDataSource(msfile, self)
+            sources = ms_source.sources()
 
-            montblanc.log.info("Feeding arrays '{a}' "
+            montblanc.log.info("Sourcing arrays '{a}' "
                 "from Measurement Set '{ms}'"
-                .format(a=ms_feeder.feeds().keys(), ms=msfile))
+                .format(a=ms_source.sources().keys(), ms=msfile))
 
-            # Update dimensions with any new information from the feeder
-            self.update_dimensions(ms_feeder.updated_dimensions())
+            # Update dimensions with any new information from the source
+            self.update_dimensions(ms_source.updated_dimensions())
 
-            # Update data sources with the given feeds
+            # Update data sources with the given sources
             ds.update({k: DataSource(f, self.array(k).dtype) for k, f
-                in ms_feeder.feeds().iteritems()})
+                in ms_source.sources().iteritems()})
 
-            # Store feeder for close()
-            self._feeders.append(ms_feeder)
+            # Store source for close()
+            self._sources.append(ms_source)
 
         ds.update(slvr_cfg.get('supplied', {}))
 
@@ -184,7 +184,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         QUEUE_SIZE = 10
 
-        from montblanc.impl.rime.tensorflow.feeders.queue_wrapper import create_queue_wrapper
+        from montblanc.impl.rime.tensorflow.sources.queue_wrapper import create_queue_wrapper
 
         self._uvw_queue = create_queue_wrapper('uvw',
             QUEUE_SIZE, ['uvw', 'antenna1', 'antenna2'], ds)
@@ -402,7 +402,7 @@ class RimeSolver(MontblancTensorflowSolver):
                 for ph, a in zip(q.placeholders, q.fed_arrays)]
 
             # Create a feed dictionary by calling the data source functors
-            feed_dict = { ph: ds.source(FeedContext(a, cube,
+            feed_dict = { ph: ds.source(SourceContext(a, cube,
                     self.config(), ad.shape, ad.dtype))
                 for (a, ph, ds, ad) in gen }
 
@@ -429,7 +429,7 @@ class RimeSolver(MontblancTensorflowSolver):
                         for ph, a in zip(queue.placeholders, queue.fed_arrays)]
 
                     # Create a feed dictionary by calling the data source functors
-                    feed_dict = { ph: ds.source(FeedContext(a, cube,
+                    feed_dict = { ph: ds.source(SourceContext(a, cube,
                             self.config(), ad.shape, ad.dtype))
                         for (a, ph, ds, ad) in gen }
 
@@ -583,8 +583,8 @@ class RimeSolver(MontblancTensorflowSolver):
         self._compute_executor.shutdown()
         self._tf_session.close()
 
-        for feeder in self._feeders:
-            feeder.close()
+        for source in self._sources:
+            source.close()
 
     def __enter__(self):
         return self

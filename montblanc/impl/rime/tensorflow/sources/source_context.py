@@ -14,7 +14,7 @@ class _setter_property(object):
     def __set__(self, obj, value):
         return self.func(obj, value)
 
-class FeedContext(object):
+class SourceContext(object):
 	"""
 	Context for queue arrays.
 
@@ -35,7 +35,7 @@ class FeedContext(object):
 		# public methods on the hypercube, the current class
 		# and the cfg
 		intersect = set.intersection(self._cube_methods,
-			_feed_context_methods,
+			_source_context_methods,
 			_get_public_methods(slvr_cfg))
 
 		if len(intersect) > 0:
@@ -88,4 +88,4 @@ class FeedContext(object):
 		else:
 			raise AttributeError(name)
 
-_feed_context_methods = _get_public_methods(FeedContext)
+_source_context_methods = _get_public_methods(SourceContext)

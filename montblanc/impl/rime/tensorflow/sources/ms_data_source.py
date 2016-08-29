@@ -31,7 +31,7 @@ import pyrap.tables as pt
 import montblanc.util as mbu
 from montblanc.config import RimeSolverConfig as Options
 
-from rime_data_feeder import RimeDataFeeder
+from rime_data_source import RimeDataSource
 
 # Map MS column string types to numpy types
 MS_TO_NP_TYPE_MAP = {
@@ -104,9 +104,9 @@ UPDATE_DIMENSIONS = ['ntime', 'nbl', 'na', 'nchan', 'nbands', 'npol',
 
 def cache_ms_read(method):
     """
-    Decorator for caching MSRimeDataFeeder feeder function return values
+    Decorator for caching MSRimeDataSource source function return values
 
-    Create a key index for the proxied array in the FeedContext.
+    Create a key index for the proxied array in the SourceContext.
     Iterate over the array shape descriptor e.g. (ntime, nbl, 3)
     returning tuples containing the lower and upper extents
     of string dimensions. Takes (0, d) in the case of an integer
@@ -153,31 +153,31 @@ def open_table(msname, subtable=None):
     return pt.table(subtable_name(msname, subtable), ack=False)
 
 def row_extents(cube):
-    shape = cube.dim_global_size(*MSRimeDataFeeder.MS_DIM_ORDER)
-    lower = cube.dim_lower_extent(*MSRimeDataFeeder.MS_DIM_ORDER)
+    shape = cube.dim_global_size(*MSRimeDataSource.MS_DIM_ORDER)
+    lower = cube.dim_lower_extent(*MSRimeDataSource.MS_DIM_ORDER)
     upper = tuple(u-1 for u in cube.dim_upper_extent(
-        *MSRimeDataFeeder.MS_DIM_ORDER))
+        *MSRimeDataSource.MS_DIM_ORDER))
 
     return (np.ravel_multi_index(lower, shape),
         np.ravel_multi_index(upper, shape) + 1)
 
 def uvw_row_extents(cube):
-    shape = cube.dim_global_size(*MSRimeDataFeeder.UVW_DIM_ORDER)
-    lower = cube.dim_lower_extent(*MSRimeDataFeeder.UVW_DIM_ORDER)
+    shape = cube.dim_global_size(*MSRimeDataSource.UVW_DIM_ORDER)
+    lower = cube.dim_lower_extent(*MSRimeDataSource.UVW_DIM_ORDER)
     upper = tuple(u-1 for u in cube.dim_upper_extent(
-        *MSRimeDataFeeder.UVW_DIM_ORDER))
+        *MSRimeDataSource.UVW_DIM_ORDER))
 
     return (np.ravel_multi_index(lower, shape),
         np.ravel_multi_index(upper, shape) + 1)
 
-class MSRimeDataFeeder(RimeDataFeeder):
+class MSRimeDataSource(RimeDataSource):
     # Main measurement set ordering dimensions
     MS_DIM_ORDER = ('ntime', 'nbl', 'nbands')
     # UVW measurement set ordering dimensions
     UVW_DIM_ORDER = ('ntime', 'nbl')
 
     def __init__(self, msname, cube):
-        super(MSRimeDataFeeder, self).__init__()
+        super(MSRimeDataSource, self).__init__()
 
         self._msname = msname
         # Create dictionary of tables

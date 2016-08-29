@@ -20,18 +20,18 @@
 
 import inspect
 
-class AbstractRimeDataFeeder(object):
+class AbstractRimeDataSource(object):
 
     def close(self):
         """ Perform any required cleanup """
         raise NotImplementedError()
 
     def clear_cache(self):
-        """ Clears any caches associated with the feed """
+        """ Clears any caches associated with the source """
         raise NotImplementedError()
 
-    def feeds(self):
-        """ Returns a dictionary of feed methods, keyed on feed name """
+    def sources(self):
+        """ Returns a dictionary of source methods, keyed on source name """
         raise NotImplementedError()
 
     def updated_dimensions(self):
@@ -42,8 +42,9 @@ class AbstractRimeDataFeeder(object):
         """ Return an iterable/mapping of hypercube arrays to update """
         raise NotImplementedError()
 
-class RimeDataFeeder(AbstractRimeDataFeeder):
-    FEED_ARGSPEC = ['self', 'context']
+class RimeDataSource(AbstractRimeDataSource):
+
+    SOURCE_ARGSPEC = ['self', 'context']
 
     def close(self):
         """ Perform any required cleanup. """
@@ -53,16 +54,16 @@ class RimeDataFeeder(AbstractRimeDataFeeder):
         """ Clears any caches associated with the source """
         pass
 
-    def feeds(self):
+    def sources(self):
         """
-        Returns a dictionary of feed methods found on this object,
-        keyed on method name. Feed methods are identified by
+        Returns a dictionary of source methods found on this object,
+        keyed on method name. Source methods are identified by
         (self, context) arguments on this object. For example:
 
         def f(self, context):
             ...
 
-        is a feed method, but
+        is a source method, but
 
         def f(self, ctx):
             ...
@@ -73,7 +74,7 @@ class RimeDataFeeder(AbstractRimeDataFeeder):
 
         return { n: m for n, m
             in inspect.getmembers(self, inspect.ismethod)
-            if inspect.getargspec(m)[0] == self.FEED_ARGSPEC
+            if inspect.getargspec(m)[0] == self.SOURCE_ARGSPEC
         }
 
 
