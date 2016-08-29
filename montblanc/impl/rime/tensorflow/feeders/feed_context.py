@@ -1,13 +1,16 @@
+import inspect
+
 def _get_public_methods(obj):
-	return set(method for method in dir(obj)
-		if callable(getattr(obj, method))
-		and not method.startswith('_'))
+	""" Return the public methods on an object """
+	return set(n for n, m
+		in inspect.getmembers(obj, inspect.ismethod)
+		if not n.startswith('_'))
 
 class _setter_property(object):
     def __init__(self, func, doc=None):
         self.func = func
         self.__doc__ = doc if doc is not None else func.__doc__
-    
+
     def __set__(self, obj, value):
         return self.func(obj, value)
 
@@ -46,7 +49,7 @@ class FeedContext(object):
 	@property
 	def cfg(self):
 		return self._cfg
-		
+
 	@cfg.setter
 	def cfg(self, value):
 		self._cfg = value
