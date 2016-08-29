@@ -32,7 +32,8 @@ import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow.ant_pairs import monkey_patch_antenna_pairs
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
-from montblanc.impl.rime.tensorflow.feeders.feed_context import FeedContext
+from montblanc.impl.rime.tensorflow.feeders import (FeedContext,
+    MSRimeDataFeeder, FitsBeamDataFeeder)
 
 from hypercube import HyperCube
 import hypercube.util as hcu
@@ -86,41 +87,18 @@ class RimeSolver(MontblancTensorflowSolver):
         #=========================================
         # Register hypercube Arrays and Properties
         #=========================================
-   
+
         from montblanc.impl.rime.tensorflow.config import (A, P)
 
         self.register_properties(P)
         self.register_arrays(A)
 
-        #==================
-        # Memory Budgeting
-        #==================
-
-        # Attempt to fit arrays into memory budget by
-        # reducing dimension local_sizes
-        modded_dims = self._budget(A, slvr_cfg)
-
-        # Update any dimensions
-        for k, v in modded_dims.iteritems():
-            self.update_dimension(k, local_size=v,
-                lower_extent=0, upper_extent=v)
-
-        #====================================
-        # Tensorflow Session and placeholders
-        #====================================
+        #===================
+        # Tensorflow Session
+        #===================
 
         # Create the tensorflow session object
         self._tf_session = tf.Session()
-
-        # Create placholder variables for source counts
-        self._src_ph_vars = AttrDict({
-            n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
-            for n in mbu.source_nr_vars() })
-
-        # Create placeholder variables for properties
-        self._property_ph_vars = AttrDict({
-            n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
-            for n, p in self.properties().iteritems() })
 
         #================================
         # Queue Data Source Configuration
@@ -137,14 +115,61 @@ class RimeSolver(MontblancTensorflowSolver):
             if data_source == Options.DATA_SOURCE_MS
             else data_source)
 
-        montblanc.log.info("Taking queue defaults from data source '{ds}'"
-            .format(ds=queue_data_source))
-
         # Obtain default data sources for each array,
         # then update with any data sources supplied by the user
         self._data_sources = ds = {
             n: DataSource(a.get(queue_data_source), a.dtype)
             for n, a in self.arrays().iteritems() }
+
+        montblanc.log.info("Data source '{ds}'".format(ds=data_source))
+
+
+        # Handle any specified feeders in the configuration
+        self._feeders = []
+
+        # Obtain feeds for data in FITS beam cubes
+        base_fits_name = slvr_cfg.get(Options.E_BEAM_BASE_FITS_NAME, '')
+
+        if not base_fits_name:
+            pass
+        else:
+            # Create the FITS feeder and extract the feeds
+            fits_feeder = FitsBeamDataFeeder(base_fits_name)
+            feeds = fits_feeder.feeds()
+
+            montblanc.log.info("Feeding arrays '{a}' from FITS files '{s}'"
+                .format(a=feeds.keys(), s=fits_feeder.filename_schema))
+
+            # Update dimensions with any new information from the feeder
+            self.update_dimensions(fits_feeder.updated_dimensions())
+
+            # Update data sources with the given feeds
+            ds.update({k: DataSource(f, self.array(k).dtype) for k, f
+                in feeds.iteritems()})
+
+            # Store feeder for close()
+            self._feeders.append(fits_feeder)
+
+        # Obtain feeds for data in a MS
+        if data_source == Options.DATA_SOURCE_MS:
+            # Create the MS and extract the feeds
+            msfile = slvr_cfg.get(Options.MS_FILE)
+            ms_feeder = MSRimeDataFeeder(msfile, self)
+            feeds = ms_feeder.feeds()
+
+            montblanc.log.info("Feeding arrays '{a}' "
+                "from Measurement Set '{ms}'"
+                .format(a=ms_feeder.feeds().keys(), ms=msfile))
+
+            # Update dimensions with any new information from the feeder
+            self.update_dimensions(ms_feeder.updated_dimensions())
+
+            # Update data sources with the given feeds
+            ds.update({k: DataSource(f, self.array(k).dtype) for k, f
+                in ms_feeder.feeds().iteritems()})
+
+            # Store feeder for close()
+            self._feeders.append(ms_feeder)
 
         ds.update(slvr_cfg.get('supplied', {}))
 
@@ -197,6 +222,33 @@ class RimeSolver(MontblancTensorflowSolver):
         self._parameter_queue = create_queue_wrapper('descriptors',
             QUEUE_SIZE, ['descriptor'], ds)
 
+        #==================
+        # Memory Budgeting
+        #==================
+
+        # Attempt to fit arrays into memory budget by
+        # reducing dimension local_sizes
+        modded_dims = self._budget(A, slvr_cfg)
+
+        # Update any dimensions
+        for k, v in modded_dims.iteritems():
+            self.update_dimension(k, local_size=v,
+                lower_extent=0, upper_extent=v)
+
+        #======================
+        # Tensorflow Placeholders
+        #======================
+
+        # Create placholder variables for source counts
+        self._src_ph_vars = AttrDict({
+            n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
+            for n in mbu.source_nr_vars() })
+
+        # Create placeholder variables for properties
+        self._property_ph_vars = AttrDict({
+            n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
+            for n, p in self.properties().iteritems() })
+
         #======================
         # Thread pool executors
         #======================
@@ -217,7 +269,6 @@ class RimeSolver(MontblancTensorflowSolver):
         self._transcoder = CubeDimensionTranscoder(self._iter_dims)
 
     def _budget(self, arrays, slvr_cfg):
-        na = slvr_cfg.get(Options.NA)
         nsrc = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
         src_str_list = [Options.NSRC] + mbu.source_nr_vars()
         src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
@@ -225,13 +276,14 @@ class RimeSolver(MontblancTensorflowSolver):
 
         mem__budget = slvr_cfg.get('mem_budget', 256*ONE_MB)
         T = self.template_dict()
+        na = self.dim_local_size('na')
 
         # Figure out a viable dimension configuration
-        # given the total problem size 
+        # given the total problem size
         viable, modded_dims = mbu.viable_dim_config(
             mem__budget, arrays, T, [src_reduction_str,
                 'ntime',
-                'nbl={na}&na={na}'.format(na=na)], 1)                
+                'nbl={na}&na={na}'.format(na=na)], 1)
 
         # Create property dictionary with updated dimensions.
         # Determine memory required by our chunk size
@@ -364,7 +416,7 @@ class RimeSolver(MontblancTensorflowSolver):
             for src_type, queue in src_queues.iteritems():
                 iter_args = (src_type, cube.dim_local_size(src_type))
 
-                # Iterate over local_size chunks of the source 
+                # Iterate over local_size chunks of the source
                 for dim_desc in cube.dim_iter(iter_args, update_local_size=True):
                     cube.update_dimensions(dim_desc)
 
@@ -466,7 +518,7 @@ class RimeSolver(MontblancTensorflowSolver):
             lm, stokes, alpha = self._point_source_queue.dequeue()
             nsrc = tf.shape(lm)[0]
             ant_jones = antenna_jones(lm, stokes, alpha)
-            shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=lm.dtype)    
+            shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=lm.dtype)
             model_vis = rime.sum_coherencies(antenna1, antenna2,
                 shape, ant_jones, flag, gterm, model_vis, False)
 
@@ -530,6 +582,9 @@ class RimeSolver(MontblancTensorflowSolver):
         self._feed_executor.shutdown()
         self._compute_executor.shutdown()
         self._tf_session.close()
+
+        for feeder in self._feeders:
+            feeder.close()
 
     def __enter__(self):
         return self
