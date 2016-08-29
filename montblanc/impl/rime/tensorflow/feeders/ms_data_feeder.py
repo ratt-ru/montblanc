@@ -425,11 +425,6 @@ class MSRimeDataFeeder(RimeDataFeeder):
         weight = np.repeat(weight, nchan, 0)
         return weight.reshape(context.shape)
 
-    def feeds(self):
-        return { k: getattr(self, k) for k in ('uvw',
-            'antenna1', 'antenna2', 'parallactic_angles',
-            'observed_vis', 'flag', 'weight') }
-
     def clear_cache(self):
         self._cache.clear()
 

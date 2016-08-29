@@ -84,9 +84,6 @@ class NumpyRimeDataFeeder(RimeDataFeeder):
             method = types.MethodType(f, self)
             setattr(self, n, method)
 
-    def feeds(self):
-        return { k : getattr(self, k) for k in self.arrays }            
-
     @property
     def arrays(self):
         return self._arrays

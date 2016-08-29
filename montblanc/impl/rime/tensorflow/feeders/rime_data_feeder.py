@@ -18,11 +18,41 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-class RimeDataFeeder(object):
+import inspect
+
+class AbstractRimeDataFeeder(object):
     def clear_cache(self):
-    	raise NotImplementedError()
+        """ Clears any caches associated with the feed """
+        raise NotImplementedError()
 
     def feeds(self):
+        """ Returns a dictionary of feed methods, keyed on feed name """
         raise NotImplementedError()
+
+class RimeDataFeeder(AbstractRimeDataFeeder):
+    FEED_ARGSPEC = ['self', 'context']
+
+    def feeds(self):
+        """
+        Returns a dictionary of feed methods found on this object,
+        keyed on method name. Feed methods are identified by
+        (self, context) arguments on this object. For example:
+
+        def f(self, context):
+            ...
+
+        is a feed method, but
+
+        def f(self, ctx):
+            ...
+
+        is not.
+
+        """
+
+        return { n: m for n, m
+            in inspect.getmembers(self, inspect.ismethod)
+            if inspect.getargspec(m)[0] == self.FEED_ARGSPEC
+        }
 
 
