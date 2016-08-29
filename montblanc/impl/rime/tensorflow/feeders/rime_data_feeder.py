@@ -29,6 +29,14 @@ class AbstractRimeDataFeeder(object):
         """ Returns a dictionary of feed methods, keyed on feed name """
         raise NotImplementedError()
 
+    def updated_dimensions(self):
+        """ Return an iterable/mapping of hypercube dimensions to update """
+        raise NotImplementedError()
+
+    def updated_arrays(self):
+        """ Return an iterable/mapping of hypercube arrays to update """
+        raise NotImplementedError()
+
 class RimeDataFeeder(AbstractRimeDataFeeder):
     FEED_ARGSPEC = ['self', 'context']
 

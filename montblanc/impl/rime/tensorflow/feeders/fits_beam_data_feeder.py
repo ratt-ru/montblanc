@@ -246,10 +246,6 @@ class FitsBeamDataFeeder(RimeDataFeeder):
             self._axes.naxis[f_ax],
             description='E Beam cube frequency depth')
 
-    @property
-    def cube(self):
-        return self._cube
-
     @cache_fits_read
     def ebeam(self, context):
         """ Feeds the ebeam cube """
@@ -268,6 +264,10 @@ class FitsBeamDataFeeder(RimeDataFeeder):
     def beam_extents(self, context):
         """ Return the beam extents """
         return self._cube_extents.flatten()
+
+    def updated_dimensions(self):
+        D = self._cube.dimensions(copy=False)
+        return [D[k] for k in ('beam_lw', 'beam_mh', 'beam_nud')]
 
     @property
     def base_beam_filename(self):

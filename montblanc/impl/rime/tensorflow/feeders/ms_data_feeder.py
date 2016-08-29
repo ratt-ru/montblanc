@@ -43,15 +43,6 @@ MS_TO_NP_TYPE_MAP = {
     'DCOMPLEX' : np.complex128
 }
 
-FLOAT_TO_DOUBLE_CAST_MAP = {
-    'COMPLEX' : 'DCOMPLEX',
-    'FLOAT' : 'DOUBLE',
-}
-
-DOUBLE_TO_FLOAT_CAST_MAP = { v: k for
-    k, v in FLOAT_TO_DOUBLE_CAST_MAP.iteritems() }
-
-
 # Key names for main and taql selected tables
 MAIN_TABLE = 'MAIN'
 ORDERED_MAIN_TABLE = 'ORDERED_MAIN'
@@ -89,6 +80,8 @@ PHASE_DIR = 'PHASE_DIR'
 
 # Columns used in select statement
 SELECTED = [TIME, ANTENNA1, ANTENNA2, UVW, DATA, FLAG, WEIGHT]
+DTYPES_FLOAT = ['FLOAT', 'INT', 'INT', 'FLOAT', 'COMPLEX', 'BOOL', 'FLOAT']
+DTYPES_DOUBLE = ['DOUBLE', 'INT', 'INT', 'DOUBLE', 'DCOMPLEX', 'BOOL', 'DOUBLE']
 
 # Named tuple defining a mapping from MS row to dimension
 OrderbyMap = collections.namedtuple("OrderbyMap", "dimension orderby")
@@ -105,6 +98,9 @@ MS_ROW_MAPPINGS = [
     BASELINE_MAP,
     BAND_MAP
 ]
+
+UPDATE_DIMENSIONS = ['ntime', 'nbl', 'na', 'nchan', 'nbands', 'npol',
+    'npolchan', 'nvis']
 
 def cache_ms_read(method):
     """
@@ -142,20 +138,13 @@ def orderby_clause(dimensions, unique=False):
 
     return " ".join(("ORDERBY", "UNIQUE" if unique else "", columns))
 
-def select_columns(dimensions, dtypes, precision=None):
+def select_columns(dimensions, ms_dtypes):
     """
     Generate select columns. columns will be casted according
     specified precision
     """
-    if precision is None or precision == Options.DTYPE_DOUBLE:
-        dtypes = [FLOAT_TO_DOUBLE_CAST_MAP.get(d, d) for d in dtypes]
-    elif precision == Options.DTYPE_FLOAT:
-        dtypes = [DOUBLE_TO_FLOAT_CAST_MAP.get(d, d) for d in dtypes]
-    else:
-        raise ValueError("Invalid precision '{p}'".format(p=precision))
-
     return ", ".join('{n} AS {n} {d}'.format(n=n, d=d)
-        for n, d in zip(dimensions, dtypes))
+        for n, d in zip(dimensions, ms_dtypes))
 
 def subtable_name(msname, subtable=None):
     return '::'.join((msname, subtable)) if subtable else msname
@@ -163,22 +152,41 @@ def subtable_name(msname, subtable=None):
 def open_table(msname, subtable=None):
     return pt.table(subtable_name(msname, subtable), ack=False)
 
+def row_extents(cube):
+    shape = cube.dim_global_size(*MSRimeDataFeeder.MS_DIM_ORDER)
+    lower = cube.dim_lower_extent(*MSRimeDataFeeder.MS_DIM_ORDER)
+    upper = tuple(u-1 for u in cube.dim_upper_extent(
+        *MSRimeDataFeeder.MS_DIM_ORDER))
+
+    return (np.ravel_multi_index(lower, shape),
+        np.ravel_multi_index(upper, shape) + 1)
+
+def uvw_row_extents(cube):
+    shape = cube.dim_global_size(*MSRimeDataFeeder.UVW_DIM_ORDER)
+    lower = cube.dim_lower_extent(*MSRimeDataFeeder.UVW_DIM_ORDER)
+    upper = tuple(u-1 for u in cube.dim_upper_extent(
+        *MSRimeDataFeeder.UVW_DIM_ORDER))
+
+    return (np.ravel_multi_index(lower, shape),
+        np.ravel_multi_index(upper, shape) + 1)
+
 class MSRimeDataFeeder(RimeDataFeeder):
     # Main measurement set ordering dimensions
     MS_DIM_ORDER = ('ntime', 'nbl', 'nbands')
     # UVW measurement set ordering dimensions
     UVW_DIM_ORDER = ('ntime', 'nbl')
 
-    def __init__(self, msname, precision=None):
+    def __init__(self, msname, cube):
         super(MSRimeDataFeeder, self).__init__()
-
-        if precision is None:
-            precision = Options.DTYPE_DOUBLE
 
         self._msname = msname
         # Create dictionary of tables
         self._tables = { k: open_table(msname, k) for k in SUBTABLE_KEYS }
-        self._cube = cube = HyperCube()
+        self._cube = mscube = HyperCube()
+
+        # Register the main cube dimensions
+        mscube.register_dimensions(cube.dimensions(copy=False))
+        mscube.register_arrays(cube.arrays())
 
         # Open the main measurement set
         ms = open_table(msname)
@@ -212,8 +220,8 @@ class MSRimeDataFeeder(RimeDataFeeder):
         field_id = 0
 
         select_cols = select_columns(SELECTED,
-            [ms.getcoldesc(c)["valueType"].upper() for c in SELECTED],
-            precision=precision)
+            DTYPES_DOUBLE if mscube.array('uvw').dtype == np.float64
+            else DTYPES_FLOAT)
 
         # Create a view over the MS, ordered by
         # (1) time (TIME)
@@ -263,63 +271,29 @@ class MSRimeDataFeeder(RimeDataFeeder):
         # Cache the phase direction for the field
         self._phase_dir = field.getcol(PHASE_DIR, startrow=field_id, nrow=1)[0][0]
 
-        # Register dimensions on the cube
-        cube.register_dimension('npol', npol,
-            description='Polarisations')
-        cube.register_dimension('nbands', len(chan_per_band),
-            description='Bands')
-        cube.register_dimension('nchan', sum(chan_per_band),
-            description='Channels')
-        cube.register_dimension('nchanperband', chan_per_band[0],
-            description='Channels-per-band')
-        cube.register_dimension('nrows', ms.nrows(),
-            description='Main MS rows')
-        cube.register_dimension('nuvwrows', otblms.nrows(),
-            description='UVW sub-MS rows')
-        cube.register_dimension('na', ant.nrows(),
-            description='Antenna')
-        cube.register_dimension('ntime', ntime,
-            description='Timesteps')
-        cube.register_dimension('nbl', nbl,
-            description='Baselines')
+        # Number of channels per band
+        self._nchanperband = chan_per_band[0]
 
-        def _cube_row_update_function(self):
-            # Update main measurement set rows
-            shape = self.dim_global_size(*MSRimeDataFeeder.MS_DIM_ORDER)
-            lower = self.dim_lower_extent(*MSRimeDataFeeder.MS_DIM_ORDER)
-            upper = tuple(u-1 for u in self.dim_upper_extent(
-                *MSRimeDataFeeder.MS_DIM_ORDER))
+        nchan = sum(chan_per_band)
+        nbands = len(chan_per_band)
+        npolchan = npol*nchan
+        nvis = ntime*nbl*nchan
 
-            self.update_dimension(name='nrows',
-                lower_extent=np.ravel_multi_index(lower, shape),
-                upper_extent=np.ravel_multi_index(upper, shape)+1)
+        # Update the cube with dimension information
+        # obtained from the MS
+        updated_sizes = [ntime, nbl, ant.nrows(),
+            sum(chan_per_band), len(chan_per_band), npol,
+            npolchan, nvis]
 
-            shape = self.dim_global_size(*MSRimeDataFeeder.UVW_DIM_ORDER)
-            lower = self.dim_lower_extent(*MSRimeDataFeeder.UVW_DIM_ORDER)
-            upper = tuple(u-1 for u in self.dim_upper_extent(
-                *MSRimeDataFeeder.UVW_DIM_ORDER))
-
-            self.update_dimension(name='nuvwrows',
-                lower_extent=np.ravel_multi_index(lower, shape),
-                upper_extent=np.ravel_multi_index(upper, shape)+1)
-
-        self._cube.update_row_dimensions = types.MethodType(
-            _cube_row_update_function, self._cube)
+        for dim, size in zip(UPDATE_DIMENSIONS, updated_sizes):
+            mscube.update_dimension(dim, global_size=size,
+                local_size=size, lower_extent=0, upper_extent=size)
 
         self._cache = collections.defaultdict(dict)
 
-        # Temporary, need to get these arrays from elsewhere
-        cube.register_array('uvw', ('ntime', 'na', 3), np.float64)
-        cube.register_array('antenna1', ('ntime', 'nbl'), np.int32)
-        cube.register_array('antenna2', ('ntime', 'nbl'), np.int32)
-        cube.register_array('observed_vis', ('ntime', 'nbl', 'nchan', 'npol'), np.complex64)
-        cube.register_array('weight', ('ntime', 'nbl', 'nchan', 'npol'), np.float32)
-        cube.register_array('flag', ('ntime', 'nbl', 'nchan', 'npol'), np.bool)
-        cube.register_array('parallactic_angles', ('ntime', 'na'), np.float64)
-
-    @property
-    def mscube(self):
-        return self._cube
+    def updated_dimensions(self):
+        D = self._cube.dimensions(copy=False)
+        return [D[k] for k in UPDATE_DIMENSIONS]
 
     @cache_ms_read
     def uvw(self, context):
@@ -372,7 +346,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
     @cache_ms_read
     def antenna1(self, context):
-        lrow, urow = context.dim_extents('nuvwrows')
+        lrow, urow = uvw_row_extents(context)
         antenna1 = self._tables[ORDERED_UVW_TABLE].getcol(
             ANTENNA1, startrow=lrow, nrow=urow-lrow)
 
@@ -380,7 +354,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
     @cache_ms_read
     def antenna2(self, context):
-        lrow, urow = context.dim_extents('nuvwrows')
+        lrow, urow = uvw_row_extents(context)
         antenna2 = self._tables[ORDERED_UVW_TABLE].getcol(
             ANTENNA2, startrow=lrow, nrow=urow-lrow)
 
@@ -397,7 +371,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
     @cache_ms_read
     def observed_vis(self, context):
-        lrow, urow = context.dim_extents('nrows')
+        lrow, urow = row_extents(context)
 
         data = self._tables[ORDERED_MAIN_TABLE].getcol(
             DATA, startrow=lrow, nrow=urow-lrow)
@@ -406,7 +380,7 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
     @cache_ms_read
     def flag(self, context):
-        lrow, urow = context.dim_extents('nrows')
+        lrow, urow = row_extents(context)
 
         flag = self._tables[ORDERED_MAIN_TABLE].getcol(
             FLAG, startrow=lrow, nrow=urow-lrow)
@@ -415,14 +389,13 @@ class MSRimeDataFeeder(RimeDataFeeder):
 
     @cache_ms_read
     def weight(self, context):
-        lrow, urow = context.dim_extents('nrows')
-        nchan = context.dim_extent_size('nchanperband')
+        lrow, urow = row_extents(context)
 
         weight = self._tables[ORDERED_MAIN_TABLE].getcol(
             WEIGHT, startrow=lrow, nrow=urow-lrow)
 
         # WEIGHT is applied across all channels
-        weight = np.repeat(weight, nchan, 0)
+        weight = np.repeat(weight, self._nchanperband, 0)
         return weight.reshape(context.shape)
 
     def clear_cache(self):
