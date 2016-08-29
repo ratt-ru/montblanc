@@ -32,6 +32,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='RIME MS test script')
     parser.add_argument('msfile', help='Measurement Set File')
+    parser.add_argument('-b', '--beam',
+        type=str, default='', help='Base beam filename')
     parser.add_argument('-np','--npsrc',dest='npsrc',
         type=int, default=10, help='Number of Point Sources')
     parser.add_argument('-ng','--ngsrc',dest='ngsrc',
@@ -56,13 +58,14 @@ if __name__ == '__main__':
 
     slvr_cfg = montblanc.rime_solver_cfg(
         ntime=10000, na=3000, nchan=128,
-        data_source=Options.DATA_SOURCE_DEFAULT,
+        msfile=args.msfile,
+        beam_base_fits_name=args.beam,
+        data_source=Options.DATA_SOURCE_MS,
         sources=montblanc.sources(point=args.npsrc,
             gaussian=args.ngsrc,
             sersic=args.nssrc),
         init_weights='weight', weight_vector=False,
         dtype='double', auto_correlations=args.auto_correlations,
-        context='blah',
         version=args.version)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
