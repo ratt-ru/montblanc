@@ -142,6 +142,16 @@ def _create_filenames(base_filename):
         (c, _re_im_filenames(c, base_filename))
         for c in CORRELATIONS)
 
+def _filename_schema(base_filename):
+    """
+    Given the base_filename, print out a string
+    illustrating the naming scheme for the FITS filenames
+    """
+    return '{b}_{{{c}}}_{{{ri}}}.fits'.format(
+        b=base_filename,
+        c='/'.join(CORRELATIONS),
+        ri='/'.join(REIM))
+
 def _open_fits_files(filenames):
     open_kwargs = { 'mode' : 'update', 'memmap' : False }
 
@@ -268,6 +278,10 @@ class FitsBeamDataFeeder(RimeDataFeeder):
     def updated_dimensions(self):
         D = self._cube.dimensions(copy=False)
         return [D[k] for k in ('beam_lw', 'beam_mh', 'beam_nud')]
+
+    @property
+    def filename_schema(self):
+        return _filename_schema(self._base_beam_filename)
 
     @property
     def base_beam_filename(self):
