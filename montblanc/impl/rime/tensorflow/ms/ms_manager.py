@@ -22,6 +22,7 @@ import collections
 
 import numpy as np
 
+import montblanc
 from hypercube import HyperCube
 import pyrap.tables as pt
 
@@ -63,6 +64,8 @@ UVW = 'UVW'
 DATA = 'DATA'
 FLAG = 'FLAG'
 WEIGHT = 'WEIGHT'
+MODEL_DATA = 'MODEL_DATA'
+CORRECTED_DATA = 'CORRECTED_DATA'
 
 # Antenna sub-table column name constants
 POSITION = 'POSITION'
@@ -71,9 +74,12 @@ POSITION = 'POSITION'
 PHASE_DIR = 'PHASE_DIR'
 
 # Columns used in select statement
-SELECTED = [TIME, ANTENNA1, ANTENNA2, UVW, DATA, FLAG, WEIGHT]
-DTYPES_FLOAT = ['FLOAT', 'INT', 'INT', 'FLOAT', 'COMPLEX', 'BOOL', 'FLOAT']
-DTYPES_DOUBLE = ['DOUBLE', 'INT', 'INT', 'DOUBLE', 'DCOMPLEX', 'BOOL', 'DOUBLE']
+SELECTED = [TIME, ANTENNA1, ANTENNA2, UVW,
+    DATA, MODEL_DATA, CORRECTED_DATA, FLAG, WEIGHT]
+DTYPES_FLOAT = ['FLOAT', 'INT', 'INT', 'FLOAT',
+    'COMPLEX', 'COMPLEX', 'COMPLEX' 'BOOL', 'FLOAT']
+DTYPES_DOUBLE = ['DOUBLE', 'INT', 'INT', 'DOUBLE',
+    'DCOMPLEX', 'DCOMPLEX', 'DCOMPLEX', 'BOOL', 'DOUBLE']
 
 # Named tuple defining a mapping from MS row to dimension
 OrderbyMap = collections.namedtuple("OrderbyMap", "dimension orderby")
@@ -137,6 +143,7 @@ def uvw_row_extents(cube):
     return (np.ravel_multi_index(lower, shape),
         np.ravel_multi_index(upper, shape) + 1)
 
+
 class MeasurementSetManager(object):
     def __init__(self, msname, cube):
         super(MeasurementSetManager, self).__init__()
@@ -149,6 +156,13 @@ class MeasurementSetManager(object):
         # Register the main cube dimensions
         mscube.register_dimensions(cube.dimensions(copy=False))
         mscube.register_arrays(cube.arrays())
+
+        if not pt.tableexists(msname):
+            raise ValueError("'{ms}' does not exist "
+                "or is not a Measurement Set!".format(ms=msname))
+
+        # Add imaging columns, just in case
+        pt.addImagingColumns(msname, ack=False)
 
         # Open the main measurement set
         ms = open_table(msname)
@@ -198,6 +212,10 @@ class MeasurementSetManager(object):
 
         # Ordered Measurement Set
         oms = pt.taql(ordering_query)
+
+        montblanc.log.debug("Measurement Set Manager ordering query "
+            "is {o}.".format(o=oms))
+
         # Measurement Set ordered by unique time and baseline
         otblms = pt.taql("SELECT FROM $oms {c}".format(
             c=orderby_clause(UVW_DIM_ORDER, unique=True)))
@@ -206,6 +224,8 @@ class MeasurementSetManager(object):
         self._tables[MAIN_TABLE] = ms
         self._tables[ORDERED_MAIN_TABLE] = oms
         self._tables[ORDERED_UVW_TABLE] = otblms
+
+        self._column_descriptors = {col: ms.getcoldesc(col) for col in SELECTED}
 
         # Count distinct timesteps in the MS
         t_orderby = orderby_clause(['ntime'], unique=True)
@@ -241,6 +261,10 @@ class MeasurementSetManager(object):
         # Close all the tables
         for table in self._tables.itervalues():
             table.close()
+
+    @property
+    def column_descriptors(self):
+        return self._column_descriptors
 
     @property
     def channels_per_band(self):
