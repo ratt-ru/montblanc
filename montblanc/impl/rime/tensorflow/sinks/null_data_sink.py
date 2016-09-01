@@ -18,6 +18,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from montblanc.impl.rime.tensorflow.sinks.rime_data_sink import RimeDataSink
-from montblanc.impl.rime.tensorflow.sinks.null_data_sink import NullDataSink
-from montblanc.impl.rime.tensorflow.sinks.sink_context import SinkContext
+import montblanc
+
+from rime_data_sink import RimeDataSink
+
+class NullDataSink(RimeDataSink):
+
+    def model_vis(self, context):
+        array_schema = context.array(context.name, reify=True)
+        slices = context.slice_index(*array_schema.shape)
+        slice_str = ' '.join('(%s %s)' % (s.start, s.stop) for s in slices)
+        montblanc.log.info("Received '{n}' of shape '{s}' with slices {sl} "
+            .format(n=context.name, s=context.data.shape, sl=slice_str))

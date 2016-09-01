@@ -36,7 +36,7 @@ from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTran
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
     MSRimeDataSource, FitsBeamDataSource)
 
-from montblanc.impl.rime.tensorflow.sinks import (SinkContext)
+from montblanc.impl.rime.tensorflow.sinks import (SinkContext, NullDataSink)
 
 from hypercube import HyperCube
 import hypercube.util as hcu
@@ -220,10 +220,18 @@ class RimeSolver(MontblancTensorflowSolver):
             QUEUE_SIZE, ['descriptor','model_vis'], ds)
 
         self._output_queue = create_queue_wrapper('output',
-            QUEUE_SIZE, ['model_vis'], ds)
+            QUEUE_SIZE, ['descriptor', 'model_vis'], ds)
 
         self._parameter_queue = create_queue_wrapper('descriptors',
             QUEUE_SIZE, ['descriptor'], ds)
+
+        #==================
+        # Data Sinks
+        #==================
+
+        self._null_data_sink = NullDataSink()
+        self._sinks = [NullDataSink()]
+
 
         #==================
         # Memory Budgeting
@@ -325,8 +333,7 @@ class RimeSolver(MontblancTensorflowSolver):
         session = self._tf_session
 
         # Copy dimensions of the main cube
-        cube = HyperCube()
-        cube.register_dimensions(self.dimensions(copy=False))
+        cube = self.copy()
 
         # Iterate over time and baseline
         iter_strides = cube.dim_local_size(*self._iter_dims)
@@ -357,9 +364,7 @@ class RimeSolver(MontblancTensorflowSolver):
         data_sources = self._data_sources.copy()
 
         # Maintain a hypercube based on the main cube
-        cube = HyperCube()
-        cube.register_dimensions(self.dimensions(copy=False))
-        cube.register_arrays(self.arrays())
+        cube = self.copy()
 
         # Queues to be fed on each iteration
         chunk_queues = (self._input_queue,
@@ -572,25 +577,62 @@ class RimeSolver(MontblancTensorflowSolver):
         return descriptor, model_vis
 
     def solve(self):
-        p = self._parameter_executor.submit(self._parameter_feed)
-        f = self._feed_executor.submit(self._feed)
-        c = self._compute_executor.submit(self._compute)
 
-        done, not_done = cf.wait([f,c], return_when=cf.FIRST_COMPLETED)
+        try:
+            p = self._parameter_executor.submit(self._parameter_feed)
+            f = self._feed_executor.submit(self._feed)
+            c = self._compute_executor.submit(self._compute)
 
-        for d in done:
-            data = d.result()
-            print data
-            print data.shape
+            cube = self.copy()
+
+            not_done = [p, f, c]
+
+            while True:
+                # TODO: timeout not strictly necessary
+                done, not_done = cf.wait(not_done,
+                    timeout=1.0,
+                    return_when=cf.FIRST_COMPLETED)
+
+                montblanc.log.info('Done {d} Not Done {nd}'.format(
+                    d=len(done), nd=len(not_done)))
+
+                for future in done:
+                    res = future.result()
+                    if future is c:
+                        descriptor, model_vis = res
+                        dim_updates = self._transcoder.decode(descriptor)
+                        cube.update_dimensions(dim_updates)
+                        array_schemas = cube.arrays(reify=True)
+                        sink_context = SinkContext('model_vis',
+                            cube, self.config(), model_vis)
+                        self._null_data_sink.sinks()['model_vis'](sink_context)
+
+                # Nothing remains to be done, quit the loop
+                if len(not_done) == 0:
+                    break
+
+        except (KeyboardInterrupt, SystemExit) as e:
+            montblanc.log.exception('Solving interrupted')
+            raise
+        except:
+            montblanc.log.exception('Solving exception')
 
     def close(self):
+        # Shutdown thread executors
         self._parameter_executor.shutdown()
         self._feed_executor.shutdown()
         self._compute_executor.shutdown()
+
+        # Shutdown thte tensorflow session
         self._tf_session.close()
 
+        # Shutdown data sources
         for source in self._sources:
             source.close()
+
+        # Shutdown data sinks
+        for sink in self._sinks:
+            sink.close()
 
     def __enter__(self):
         return self
