@@ -301,13 +301,16 @@ class RimeSolver(MontblancTensorflowSolver):
             rb=mbu.fmt_bytes(required_mem),
             mb=mbu.fmt_bytes(mem__budget)))
 
-        montblanc.log.info((
-            "The following dimension reductions "
-            "have been applied:"))
+        if len(modded_dims) > 0:
+            montblanc.log.info((
+                "The following dimension reductions "
+                "have been applied:"))
 
-        for k, v in modded_dims.iteritems():
-            montblanc.log.info('{p}{d}: {id} => {rd}'.format
-                (p=' '*4, d=k, id=T[k], rd=v))
+            for k, v in modded_dims.iteritems():
+                montblanc.log.info('{p}{d}: {id} => {rd}'.format
+                    (p=' '*4, d=k, id=T[k], rd=v))
+        else:
+            montblanc.log.info("No dimension reductions were applied.")
 
         return modded_dims
 
