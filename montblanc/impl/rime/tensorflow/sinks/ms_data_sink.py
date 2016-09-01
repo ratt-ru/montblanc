@@ -18,7 +18,25 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import montblanc
+
 from montblanc.impl.rime.tensorflow.sinks.rime_data_sink import RimeDataSink
-from montblanc.impl.rime.tensorflow.sinks.null_data_sink import NullDataSink
-from montblanc.impl.rime.tensorflow.sinks.ms_data_sink import MSRimeDataSink
-from montblanc.impl.rime.tensorflow.sinks.sink_context import SinkContext
+import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
+
+class MSRimeDataSink(RimeDataSink):
+    def __init__(self, manager):
+        self._manager = manager
+
+    def model_vis(self, context):
+        lrow, urow = MS.row_extents(context)
+
+        column = 'MODEL_DATA'
+        colshape = self._manager.column_descriptors[column]['shape']
+        msshape = [-1] + colshape.tolist()
+
+        self._manager.ordered_main_table.putcol(column,
+            context.data.reshape(msshape),
+            startrow=lrow, nrow=urow-lrow)
+
+
+
