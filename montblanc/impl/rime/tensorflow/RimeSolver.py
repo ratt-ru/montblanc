@@ -33,6 +33,8 @@ import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow.ant_pairs import monkey_patch_antenna_pairs
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
 
+from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
+
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
     MSRimeDataSource, FitsBeamDataSource)
 
@@ -126,6 +128,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         montblanc.log.info("Data source '{ds}'".format(ds=data_source))
 
+        self._ms_manager = None
 
         # Handle any specified sources in the configuration
         self._sources = []
@@ -157,7 +160,12 @@ class RimeSolver(MontblancTensorflowSolver):
         if data_source == Options.DATA_SOURCE_MS:
             # Create the MS and extract the sources
             msfile = slvr_cfg.get(Options.MS_FILE)
-            ms_source = MSRimeDataSource(msfile, self)
+
+            # Create a MS manager
+            self._ms_manager = mgr = MeasurementSetManager(msfile, self)
+
+            # Pass it through to our MS data source
+            ms_source = MSRimeDataSource(mgr)
             sources = ms_source.sources()
 
             montblanc.log.info("Sourcing arrays '{a}' "
@@ -633,6 +641,11 @@ class RimeSolver(MontblancTensorflowSolver):
         # Shutdown data sinks
         for sink in self._sinks:
             sink.close()
+
+        # Close the measurement set manager
+        if self._ms_manager is not None:
+            self._ms_manager.close()
+
 
     def __enter__(self):
         return self
