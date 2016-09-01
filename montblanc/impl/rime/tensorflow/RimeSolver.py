@@ -393,17 +393,17 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Determine array shapes and data types for this
             # portion of the hypercube
-            array_descriptors = cube.arrays(reify=True)
+            array_schemas = cube.arrays(reify=True)
 
-            # Inject data sources and array descriptors for the
+            # Inject a data source and array schema for the
             # descriptor queue items. These aren't full on arrays per se
             # but they need to work within the feeding framework
-            array_descriptors['descriptor'] = descriptor
+            array_schemas['descriptor'] = descriptor
             data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32)
 
             # Generate (name, placeholder, datasource, array descriptor)
             # for the arrays required by each queue
-            gen = [(a, ph, data_sources[a], array_descriptors[a])
+            gen = [(a, ph, data_sources[a], array_schemas[a])
                 for q in chunk_queues
                 for ph, a in zip(q.placeholders, q.fed_arrays)]
 
@@ -431,7 +431,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
                     # Generate (name, placeholder, datasource, array descriptor)
                     # for the arrays required by each queue
-                    gen = [(a, ph, data_sources[a], array_descriptors[a])
+                    gen = [(a, ph, data_sources[a], array_schemas[a])
                         for ph, a in zip(queue.placeholders, queue.fed_arrays)]
 
                     # Create a feed dictionary by calling the data source functors
