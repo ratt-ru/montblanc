@@ -20,11 +20,9 @@
 
 import inspect
 
-def _get_public_methods(obj):
-    """ Return the public methods on an object """
-    return set(n for n, m
-        in inspect.getmembers(obj, inspect.ismethod)
-        if not n.startswith('_'))
+def _get_public_attributes(obj):
+    """ Return the public attributes on an object """
+    return set(n for n, m in inspect.getmembers(obj) if not n.startswith('_'))
 
 class _setter_property(object):
     def __init__(self, func, doc=None):
@@ -38,28 +36,32 @@ class SinkContext(object):
     """
     Context for queue arrays.
 
-    Proxies methods of a hypercube and provides access to configuration
+    Proxies attributes of a hypercube and provides access to configuration
     """
-    __slots__ = ('_cube', '_cfg', '_name', '_array',
-        '_cube_methods')
+    __slots__ = ('_cube', '_cfg', '_name', '_data',
+        '_cube_attributes')
 
-    def __init__(self, name, cube, slvr_cfg, array):
+    def __init__(self, name, cube, slvr_cfg, data):
         self._name = name
         self._cube = cube
         self._cfg = slvr_cfg
-        self._array = array
-        self._cube_methods = _get_public_methods(cube)
+        self._data = data
+
+        # TODO: Only do _get_public_attributes once for
+        # cube and slvr_cfg below. It's probably enough
+        # to do this at a class level and SinkContexts
+        # are created fairly often
+        self._cube_attributes = _get_public_attributes(cube)
 
         # Fall over if there's any intersection between the
-        # public methods on the hypercube, the current class
-        # and the cfg
-        intersect = set.intersection(self._cube_methods,
-            _sink_context_methods,
-            _get_public_methods(slvr_cfg))
+        # public attributes the current class and the
+        # union of the hypercube and the configuration attributes
+        intersect = set.intersection(_sink_context_attributes,
+            set.union(self._cube_attributes, _get_public_attributes(slvr_cfg)))
 
         if len(intersect) > 0:
-            raise ValueError("'{i}' methods intersected on context"
-                .format(i=intersect))
+            raise ValueError("'{i}' attributes intersected on context"
+                .format(i=list(intersect)))
 
     @_setter_property
     def cube(self, value):
@@ -74,8 +76,8 @@ class SinkContext(object):
         self._cfg = value
 
     @property
-    def array(self):
-        return self._array
+    def data(self):
+        return self._data
 
     @property
     def name(self):
@@ -87,7 +89,7 @@ class SinkContext(object):
 
     def __getattr__(self, name):
         # Defer to the hypercube
-        if name in self._cube_methods:
+        if name in self._cube_attributes:
             return getattr(self._cube, name)
         # Avoid recursive calls to getattr
         elif hasattr(self, name):
@@ -95,4 +97,4 @@ class SinkContext(object):
         else:
             raise AttributeError(name)
 
-_sink_context_methods = _get_public_methods(SinkContext)
+_sink_context_attributes = _get_public_attributes(SinkContext)

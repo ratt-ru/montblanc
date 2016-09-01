@@ -20,11 +20,9 @@
 
 import inspect
 
-def _get_public_methods(obj):
-	""" Return the public methods on an object """
-	return set(n for n, m
-		in inspect.getmembers(obj, inspect.ismethod)
-		if not n.startswith('_'))
+def _get_public_attributes(obj):
+	""" Return the public attributes on an object """
+	return set(n for n, m in inspect.getmembers(obj) if not n.startswith('_'))
 
 class _setter_property(object):
     def __init__(self, func, doc=None):
@@ -38,10 +36,10 @@ class SourceContext(object):
 	"""
 	Context for queue arrays.
 
-	Proxies methods of a hypercube and provides access to configuration
+	Proxies attributes of a hypercube and provides access to configuration
 	"""
 	__slots__ = ('_cube', '_cfg', '_name', '_shape', '_dtype',
-		'_cube_methods')
+		'_cube_attributes')
 
 	def __init__(self, name, cube, slvr_cfg, shape, dtype):
 		self._name = name
@@ -49,18 +47,22 @@ class SourceContext(object):
 		self._cfg = slvr_cfg
 		self._shape = shape
 		self._dtype = dtype
-		self._cube_methods = _get_public_methods(cube)
+
+        # TODO: Only do _get_public_attributes once for
+        # cube and slvr_cfg below. It's probably enough
+        # to do this at a class level and SourceContexts
+        # are created fairly often
+		self._cube_attributes = _get_public_attributes(cube)
 
 		# Fall over if there's any intersection between the
-		# public methods on the hypercube, the current class
-		# and the cfg
-		intersect = set.intersection(self._cube_methods,
-			_source_context_methods,
-			_get_public_methods(slvr_cfg))
+		# public attributes the current class and the
+		# union of the hypercube and the configuration attributes
+		intersect = set.intersection(_source_context_attributes,
+			set.union(self._cube_attributes, _get_public_attributes(slvr_cfg)))
 
 		if len(intersect) > 0:
-			raise ValueError("'{i}' methods intersected on context"
-				.format(i=intersect))
+			raise ValueError("'{i}' attributes intersected on context"
+				.format(i=list(intersect)))
 
 	@_setter_property
 	def cube(self, value):
@@ -100,7 +102,7 @@ class SourceContext(object):
 
 	def __getattr__(self, name):
 		# Defer to the hypercube
-		if name in self._cube_methods:
+		if name in self._cube_attributes:
 			return getattr(self._cube, name)
 		# Avoid recursive calls to getattr
 		elif hasattr(self, name):
@@ -108,4 +110,4 @@ class SourceContext(object):
 		else:
 			raise AttributeError(name)
 
-_source_context_methods = _get_public_methods(SourceContext)
+_source_context_attributes = _get_public_attributes(SourceContext)
