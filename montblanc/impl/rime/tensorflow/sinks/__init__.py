@@ -19,3 +19,4 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 from montblanc.impl.rime.tensorflow.sinks.rime_data_sink import RimeDataSink
+from montblanc.impl.rime.tensorflow.sinks.sink_context import SinkContext

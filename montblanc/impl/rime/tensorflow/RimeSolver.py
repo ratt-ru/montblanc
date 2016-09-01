@@ -32,8 +32,11 @@ import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow.ant_pairs import monkey_patch_antenna_pairs
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
+
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
     MSRimeDataSource, FitsBeamDataSource)
+
+from montblanc.impl.rime.tensorflow.sinks import (SinkContext)
 
 from hypercube import HyperCube
 import hypercube.util as hcu
