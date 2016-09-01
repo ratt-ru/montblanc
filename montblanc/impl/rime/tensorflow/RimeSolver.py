@@ -38,7 +38,8 @@ from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
     MSRimeDataSource, FitsBeamDataSource)
 
-from montblanc.impl.rime.tensorflow.sinks import (SinkContext, NullDataSink)
+from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
+    NullDataSink, MSRimeDataSink)
 
 from hypercube import HyperCube
 import hypercube.util as hcu
@@ -53,6 +54,7 @@ rime_lib_path = os.path.join(montblanc.get_montblanc_path(),
 rime = tf.load_op_library(rime_lib_path)
 
 DataSource = collections.namedtuple("DataSource", ['source', 'dtype'])
+DataSink = collections.namedtuple("DataSink", ['sink'])
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
@@ -158,7 +160,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Obtain sources for data in a MS
         if data_source == Options.DATA_SOURCE_MS:
-            # Create the MS and extract the sources
+
             msfile = slvr_cfg.get(Options.MS_FILE)
 
             # Create a MS manager
@@ -197,6 +199,12 @@ class RimeSolver(MontblancTensorflowSolver):
 
         from montblanc.impl.rime.tensorflow.sources.queue_wrapper import create_queue_wrapper
 
+        self._parameter_queue = create_queue_wrapper('descriptors',
+            QUEUE_SIZE, ['descriptor'], ds)
+
+        self._input_queue = create_queue_wrapper('input',
+            QUEUE_SIZE, ['descriptor','model_vis'], ds)
+
         self._uvw_queue = create_queue_wrapper('uvw',
             QUEUE_SIZE, ['uvw', 'antenna1', 'antenna2'], ds)
 
@@ -224,22 +232,33 @@ class RimeSolver(MontblancTensorflowSolver):
             QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
                 'sersic_shape'], ds)
 
-        self._input_queue = create_queue_wrapper('input',
-            QUEUE_SIZE, ['descriptor','model_vis'], ds)
-
         self._output_queue = create_queue_wrapper('output',
             QUEUE_SIZE, ['descriptor', 'model_vis'], ds)
-
-        self._parameter_queue = create_queue_wrapper('descriptors',
-            QUEUE_SIZE, ['descriptor'], ds)
 
         #==================
         # Data Sinks
         #==================
 
-        self._null_data_sink = NullDataSink()
-        self._sinks = [NullDataSink()]
 
+        self._sinks = sinks = []
+        self._null_data_sink = null_sink = NullDataSink()
+        sinks.append(null_sink)
+        null_sinks = null_sink.sinks()
+
+        # TODO: Change name from fed_arrays to arrays
+        self._data_sinks = data_sinks = {
+            n: DataSink(null_sinks.get(n))
+            for n in self._output_queue.fed_arrays
+            if not n == 'descriptor' }
+
+        if self._ms_manager is not None:
+            self._rime_data_sink = ms_sink = MSRimeDataSink(self._ms_manager)
+            sinks.append(ms_sink)
+            ms_sinks = ms_sink.sinks()
+            data_sinks.update({
+                n: DataSink(ms_sinks.get(n))
+                for n in self._output_queue.fed_arrays
+                if not n == 'descriptor' })
 
         #==================
         # Memory Budgeting
@@ -274,6 +293,7 @@ class RimeSolver(MontblancTensorflowSolver):
         self._parameter_executor = cf.ThreadPoolExecutor(1)
         self._feed_executor = cf.ThreadPoolExecutor(1)
         self._compute_executor = cf.ThreadPoolExecutor(1)
+        self._consumer_executor = cf.ThreadPoolExecutor(1)
 
         #==========================
         # Tensorflow initialisation
@@ -334,7 +354,7 @@ class RimeSolver(MontblancTensorflowSolver):
         try:
             self._parameter_feed_impl()
         except Exception as e:
-            montblanc.log.exception("Parameter exception")
+            montblanc.log.exception("Parameter Exception")
             raise
 
     def _parameter_feed_impl(self):
@@ -363,7 +383,7 @@ class RimeSolver(MontblancTensorflowSolver):
         try:
             self._feed_impl()
         except Exception as e:
-            montblanc.log.exception("Feed exception")
+            montblanc.log.exception("Feed Exception")
             raise
 
     def _feed_impl(self):
@@ -469,7 +489,7 @@ class RimeSolver(MontblancTensorflowSolver):
         feed_dict.update({ ph: getattr(self, n) for
             n, ph in self._property_ph_vars.iteritems() })
 
-        result = S.run(self._tf_expr,
+        S.run(self._tf_expr,
             feed_dict=feed_dict,
             options=run_options,
             run_metadata=run_metadata)
@@ -479,15 +499,46 @@ class RimeSolver(MontblancTensorflowSolver):
         with open('compute-timeline.json', 'w') as f:
             f.write(ctf)
 
-        return result
-
     def _compute(self):
         """ Compute stub """
         try:
             return self._compute_impl()
         except Exception as e:
-            montblanc.log.exception("Compute exception")
+            montblanc.log.exception("Compute Exception")
             raise
+
+    def _consume(self):
+        """ Consume stub """
+        try:
+            return self._consume_impl()
+        except Exception as e:
+            montblanc.log.exception("Consumer Exception")
+            raise
+
+    def _consume_impl(self):
+        """ Consume """
+
+        S = self._tf_session
+        cube = self.copy()
+        data_sinks = self._data_sinks.copy()
+
+        while True:
+            output = S.run(self._output_queue.dequeue())
+
+            assert len(output) > 0
+
+            descriptor = output[0]
+            dims = self._transcoder.decode(descriptor)
+            cube.update_dimensions(dims)
+
+            assert self._output_queue.fed_arrays[0] == 'descriptor'
+
+            for n, a in zip(self._output_queue.fed_arrays[1:], output[1:]):
+                self._data_sinks[n].sink(SinkContext(n, cube,
+                    self.config(), a))
+
+            if all([d.upper_extent == d.global_size for d in dims]):
+                break
 
     def _construct_tensorflow_expression(self):
         """ Constructs a tensorflow expression for computing the RIME """
@@ -582,7 +633,7 @@ class RimeSolver(MontblancTensorflowSolver):
         model_vis, nssrc = tf.while_loop(sersic_cond, sersic_body,
             [model_vis, zero])
 
-        return descriptor, model_vis
+        return self._output_queue.queue.enqueue([descriptor, model_vis])
 
     def solve(self):
 
@@ -590,10 +641,11 @@ class RimeSolver(MontblancTensorflowSolver):
             p = self._parameter_executor.submit(self._parameter_feed)
             f = self._feed_executor.submit(self._feed)
             c = self._compute_executor.submit(self._compute)
+            co = self._consumer_executor.submit(self._consume)
 
             cube = self.copy()
 
-            not_done = [p, f, c]
+            not_done = [p, f, c, co]
 
             while True:
                 # TODO: timeout not strictly necessary
@@ -606,14 +658,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
                 for future in done:
                     res = future.result()
-                    if future is c:
-                        descriptor, model_vis = res
-                        dim_updates = self._transcoder.decode(descriptor)
-                        cube.update_dimensions(dim_updates)
-                        array_schemas = cube.arrays(reify=True)
-                        sink_context = SinkContext('model_vis',
-                            cube, self.config(), model_vis)
-                        self._null_data_sink.sinks()['model_vis'](sink_context)
 
                 # Nothing remains to be done, quit the loop
                 if len(not_done) == 0:
@@ -630,6 +674,7 @@ class RimeSolver(MontblancTensorflowSolver):
         self._parameter_executor.shutdown()
         self._feed_executor.shutdown()
         self._compute_executor.shutdown()
+        self._consumer_executor.shutdown()
 
         # Shutdown thte tensorflow session
         self._tf_session.close()
