@@ -38,6 +38,10 @@ from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
     MSRimeDataSource, FitsBeamDataSource)
 
+# TODO: Move this into a separate package
+from montblanc.impl.rime.tensorflow.sources.queue_wrapper import (
+    create_queue_wrapper)
+
 from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
     NullDataSink, MSRimeDataSink)
 
@@ -196,8 +200,6 @@ class RimeSolver(MontblancTensorflowSolver):
         ds['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32)
 
         QUEUE_SIZE = 10
-
-        from montblanc.impl.rime.tensorflow.sources.queue_wrapper import create_queue_wrapper
 
         self._parameter_queue = create_queue_wrapper('descriptors',
             QUEUE_SIZE, ['descriptor'], ds)
@@ -366,6 +368,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Iterate over time and baseline
         iter_strides = cube.dim_local_size(*self._iter_dims)
         iter_args = zip(self._iter_dims, iter_strides)
+        parameters_fed = 0
 
         # Iterate through the hypercube space
         for i, d in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
@@ -374,9 +377,10 @@ class RimeSolver(MontblancTensorflowSolver):
             feed_dict = {self._parameter_queue.placeholders[0] : descriptor }
             montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
             session.run(self._parameter_queue.enqueue_op, feed_dict=feed_dict)
+            parameters_fed += 1
 
-        # Close the queue
-        session.run(self._parameter_queue.close())
+        montblanc.log.info("Done feeding {n} parameters.".format(
+            n=parameters_fed))
 
     def _feed(self):
         """ Feed stub """
@@ -402,7 +406,8 @@ class RimeSolver(MontblancTensorflowSolver):
             self._die_queue,
             self._dde_queue)
 
-        chunks_read = 0
+        chunks_fed = 0
+        done = False
 
         src_queues  = {
             'npsrc' : self._point_source_queue,
@@ -410,18 +415,16 @@ class RimeSolver(MontblancTensorflowSolver):
             'nssrc' : self._sersic_source_queue,
         }
 
-        while True:
+        while not done:
             try:
                 # Get the descriptor describing a portion of the RIME
                 descriptor = session.run(self._parameter_queue.dequeue())
 
                 # Decode the descriptor and update our cube dimensions
-                dimensions = self._transcoder.decode(descriptor)
-                cube.update_dimensions(dimensions)
-                chunks_read += 1
+                dims = self._transcoder.decode(descriptor)
+                cube.update_dimensions(dims)
 
             except tf.errors.OutOfRangeError as e:
-                montblanc.log.info('Read {n} chunks'.format(n=chunks_read))
                 break
 
             # Determine array shapes and data types for this
@@ -446,10 +449,12 @@ class RimeSolver(MontblancTensorflowSolver):
                 for (a, ph, ds, ad) in gen }
 
             montblanc.log.debug("Enqueueing chunk {i} {d}".format(
-                i=chunks_read, d=descriptor))
+                i=chunks_fed, d=descriptor))
 
             session.run([q.enqueue_op for q in chunk_queues],
                 feed_dict=feed_dict)
+
+            chunks_fed += 1
 
             # For each source type, feed that source queue
             for src_type, queue in src_queues.iteritems():
@@ -459,7 +464,7 @@ class RimeSolver(MontblancTensorflowSolver):
                 for dim_desc in cube.dim_iter(iter_args, update_local_size=True):
                     cube.update_dimensions(dim_desc)
 
-                    montblanc.log.info("Enqueueing '{s}' '{t}' sources".format(
+                    montblanc.log.debug("Enqueueing '{s}' '{t}' sources".format(
                         s=dim_desc[0]['local_size'], t=src_type))
 
                     # Generate (name, placeholder, datasource, array descriptor)
@@ -474,14 +479,21 @@ class RimeSolver(MontblancTensorflowSolver):
 
                     session.run(queue.enqueue_op, feed_dict=feed_dict)
 
-        montblanc.log.info('Done Feeding')
+            # Are we done?
+            done = _last_chunk(dims)
+
+        montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
     def _compute_impl(self):
         """ Implementation of computation """
-        run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+        #run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE,
+        #    timeout_in_ms=10000)
+        run_options =tf.RunOptions()
         run_metadata = tf.RunMetadata()
 
         S = self._tf_session
+        chunks_computed = 0
+        done = False
 
         feed_dict = { ph: self.dim_global_size(n) for
             n, ph in self._src_ph_vars.iteritems() }
@@ -489,10 +501,19 @@ class RimeSolver(MontblancTensorflowSolver):
         feed_dict.update({ ph: getattr(self, n) for
             n, ph in self._property_ph_vars.iteritems() })
 
-        S.run(self._tf_expr,
-            feed_dict=feed_dict,
-            options=run_options,
-            run_metadata=run_metadata)
+        while not done:
+            descriptor, enq = S.run(self._tf_expr,
+                feed_dict=feed_dict,
+                options=run_options,
+                run_metadata=run_metadata)
+
+            # Are we done?
+            dims = self._transcoder.decode(descriptor)
+            done = _last_chunk(dims)
+            chunks_computed += 1
+
+        montblanc.log.info("Done computing {n} chunks."
+            .format(n=chunks_computed))
 
         tl = timeline.Timeline(run_metadata.step_stats)
         ctf = tl.generate_chrome_trace_format()
@@ -521,24 +542,30 @@ class RimeSolver(MontblancTensorflowSolver):
         S = self._tf_session
         cube = self.copy()
         data_sinks = self._data_sinks.copy()
+        chunks_consumed = 0
+        done = False
 
-        while True:
+        while not done:
             output = S.run(self._output_queue.dequeue())
+            chunks_consumed += 1
 
+            # Expect the descriptor in the first tuple position
             assert len(output) > 0
+            assert self._output_queue.fed_arrays[0] == 'descriptor'
 
             descriptor = output[0]
             dims = self._transcoder.decode(descriptor)
             cube.update_dimensions(dims)
 
-            assert self._output_queue.fed_arrays[0] == 'descriptor'
-
+            # For each array in our output, call the associated data sink
             for n, a in zip(self._output_queue.fed_arrays[1:], output[1:]):
-                self._data_sinks[n].sink(SinkContext(n, cube,
-                    self.config(), a))
+                sink_context = SinkContext(n, cube, self.config(), a)
+                data_sinks[n].sink(sink_context)
 
-            if all([d.upper_extent == d.global_size for d in dims]):
-                break
+            # Are we done?
+            done = _last_chunk(dims)
+
+        montblanc.log.info('Done consuming {n} chunks'.format(n=chunks_consumed))
 
     def _construct_tensorflow_expression(self):
         """ Constructs a tensorflow expression for computing the RIME """
@@ -549,8 +576,9 @@ class RimeSolver(MontblancTensorflowSolver):
         descriptor, model_vis = self._input_queue.dequeue()
         uvw, antenna1, antenna2 = self._uvw_queue.dequeue()
         observed_vis, flag, weight = self._observation_queue.dequeue()
-        ebeam, antenna_scaling, point_errors, parallactic_angles, beam_extents = self._dde_queue.dequeue()
         gterm = self._die_queue.dequeue()
+        (ebeam, antenna_scaling, point_errors,
+            parallactic_angles, beam_extents) = self._dde_queue.dequeue()
 
         # Infer chunk dimensions
         model_vis_shape = tf.shape(model_vis)
@@ -633,28 +661,27 @@ class RimeSolver(MontblancTensorflowSolver):
         model_vis, nssrc = tf.while_loop(sersic_cond, sersic_body,
             [model_vis, zero])
 
-        return self._output_queue.queue.enqueue([descriptor, model_vis])
+        # Create enqueue operation
+        enqueue_op = self._output_queue.queue.enqueue([descriptor, model_vis])
+
+        # Return descriptor and enqueue operation
+        return descriptor, enqueue_op
 
     def solve(self):
 
         try:
-            p = self._parameter_executor.submit(self._parameter_feed)
-            f = self._feed_executor.submit(self._feed)
-            c = self._compute_executor.submit(self._compute)
-            co = self._consumer_executor.submit(self._consume)
+            params = self._parameter_executor.submit(self._parameter_feed)
+            feed = self._feed_executor.submit(self._feed)
+            compute = self._compute_executor.submit(self._compute)
+            consume = self._consumer_executor.submit(self._consume)
 
-            cube = self.copy()
-
-            not_done = [p, f, c, co]
+            not_done = [params, feed, compute, consume]
 
             while True:
                 # TODO: timeout not strictly necessary
                 done, not_done = cf.wait(not_done,
                     timeout=1.0,
                     return_when=cf.FIRST_COMPLETED)
-
-                montblanc.log.info('Done {d} Not Done {nd}'.format(
-                    d=len(done), nd=len(not_done)))
 
                 for future in done:
                     res = future.result()
@@ -697,3 +724,11 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def __exit__(self, etype, evalue, etrace):
         self.close()
+
+
+def _last_chunk(dims):
+    """
+    Does the list of dimension dictionaries indicate this is the last chunk?
+    i.e. does upper_extent == global_size for all dimensions?
+    """
+    return all(d['upper_extent'] == d['global_size'] for d in dims)
