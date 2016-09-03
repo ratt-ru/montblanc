@@ -114,8 +114,10 @@ class MSRimeDataSource(RimeDataSource):
             raise ValueError("'{o}'' ordering expected for "
                 "antenna reading code.".format(o=MS.UVW_DIM_ORDER))
 
+        # Figure out our extents in the time dimension
+        # and our global antenna and baseline sizes
         (t_low, t_high) = context.dim_extents('ntime')
-        na = context.dim_global_size('na')
+        na, nbl = context.dim_global_size('na', 'nbl')
 
         # We expect to handle all antenna at once
         if context.shape != (t_high - t_low, na, 3):
@@ -139,18 +141,17 @@ class MSRimeDataSource(RimeDataSource):
         # Then, other baseline values can be derived as
         # u_21 = u_1 - u_2
 
-        # Allocate space for per-antenna UVW
+        # Allocate space for per-antenna UVW, zeroing antenna 0 at each timestep
         ant_uvw = np.empty(shape=context.shape, dtype=context.dtype)
-        # Zero antenna 0
         ant_uvw[:,0,:] = 0
 
         # Read in uvw[1:na] row at each timestep
         for ti, t in enumerate(xrange(t_low, t_high)):
-            # Inspection confirms that this achieves the# same effect as
+            # Inspection confirms that this achieves the same effect as
             # ant_uvw[ti,1:na,:] = ...getcol(UVW, ...).reshape(na-1, -1)
             self._manager.ordered_uvw_table.getcolnp(MS.UVW,
                 ant_uvw[ti,1:na,:],
-                startrow=t*na+1, nrow=na-1)
+                startrow=t*nbl, nrow=na-1)
 
         return ant_uvw
 
