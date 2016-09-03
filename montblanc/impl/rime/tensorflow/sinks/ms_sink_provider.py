@@ -23,10 +23,10 @@ import sys
 import montblanc
 
 from montblanc.config import RimeSolverConfig as Options
-from montblanc.impl.rime.tensorflow.sinks.rime_data_sink import RimeDataSink
+from montblanc.impl.rime.tensorflow.sinks.sink_provider import SinkProvider
 import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 
-class MSRimeDataSink(RimeDataSink):
+class MSSinkProvider(SinkProvider):
     def __init__(self, manager):
         self._manager = manager
         self._name = "Measurement Set '{ms}'".format(ms=manager.msname)

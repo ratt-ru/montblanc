@@ -30,7 +30,7 @@ from hypercube import HyperCube
 
 import montblanc
 import montblanc.util as mbu
-from montblanc.impl.rime.tensorflow.sources.rime_data_source import RimeDataSource
+from montblanc.impl.rime.tensorflow.sources.source_provider import SourceProvider
 
 class FitsAxes(object):
     """
@@ -222,7 +222,7 @@ def cache_fits_read(method):
     return memoizer
 
 
-class FitsBeamDataSource(RimeDataSource):
+class FitsBeamSourceProvider(SourceProvider):
     """ Feeds holography cubes from FITS files """
     def __init__(self, base_beam_filename):
         self._base_beam_filename = base_beam_filename

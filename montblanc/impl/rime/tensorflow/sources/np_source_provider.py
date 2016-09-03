@@ -25,15 +25,15 @@ import types
 import montblanc
 import montblanc.util as mbu
 
-from rime_data_source import RimeDataSource
+from source_provider import SourceProvider
 
-class NumpyRimeDataSource(RimeDataSource):
+class NumpySourceProvider(SourceProvider):
     """
     Given a dictionary containing numpy arrays and keyed on array name,
     provides source functions for each array.
 
 
-    >>> source = NumpyRimeDataSource({
+    >>> source = NumpySourceProvider({
         "uvw" : np.zeros(shape=(100,14,3),dtype=np.float64),
         "antenna1" : np.zeros(shape=(100,351), dtype=np.int32)})
 

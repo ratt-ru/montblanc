@@ -31,7 +31,7 @@ import montblanc.util as mbu
 from montblanc.config import RimeSolverConfig as Options
 import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 
-from montblanc.impl.rime.tensorflow.sources.rime_data_source import RimeDataSource
+from montblanc.impl.rime.tensorflow.sources.source_provider import SourceProvider
 
 def cache_ms_read(method):
     """
@@ -63,7 +63,7 @@ def cache_ms_read(method):
 
     return memoizer
 
-class MSRimeDataSource(RimeDataSource):
+class MSSourceProvider(SourceProvider):
     def __init__(self, manager):
         # Cache columns on the object
         # Handle these columns slightly differently

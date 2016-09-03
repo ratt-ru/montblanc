@@ -19,10 +19,10 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 from montblanc.impl.rime.tensorflow.sources.source_context import SourceContext
-from montblanc.impl.rime.tensorflow.sources.rime_data_source import RimeDataSource
-from montblanc.impl.rime.tensorflow.sources.ms_data_source import MSRimeDataSource
-from montblanc.impl.rime.tensorflow.sources.np_data_source import NumpyRimeDataSource
-from montblanc.impl.rime.tensorflow.sources.fits_beam_data_source import FitsBeamDataSource
+from montblanc.impl.rime.tensorflow.sources.source_provider import SourceProvider
+from montblanc.impl.rime.tensorflow.sources.ms_source_provider import MSSourceProvider
+from montblanc.impl.rime.tensorflow.sources.np_source_provider import NumpySourceProvider
+from montblanc.impl.rime.tensorflow.sources.fits_beam_source_provider import FitsBeamSourceProvider
 
 def test():
     import argparse
@@ -35,7 +35,7 @@ def test():
     parser.add_argument('msfile')
     args = parser.parse_args()
 
-    source = MSRimeDataSource(args.msfile, precision='float')
+    source = MSSourceProvider(args.msfile, precision='float')
     cube = copy.deepcopy(source.mscube)
 
     row_iter_sizes = [10] + cube.dim_global_size('nbl', 'nbands')
@@ -79,7 +79,7 @@ def test():
 
     print [(k, a.shape) for k, a in arrays.iteritems()]
 
-    source = NumpyRimeDataSource(arrays, cube)
+    source = NumpySourceProvider(arrays, cube)
     feed(source, cube, array_names)
 
 if __name__ == '__main__':

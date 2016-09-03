@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from montblanc.impl.rime.tensorflow.sinks.rime_data_sink import RimeDataSink
-from montblanc.impl.rime.tensorflow.sinks.null_data_sink import NullDataSink
-from montblanc.impl.rime.tensorflow.sinks.ms_data_sink import MSRimeDataSink
+from montblanc.impl.rime.tensorflow.sinks.sink_provider import SinkProvider
+from montblanc.impl.rime.tensorflow.sinks.null_sink_provider import NullSinkProvider
+from montblanc.impl.rime.tensorflow.sinks.ms_sink_provider import MSSinkProvider
 from montblanc.impl.rime.tensorflow.sinks.sink_context import SinkContext

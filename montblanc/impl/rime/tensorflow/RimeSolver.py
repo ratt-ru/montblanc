@@ -36,14 +36,14 @@ from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTran
 from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
 
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
-    MSRimeDataSource, FitsBeamDataSource)
+                                                    MSSourceProvider, FitsBeamSourceProvider)
 
 # TODO: Move this into a separate package
 from montblanc.impl.rime.tensorflow.sources.queue_wrapper import (
     create_queue_wrapper)
 
 from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
-    NullDataSink, MSRimeDataSink)
+                                                  NullSinkProvider, MSSinkProvider)
 
 from hypercube import HyperCube
 import hypercube.util as hcu
@@ -190,22 +190,22 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct list of data sources internal to the solver
         # Any data sources specified in the solve() method will
         # override these
-        self.source_providers = []
+        self._source_providers = []
 
         # Create and add the FITS Beam Data Source, if present
         base_fits_name = slvr_cfg.get(Options.E_BEAM_BASE_FITS_NAME, '')
 
         if base_fits_name:
-            self._source.append(FitsBeamDataSource(base_fits_name))
+            self._source_providers.append(FitsBeamSourceProvider(base_fits_name))
 
         # Create and add the MS Data Source
         if data_source == Options.DATA_SOURCE_MS:
             msfile = slvr_cfg.get(Options.MS_FILE)
             self._ms_manager = mgr = MeasurementSetManager(msfile, self, slvr_cfg)
-            self.source_providers.append(MSRimeDataSource(mgr))
+            self._source_providers.append(MSSourceProvider(mgr))
 
         # Use any dimension update hints from the sources
-        for data_source in self.source_providers:
+        for data_source in self._source_providers:
             self.update_dimensions(data_source.updated_dimensions())
 
         #==================
@@ -215,11 +215,11 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct list of data sinks internal to the solver
         # Any data sinks specified in the solve() method will
         # override these.
-        self._sink_providers = [NullDataSink()]
+        self._sink_providers = [NullSinkProvider()]
 
         # We have an MS so add a MS data sink
         if self._ms_manager is not None:
-            self._sink_providers.append(MSRimeDataSink(self._ms_manager))
+            self._sink_providers.append(MSSinkProvider(self._ms_manager))
 
         #==================
         # Memory Budgeting
@@ -357,7 +357,7 @@ class RimeSolver(MontblancTensorflowSolver):
         cube = self.copy()
 
         # Include internal source providers
-        source_providers = self.source_providers + source_providers
+        source_providers = self._source_providers + source_providers
 
         # Construct data sources
         data_sources = self._default_data_sources.copy()
@@ -670,14 +670,14 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def solve(self, *args, **kwargs):
 
-        data_sources = kwargs.get('data_sources', [])
-        data_sinks = kwargs.get('data_sinks', [])
+        source_providers = kwargs.get('source_providers', [])
+        sink_providers = kwargs.get('sink_providers', [])
 
         try:
             params = self._parameter_executor.submit(self._parameter_feed)
-            feed = self._feed_executor.submit(self._feed, data_sources)
+            feed = self._feed_executor.submit(self._feed, source_providers)
             compute = self._compute_executor.submit(self._compute)
-            consume = self._consumer_executor.submit(self._consume, data_sinks)
+            consume = self._consumer_executor.submit(self._consume, sink_providers)
 
             not_done = [params, feed, compute, consume]
 
@@ -711,7 +711,7 @@ class RimeSolver(MontblancTensorflowSolver):
         self._tf_session.close()
 
         # Shutdown data sources
-        for source in self.source_providers:
+        for source in self._source_providers:
             source.close()
 
         # Shutdown data sinks

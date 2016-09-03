@@ -20,9 +20,9 @@
 
 import montblanc
 
-from rime_data_sink import RimeDataSink
+from sink_provider import SinkProvider
 
-class NullDataSink(RimeDataSink):
+class NullSinkProvider(SinkProvider):
 
     def name(self):
         return "Null"

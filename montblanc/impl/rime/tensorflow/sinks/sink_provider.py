@@ -20,7 +20,7 @@
 
 import inspect
 
-class AbstractRimeDataSink(object):
+class AbstractSinkProvider(object):
 
     def name(self):
         """ Returns this data sink's name """
@@ -38,7 +38,7 @@ class AbstractRimeDataSink(object):
         """ Returns a dictionary of sink methods, keyed on sink name """
         raise NotImplementedError()
 
-class RimeDataSink(AbstractRimeDataSink):
+class SinkProvider(AbstractSinkProvider):
 
     SINK_ARGSPEC = ['self', 'context']
 

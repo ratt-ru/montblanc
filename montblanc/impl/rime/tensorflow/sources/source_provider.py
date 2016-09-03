@@ -20,7 +20,7 @@
 
 import inspect
 
-class AbstractRimeDataSource(object):
+class AbstractSourceProvider(object):
 
     def name(self):
         """ Return the name associated with this data source """
@@ -46,7 +46,7 @@ class AbstractRimeDataSource(object):
         """ Return an iterable/mapping of hypercube arrays to update """
         raise NotImplementedError()
 
-class RimeDataSource(AbstractRimeDataSource):
+class SourceProvider(AbstractSourceProvider):
 
     SOURCE_ARGSPEC = ['self', 'context']
 
