@@ -31,7 +31,7 @@ public:
         return montblanc::shrink_small_dims(
             dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
             nchan, na, ntime);
-    }        
+    }
 };
 
 // Specialise for double
@@ -47,7 +47,7 @@ public:
         return montblanc::shrink_small_dims(
             dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
             nchan, na, ntime);
-    }        
+    }
 };
 
 typedef Eigen::GpuDevice GPUDevice;
@@ -77,6 +77,7 @@ __global__ void rime_phase(
 
     // Lightspeed
     constexpr FT lightspeed = 299792458;
+    constexpr FT two_pi_over_c = FT(-2.0*M_PI/lightspeed);
 
     __shared__ typename Traits::uvw_type
         s_uvw[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];
@@ -106,7 +107,7 @@ __global__ void rime_phase(
             + s_uvw[threadIdx.z][threadIdx.y].y*r_lm.y
             + s_uvw[threadIdx.z][threadIdx.y].x*r_lm.x;
 
-        real_phase *= s_freq[threadIdx.x]*FT(-2*M_PI/lightspeed);
+        real_phase *= two_pi_over_c*s_freq[threadIdx.x];
 
         CT cplx_phase;
         Po::sincos(real_phase, &cplx_phase.y, &cplx_phase.x);
