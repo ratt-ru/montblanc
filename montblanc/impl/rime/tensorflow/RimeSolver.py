@@ -584,6 +584,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Infer chunk dimensions
         model_vis_shape = tf.shape(model_vis)
         ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
+        FT, CT = uvw.dtype, model_vis.dtype
 
         def antenna_jones(lm, stokes, alpha):
             """
@@ -591,15 +592,14 @@ class RimeSolver(MontblancTensorflowSolver):
 
             lm, stokes and alpha are the source variables.
             """
-            cplx_phase = rime.phase(lm, uvw, frequency,
-                CT=model_vis.dtype)
-            bsqrt = rime.b_sqrt(stokes, alpha, frequency, ref_frequency,
-                CT=model_vis.dtype)
+            cplx_phase = rime.phase(lm, uvw, frequency, CT=CT)
+            bsqrt = rime.b_sqrt(stokes, alpha, frequency, ref_frequency, CT=CT)
             ejones = rime.e_beam(lm, frequency,
                 point_errors, antenna_scaling,
-                parallactic_angles, beam_extents, ebeam)
+                parallactic_angles,
+                beam_extents, ebeam)
 
-            return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=lm.dtype)
+            return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT)
 
         # While loop condition for each point source type
         def point_cond(model_vis, npsrc):
@@ -617,7 +617,7 @@ class RimeSolver(MontblancTensorflowSolver):
             lm, stokes, alpha = self._point_source_queue.dequeue()
             nsrc = tf.shape(lm)[0]
             ant_jones = antenna_jones(lm, stokes, alpha)
-            shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=lm.dtype)
+            shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
             model_vis = rime.sum_coherencies(antenna1, antenna2,
                 shape, ant_jones, flag, gterm, model_vis, False)
 
