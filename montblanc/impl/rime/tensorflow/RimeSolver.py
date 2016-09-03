@@ -226,7 +226,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Attempt to fit arrays into memory budget by
         # reducing dimension local_sizes
-        modded_dims = self._budget(A, slvr_cfg)
+        self._modded_dims = modded_dims = self._budget(A, slvr_cfg)
 
         # Update any dimensions
         for k, v in modded_dims.iteritems():
@@ -387,14 +387,15 @@ class RimeSolver(MontblancTensorflowSolver):
         while not done:
             try:
                 # Get the descriptor describing a portion of the RIME
-                descriptor = session.run(self._parameter_queue.dequeue())
-
-                # Decode the descriptor and update our cube dimensions
-                dims = self._transcoder.decode(descriptor)
-                cube.update_dimensions(dims)
-
+                descriptor = session.run(self._parameter_queue.dequeue_op)
             except tf.errors.OutOfRangeError as e:
-                break
+                montblanc.log.exception("Descriptor reading exception")
+
+            # Decode the descriptor and update our cube dimensions
+            dims = self._transcoder.decode(descriptor)
+            # Are we done?
+            done = _last_chunk(dims)
+            cube.update_dimensions(dims)
 
             # Determine array shapes and data types for this
             # portion of the hypercube
@@ -461,9 +462,6 @@ class RimeSolver(MontblancTensorflowSolver):
                         for (a, ph, ds, ad) in gen }
 
                     session.run(queue.enqueue_op, feed_dict=feed_dict)
-
-            # Are we done?
-            done = _last_chunk(dims)
 
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
@@ -541,7 +539,7 @@ class RimeSolver(MontblancTensorflowSolver):
         data_sinks = _data_sinks
 
         while not done:
-            output = S.run(self._output_queue.dequeue())
+            output = S.run(self._output_queue.dequeue_op)
             chunks_consumed += 1
 
             # Expect the descriptor in the first tuple position
