@@ -129,7 +129,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
         self._default_data_sources = dfs = {
             n: DataSource(a.get(queue_data_source), a.dtype, queue_data_source)
-            for n, a in self.arrays().iteritems() }
+            for n, a in self.arrays().iteritems()
+            if not a.temporary }
 
         montblanc.log.info("Data source '{dfs}'".format(dfs=data_source))
 
