@@ -76,10 +76,6 @@ PHASE_DIR = 'PHASE_DIR'
 # Columns used in select statement
 SELECTED = [TIME, ANTENNA1, ANTENNA2, UVW,
     DATA, MODEL_DATA, CORRECTED_DATA, FLAG, WEIGHT]
-DTYPES_FLOAT = ['FLOAT', 'INT', 'INT', 'FLOAT',
-    'COMPLEX', 'COMPLEX', 'COMPLEX' 'BOOL', 'FLOAT']
-DTYPES_DOUBLE = ['DOUBLE', 'INT', 'INT', 'DOUBLE',
-    'DCOMPLEX', 'DCOMPLEX', 'DCOMPLEX', 'BOOL', 'DOUBLE']
 
 # Named tuple defining a mapping from MS row to dimension
 OrderbyMap = collections.namedtuple("OrderbyMap", "dimension orderby")
@@ -111,14 +107,6 @@ def orderby_clause(dimensions, unique=False):
         in MS_ROW_MAPPINGS if m.dimension in dimensions)
 
     return " ".join(("ORDERBY", "UNIQUE" if unique else "", columns))
-
-def select_columns(dimensions, ms_dtypes):
-    """
-    Generate select columns. columns will be casted according
-    specified precision
-    """
-    return ", ".join('{n} AS {n} {d}'.format(n=n, d=d)
-        for n, d in zip(dimensions, ms_dtypes))
 
 def subtable_name(msname, subtable=None):
     return '::'.join((msname, subtable)) if subtable else msname
@@ -195,16 +183,12 @@ class MeasurementSetManager(object):
         self._auto_correlations = auto_correlations = True
         self._field_id = field_id = 0
 
-        select_cols = select_columns(SELECTED,
-            DTYPES_DOUBLE if mscube.array('uvw').dtype == np.float64
-            else DTYPES_FLOAT)
-
         # Create a view over the MS, ordered by
         # (1) time (TIME)
         # (2) baseline (ANTENNA1, ANTENNA2)
         # (3) band (SPECTRAL_WINDOW_ID via DATA_DESC_ID)
         ordering_query = " ".join((
-            "SELECT {c} FROM $ms".format(c=select_cols),
+            "SELECT FROM $ms",
             "WHERE FIELD_ID={fid}".format(fid=field_id),
             "" if auto_correlations else "AND ANTENNA1 != ANTENNA2",
             orderby_clause(MS_DIM_ORDER)
