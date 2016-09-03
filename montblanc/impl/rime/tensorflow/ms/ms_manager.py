@@ -23,6 +23,8 @@ import collections
 import numpy as np
 
 import montblanc
+from montblanc.config import RimeSolverConfig as Options
+
 from hypercube import HyperCube
 import pyrap.tables as pt
 
@@ -138,7 +140,7 @@ def uvw_row_extents(cube):
 
 
 class MeasurementSetManager(object):
-    def __init__(self, msname, cube):
+    def __init__(self, msname, cube, slvr_cfg):
         super(MeasurementSetManager, self).__init__()
 
         self._msname = msname
@@ -185,7 +187,7 @@ class MeasurementSetManager(object):
                 "!= SPECTRAL_WINDOW.nrows()")
 
         # Hard code auto-correlations and field_id 0
-        self._auto_correlations = auto_correlations = True
+        self._auto_correlations = auto_correlations = slvr_cfg[Options.AUTO_CORRELATIONS]
         self._field_id = field_id = 0
 
         # Create a view over the MS, ordered by

@@ -201,7 +201,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Create and add the MS Data Source
         if data_source == Options.DATA_SOURCE_MS:
             msfile = slvr_cfg.get(Options.MS_FILE)
-            self._ms_manager = mgr = MeasurementSetManager(msfile, self)
+            self._ms_manager = mgr = MeasurementSetManager(msfile, self, slvr_cfg)
             self.source_providers.append(MSRimeDataSource(mgr))
 
         # Use any dimension update hints from the sources
