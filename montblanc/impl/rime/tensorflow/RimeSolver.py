@@ -190,7 +190,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct list of data sources internal to the solver
         # Any data sources specified in the solve() method will
         # override these
-        self._sources = []
+        self.source_providers = []
 
         # Create and add the FITS Beam Data Source, if present
         base_fits_name = slvr_cfg.get(Options.E_BEAM_BASE_FITS_NAME, '')
@@ -202,10 +202,10 @@ class RimeSolver(MontblancTensorflowSolver):
         if data_source == Options.DATA_SOURCE_MS:
             msfile = slvr_cfg.get(Options.MS_FILE)
             self._ms_manager = mgr = MeasurementSetManager(msfile, self)
-            self._sources.append(MSRimeDataSource(mgr))
+            self.source_providers.append(MSRimeDataSource(mgr))
 
         # Use any dimension update hints from the sources
-        for data_source in self._sources:
+        for data_source in self.source_providers:
             self.update_dimensions(data_source.updated_dimensions())
 
         #==================
@@ -215,11 +215,11 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct list of data sinks internal to the solver
         # Any data sinks specified in the solve() method will
         # override these.
-        self._sinks = [NullDataSink()]
+        self._sink_providers = [NullDataSink()]
 
         # We have an MS so add a MS data sink
         if self._ms_manager is not None:
-            self._sinks.append(MSRimeDataSink(self._ms_manager))
+            self._sink_providers.append(MSRimeDataSink(self._ms_manager))
 
         #==================
         # Memory Budgeting
@@ -341,32 +341,31 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.info("Done feeding {n} parameters.".format(
             n=parameters_fed))
 
-    def _feed(self, data_sources):
+    def _feed(self, source_providers):
         """ Feed stub """
         try:
-            self._feed_impl(data_sources)
+            self._feed_impl(source_providers)
         except Exception as e:
             montblanc.log.exception("Feed Exception")
             raise
 
-    def _feed_impl(self, data_sources):
+    def _feed_impl(self, source_providers):
         """ Implementation of queue feeding """
         session = self._tf_session
 
         # Maintain a hypercube based on the main cube
         cube = self.copy()
 
-        # Construct data sources
-        data_sources = self._sources + data_sources
+        # Include internal source providers
+        source_providers = self.source_providers + source_providers
 
-        # Construct per array data sources
-        _data_sources = self._default_data_sources.copy()
-        _data_sources.update({
+        # Construct data sources
+        data_sources = self._default_data_sources.copy()
+        data_sources.update({
             n: DataSource(f, cube.array(n).dtype, source.name())
-            for source in data_sources
+            for source in source_providers
             for n, f in source.sources().iteritems()})
 
-        data_sources = _data_sources
 
         # Queues to be fed on each iteration
         chunk_queues = (self._input_queue,
@@ -519,15 +518,15 @@ class RimeSolver(MontblancTensorflowSolver):
             montblanc.log.exception("Compute Exception")
             raise
 
-    def _consume(self, data_sinks):
+    def _consume(self, sink_providers):
         """ Consume stub """
         try:
-            return self._consume_impl(data_sinks)
+            return self._consume_impl(sink_providers)
         except Exception as e:
             montblanc.log.exception("Consumer Exception")
             raise
 
-    def _consume_impl(self, data_sinks):
+    def _consume_impl(self, sink_providers):
         """ Consume """
 
         S = self._tf_session
@@ -537,16 +536,15 @@ class RimeSolver(MontblancTensorflowSolver):
         # Maintain a hypercube based on the main cube
         cube = self.copy()
 
-        # Construct our data sinks
-        data_sinks = self._sinks + data_sinks
+        # Include internal sink providers with supplied sink providers
+        sink_providers = self._sink_providers + sink_providers
 
-        # Construct per array data sinks
-        _data_sinks = { n: DataSink(f, sink.name())
-            for sink in data_sinks
+        # Get data sinks from supplied providers
+        data_sinks = { n: DataSink(f, sink.name())
+            for sink in sink_providers
             for n, f in sink.sinks().iteritems()
             if not n == 'descriptor' }
 
-        data_sinks = _data_sinks
 
         while not done:
             output = S.run(self._output_queue.dequeue_op)
@@ -713,11 +711,11 @@ class RimeSolver(MontblancTensorflowSolver):
         self._tf_session.close()
 
         # Shutdown data sources
-        for source in self._sources:
+        for source in self.source_providers:
             source.close()
 
         # Shutdown data sinks
-        for sink in self._sinks:
+        for sink in self._sink_providers:
             sink.close()
 
         # Close the measurement set manager
