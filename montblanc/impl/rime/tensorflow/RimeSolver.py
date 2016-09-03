@@ -414,8 +414,17 @@ class RimeSolver(MontblancTensorflowSolver):
                 for ph, a in zip(q.placeholders, q.fed_arrays)]
 
             def _get_data_source(data_source, context):
+                # Invoke the data source
                 data = data_source.source(context)
-                same = (data.shape == context.shape and data.dtype == context.dtype)
+
+                # Complain about None values
+                if data is None:
+                    raise ValueError("'None' returned from "
+                        "data source '{n}'".format(n=context.name))
+
+                # Check that the data matches the expected shape
+                same = (data.shape == context.shape and
+                        data.dtype == context.dtype)
 
                 if not same:
                     raise ValueError("Expected data of shape '{esh}' and "
