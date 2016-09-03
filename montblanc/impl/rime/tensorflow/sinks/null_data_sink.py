@@ -24,6 +24,9 @@ from rime_data_sink import RimeDataSink
 
 class NullDataSink(RimeDataSink):
 
+    def name(self):
+        return "Null"
+
     def model_vis(self, context):
         array_schema = context.array(context.name, reify=True)
         slices = context.slice_index(*array_schema.shape)

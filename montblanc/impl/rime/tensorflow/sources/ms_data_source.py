@@ -71,6 +71,7 @@ class MSRimeDataSource(RimeDataSource):
         # TODO: Fit them into the cache_ms_read strategy at some point
 
         self._manager = manager
+        self._name = "Measurement Set '{ms}'".format(ms=manager.msname)
 
         # Cache antenna positions
         self._antenna_positions = manager.antenna_table.getcol(MS.POSITION)
@@ -83,6 +84,9 @@ class MSRimeDataSource(RimeDataSource):
             startrow=manager.field_id, nrow=1)[0][0]
 
         self._cache = collections.defaultdict(dict)
+
+    def name(self):
+        return self._name
 
     def updated_dimensions(self):
         # Defer to manager's method

@@ -247,6 +247,10 @@ class MeasurementSetManager(object):
             table.close()
 
     @property
+    def msname(self):
+        return self._msname
+
+    @property
     def column_descriptors(self):
         return self._column_descriptors
 

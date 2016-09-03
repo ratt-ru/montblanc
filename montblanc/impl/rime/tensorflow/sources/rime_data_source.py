@@ -22,6 +22,10 @@ import inspect
 
 class AbstractRimeDataSource(object):
 
+    def name(self):
+        """ Return the name associated with this data source """
+        raise NotImplementedError()
+
     def close(self):
         """ Perform any required cleanup """
         raise NotImplementedError()

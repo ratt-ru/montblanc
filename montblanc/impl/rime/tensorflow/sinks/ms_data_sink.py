@@ -29,6 +29,10 @@ import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 class MSRimeDataSink(RimeDataSink):
     def __init__(self, manager):
         self._manager = manager
+        self._name = "Measurement Set '{ms}'".format(ms=manager.msname)
+
+    def name(self):
+        return self._name
 
     def model_vis(self, context):
         lrow, urow = MS.row_extents(context)

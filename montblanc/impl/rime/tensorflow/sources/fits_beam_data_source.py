@@ -230,6 +230,7 @@ class FitsBeamDataSource(RimeDataSource):
         self._files = _open_fits_files(self._filenames)
         self._axes = _create_axes(self._files)
         self._dim_indices = (l_ax, m_ax, f_ax) = _cube_dim_indices(self._axes)
+        self._name = "FITS Beams '{s}'".format(s=self.filename_schema)
 
         # Complain if we can't find required axes
         for i, ax in enumerate(zip(self._dim_indices, BEAM_DIMS)):
@@ -255,6 +256,9 @@ class FitsBeamDataSource(RimeDataSource):
         cube.register_dimension('beam_nud',
             self._axes.naxis[f_ax],
             description='E Beam cube frequency depth')
+
+    def name(self):
+        return self._name
 
     @cache_fits_read
     def ebeam(self, context):

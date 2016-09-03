@@ -57,8 +57,8 @@ rime_lib_path = os.path.join(montblanc.get_montblanc_path(),
     'tensorflow', 'rime_ops', 'rime.so')
 rime = tf.load_op_library(rime_lib_path)
 
-DataSource = collections.namedtuple("DataSource", ['source', 'dtype'])
-DataSink = collections.namedtuple("DataSink", ['sink'])
+DataSource = collections.namedtuple("DataSource", ['source', 'dtype', 'name'])
+DataSink = collections.namedtuple("DataSink", ['sink', 'name'])
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
@@ -128,7 +128,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # then update with any data sources supplied by the user
 
         self._default_data_sources = dfs = {
-            n: DataSource(a.get(queue_data_source), a.dtype)
+            n: DataSource(a.get(queue_data_source), a.dtype, queue_data_source)
             for n, a in self.arrays().iteritems() }
 
         montblanc.log.info("Data source '{dfs}'".format(dfs=data_source))
@@ -140,7 +140,7 @@ class RimeSolver(MontblancTensorflowSolver):
             raise KeyError("'descriptor' is reserved, "
                 "please use another array name.")
 
-        dfs['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32)
+        dfs['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32, 'Internal')
 
         QUEUE_SIZE = 10
 
@@ -361,7 +361,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct per array data sources
         _data_sources = self._default_data_sources.copy()
         _data_sources.update({
-            n: DataSource(f, cube.array(n).dtype)
+            n: DataSource(f, cube.array(n).dtype, source.name())
             for source in data_sources
             for n, f in source.sources().iteritems()})
 
@@ -405,7 +405,7 @@ class RimeSolver(MontblancTensorflowSolver):
             # descriptor queue items. These aren't full on arrays per se
             # but they need to work within the feeding framework
             array_schemas['descriptor'] = descriptor
-            data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32)
+            data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32, 'Internal')
 
             # Generate (name, placeholder, datasource, array descriptor)
             # for the arrays required by each queue
@@ -540,7 +540,7 @@ class RimeSolver(MontblancTensorflowSolver):
         data_sinks = self._sinks + data_sinks
 
         # Construct per array data sinks
-        _data_sinks = { n: DataSink(f)
+        _data_sinks = { n: DataSink(f, sink.name())
             for sink in data_sinks
             for n, f in sink.sinks().iteritems()
             if not n == 'descriptor' }

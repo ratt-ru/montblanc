@@ -22,6 +22,10 @@ import inspect
 
 class AbstractRimeDataSink(object):
 
+    def name(self):
+        """ Returns this data sink's name """
+        raise NotImplementedError()
+
     def close(self):
         """ Perform any required cleanup """
         raise NotImplementedError()
