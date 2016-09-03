@@ -73,6 +73,11 @@ POSITION = 'POSITION'
 # Field sub-table column name constants
 PHASE_DIR = 'PHASE_DIR'
 
+# Spectral window sub-table column name constants
+CHAN_FREQ = 'CHAN_FREQ'
+NUM_CHAN='NUM_CHAN'
+REF_FREQUENCY = 'REF_FREQUENCY'
+
 # Columns used in select statement
 SELECTED = [TIME, ANTENNA1, ANTENNA2, UVW,
     DATA, MODEL_DATA, CORRECTED_DATA, FLAG, WEIGHT]

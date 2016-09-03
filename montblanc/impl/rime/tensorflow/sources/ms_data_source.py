@@ -93,6 +93,19 @@ class MSRimeDataSource(RimeDataSource):
         return self._manager.updated_dimensions()
 
     @cache_ms_read
+    def frequency(self, context):
+        channels = self._manager.spectral_window_table.getcol(MS.CHAN_FREQ)
+        return channels.reshape(context.shape).astype(context.dtype)
+
+    @cache_ms_read
+    def ref_frequency(self, context):
+        num_chans = self._manager.spectral_window_table.getcol(MS.NUM_CHAN)
+        ref_freqs = self._manager.spectral_window_table.getcol(MS.REF_FREQUENCY)
+
+        data = np.hstack((np.repeat(rf, bs) for bs, rf in zip(num_chans, ref_freqs)))
+        return data.reshape(context.shape).astype(context.dtype)
+
+    @cache_ms_read
     def uvw(self, context):
         """ Special case for handling antenna uvw code """
 
