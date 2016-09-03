@@ -143,7 +143,7 @@ class MSRimeDataSource(RimeDataSource):
         antenna1 = self._manager.ordered_uvw_table.getcol(
             MS.ANTENNA1, startrow=lrow, nrow=urow-lrow)
 
-        return antenna1.reshape(context.shape)
+        return antenna1.reshape(context.shape).astype(context.dtype)
 
     @cache_ms_read
     def antenna2(self, context):
@@ -151,7 +151,7 @@ class MSRimeDataSource(RimeDataSource):
         antenna2 = self._manager.ordered_uvw_table.getcol(
             MS.ANTENNA2, startrow=lrow, nrow=urow-lrow)
 
-        return antenna2.reshape(context.shape)
+        return antenna2.reshape(context.shape).astype(context.dtype)
 
     @cache_ms_read
     def parallactic_angles(self, context):
@@ -160,7 +160,7 @@ class MSRimeDataSource(RimeDataSource):
 
         return mbu.parallactic_angles(self._phase_dir,
             self._antenna_positions[la:ua],
-            self._times[lt:ut])
+            self._times[lt:ut]).astype(context.dtype)
 
     @cache_ms_read
     def observed_vis(self, context):
@@ -170,7 +170,7 @@ class MSRimeDataSource(RimeDataSource):
         data = self._manager.ordered_main_table.getcol(
             column, startrow=lrow, nrow=urow-lrow)
 
-        return data.reshape(context.shape)
+        return data.reshape(context.shape).astype(context.dtype)
 
     @cache_ms_read
     def flag(self, context):
@@ -179,7 +179,7 @@ class MSRimeDataSource(RimeDataSource):
         flag = self._manager.ordered_main_table.getcol(
             MS.FLAG, startrow=lrow, nrow=urow-lrow)
 
-        return flag.reshape(context.shape)
+        return flag.reshape(context.shape).astype(context.dtype)
 
     @cache_ms_read
     def weight(self, context):
@@ -190,7 +190,7 @@ class MSRimeDataSource(RimeDataSource):
 
         # WEIGHT is applied across all channels
         weight = np.repeat(weight, self._manager.channels_per_band, 0)
-        return weight.reshape(context.shape)
+        return weight.reshape(context.shape).astype(context.dtype)
 
     def clear_cache(self):
         self._cache.clear()

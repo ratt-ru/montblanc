@@ -119,148 +119,106 @@ class RimeSolver(MontblancTensorflowSolver):
         data_source = slvr_cfg.get(Options.DATA_SOURCE)
 
         # Set up the queue data sources. Just take from
-        # the defaults if the original data source was MS
-        # we only want the data source types for configuring
-        # the queue
+        # defaults if test data isn't specified
         queue_data_source = (Options.DATA_SOURCE_DEFAULT
-            if data_source == Options.DATA_SOURCE_MS
+            if not data_source == Options.DATA_SOURCE_TEST
             else data_source)
 
         # Obtain default data sources for each array,
         # then update with any data sources supplied by the user
-        self._data_sources = ds = {
+
+        self._default_data_sources = dfs = {
             n: DataSource(a.get(queue_data_source), a.dtype)
             for n, a in self.arrays().iteritems() }
 
-        montblanc.log.info("Data source '{ds}'".format(ds=data_source))
-
-        self._ms_manager = None
-
-        # Handle any specified sources in the configuration
-        self._sources = []
-
-        # Obtain sources for data in FITS beam cubes
-        base_fits_name = slvr_cfg.get(Options.E_BEAM_BASE_FITS_NAME, '')
-
-        if not base_fits_name:
-            pass
-        else:
-            # Create the FITS source and extract the sources
-            fits_source = FitsBeamDataSource(base_fits_name)
-            sources = fits_source.sources()
-
-            montblanc.log.info("Sourcing arrays '{a}' from FITS files '{s}'"
-                .format(a=sources.keys(), s=fits_source.filename_schema))
-
-            # Update dimensions with any new information from the source
-            self.update_dimensions(fits_source.updated_dimensions())
-
-            # Update data sources with the given sources
-            ds.update({k: DataSource(f, self.array(k).dtype) for k, f
-                in sources.iteritems()})
-
-            # Store source for close()
-            self._sources.append(fits_source)
-
-        # Obtain sources for data in a MS
-        if data_source == Options.DATA_SOURCE_MS:
-
-            msfile = slvr_cfg.get(Options.MS_FILE)
-
-            # Create a MS manager
-            self._ms_manager = mgr = MeasurementSetManager(msfile, self)
-
-            # Pass it through to our MS data source
-            ms_source = MSRimeDataSource(mgr)
-            sources = ms_source.sources()
-
-            montblanc.log.info("Sourcing arrays '{a}' "
-                "from Measurement Set '{ms}'"
-                .format(a=ms_source.sources().keys(), ms=msfile))
-
-            # Update dimensions with any new information from the source
-            self.update_dimensions(ms_source.updated_dimensions())
-
-            # Update data sources with the given sources
-            ds.update({k: DataSource(f, self.array(k).dtype) for k, f
-                in ms_source.sources().iteritems()})
-
-            # Store source for close()
-            self._sources.append(ms_source)
-
-        ds.update(slvr_cfg.get('supplied', {}))
+        montblanc.log.info("Data source '{dfs}'".format(dfs=data_source))
 
         # The descriptor queue items are not user-defined arrays
         # but a variable passed through describing a chunk of the
         # problem. Make it look as if it's an array
-        if 'descriptor' in ds:
+        if 'descriptor' in dfs:
             raise KeyError("'descriptor' is reserved, "
                 "please use another array name.")
 
-        ds['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32)
+        dfs['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32)
 
         QUEUE_SIZE = 10
 
         self._parameter_queue = create_queue_wrapper('descriptors',
-            QUEUE_SIZE, ['descriptor'], ds)
+            QUEUE_SIZE, ['descriptor'], dfs)
 
         self._input_queue = create_queue_wrapper('input',
-            QUEUE_SIZE, ['descriptor','model_vis'], ds)
+            QUEUE_SIZE, ['descriptor','model_vis'], dfs)
 
         self._uvw_queue = create_queue_wrapper('uvw',
-            QUEUE_SIZE, ['uvw', 'antenna1', 'antenna2'], ds)
+            QUEUE_SIZE, ['uvw', 'antenna1', 'antenna2'], dfs)
 
         self._observation_queue = create_queue_wrapper('observation',
-            QUEUE_SIZE, ['observed_vis', 'flag', 'weight'], ds)
+            QUEUE_SIZE, ['observed_vis', 'flag', 'weight'], dfs)
 
         self._frequency_queue = create_queue_wrapper('frequency',
-            QUEUE_SIZE, ['frequency', 'ref_frequency'], ds)
+            QUEUE_SIZE, ['frequency', 'ref_frequency'], dfs)
 
         self._die_queue = create_queue_wrapper('gterm',
-            QUEUE_SIZE, ['gterm'], ds)
+            QUEUE_SIZE, ['gterm'], dfs)
 
         self._dde_queue = create_queue_wrapper('dde',
             QUEUE_SIZE, ['ebeam', 'antenna_scaling', 'point_errors',
-                'parallactic_angles', 'beam_extents'], ds)
+                'parallactic_angles', 'beam_extents'], dfs)
 
         self._point_source_queue = create_queue_wrapper('point_source',
-            QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], ds)
+            QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
 
         self._gaussian_source_queue = create_queue_wrapper('gaussian_source',
             QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
-                'gaussian_shape'], ds)
+                'gaussian_shape'], dfs)
 
         self._sersic_source_queue = create_queue_wrapper('sersic_source',
             QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
-                'sersic_shape'], ds)
+                'sersic_shape'], dfs)
 
         self._output_queue = create_queue_wrapper('output',
-            QUEUE_SIZE, ['descriptor', 'model_vis'], ds)
+            QUEUE_SIZE, ['descriptor', 'model_vis'], dfs)
+
+        #==================
+        # Data Sources
+        #==================
+
+        self._ms_manager = None
+
+        # Construct list of data sources internal to the solver
+        # Any data sources specified in the solve() method will
+        # override these
+        self._sources = []
+
+        # Create and add the FITS Beam Data Source, if present
+        base_fits_name = slvr_cfg.get(Options.E_BEAM_BASE_FITS_NAME, '')
+
+        if base_fits_name:
+            self._source.append(FitsBeamDataSource(base_fits_name))
+
+        # Create and add the MS Data Source
+        if data_source == Options.DATA_SOURCE_MS:
+            msfile = slvr_cfg.get(Options.MS_FILE)
+            self._ms_manager = mgr = MeasurementSetManager(msfile, self)
+            self._sources.append(MSRimeDataSource(mgr))
+
+        # Use any dimension update hints from the sources
+        for data_source in self._sources:
+            self.update_dimensions(data_source.updated_dimensions())
 
         #==================
         # Data Sinks
         #==================
 
+        # Construct list of data sinks internal to the solver
+        # Any data sinks specified in the solve() method will
+        # override these.
+        self._sinks = [NullDataSink()]
 
-        self._sinks = sinks = []
-        self._null_data_sink = null_sink = NullDataSink()
-        sinks.append(null_sink)
-        null_sinks = null_sink.sinks()
-
-        # TODO: Change name from fed_arrays to arrays
-        self._data_sinks = data_sinks = {
-            n: DataSink(null_sinks.get(n))
-            for n in self._output_queue.fed_arrays
-            if not n == 'descriptor' }
-
+        # We have an MS so add a MS data sink
         if self._ms_manager is not None:
-            self._rime_data_sink = ms_sink = MSRimeDataSink(self._ms_manager)
-            sinks.append(ms_sink)
-            ms_sinks = ms_sink.sinks()
-            data_sinks.update({
-                n: DataSink(ms_sinks.get(n))
-                for n in self._output_queue.fed_arrays
-                if not n == 'descriptor' })
+            self._sinks.append(MSRimeDataSink(self._ms_manager))
 
         #==================
         # Memory Budgeting
@@ -382,21 +340,32 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.info("Done feeding {n} parameters.".format(
             n=parameters_fed))
 
-    def _feed(self):
+    def _feed(self, data_sources):
         """ Feed stub """
         try:
-            self._feed_impl()
+            self._feed_impl(data_sources)
         except Exception as e:
             montblanc.log.exception("Feed Exception")
             raise
 
-    def _feed_impl(self):
+    def _feed_impl(self, data_sources):
         """ Implementation of queue feeding """
         session = self._tf_session
-        data_sources = self._data_sources.copy()
 
         # Maintain a hypercube based on the main cube
         cube = self.copy()
+
+        # Construct data sources
+        data_sources = self._sources + data_sources
+
+        # Construct per array data sources
+        _data_sources = self._default_data_sources.copy()
+        _data_sources.update({
+            n: DataSource(f, cube.array(n).dtype)
+            for source in data_sources
+            for n, f in source.sources().iteritems()})
+
+        data_sources = _data_sources
 
         # Queues to be fed on each iteration
         chunk_queues = (self._input_queue,
@@ -443,9 +412,23 @@ class RimeSolver(MontblancTensorflowSolver):
                 for q in chunk_queues
                 for ph, a in zip(q.placeholders, q.fed_arrays)]
 
+            def _get_data_source(data_source, context):
+                data = data_source.source(context)
+                same = (data.shape == context.shape and data.dtype == context.dtype)
+
+                if not same:
+                    raise ValueError("Expected data of shape '{esh}' and "
+                        "dtype '{edt}' for data source '{n}', but "
+                        "shape '{rsh}' and '{rdt}' was found instead".format(
+                            n=context.name,
+                            esh=context.shape, edt=context.dtype,
+                            rsh=data.shape, rdt=data.dtype))
+
+                return data
+
             # Create a feed dictionary by calling the data source functors
-            feed_dict = { ph: ds.source(SourceContext(a, cube,
-                    self.config(), ad.shape, ad.dtype))
+            feed_dict = { ph: _get_data_source(ds,
+                    SourceContext(a, cube, self.config(), ad.shape, ad.dtype))
                 for (a, ph, ds, ad) in gen }
 
             montblanc.log.debug("Enqueueing chunk {i} {d}".format(
@@ -528,22 +511,34 @@ class RimeSolver(MontblancTensorflowSolver):
             montblanc.log.exception("Compute Exception")
             raise
 
-    def _consume(self):
+    def _consume(self, data_sinks):
         """ Consume stub """
         try:
-            return self._consume_impl()
+            return self._consume_impl(data_sinks)
         except Exception as e:
             montblanc.log.exception("Consumer Exception")
             raise
 
-    def _consume_impl(self):
+    def _consume_impl(self, data_sinks):
         """ Consume """
 
         S = self._tf_session
-        cube = self.copy()
-        data_sinks = self._data_sinks.copy()
         chunks_consumed = 0
         done = False
+
+        # Maintain a hypercube based on the main cube
+        cube = self.copy()
+
+        # Construct our data sinks
+        data_sinks = self._sinks + data_sinks
+
+        # Construct per array data sinks
+        _data_sinks = { n: DataSink(f)
+            for sink in data_sinks
+            for n, f in sink.sinks().iteritems()
+            if not n == 'descriptor' }
+
+        data_sinks = _data_sinks
 
         while not done:
             output = S.run(self._output_queue.dequeue())
@@ -667,13 +662,16 @@ class RimeSolver(MontblancTensorflowSolver):
         # Return descriptor and enqueue operation
         return descriptor, enqueue_op
 
-    def solve(self):
+    def solve(self, *args, **kwargs):
+
+        data_sources = kwargs.get('data_sources', [])
+        data_sinks = kwargs.get('data_sinks', [])
 
         try:
             params = self._parameter_executor.submit(self._parameter_feed)
-            feed = self._feed_executor.submit(self._feed)
+            feed = self._feed_executor.submit(self._feed, data_sources)
             compute = self._compute_executor.submit(self._compute)
-            consume = self._consumer_executor.submit(self._consume)
+            consume = self._consumer_executor.submit(self._consume, data_sinks)
 
             not_done = [params, feed, compute, consume]
 
