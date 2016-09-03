@@ -165,9 +165,10 @@ class MSRimeDataSource(RimeDataSource):
     @cache_ms_read
     def observed_vis(self, context):
         lrow, urow = MS.row_extents(context)
+        column = context.cfg[Options.MS_VIS_INPUT_COLUMN]
 
         data = self._manager.ordered_main_table.getcol(
-            MS.DATA, startrow=lrow, nrow=urow-lrow)
+            column, startrow=lrow, nrow=urow-lrow)
 
         return data.reshape(context.shape)
 

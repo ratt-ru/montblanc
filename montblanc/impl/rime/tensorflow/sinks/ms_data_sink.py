@@ -18,8 +18,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import sys
+
 import montblanc
 
+from montblanc.config import RimeSolverConfig as Options
 from montblanc.impl.rime.tensorflow.sinks.rime_data_sink import RimeDataSink
 import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 
@@ -30,9 +33,15 @@ class MSRimeDataSink(RimeDataSink):
     def model_vis(self, context):
         lrow, urow = MS.row_extents(context)
 
-        column = 'MODEL_DATA'
-        colshape = self._manager.column_descriptors[column]['shape']
-        msshape = [-1] + colshape.tolist()
+        column = context.cfg[Options.MS_VIS_OUTPUT_COLUMN]
+
+        try:
+            coldesc = self._manager.column_descriptors[column]
+        except KeyError as e:
+            raise (ValueError("No column descriptor for '{c}'".format(c=column)),
+                None, sys.exc_info()[2])
+
+        msshape = [-1] + coldesc['shape'].tolist()
 
         self._manager.ordered_main_table.putcol(column,
             context.data.reshape(msshape),
