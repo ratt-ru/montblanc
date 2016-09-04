@@ -232,14 +232,14 @@ class RimeSolver(MontblancTensorflowSolver):
         src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
             for nr_var in src_str_list])
 
-        mem__budget = slvr_cfg.get('mem_budget', 256*ONE_MB)
+        mem_budget = slvr_cfg.get('mem_budget', 256*ONE_MB)
         T = self.template_dict()
         na = self.dim_local_size('na')
 
         # Figure out a viable dimension configuration
         # given the total problem size
         viable, modded_dims = mbu.viable_dim_config(
-            mem__budget, arrays, T, [src_reduction_str,
+            mem_budget, arrays, T, [src_reduction_str,
                 'ntime',
                 'nbl={na}&na={na}'.format(na=na)], 1)
 
@@ -254,7 +254,7 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.info(("Selected a solver memory budget of {rb} "
             "given a hard limit of {mb}.").format(
             rb=mbu.fmt_bytes(required_mem),
-            mb=mbu.fmt_bytes(mem__budget)))
+            mb=mbu.fmt_bytes(mem_budget)))
 
         if len(modded_dims) > 0:
             montblanc.log.info((
