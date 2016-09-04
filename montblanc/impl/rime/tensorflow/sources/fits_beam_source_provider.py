@@ -41,11 +41,11 @@ class FitsAxes(object):
 
         # Extract header information for each dimension
         axr = range(1, ndims+1)
-        self._naxis = [header.get('NAXIS%d'%n) for n in axr]
-        self._ctype = [header.get('CTYPE%d'%n) for n in axr]
-        self._crval = [header.get('CRVAL%d'%n) for n in axr]
-        self._crpix = [header.get('CRPIX%d'%n) for n in axr]
-        self._cdelta = [header.get('CDELT%d'%n) for n in axr]
+        self._naxis = [header.get('NAXIS%d'%n)      for n in axr]
+        self._ctype = [header.get('CTYPE%d'%n, n)   for n in axr]
+        self._crval = [header.get('CRVAL%d'%n, 0)   for n in axr]
+        self._crpix = [header.get('CRPIX%d'%n)-1    for n in axr]
+        self._cdelta = [header.get('CDELT%d'%n, 1)  for n in axr]
         self._cunit = [header.get('CUNIT%d'%n, '').strip().upper()
             for n in axr]
 
