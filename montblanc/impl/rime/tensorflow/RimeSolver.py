@@ -143,44 +143,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         dfs['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32, 'Internal')
 
-        QUEUE_SIZE = 10
-
-        self._parameter_queue = create_queue_wrapper('descriptors',
-            QUEUE_SIZE, ['descriptor'], dfs)
-
-        self._input_queue = create_queue_wrapper('input',
-            QUEUE_SIZE, ['descriptor','model_vis'], dfs)
-
-        self._uvw_queue = create_queue_wrapper('uvw',
-            QUEUE_SIZE, ['uvw', 'antenna1', 'antenna2'], dfs)
-
-        self._observation_queue = create_queue_wrapper('observation',
-            QUEUE_SIZE, ['observed_vis', 'flag', 'weight'], dfs)
-
-        self._frequency_queue = create_queue_wrapper('frequency',
-            QUEUE_SIZE, ['frequency', 'ref_frequency'], dfs)
-
-        self._die_queue = create_queue_wrapper('gterm',
-            QUEUE_SIZE, ['gterm'], dfs)
-
-        self._dde_queue = create_queue_wrapper('dde',
-            QUEUE_SIZE, ['ebeam', 'antenna_scaling', 'point_errors',
-                'parallactic_angles', 'beam_extents'], dfs)
-
-        self._point_source_queue = create_queue_wrapper('point_source',
-            QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
-
-        self._gaussian_source_queue = create_queue_wrapper('gaussian_source',
-            QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
-                'gaussian_shape'], dfs)
-
-        self._sersic_source_queue = create_queue_wrapper('sersic_source',
-            QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
-                'sersic_shape'], dfs)
-
-        self._output_queue = create_queue_wrapper('output',
-            QUEUE_SIZE, ['descriptor', 'model_vis'], dfs)
-
         #==================
         # Data Sources
         #==================
@@ -259,7 +221,7 @@ class RimeSolver(MontblancTensorflowSolver):
         #==========================
         # Tensorflow initialisation
         #==========================
-        self._tf_expr = self._construct_tensorflow_expression()
+        self._tf_expr = self._construct_tensorflow_expression(dfs)
         self._tf_session.run(tf.initialize_all_variables())
 
         #================
@@ -574,8 +536,49 @@ class RimeSolver(MontblancTensorflowSolver):
 
         montblanc.log.info('Done consuming {n} chunks'.format(n=chunks_consumed))
 
-    def _construct_tensorflow_expression(self):
+    def _construct_tensorflow_expression(self, dfs):
         """ Constructs a tensorflow expression for computing the RIME """
+
+        QUEUE_SIZE = 10
+
+        # TODO: don't create these on the object instance
+        self._parameter_queue = create_queue_wrapper('descriptors',
+            QUEUE_SIZE, ['descriptor'], dfs)
+
+        self._input_queue = create_queue_wrapper('input',
+            QUEUE_SIZE, ['descriptor','model_vis'], dfs)
+
+        self._uvw_queue = create_queue_wrapper('uvw',
+            QUEUE_SIZE, ['uvw', 'antenna1', 'antenna2'], dfs)
+
+        self._observation_queue = create_queue_wrapper('observation',
+            QUEUE_SIZE, ['observed_vis', 'flag', 'weight'], dfs)
+
+        self._frequency_queue = create_queue_wrapper('frequency',
+            QUEUE_SIZE, ['frequency', 'ref_frequency'], dfs)
+
+        self._die_queue = create_queue_wrapper('gterm',
+            QUEUE_SIZE, ['gterm'], dfs)
+
+        self._dde_queue = create_queue_wrapper('dde',
+            QUEUE_SIZE, ['ebeam', 'antenna_scaling', 'point_errors',
+                'parallactic_angles', 'beam_extents'], dfs)
+
+        self._point_source_queue = create_queue_wrapper('point_source',
+            QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
+
+        self._gaussian_source_queue = create_queue_wrapper('gaussian_source',
+            QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
+                'gaussian_shape'], dfs)
+
+        self._sersic_source_queue = create_queue_wrapper('sersic_source',
+            QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
+                'sersic_shape'], dfs)
+
+        self._output_queue = create_queue_wrapper('output',
+            QUEUE_SIZE, ['descriptor', 'model_vis'], dfs)
+
+
         zero = tf.constant(0)
 
         # Pull RIME inputs out of the feed queues
