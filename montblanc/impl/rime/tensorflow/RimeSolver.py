@@ -324,9 +324,8 @@ class RimeSolver(MontblancTensorflowSolver):
         # Copy dimensions of the main cube
         cube = self.copy()
 
-        # Iterate over time and baseline
-        iter_strides = cube.dim_local_size(*self._iter_dims)
-        iter_args = zip(self._iter_dims, iter_strides)
+        # Get space of iteration
+        iter_args = _iter_args(self._iter_dims, cube)
         parameters_fed = 0
 
         # Iterate through the hypercube space
@@ -355,6 +354,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Maintain a hypercube based on the main cube
         cube = self.copy()
+
+        # Get space of iteration
+        global_iter_args = _iter_args(self._iter_dims, cube)
 
         # Include internal source providers
         source_providers = self._source_providers + source_providers
@@ -407,12 +409,6 @@ class RimeSolver(MontblancTensorflowSolver):
             array_schemas['descriptor'] = descriptor
             data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32, 'Internal')
 
-            # Generate (name, placeholder, datasource, array descriptor)
-            # for the arrays required by each queue
-            gen = [(a, ph, data_sources[a], array_schemas[a])
-                for q in chunk_queues
-                for ph, a in zip(q.placeholders, q.fed_arrays)]
-
             def _get_data_source(data_source, context):
                 # Invoke the data source
                 data = data_source.source(context)
@@ -436,9 +432,17 @@ class RimeSolver(MontblancTensorflowSolver):
 
                 return data
 
+            # Generate (name, placeholder, datasource, array schema)
+            # for the arrays required by each queue
+            gen = [(a, ph, data_sources[a], array_schemas[a])
+                for q in chunk_queues
+                for ph, a in zip(q.placeholders, q.fed_arrays)]
+
             # Create a feed dictionary by calling the data source functors
             feed_dict = { ph: _get_data_source(ds,
-                    SourceContext(a, cube, self.config(), ad.shape, ad.dtype))
+                    SourceContext(a, cube, self.config(), global_iter_args,
+                        cube.array(a) if a in cube.arrays() else {},
+                        ad.shape, ad.dtype))
                 for (a, ph, ds, ad) in gen }
 
             montblanc.log.debug("Enqueueing chunk {i} {d}".format(
@@ -451,10 +455,10 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # For each source type, feed that source queue
             for src_type, queue in src_queues.iteritems():
-                iter_args = (src_type, cube.dim_local_size(src_type))
+                iter_args = [(src_type, cube.dim_local_size(src_type))]
 
                 # Iterate over local_size chunks of the source
-                for dim_desc in cube.dim_iter(iter_args, update_local_size=True):
+                for dim_desc in cube.dim_iter(*iter_args, update_local_size=True):
                     cube.update_dimensions(dim_desc)
 
                     montblanc.log.debug("Enqueueing '{s}' '{t}' sources".format(
@@ -466,8 +470,10 @@ class RimeSolver(MontblancTensorflowSolver):
                         for ph, a in zip(queue.placeholders, queue.fed_arrays)]
 
                     # Create a feed dictionary by calling the data source functors
-                    feed_dict = { ph: ds.source(SourceContext(a, cube,
-                            self.config(), ad.shape, ad.dtype))
+                    feed_dict = { ph: ds.source(SourceContext(a, cube, self.config(),
+                            global_iter_args + iter_args,
+                            cube.array(a) if a in cube.arrays() else {},
+                            ad.shape, ad.dtype))
                         for (a, ph, ds, ad) in gen }
 
                     session.run(queue.enqueue_op, feed_dict=feed_dict)
@@ -736,3 +742,7 @@ def _last_chunk(dims):
     i.e. does upper_extent == global_size for all dimensions?
     """
     return all(d['upper_extent'] == d['global_size'] for d in dims)
+
+def _iter_args(iter_dims, cube):
+    iter_strides = cube.dim_local_size(*iter_dims)
+    return zip(iter_dims, iter_strides)

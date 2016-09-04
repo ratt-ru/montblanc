@@ -39,12 +39,14 @@ class SourceContext(object):
 	Proxies attributes of a hypercube and provides access to configuration
 	"""
 	__slots__ = ('_cube', '_cfg', '_name', '_shape', '_dtype',
-		'_cube_attributes')
+		'_iter_args', '_array_schema', '_cube_attributes')
 
-	def __init__(self, name, cube, slvr_cfg, shape, dtype):
+	def __init__(self, name, cube, slvr_cfg, iter_args, array_schema, shape, dtype):
 		self._name = name
 		self._cube = cube
 		self._cfg = slvr_cfg
+		self._iter_args = iter_args
+		self._array_schema = array_schema
 		self._shape = shape
 		self._dtype = dtype
 
@@ -99,6 +101,14 @@ class SourceContext(object):
 	@name.setter
 	def name(self, value):
 		self._name = value
+
+	@property
+	def array_schema(self):
+		return self._array_schema
+
+	@property
+	def iter_args(self):
+		return self._iter_args
 
 	def __getattr__(self, name):
 		# Defer to the hypercube
