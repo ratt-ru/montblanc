@@ -81,4 +81,11 @@ class SourceProvider(AbstractSourceProvider):
             if inspect.getargspec(m)[0] == self.SOURCE_ARGSPEC
         }
 
+    def updated_dimensions(self):
+        """ Return an iterable/mapping of hypercube dimensions to update """
+        return ()
+
+    def updated_arrays(self):
+        """ Return an iterable/mapping of hypercube arrays to update """
+        return ()
 
