@@ -126,11 +126,10 @@ def _create_filenames(base_filename):
 
     Given 'beam' as the base_filename, returns something like
     {
-      'xx' : 'beam_xx_re.fits',
-      'xx' : 'beam_xx_im.fits',
-      'xy' : 'beam_xy_re.fits',
+      'xx' : ('beam_xx_re.fits', 'beam_xx_im.fits'),
+      'xy' : ('beam_xy_re.fits', 'beam_xy_im.fits'),
       ...
-      'yy' : 'beam_yy_im.fits'
+      'yy' : ('beam_yy_re.fits', 'beam_yy_im.fits'),
     }
     """
     def _re_im_filenames(corr, base):
