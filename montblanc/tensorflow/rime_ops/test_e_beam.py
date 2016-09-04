@@ -26,7 +26,7 @@ def e_beam_op(lm, frequency, point_errors, antenna_scaling,
         parallactic_angles, beam_extents, ebeam)
 
 dtype, ctype = np.float64, np.complex128
-nsrc, ntime, na, nchan = 20, 10, 7, 32
+nsrc, ntime, na, nchan = 20, 29, 14, 64
 beam_lw = beam_mh = beam_nud = 50
 
 # Beam cube coordinates
@@ -36,7 +36,7 @@ rf = lambda *s: np.random.random(size=s).astype(dtype)
 
 # Set up our numpy input arrays
 np_lm = (rf(nsrc,2)-0.5)*1e-1
-np_frequency = np.linspace(1e9, 2e9, nchan)
+np_frequency = np.linspace(1e9, 2e9, nchan).astype(dtype)
 np_point_errors = (rf(ntime, na, nchan, 2)-0.5)*1e-2
 np_antenna_scaling = rf(na,nchan,2)
 np_parallactic_angle = np.deg2rad(rf(ntime, na)).astype(dtype)
