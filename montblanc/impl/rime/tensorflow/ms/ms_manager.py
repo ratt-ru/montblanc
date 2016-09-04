@@ -204,8 +204,8 @@ class MeasurementSetManager(object):
         # Ordered Measurement Set
         oms = pt.taql(ordering_query)
 
-        montblanc.log.debug("Measurement Set Manager ordering query "
-            "is {o}.".format(o=oms))
+        montblanc.log.debug("MS ordering query is '{o}'."
+            .format(o=ordering_query))
 
         # Measurement Set ordered by unique time and baseline
         otblms = pt.taql("SELECT FROM $oms {c}".format(
