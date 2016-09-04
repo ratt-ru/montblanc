@@ -279,8 +279,8 @@ class FitsBeamSourceProvider(SourceProvider):
         return self._cube_extents.flatten()
 
     def updated_dimensions(self):
-        D = self._cube.dimensions(copy=False)
-        return [D[k] for k in ('beam_lw', 'beam_mh', 'beam_nud')]
+        return [self._cube.dimension(k,copy=False)
+            for k in ('beam_lw', 'beam_mh', 'beam_nud')]
 
     @property
     def filename_schema(self):

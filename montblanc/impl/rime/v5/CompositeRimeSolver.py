@@ -918,7 +918,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
                 # Configure dimension extents and global size on the sub-solver
                 for name, slice_ in cpu_slice_map.iteritems():
                     subslvr.update_dimension(name=name,
-                        global_size=self.dimension(name).global_size,
+                        global_size=self.dimension(name, copy=False).global_size,
                         lower_extent=slice_.start,
                         upper_extent=slice_.stop)
 

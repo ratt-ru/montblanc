@@ -266,7 +266,7 @@ class MeasurementSetManager(object):
         return self._nchanperband
 
     def updated_dimensions(self):
-        return [self._cube.dimension(k) for k in UPDATE_DIMENSIONS]
+        return [self._cube.dimension(k, copy=False) for k in UPDATE_DIMENSIONS]
 
     @property
     def auto_correlations(self):
