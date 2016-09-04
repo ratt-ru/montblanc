@@ -22,8 +22,6 @@ import os
 
 import numpy as np
 
-import pycuda.driver as cuda
-
 import montblanc
 import montblanc.util as mbu
 
@@ -39,6 +37,8 @@ def get_contexts_per_device():
     """ Returns a list of CUDA contexts associated with each CUDA device """
     global __devices
     global __contexts
+
+    import pycuda.driver as cuda
 
     # Create contexts for each device if they don't yet exist
     if __devices is None and __contexts is None:
@@ -151,18 +151,16 @@ def rime_solver(slvr_cfg):
     """ Factory function that produces a RIME solver """
 
     slvr_cfg = slvr_cfg.copy()
+    version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)
 
     # Set the default cuda context if none is provided
-    if slvr_cfg.get(Options.CONTEXT, None) is None:
+    if version != Options.VERSION_TENSORFLOW and slvr_cfg.get(Options.CONTEXT, None) is None:
         slvr_cfg[Options.CONTEXT] = get_default_context()
 
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
-    version = slvr_cfg.get(Options.VERSION, Options.DEFAULT_VERSION)
 
     # Figure out which version of RIME solver we're dealing with.
-    if version == Options.VERSION_TWO:
-        from montblanc.impl.rime.v2.RimeSolver import RimeSolver
-    elif version == Options.VERSION_FOUR:
+    if version == Options.VERSION_FOUR:
         from montblanc.impl.rime.v4.RimeSolver import RimeSolver
     elif version == Options.VERSION_FIVE:
         from montblanc.impl.rime.v5.CompositeRimeSolver \
