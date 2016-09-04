@@ -30,7 +30,6 @@ from tensorflow.python.client import timeline
 
 import montblanc
 import montblanc.util as mbu
-from montblanc.impl.rime.tensorflow.ant_pairs import monkey_patch_antenna_pairs
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
 
 from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
@@ -91,9 +90,6 @@ class RimeSolver(MontblancTensorflowSolver):
         self.register_dimension('beam_nud',
             slvr_cfg[Options.E_BEAM_DEPTH],
             description='E Beam cube nu depth')
-
-        # Monkey patch these functions onto the object
-        monkey_patch_antenna_pairs(self)
 
         #=========================================
         # Register hypercube Arrays and Properties
