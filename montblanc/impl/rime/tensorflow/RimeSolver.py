@@ -444,6 +444,12 @@ class RimeSolver(MontblancTensorflowSolver):
         # Maintain a hypercube based on the main cube
         cube = self.copy()
 
+        # Get space of iteration
+        global_iter_args = _iter_args(self._iter_dims, cube)
+
+        # Array Schemas
+        array_schemas = cube.array
+
         # Get data sinks from supplied providers
         data_sinks = { n: DataSink(f, sink.name())
             for sink in sink_providers
@@ -465,7 +471,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # For each array in our output, call the associated data sink
             for n, a in zip(self._output_queue.fed_arrays[1:], output[1:]):
-                sink_context = SinkContext(n, cube, self.config(), a)
+                sink_context = SinkContext(n, cube, self.config(), global_iter_args,
+                    cube.array(n) if n in cube.arrays() else {}, a)
                 data_sinks[n].sink(sink_context)
 
             # Are we done?
