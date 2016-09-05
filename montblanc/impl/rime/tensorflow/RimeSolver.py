@@ -162,10 +162,6 @@ class RimeSolver(MontblancTensorflowSolver):
             self._ms_manager = mgr = MeasurementSetManager(msfile, self, slvr_cfg)
             self._source_providers.append(MSSourceProvider(mgr))
 
-        # Use any dimension update hints from the sources
-        for data_source in self._source_providers:
-            self.update_dimensions(data_source.updated_dimensions())
-
         #==================
         # Data Sinks
         #==================
@@ -183,14 +179,8 @@ class RimeSolver(MontblancTensorflowSolver):
         # Memory Budgeting
         #==================
 
-        # Attempt to fit arrays into memory budget by
-        # reducing dimension local_sizes
-        self._modded_dims = modded_dims = self._budget(A, slvr_cfg)
-
-        # Update any dimensions
-        for k, v in modded_dims.iteritems():
-            self.update_dimension(k, local_size=v,
-                lower_extent=0, upper_extent=v)
+        # For deciding whether to rebudget
+        self._previous_budget = 0
 
         #======================
         # Tensorflow Placeholders
@@ -225,49 +215,6 @@ class RimeSolver(MontblancTensorflowSolver):
         #================
         self._iter_dims = ['ntime', 'nbl']
         self._transcoder = CubeDimensionTranscoder(self._iter_dims)
-
-    def _budget(self, arrays, slvr_cfg):
-        nsrc = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
-        src_str_list = [Options.NSRC] + mbu.source_nr_vars()
-        src_reduction_str = '&'.join(['%s=%s' % (nr_var, nsrc)
-            for nr_var in src_str_list])
-
-        mem_budget = slvr_cfg.get('mem_budget', 256*ONE_MB)
-        T = self.template_dict()
-        na = self.dim_local_size('na')
-
-        # Figure out a viable dimension configuration
-        # given the total problem size
-        viable, modded_dims = mbu.viable_dim_config(
-            mem_budget, arrays, T, [src_reduction_str,
-                'ntime',
-                'nbl={na}&na={na}'.format(na=na)], 1)
-
-        # Create property dictionary with updated dimensions.
-        # Determine memory required by our chunk size
-        mT = T.copy()
-        mT.update(modded_dims)
-        required_mem = mbu.dict_array_bytes_required(arrays, mT)
-
-        # Log some information about the memory _budget
-        # and dimension reduction
-        montblanc.log.info(("Selected a solver memory budget of {rb} "
-            "given a hard limit of {mb}.").format(
-            rb=mbu.fmt_bytes(required_mem),
-            mb=mbu.fmt_bytes(mem_budget)))
-
-        if len(modded_dims) > 0:
-            montblanc.log.info((
-                "The following dimension reductions "
-                "have been applied:"))
-
-            for k, v in modded_dims.iteritems():
-                montblanc.log.info('{p}{d}: {id} => {rd}'.format
-                    (p=' '*4, d=k, id=T[k], rd=v))
-        else:
-            montblanc.log.info("No dimension reductions were applied.")
-
-        return modded_dims
 
     def _parameter_feed(self):
         try:
@@ -315,9 +262,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
-
-        # Include internal source providers
-        source_providers = self._source_providers + source_providers
 
         # Construct data sources
         data_sources = self._default_data_sources.copy()
@@ -500,9 +444,6 @@ class RimeSolver(MontblancTensorflowSolver):
         # Maintain a hypercube based on the main cube
         cube = self.copy()
 
-        # Include internal sink providers with supplied sink providers
-        sink_providers = self._sink_providers + sink_providers
-
         # Get data sinks from supplied providers
         data_sinks = { n: DataSink(f, sink.name())
             for sink in sink_providers
@@ -674,9 +615,22 @@ class RimeSolver(MontblancTensorflowSolver):
         return descriptor, enqueue_op
 
     def solve(self, *args, **kwargs):
+        #  Obtain source and sink providers, including internal providers
+        source_providers = (kwargs.get('source_providers', []) +
+            self._source_providers)
+        sink_providers = (kwargs.get('sink_providers', []) +
+            self._sink_providers)
 
-        source_providers = kwargs.get('source_providers', [])
-        sink_providers = kwargs.get('sink_providers', [])
+        # Apply any dimension updates from the source provider
+        # to the hypercube
+        bytes_required = _apply_source_provider_dim_updates(self,
+            source_providers)
+
+        # If we use more memory than previously,
+        # perform another budgeting operation
+        # to make sure everything fits
+        if bytes_required > self._previous_budget:
+            self._previous_budget = _budget(self, self.config())
 
         try:
             params = self._parameter_executor.submit(self._parameter_feed)
@@ -745,3 +699,121 @@ def _last_chunk(dims):
 def _iter_args(iter_dims, cube):
     iter_strides = cube.dim_local_size(*iter_dims)
     return zip(iter_dims, iter_strides)
+
+def _uniq_log2_range(start, size, div):
+    start = np.log2(start)
+    size = np.log2(size)
+    int_values = np.int32(np.logspace(start, size, div, base=2)[:-1])
+
+    return np.flipud(np.unique(int_values))
+
+BUDGETING_DIMS = ['nbl', 'ntime', 'nsrc'] + mbu.source_nr_vars()
+
+def _budget(cube, slvr_cfg):
+    # Figure out a viable dimension configuration
+    # given the total problem size
+    mem_budget = slvr_cfg.get('mem_budget', 2*ONE_GB)
+    bytes_required = cube.bytes_required()
+
+    dim_names = 'na', 'nbl', 'ntime', 'nsrc'
+    global_sizes =  na, nbl, ntime, nsrc = cube.dim_global_size(*dim_names)
+
+    # Keep track of original dimension sizes and any reductions that are applied
+    # Ignore 'na'
+    original_sizes = { r: s for r, s in zip(dim_names, global_sizes)[1:] }
+    applied_reductions = {}
+
+    def _reduction():
+        # Reduce over time first
+        for t in _uniq_log2_range(1, ntime, 5):
+            yield [('ntime', t)]
+
+        # Attempt reduction over source
+        bs = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
+
+        if nsrc > bs:
+            yield [(d,nsrc) for d in [Options.NSRC] + mbu.source_nr_vars()]
+
+        # Reduce by baseline
+        for bl in _uniq_log2_range(na, nbl, 5):
+            yield [('nbl', bl)]
+
+    for reduction in _reduction():
+        if bytes_required > mem_budget:
+            for dim, size in reduction:
+                applied_reductions[dim] = size
+                cube.update_dimension(dim, local_size=size,
+                    lower_extent=0, upper_extent=size)
+        else:
+            break
+
+        bytes_required = cube.bytes_required()
+
+    # Log some information about the memory_budget
+    # and dimension reduction
+    montblanc.log.info(("Selected a solver memory budget of {rb} "
+        "given a hard limit of {mb}.").format(
+        rb=mbu.fmt_bytes(bytes_required),
+        mb=mbu.fmt_bytes(mem_budget)))
+
+    if len(applied_reductions) > 0:
+        montblanc.log.info("The following dimension reductions "
+            "were applied:")
+
+        for k, v in applied_reductions.iteritems():
+            montblanc.log.info('{p}{d}: {id} => {rd}'.format
+                (p=' '*4, d=k, id=original_sizes[k], rd=v))
+    else:
+        montblanc.log.info("No dimension reductions were applied.")
+
+    return bytes_required
+
+def _apply_source_provider_dim_updates(cube, source_providers):
+    """
+    Given a list of source_providers, apply the list of
+    suggested dimension updates given in provider.updated_dimensions()
+    to the supplied hypercube.
+
+    Dimension global sizes are always updated. Local sizes will be applied
+    UNLESS the dimension is reduced during the budgeting process.
+    Assumption here is that the budgeter is smarter than the user.
+
+    """
+    # Create a mapping between a dimension and a
+    # list of (global_size, provider_name) tuples
+    mapping = collections.defaultdict(list)
+
+    # Update the mapping
+    [mapping[d.name].append((d, prov.name()))
+        for prov in source_providers
+        for d in prov.updated_dimensions()]
+
+    # Ensure that the global sizes we receive
+    # for each dimension are unique. Tell the user
+    # about which sources conflict
+    for n, u in mapping.iteritems():
+        if not all(u[0][0] == tup[0] for tup in u[1:]):
+            raise ValueError("Received conflicting global size updates '{u}'"
+                " for dimension '{n}'.".format(n=n, u=u))
+
+    if len(mapping) > 0:
+        montblanc.log.info("Updating dimensions {mk} from "
+            "source providers.".format(mk=mapping.keys()))
+
+    # Get existing local dimension sizes
+    local_sizes = cube.dim_local_size(*mapping.keys())
+
+    # Now update our dimensions
+    for (n, u), ls in zip(mapping.iteritems(), local_sizes):
+        # Reduce our local size to satisfy hypercube
+        d = u[0][0]
+        gs = d.global_size
+        # Defer to existing local size for budgeting dimensions
+        ls = ls if ls in BUDGETING_DIMS else d.local_size
+        # Clamp local size to global size
+        ls = gs if ls > gs else ls
+        cube.update_dimension(n, local_size=ls, global_size=gs,
+            lower_extent=0, upper_extent=ls)
+
+    # Return our cube size
+    return cube.bytes_required()

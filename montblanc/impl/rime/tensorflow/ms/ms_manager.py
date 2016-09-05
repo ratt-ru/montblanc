@@ -248,6 +248,9 @@ class MeasurementSetManager(object):
             mscube.update_dimension(dim, global_size=size,
                 local_size=size, lower_extent=0, upper_extent=size)
 
+        # Have we indicated dimensions updates?
+        self._dim_updates_indicated = False
+
     def close(self):
         # Close all the tables
         for table in self._tables.itervalues():
@@ -266,6 +269,11 @@ class MeasurementSetManager(object):
         return self._nchanperband
 
     def updated_dimensions(self):
+        # Dimension updates bave been indicated, don't send them again
+        if self._dim_updates_indicated is True:
+            return ()
+
+        self._dim_updates_indicated = True
         return [self._cube.dimension(k, copy=False) for k in UPDATE_DIMENSIONS]
 
     @property

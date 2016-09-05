@@ -256,6 +256,8 @@ class FitsBeamSourceProvider(SourceProvider):
             self._axes.naxis[f_ax],
             description='E Beam cube frequency depth')
 
+        self._dim_updates_indicated = False
+
     def name(self):
         return self._name
 
@@ -279,6 +281,11 @@ class FitsBeamSourceProvider(SourceProvider):
         return self._cube_extents.flatten()
 
     def updated_dimensions(self):
+        # Dimension updates bave been indicated, don't send them again
+        if self._dim_updates_indicated is True:
+            return ()
+
+        self._dim_updates_indicated = True
         return [self._cube.dimension(k,copy=False)
             for k in ('beam_lw', 'beam_mh', 'beam_nud')]
 
