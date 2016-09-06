@@ -282,7 +282,7 @@ A = [
     # Point Source Definitions
     array_dict('point_lm', ('npsrc',2), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda s, a : (rf(c.shape, c.dtype)-0.5)*1e-1),
+        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1),
     array_dict('point_stokes', ('npsrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes),
@@ -319,7 +319,7 @@ A = [
         test    = test_sersic_shape),
 
     # Observation Data
-    
+
     # Visibility flagging array
     array_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
         default = lambda c: np.zeros(c.shape, c.dtype),
