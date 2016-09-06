@@ -122,7 +122,10 @@ def open_table(msname, subtable=None):
     return pt.table(subtable_name(msname, subtable),
         ack=False, readonly=False)
 
-def row_extents(cube):
+def row_extents(cube, dim_order=None):
+    if dim_order is None:
+        dim_order = MS_DIM_ORDER
+
     shape = cube.dim_global_size(*MS_DIM_ORDER)
     lower = cube.dim_lower_extent(*MS_DIM_ORDER)
     upper = tuple(u-1 for u in cube.dim_upper_extent(*MS_DIM_ORDER))
@@ -131,13 +134,7 @@ def row_extents(cube):
         np.ravel_multi_index(upper, shape) + 1)
 
 def uvw_row_extents(cube):
-    shape = cube.dim_global_size(*UVW_DIM_ORDER)
-    lower = cube.dim_lower_extent(*UVW_DIM_ORDER)
-    upper = tuple(u-1 for u in cube.dim_upper_extent(*UVW_DIM_ORDER))
-
-    return (np.ravel_multi_index(lower, shape),
-        np.ravel_multi_index(upper, shape) + 1)
-
+    return row_extents(cube, UVW_DIM_ORDER)
 
 class MeasurementSetManager(object):
     def __init__(self, msname, cube, slvr_cfg):
