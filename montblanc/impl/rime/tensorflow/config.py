@@ -63,16 +63,15 @@ def default_base_ant_pairs(ctx):
     """ Compute base antenna pairs """
     auto_correlations = ctx.cfg[Options.AUTO_CORRELATIONS]
 
-    # Auto-correlated
     if auto_correlations == True:
         k = 0
-    # No auto-correlations?
     elif auto_correlations == False:
         k = 1
     else:
         raise ValueError("Invalid value {ac}".format(ac=auto_correlations))
 
-    return np.triu_indices(ctx.dim_global_size('na'), k)
+    na = ctx.dim_global_size('na')
+    return (i.astype(ctx.dtype) for i in np.triu_indices(na, k))
 
 def default_antenna1(ctx):
     ant0, ant1 = default_base_ant_pairs(ctx)
