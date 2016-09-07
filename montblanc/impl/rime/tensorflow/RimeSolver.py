@@ -190,7 +190,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Create placholder variables for source counts
         self._src_ph_vars = AttrDict({
             n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
-            for n in mbu.source_nr_vars() })
+            for n in ['nsrc'] + mbu.source_nr_vars()})
 
         # Create placeholder variables for properties
         self._property_ph_vars = AttrDict({
@@ -534,6 +534,7 @@ class RimeSolver(MontblancTensorflowSolver):
             for a in q.fed_arrays }
 
         zero = tf.constant(0)
+        src_count = zero
 
         # Pull RIME inputs out of the feed queues
         frequency, ref_frequency = self._frequency_queue.dequeue()
@@ -548,6 +549,10 @@ class RimeSolver(MontblancTensorflowSolver):
         model_vis_shape = tf.shape(model_vis)
         ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
         FT, CT = uvw.dtype, model_vis.dtype
+
+        def apply_dies(src_count):
+            """ Have we reached the maximum source count """
+            return tf.greater_equal(src_count, self._src_ph_vars.nsrc)
 
         def antenna_jones(lm, stokes, alpha):
             """
@@ -565,65 +570,74 @@ class RimeSolver(MontblancTensorflowSolver):
             return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT)
 
         # While loop condition for each point source type
-        def point_cond(model_vis, npsrc):
+        def point_cond(model_vis, npsrc, src_count):
             return tf.less(npsrc, self._src_ph_vars.npsrc)
 
-        def gaussian_cond(model_vis, ngsrc):
+        def gaussian_cond(model_vis, ngsrc, src_count):
             return tf.less(ngsrc, self._src_ph_vars.ngsrc)
 
-        def sersic_cond(model_vis, nssrc):
+        def sersic_cond(model_vis, nssrc, src_count):
             return tf.less(nssrc, self._src_ph_vars.nssrc)
 
         # While loop bodies
-        def point_body(model_vis, npsrc):
+        def point_body(model_vis, npsrc, src_count):
             """ Accumulate visiblities for point source batch """
             lm, stokes, alpha = self._point_source_queue.dequeue()
             nsrc = tf.shape(lm)[0]
+            src_count += nsrc
+            npsrc +=  nsrc
             ant_jones = antenna_jones(lm, stokes, alpha)
             shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
             model_vis = rime.sum_coherencies(antenna1, antenna2,
-                shape, ant_jones, flag, gterm, model_vis, False)
+                shape, ant_jones, flag, gterm, model_vis,
+                apply_dies(src_count))
 
-            return model_vis, npsrc + nsrc
+            return model_vis, npsrc, src_count
 
-        def gaussian_body(model_vis, ngsrc):
+        def gaussian_body(model_vis, ngsrc, src_count):
             """ Accumulate visiblities for gaussian source batch """
             lm, stokes, alpha, gauss_params = self._gaussian_source_queue.dequeue()
             nsrc = tf.shape(lm)[0]
-            # Accumulate visiblities for this source batch
-
+            src_count += nsrc
+            ngsrc += nsrc
             ant_jones = antenna_jones(lm, stokes, alpha)
             gauss_shape = rime.gauss_shape(uvw, antenna1, antenna1,
                 frequency, gauss_params)
             model_vis = rime.sum_coherencies(antenna1, antenna2,
-                gauss_shape, ant_jones, flag, gterm, model_vis, False)
+                gauss_shape, ant_jones, flag, gterm, model_vis,
+                apply_dies(src_count))
 
-            return model_vis, ngsrc + nsrc
+            return model_vis, ngsrc, src_count
 
-        def sersic_body(model_vis, nssrc):
+        def sersic_body(model_vis, nssrc, src_count):
             """ Accumulate visiblities for sersic source batch """
             lm, stokes, alpha, sersic_params = self._sersic_source_queue.dequeue()
             nsrc = tf.shape(lm)[0]
-            # Accumulate visiblities for this source batch
+            src_count += nsrc
+            nssrc += nsrc
             ant_jones = antenna_jones(lm, stokes, alpha)
             sersic_shape = rime.sersic_shape(uvw, antenna1, antenna1,
                 frequency, sersic_params)
             model_vis = rime.sum_coherencies(antenna1, antenna2,
-                sersic_shape, ant_jones, flag, gterm, model_vis, False)
+                sersic_shape, ant_jones, flag, gterm, model_vis,
+                apply_dies(src_count))
 
-            return model_vis, nssrc + nsrc
+            return model_vis, nssrc, src_count
 
         # Evaluate point sources
-        model_vis, npsrc = tf.while_loop(point_cond, point_body,
-            [model_vis, zero])
+        model_vis, npsrc, src_count = tf.while_loop(
+            point_cond, point_body,
+            [model_vis, zero, src_count])
 
         # Evaluate gaussians
-        model_vis, ngsrc = tf.while_loop(gaussian_cond, gaussian_body,
-            [model_vis, zero])
+        model_vis, ngsrc, src_count = tf.while_loop(
+            gaussian_cond, gaussian_body,
+            [model_vis, zero, src_count])
 
         # Evaluate sersics
-        model_vis, nssrc = tf.while_loop(sersic_cond, sersic_body,
-            [model_vis, zero])
+        model_vis, nssrc, src_count = tf.while_loop(
+            sersic_cond, sersic_body,
+            [model_vis, zero, src_count])
 
         # Create enqueue operation
         enqueue_op = self._output_queue.queue.enqueue([descriptor, model_vis])
@@ -800,10 +814,11 @@ def _apply_source_provider_dim_updates(cube, source_providers):
     # list of (global_size, provider_name) tuples
     mapping = collections.defaultdict(list)
 
-    # Update the mapping
+    # Update the mapping, except for the nsrc dimension
     [mapping[d.name].append((d, prov.name()))
         for prov in source_providers
-        for d in prov.updated_dimensions()]
+        for d in prov.updated_dimensions()
+        if not d.name == 'nsrc' ]
 
     # Ensure that the global sizes we receive
     # for each dimension are unique. Tell the user
@@ -831,6 +846,17 @@ def _apply_source_provider_dim_updates(cube, source_providers):
         ls = gs if ls > gs else ls
         cube.update_dimension(n, local_size=ls, global_size=gs,
             lower_extent=0, upper_extent=ls)
+
+    # Handle total number of sources differently
+    # It's equal to the number of
+    # point's, gaussian's, sersic's combined
+    nsrc = sum(cube.dim_global_size(*mbu.source_nr_vars()))
+    ls = cube.dim_local_size('nsrc')
+    ls = nsrc if ls > nsrc else ls
+
+    cube.update_dimension('nsrc',
+        local_size=ls, global_size=nsrc,
+        lower_extent=0, upper_extent=ls)
 
     # Return our cube size
     return cube.bytes_required()
