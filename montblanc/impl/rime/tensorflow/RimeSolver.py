@@ -301,7 +301,7 @@ class RimeSolver(MontblancTensorflowSolver):
             array_schemas['descriptor'] = descriptor
             data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32, 'Internal')
 
-            def _get_data_source(data_source, context):
+            def _get_data(data_source, context):
                 # Invoke the data source
                 data = data_source.source(context)
 
@@ -331,10 +331,10 @@ class RimeSolver(MontblancTensorflowSolver):
                 for ph, a in zip(q.placeholders, q.fed_arrays)]
 
             # Create a feed dictionary by calling the data source functors
-            feed_dict = { ph: _get_data_source(ds,
-                    SourceContext(a, cube, self.config(), global_iter_args,
-                        cube.array(a) if a in cube.arrays() else {},
-                        ad.shape, ad.dtype))
+            feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
+                    self.config(), global_iter_args,
+                    cube.array(a) if a in cube.arrays() else {},
+                    ad.shape, ad.dtype))
                 for (a, ph, ds, ad) in gen }
 
             montblanc.log.debug("Enqueueing chunk {i} {d}".format(
@@ -362,8 +362,8 @@ class RimeSolver(MontblancTensorflowSolver):
                         for ph, a in zip(queue.placeholders, queue.fed_arrays)]
 
                     # Create a feed dictionary by calling the data source functors
-                    feed_dict = { ph: ds.source(SourceContext(a, cube, self.config(),
-                            global_iter_args + iter_args,
+                    feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
+                            self.config(), global_iter_args + iter_args,
                             cube.array(a) if a in cube.arrays() else {},
                             ad.shape, ad.dtype))
                         for (a, ph, ds, ad) in gen }
