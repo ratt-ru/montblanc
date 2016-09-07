@@ -436,9 +436,6 @@ class RimeSolver(MontblancTensorflowSolver):
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
 
-        # Array Schemas
-        array_schemas = cube.array
-
         # Get data sinks from supplied providers
         data_sinks = { n: DataSink(f, sink.name())
             for sink in sink_providers
