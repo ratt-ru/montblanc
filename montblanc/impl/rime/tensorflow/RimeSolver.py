@@ -151,10 +151,11 @@ class RimeSolver(MontblancTensorflowSolver):
         self._source_providers = []
 
         # Create and add the FITS Beam Data Source, if present
-        base_fits_name = slvr_cfg.get(Options.E_BEAM_BASE_FITS_NAME, '')
+        fits_filename_schema = slvr_cfg.get(Options.E_BEAM_FITS_FILENAMES, '')
 
-        if base_fits_name:
-            self._source_providers.append(FitsBeamSourceProvider(base_fits_name))
+        if fits_filename_schema:
+            self._source_providers.append(FitsBeamSourceProvider(
+                fits_filename_schema))
 
         # Create and add the MS Data Source
         if data_source == Options.DATA_SOURCE_MS:

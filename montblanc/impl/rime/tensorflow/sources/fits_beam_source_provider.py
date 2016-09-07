@@ -20,6 +20,9 @@
 
 import collections
 import functools
+import os
+import re
+import string
 import sys
 import types
 
@@ -31,6 +34,22 @@ from hypercube import HyperCube
 import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow.sources.source_provider import SourceProvider
+
+class FitsFilenameTemplate(string.Template):
+    """
+    Overrides the ${identifer} braced pattern in the string Template
+    with a $(identifier) braced pattern expected by FITS beam filename
+    schema
+    """
+    pattern = r"""
+    %(delim)s(?:
+      (?P<escaped>%(delim)s)   |   # Escape sequence of two delimiters
+      (?P<named>%(id)s)        |   # delimiter and a Python identifier
+      \((?P<braced>%(id)s)\)   |   # delimiter and a braced identifier
+      (?P<invalid>)                # Other ill-formed delimiter exprs
+    )
+    """ % { 'delim' : re.escape(string.Template.delimiter),
+        'id' : string.Template.idpattern }
 
 class FitsAxes(object):
     """
@@ -118,44 +137,50 @@ CORRELATIONS = ('xx', 'xy', 'yx', 'yy')
 REIM = ('re', 'im')
 BEAM_DIMS = ('L', 'M', 'FREQ')
 
-def _create_filenames(base_filename):
+def _create_filenames(filename_schema):
     """
-    Infer a dictionary of beam filename pairs,
+    Returns a dictionary of beam filename pairs,
     keyed on correlation,from the cartesian product
     of correlations and real, imaginary pairs
 
-    Given 'beam' as the base_filename, returns something like
+    Given 'beam_$(corr)_$(reim).fits' returns:
     {
       'xx' : ('beam_xx_re.fits', 'beam_xx_im.fits'),
       'xy' : ('beam_xy_re.fits', 'beam_xy_im.fits'),
       ...
       'yy' : ('beam_yy_re.fits', 'beam_yy_im.fits'),
     }
+
+    Given 'beam_$(CORR)_$(REIM).fits' returns:
+    {
+      'xx' : ('beam_XX_RE.fits', 'beam_XX_IM.fits'),
+      'xy' : ('beam_XY_RE.fits', 'beam_XY_IM.fits'),
+      ...
+      'yy' : ('beam_YY_RE.fits', 'beam_YY_IM.fits'),
+    }
+
     """
-    def _re_im_filenames(corr, base):
-        return tuple('{b}_{c}_{ri}.fits'.format(
-                b=base, c=corr, ri=ri)
-            for ri in REIM)
+    template = FitsFilenameTemplate(filename_schema)
+
+    def _re_im_filenames(corr, template):
+        return tuple(template.substitute(
+            corr=corr.lower(), CORR=corr.upper(),
+            reim=ri.lower(), REIM=ri.upper())
+                for ri in REIM)
 
     return collections.OrderedDict(
-        (c, _re_im_filenames(c, base_filename))
+        (c, _re_im_filenames(c, template))
         for c in CORRELATIONS)
 
-def _filename_schema(base_filename):
-    """
-    Given the base_filename, print out a string
-    illustrating the naming scheme for the FITS filenames
-    """
-    return '{b}_{{{c}}}_{{{ri}}}.fits'.format(
-        b=base_filename,
-        c='/'.join(CORRELATIONS),
-        ri='/'.join(REIM))
-
 def _open_fits_files(filenames):
-    open_kwargs = { 'mode' : 'update', 'memmap' : False }
+    kw = { 'mode' : 'update', 'memmap' : False }
+
+    def _fh(fn):
+        """ Returns a filehandle or None if file does not exist """
+        return fits.open(fn, **kw) if os.path.exists(fn)  else None
 
     return collections.OrderedDict(
-            (corr, tuple(fits.open(fn, **open_kwargs) for fn in files))
+            (corr, tuple(_fh(fn) for fn in files))
         for corr, files in filenames.iteritems() )
 
 def _cube_dim_indices(axes):
@@ -176,10 +201,22 @@ def _cube_extents(axes, l_ax, m_ax, f_ax):
 
 def _create_axes(file_dict):
     """ Create a FitsAxes object """
-    re0, im0 = file_dict.values()[0]
 
-    # Create a Cattery FITSAxes object
-    axes = FitsAxes(re0[0].header)
+    try:
+        # Loop through the file_dictionary, finding the
+        # first open FITS file.
+        f = iter(f for tup in file_dict.itervalues()
+        for f in tup if f is not None).next()
+    except StopIteration as e:
+        raise (ValueError("No FITS files were found "
+            "for filename schema '{s}'. "
+            "Filenames are '{f}'." .format(
+                s=self.filename_schema, f=file_dict.keys())),
+                    None, sys.exc_info()[2])
+
+
+    # Create a FitsAxes object
+    axes = FitsAxes(f[0].header)
 
     # Scale any axes in degrees to radians
     for i, u in enumerate(axes.cunit):
@@ -222,13 +259,37 @@ def cache_fits_read(method):
 
 
 class FitsBeamSourceProvider(SourceProvider):
-    """ Feeds holography cubes from FITS files """
-    def __init__(self, base_beam_filename):
-        self._base_beam_filename = base_beam_filename
-        self._filenames = _create_filenames(base_beam_filename)
+    """
+    Feeds holography cubes from a series of eight FITS files matching a
+    filename_schema. A schema of 'beam_$(corr)_$(reim).fits' produces:
+
+    ['beam_xx_re.fits', 'beam_xx_im.fits',
+     'beam_xy_re.fits', 'beam_xy_im.fits',
+      ...
+      'beam_yy_re.fits', 'beam_yy_im.fits']
+
+    while 'beam_$(CORR)_$(REIM).fits'
+
+    ['beam_XX_RE.fits', 'beam_XX_IM.fits',
+      'beam_XY_RE.fits', 'beam_XY_IM.fits',
+      ...
+      'beam_YY_RE.fits', 'beam_YY_IM.fits'\
+
+
+    Missing files will result in zero values for that correlation
+    and real/imaginary component. The shape of the FITS data will be
+    inferrred from the first file found and subsequent files should match
+    that shape.
+    """
+    def __init__(self, filename_schema):
+        """
+        """
+        self._filename_schema = filename_schema
+        self._filenames = _create_filenames(filename_schema)
         self._files = _open_fits_files(self._filenames)
         self._axes = _create_axes(self._files)
-        self._dim_indices = (l_ax, m_ax, f_ax) = _cube_dim_indices(self._axes)
+        self._dim_indices = (l_ax, m_ax, f_ax) = _cube_dim_indices(
+            self._axes)
         self._name = "FITS Beams '{s}'".format(s=self.filename_schema)
 
         # Complain if we can't find required axes
@@ -270,9 +331,12 @@ class FitsBeamSourceProvider(SourceProvider):
 
         ebeam = np.empty(context.shape, context.dtype)
 
+        # Iterate through the correlations,
+        # assigning real and imaginary data, if present,
+        # otherwise zeroing the correlation
         for i, (re, im) in enumerate(self._files.itervalues()):
-            ebeam[:,:,:,i].real[:] = re[0].data.T
-            ebeam[:,:,:,i].imag[:] = im[0].data.T
+            ebeam[:,:,:,i].real[:] = re[0].data.T if re is not None else 0
+            ebeam[:,:,:,i].imag[:] = im[0].data.T if im is not None else 0
 
         return ebeam
 
@@ -291,11 +355,7 @@ class FitsBeamSourceProvider(SourceProvider):
 
     @property
     def filename_schema(self):
-        return _filename_schema(self._base_beam_filename)
-
-    @property
-    def base_beam_filename(self):
-        return self._base_beam_filename
+        return self._filename_schema
 
     @property
     def shape(self):

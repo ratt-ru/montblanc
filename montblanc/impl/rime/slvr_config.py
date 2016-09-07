@@ -54,15 +54,17 @@ class RimeSolverConfig(SolverConfig):
         'Governs the level of discretisation of '
         'the nu (frequency) dimension.')
 
-    E_BEAM_BASE_FITS_NAME = 'beam_base_fits_name'
-    DEFAULT_E_BEAM_BASE_FITS_NAME = ''
-    E_BEAM_BASE_FITS_NAME_DESCRIPTION = (
-        "Base name of the FITS files describing the "
+    E_BEAM_FITS_FILENAMES = 'beam_fits_filenames'
+    DEFAULT_E_BEAM_FITS_FILENAMES = ''
+    E_BEAM_FITS_FILENAMES_DESCRIPTION = (
+        "Naming schema of the FITS files describing the "
         "holographic beam cube. To fully describe the "
         "cube, eight files are required, named according "
-        "to the '$(base_name)_$(xy)_$(reim).fits' convention, "
-        "where $(xy) and $(reim) are permuted by "
-        "[xx,xy,yx,yy] and [re,im] respectively.")
+        "to the '$(base_name)_$(corr)_$(reim).fits' convention, "
+        "where $(corr) and $(reim) are permuted by "
+        "[xx,xy,yx,yy] and [re,im] respectively. "
+        "Using uppercase $(CORR) and $(REIM) "
+        "in the schema will uppercase the substitutions.")
 
     # Should a weight vector (sigma) be used to
     # when calculating the chi-squared values?
@@ -210,9 +212,9 @@ class RimeSolverConfig(SolverConfig):
             SolverConfig.REQUIRED: True
         },
 
-        E_BEAM_BASE_FITS_NAME: {
-            SolverConfig.DESCRIPTION: E_BEAM_BASE_FITS_NAME_DESCRIPTION,
-            SolverConfig.DEFAULT: DEFAULT_E_BEAM_BASE_FITS_NAME,
+        E_BEAM_FITS_FILENAMES: {
+            SolverConfig.DESCRIPTION: E_BEAM_FITS_FILENAMES_DESCRIPTION,
+            SolverConfig.DEFAULT: DEFAULT_E_BEAM_FITS_FILENAMES,
             SolverConfig.REQUIRED: True
         },
     }
@@ -238,11 +240,11 @@ class RimeSolverConfig(SolverConfig):
             help=self.E_BEAM_DEPTH_DESCRIPTION,
             default=self.DEFAULT_E_BEAM_DEPTH)
 
-        p.add_argument('--{v}'.format(v=self.E_BEAM_BASE_FITS_NAME,
+        p.add_argument('--{v}'.format(v=self.E_BEAM_FITS_FILENAMES,
             required=False,
             type=str,
-            help=self.E_BEAM_BASE_FITS_NAME_DESCRIPTION,
-            default=self.DEFAULT_E_BEAM_BASE_FITS_NAME))
+            help=self.E_BEAM_FITS_FILENAMES_DESCRIPTION,
+            default=self.DEFAULT_E_BEAM_FITS_FILENAMES))
 
         p.add_argument('--{v}'.format(v=self.WEIGHT_VECTOR),
             required=False,
