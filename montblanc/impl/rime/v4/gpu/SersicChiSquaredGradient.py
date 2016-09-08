@@ -34,15 +34,15 @@ from montblanc.config import RimeSolverConfig as Options
 
 FLOAT_PARAMS = {
     'BLOCKDIMX': 4,    # Number of channels*4 polarisations
-    'BLOCKDIMY': 25,     # Number of baselines
-    'BLOCKDIMZ': 10,     # Number of timesteps
+    'BLOCKDIMY': 8,     # Number of baselines
+    'BLOCKDIMZ': 32,     # Number of timesteps
     'maxregs': 48       # Maximum number of registers
 }
 
 DOUBLE_PARAMS = {
     'BLOCKDIMX': 4,    # Number of channels*4 polarisations
-    'BLOCKDIMY': 25,     # Number of baselines
-    'BLOCKDIMZ': 10,     # Number of timesteps
+    'BLOCKDIMY': 8,     # Number of baselines
+    'BLOCKDIMZ': 32,     # Number of timesteps
     'maxregs': 63       # Maximum number of registers
 }
 
@@ -50,6 +50,7 @@ KERNEL_TEMPLATE = string.Template("""
 #include <stdint.h>
 #include <cstdio>
 #include \"math_constants.h\"
+//#include <cub/block/block_reduce.cuh>
 #include <montblanc/include/abstraction.cuh>
 #include <montblanc/include/jones.cuh>
 
@@ -143,6 +144,12 @@ void sersic_chi_squared_gradient_impl(
     if(TIME >= DEXT(ntime) || BL >= DEXT(nbl) || POLCHAN >= DEXT(npolchan))
         return;
 
+    // --- Specialize BlockReduce for type float. 
+    typedef cub::BlockReduce<T, BLOCKDIMX,cub::BLOCK_REDUCE_WARP_REDUCTIONS,BLOCKDIMY,BLOCKDIMZ> BlockReduceT; 
+
+    // --- Allocate temporary storage in shared memory 
+    __shared__ typename BlockReduceT::TempStorage temp_storage;
+
     __shared__ struct {
         typename SumCohTraits<T>::UVWType uvw[BLOCKDIMZ][BLOCKDIMY];
 
@@ -223,10 +230,7 @@ void sersic_chi_squared_gradient_impl(
             i += DEXT(nssrc);                    shared.e2 = sersic_shape[i];
             i += DEXT(nssrc);                    shared.sersic_scale = sersic_shape[i];
         }
-        if(threadIdx.x < 3 && threadIdx.y == 0 && threadIdx.z == 0)
-            shared.X2_grad_part[threadIdx.x] = 0.;
-
-        __syncthreads();
+         __syncthreads();
 
         // Create references to a
         // complicated part of shared memory
@@ -296,31 +300,20 @@ void sersic_chi_squared_gradient_impl(
         {
           dev_vis[p].x *= delta.x;
           dev_vis[p].y *= delta.y;
+            
+          dev_vis[p].x += dev_vis[p].y;
+          dev_vis[p].x *= 6;
 
-          typename Tr::ct other = cub::ShuffleIndex(dev_vis[p], cub::LaneId() + 2);
-          // Add polarisations 2 and 3 to 0 and 1
-          if((POLCHAN & 0x3) < 2)
-          {
-            dev_vis[p].x += other.x;
-            dev_vis[p].y += other.y;
-          }
-          other = cub::ShuffleIndex(dev_vis[p], cub::LaneId() + 1);
+          __syncthreads();
 
-          // If this is the polarisation 0, add polarisation 1
-          // and write out this chi squared grad term
-          if((POLCHAN & 0x3) == 0) 
-          {
-            dev_vis[p].x += other.x;
-            dev_vis[p].y += other.y;
-
-            //atomic addition to avoid concurrent access in the shared memory
-            dev_vis[p].x += dev_vis[p].y;
-            dev_vis[p].x *= 6;
-            atomicAdd(&(shared.X2_grad_part[p]), dev_vis[p].x);
-          }
+          // block reduction, result available only in the first thread
+          T aggregate = BlockReduceT(temp_storage).Sum(dev_vis[p].x);
+          
+          if(threadIdx.z == 0 and threadIdx.y == 0 && threadIdx.x == 0)
+                   shared.X2_grad_part[p] = aggregate;
         }
-        __syncthreads();
         
+        __syncthreads();
         //atomic addition to avoid concurrent access in the device memory (contribution for a single particle)
         // 3 different threads writes each a different component to avoid serialisation
         if (threadIdx.x < 3 && threadIdx.y == 0 && threadIdx.z == 0)
