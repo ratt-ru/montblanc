@@ -1049,22 +1049,17 @@ class CompositeRimeSolver(MontblancNumpySolver):
         pool_refs['X2_gpu'].append(X2_gpu_ary)
         pool_refs['X2_cpu'].append(sub_X2)
         pool_refs['model_vis_output'].append(model_vis)
-
-        data = { 'sync_event' : sync_event,
-            'sub_X2' : sub_X2,
-            'model_vis' : model_vis,
-            'pool_refs' : pool_refs,
-            'pool_lock' : subslvr.pool_lock,
-            'cpu' : cpu_slice_map.copy(),
-            'gpu' : gpu_slice_map.copy(),
-        }
-
-        # Add X2 gradient data
         if self.enable_sersic_grad:
-            data['sub_X2_grad'] = sub_X2_grad
-            data['pool_refs']['X2_grad'].append(sub_X2_grad)
-
-        return data
+            pool_refs['X2_grad'].append(sub_X2_grad)
+            return (sync_event, sub_X2, model_vis, sub_X2_grad,
+                pool_refs, subslvr.pool_lock,
+                cpu_slice_map.copy(),
+                gpu_slice_map.copy())
+        else:
+            return (sync_event, sub_X2, model_vis,
+                pool_refs, subslvr.pool_lock,
+                cpu_slice_map.copy(),
+                gpu_slice_map.copy())
 
     def initialise(self):
         """ Initialise the sub-solver """
@@ -1117,10 +1112,12 @@ class CompositeRimeSolver(MontblancNumpySolver):
             Return a copy of the pinned chi-squared, pinned model visibilities
             and index into the CPU array after synchronizing on the cuda_event
             """
-            data = future.result()
-
-            cuda_event, pool_refs, pool_lock, cpu, gpu = (data[k] for k in
-                ('sync_event', 'pool_refs', 'pool_lock', 'cpu', 'gpu'))
+            if self.enable_sersic_grad:
+                cuda_event, pinned_X2, pinned_model_vis, pinned_X2_grad,\
+                    pool_refs, pool_lock, cpu, gpu = future.result()
+            else:
+                cuda_event, pinned_X2, pinned_model_vis, \
+                    pool_refs, pool_lock, cpu, gpu = future.result()
 
             try:
                 cuda_event.synchronize()
@@ -1145,18 +1142,17 @@ class CompositeRimeSolver(MontblancNumpySolver):
             model_vis_shape = tuple(cpu[s].stop - cpu[s].start
                 if s in cpu else s for s in model_vis_sshape)
 
-            result = {
-                'X2' : data['sub_X2'].copy(),
-                'model_vis' : data['model_vis'].copy().reshape(model_vis_shape),
-                'model_vis_idx' : model_vis_idx,
-            }
-
+            X2 = pinned_X2.copy()
+            model_vis = pinned_model_vis.copy().reshape(model_vis_shape)
             if self.enable_sersic_grad:
-                result['X2_grad'] = data['sub_X2_grad'].copy()
+                X2_grad = pinned_X2_grad.copy()
 
             _free_pool_allocs(pool_refs, pool_lock)
 
-            return result
+            if self.enable_sersic_grad:
+                return X2, model_vis, model_vis_idx, X2_grad
+            else:
+                return X2, model_vis, model_vis_idx
 
         # For easier typing
         C = CompositeRimeSolver
@@ -1248,18 +1244,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
                             s.discard(f)
 
                         # Get chi-squared and model visibilities (and X2 gradient)
-                        result = f.result()
-                        # Sum X2
-                        X2_sum += result['X2']
-
                         if self.enable_sersic_grad:
-                            X2_sum += result['X2_grad']
-
-                        model_vis_idx = result['model_vis_idx']
-                        pinned_model_vis = result['model_vis']
+                            X2, pinned_model_vis, model_vis_idx, pinned_X2_grad = f.result()
+                            X2_grad += pinned_X2_grad
+                        else:
+                            X2, pinned_model_vis, model_vis_idx = f.result()
+                        # Sum X2
+                        X2_sum += X2
                         # Write model visibilities to the numpy array
-                        vis_write(self.model_vis[model_vis_idx],
-                            pinned_model_vis[:])
+                        vis_write(self.model_vis[model_vis_idx], pinned_model_vis[:])
 
                         # Break out if we've removed the prescribed
                         # number of futures
@@ -1274,18 +1267,15 @@ class CompositeRimeSolver(MontblancNumpySolver):
         # Sum remaining chi-squared
         for f in done:
             # Get chi-squared and model visibilities (and X2 gradient)
-            result = f.result()
-            # Sum X2
-            X2_sum += result['X2']
-
             if self.enable_sersic_grad:
-                X2_sum += result['X2_grad']
-
-            model_vis_idx = result['model_vis_idx']
-            pinned_model_vis = result['model_vis']
+                X2, pinned_model_vis, model_vis_idx, pinned_X2_grad = f.result()
+                X2_grad += pinned_X2_grad
+            else:
+                X2, pinned_model_vis, model_vis_idx = f.result()
+            # Sum X2
+            X2_sum += X2
             # Write model visibilities to the numpy array
-            vis_write(self.model_vis[model_vis_idx],
-                pinned_model_vis[:])
+            vis_write(self.model_vis[model_vis_idx], pinned_model_vis[:])
 
         # Set the chi-squared value possibly
         # taking the weight vector into account
