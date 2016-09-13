@@ -647,10 +647,13 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def solve(self, *args, **kwargs):
         #  Obtain source and sink providers, including internal providers
-        source_providers = (kwargs.get('source_providers', []) +
-            self._source_providers)
-        sink_providers = (kwargs.get('sink_providers', []) +
-            self._sink_providers)
+        source_providers = (self._source_providers +
+            kwargs.get('source_providers', []))
+        sink_providers = (self._sink_providers +
+            kwargs.get('sink_providers', []))
+
+        print 'Source Providers', source_providers
+        print 'Sink Providers', sink_providers
 
         # Apply any dimension updates from the source provider
         # to the hypercube
