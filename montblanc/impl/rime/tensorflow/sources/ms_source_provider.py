@@ -221,3 +221,6 @@ class MSSourceProvider(SourceProvider):
 
     def __exit__(self, etype, evalue, etraceback):
         self.close()
+
+    def __str__(self):
+        return self.__class__.__name__

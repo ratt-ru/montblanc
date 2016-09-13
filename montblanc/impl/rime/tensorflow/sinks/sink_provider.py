@@ -73,3 +73,6 @@ class SinkProvider(AbstractSinkProvider):
             if inspect.getargspec(m)[0] == self.SINK_ARGSPEC
         }
 
+    def __str__(self):
+        return self.name()
+

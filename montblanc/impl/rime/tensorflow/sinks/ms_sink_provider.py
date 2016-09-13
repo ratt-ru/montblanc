@@ -52,4 +52,6 @@ class MSSinkProvider(SinkProvider):
             startrow=lrow, nrow=urow-lrow)
 
 
+    def __str__(self):
+        return self.__class__.__name__
 

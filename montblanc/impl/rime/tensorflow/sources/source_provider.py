@@ -89,3 +89,6 @@ class SourceProvider(AbstractSourceProvider):
         """ Return an iterable/mapping of hypercube arrays to update """
         return ()
 
+    def __str__(self):
+        return self.name()
+

@@ -379,3 +379,6 @@ class FitsBeamSourceProvider(SourceProvider):
 
     def __exit__(self, etype, evalue, etrace):
         self.close()
+
+    def __str__(self):
+        return self.__class__.__name__
