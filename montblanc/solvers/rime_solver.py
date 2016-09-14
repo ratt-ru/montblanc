@@ -31,6 +31,7 @@ from hypercube import HyperCube
 from montblanc.config import RimeSolverConfig as Options
 
 import montblanc.util as mbu
+import montblanc.src_types as mbs
 
 class RIMESolver(HyperCube):
     def __init__(self, *args, **kwargs):
@@ -99,7 +100,7 @@ class RIMESolver(HyperCube):
         return np.triu_indices(na, k)
 
     def register_default_dimensions(self):
-        """ Register the default dimensions for a RIME solver """ 
+        """ Register the default dimensions for a RIME solver """
 
         # Pull out the configuration options for the basics
         autocor = self._slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
@@ -124,7 +125,7 @@ class RIMESolver(HyperCube):
         # Now get the size of the registered dimensions
         ntime, na, nchan, npol = self.dim_local_size(
             'ntime', 'na', 'nchan', 'npol')
-        
+
         # Infer number of baselines from number of antenna,
         # use this as the default value if not specific
         # baseline numbers were provided
@@ -153,12 +154,10 @@ class RIMESolver(HyperCube):
             description=Options.NSRC_DESCRIPTION)
 
         # Register the individual source types
-        for src_type, (nr_var, nr_of_src) in zip(
-            src_cfg.iterkeys(), src_nr_vars.iteritems()):
-
-            self.register_dimension(nr_var, nr_of_src, 
-                description='{t} sources'.format(t=src_type),
-                zero_valid=True)   
+        for nr_var, nr_of_src in src_nr_vars.iteritems():
+            self.register_dimension(nr_var, nr_of_src,
+                description='{t} sources'.format(t=mbs.SOURCE_DIM_TYPES[nr_var]),
+                zero_valid=True)
 
     def type_dict(self):
         """ Returns a dictionary mapping strings to concrete types """
@@ -247,7 +246,7 @@ class RIMESolver(HyperCube):
 
     def create_arrays(self, ignore=None, supplied=None):
         """
-        Create any necessary arrays on the solver. 
+        Create any necessary arrays on the solver.
 
         Arguments
         ---------
@@ -305,7 +304,7 @@ class RIMESolver(HyperCube):
                     'for setting the value on array %s is incorrect. '
                     'The function signature has the form f(slvr, ary), '
                     'where f is some function that will set values '
-                    'on the array, slvr is a Solver object which provides ' 
+                    'on the array, slvr is a Solver object which provides '
                     'useful information to the function, '
                     'and ary is the NumPy array which must be '
                     'initialised with values.') % (name))
@@ -322,7 +321,7 @@ class RIMESolver(HyperCube):
                     'for setting the value on array %s is incorrect. '
                     'The function signature has the form lambda slvr, ary:, '
                     'where lambda provides functionality for setting values '
-                    'on the array, slvr is a Solver object which provides ' 
+                    'on the array, slvr is a Solver object which provides '
                     'useful information to the function, '
                     'and ary is the NumPy array which must be '
                     'initialised with values.') % (name))
