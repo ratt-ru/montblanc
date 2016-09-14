@@ -64,7 +64,7 @@ def cache_ms_read(method):
     return memoizer
 
 class MSSourceProvider(SourceProvider):
-    def __init__(self, manager):
+    def __init__(self, manager, vis_column=None):
         # Cache columns on the object
         # Handle these columns slightly differently
         # They're used to compute the parallactic angle
@@ -72,6 +72,8 @@ class MSSourceProvider(SourceProvider):
 
         self._manager = manager
         self._name = "Measurement Set '{ms}'".format(ms=manager.msname)
+
+        self._vis_column = 'DATA' if vis_column is None else vis_column
 
         # Cache antenna positions
         self._antenna_positions = manager.antenna_table.getcol(MS.POSITION)
@@ -183,10 +185,9 @@ class MSSourceProvider(SourceProvider):
     @cache_ms_read
     def observed_vis(self, context):
         lrow, urow = MS.row_extents(context)
-        column = context.cfg[Options.MS_VIS_INPUT_COLUMN]
 
         data = self._manager.ordered_main_table.getcol(
-            column, startrow=lrow, nrow=urow-lrow)
+            self._vis_column, startrow=lrow, nrow=urow-lrow)
 
         return data.reshape(context.shape).astype(context.dtype)
 

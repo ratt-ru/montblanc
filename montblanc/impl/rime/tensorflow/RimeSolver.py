@@ -160,8 +160,12 @@ class RimeSolver(MontblancTensorflowSolver):
         # Create and add the MS Data Source
         if data_source == Options.DATA_SOURCE_MS:
             msfile = slvr_cfg.get(Options.MS_FILE)
-            self._ms_manager = mgr = MeasurementSetManager(msfile, self, slvr_cfg)
-            self._source_providers.append(MSSourceProvider(mgr))
+
+            self._ms_manager = mgr = MeasurementSetManager(msfile,
+                self, slvr_cfg)
+
+            self._source_providers.append(MSSourceProvider(mgr,
+                slvr_cfg[Options.MS_VIS_INPUT_COLUMN]))
 
         #==================
         # Data Sinks
@@ -174,7 +178,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # We have an MS so add a MS data sink
         if self._ms_manager is not None:
-            self._sink_providers.append(MSSinkProvider(self._ms_manager))
+            self._sink_providers.append(MSSinkProvider(
+                self._ms_manager,
+                slvr_cfg[Options.MS_VIS_OUTPUT_COLUMN]))
 
         #==================
         # Memory Budgeting

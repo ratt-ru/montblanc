@@ -27,30 +27,45 @@ from montblanc.impl.rime.tensorflow.sinks.sink_provider import SinkProvider
 import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 
 class MSSinkProvider(SinkProvider):
-    def __init__(self, manager):
+    def __init__(self, manager, vis_column=None):
         self._manager = manager
         self._name = "Measurement Set '{ms}'".format(ms=manager.msname)
+        self._vis_column = ('CORRECTED_DATA' if vis_column is None else vis_column)
 
     def name(self):
         return self._name
 
     def model_vis(self, context):
-        lrow, urow = MS.row_extents(context)
+        column = self._vis_column
 
-        column = context.cfg[Options.MS_VIS_OUTPUT_COLUMN]
-
+        # Do we have a column descriptor for the supplied column?
         try:
             coldesc = self._manager.column_descriptors[column]
         except KeyError as e:
-            raise (ValueError("No column descriptor for '{c}'".format(c=column)),
-                None, sys.exc_info()[2])
+            coldesec = None
 
-        msshape = [-1] + coldesc['shape'].tolist()
+        # Try to get the shape from the descriptor
+        if coldesc is not None:
+            try:
+                msshape = [-1] + coldesc['shape'].tolist()
+            except KeyError as e:
+                msshape = None
+
+        # Otherwise guess it and warn
+        if msshape is None:
+            guessed_shape = [self._manager._cube.dim_local_size('nchan'), 4]
+
+            montblanc.log.warn("Could not obtain 'shape' from the '{c}' "
+                "column descriptor. Guessing it is '{gs}'.".format(
+                    c=column, gs=guessed_shape))
+
+            msshape = [-1] + guessed_shape
+
+        lrow, urow = MS.row_extents(context)
 
         self._manager.ordered_main_table.putcol(column,
             context.data.reshape(msshape),
             startrow=lrow, nrow=urow-lrow)
-
 
     def __str__(self):
         return self.__class__.__name__
