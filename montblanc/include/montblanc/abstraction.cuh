@@ -156,6 +156,10 @@ public:
     __device__ __forceinline__ static
     Tr::FT rsqrt(const Tr::FT & value)
         { return ::rsqrtf(value); }
+
+    __device__ __forceinline__ static
+    Tr::FT copysign(const Tr::FT & magnitude, const Tr::FT & sign)
+        { return ::copysignf(magnitude, sign); }
 };
 
 template <>
@@ -170,7 +174,7 @@ public:
     typedef double2 lm_type;
     typedef double3 uvw_type;
     typedef double frequency_type;
-    typedef double2 complex_phase_type;    
+    typedef double2 complex_phase_type;
 
     typedef double stokes_type;
     typedef double alpha_type;
@@ -278,7 +282,11 @@ public:
 
     __device__ __forceinline__ static
     Tr::FT rsqrt(const Tr::FT & value)
-        { return ::rsqrt(value); }        
+        { return ::rsqrt(value); }
+
+    __device__ __forceinline__ static
+    Tr::FT copysign(const Tr::FT & magnitude, const Tr::FT & sign)
+        { return ::copysign(magnitude, sign); }
 };
 
 dim3 shrink_small_dims(dim3 && block, int X, int Y, int Z);
