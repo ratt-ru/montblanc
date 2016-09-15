@@ -13,7 +13,7 @@ namespace montblanc {
 namespace bsqrt {
 
 // For simpler partial specialisation
-typedef Eigen::ThreadPoolDevice CPUDevice;    
+typedef Eigen::ThreadPoolDevice CPUDevice;
 
 template <typename FT, typename CT>
 class BSqrt<CPUDevice, FT, CT> : public tensorflow::OpKernel
@@ -74,6 +74,9 @@ public:
         enum { iI, iQ, iU, iV };
         enum { XX, XY, YX, YY };
 
+        constexpr FT two = 2.0;
+        constexpr FT half = 0.5;
+
         for(int src=0; src < nsrc; ++src)
         {
             for(int time=0; time < ntime; ++time)
@@ -88,22 +91,27 @@ public:
                 // trace = I+Q + I-Q = 2I
                 // det = (I+Q)*(I-Q) - (U+iV)*(U-iV) = I**2-Q**2-U**2-V**2
                 // so we have real values in all cases
-                FT trace = 2.0*I;
-                FT det = I*I - Q*Q - U*U - V*V;
+                CT trace = CT(two*I, 0.0);
+                CT det = CT(I*I - Q*Q - U*U - V*V, 0.0);
 
-                // Compute s and t, used to find matrix roots
-                FT s = std::sqrt(det);
-                FT t = std::sqrt(trace + 2.0*s);
+                // Complex square root of the determinant
+                CT s = std::sqrt(det);
+                CT t = std::sqrt(trace + two*s);
 
-                // Set t to 1.0 to avoid nans/infs in the output
-                // t == 0.0 (and s == 0.0) imply a zero matrix
-                // in any case
-                if(t == 0.0)
-                    { t = 1.0; }
+                // Precompute matrix terms
+                CT B0 = CT(I + Q, 0.0) + s;
+                CT B1 = CT(U    ,  V );
+                CT B2 = CT(U    ,  -V);
+                CT B3 = CT(I - Q, 0.0) + s;
 
-                // Create common sub-expressions
-                FT Is_add_Q = I + s + Q;
-                FT Is_sub_Q = I + s - Q;
+                // Complex division
+                if(std::norm(t) > 0.0)
+                {
+                    B0 /= t;
+                    B1 /= t;
+                    B2 /= t;
+                    B3 /= t;
+                }
 
                 for(int chan=0; chan < nchan; ++chan)
                 {
@@ -112,16 +120,14 @@ public:
                         frequency(chan)/ref_freq(chan),
                         alpha(src, time));
 
-                    // Create some common sub-expressions here
-                    FT pst = std::sqrt(power)/t;
-                    FT Utmp = U*pst;
-                    FT Vtmp = V*pst;
+                    // Square root of spectral index
+                    FT psqrt = std::sqrt(power);
 
                     // Assign square root of the brightness matrix
-                    b_sqrt(src, time, chan, XX) = CT(pst*Is_add_Q, 0    );
-                    b_sqrt(src, time, chan, XY) = CT(Utmp        , Vtmp );
-                    b_sqrt(src, time, chan, YX) = CT(Utmp        , -Vtmp);
-                    b_sqrt(src, time, chan, YY) = CT(pst*Is_sub_Q, 0    );
+                    b_sqrt(src, time, chan, XX) = B0*psqrt;
+                    b_sqrt(src, time, chan, XY) = B1*psqrt;
+                    b_sqrt(src, time, chan, YX) = B2*psqrt;
+                    b_sqrt(src, time, chan, YY) = B3*psqrt;
                 }
             }
         }

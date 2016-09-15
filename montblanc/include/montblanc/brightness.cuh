@@ -116,6 +116,9 @@ void create_brightness_sqrt(
     typename Tr::CT & brightness,
     const typename Tr::FT & pol)
 {
+    constexpr typename Tr::FT two = 2.0;
+    constexpr typename Tr::FT half = 0.5;
+
     // Create the brightness matrix
     create_brightness<T>(brightness, pol);
 
@@ -124,7 +127,7 @@ void create_brightness_sqrt(
 
     // det = I^2 - Q^2 - U^2 - V^2
     typename Tr::FT I = cub::ShuffleIndex(pol, shfl_idx);
-    typename Tr::FT trace = 2*I;
+    typename Tr::FT trace = two*I;
     typename Tr::FT det = I*I;
 
     typename Tr::FT Q = cub::ShuffleIndex(pol, ++shfl_idx);
@@ -136,32 +139,37 @@ void create_brightness_sqrt(
     typename Tr::FT V = cub::ShuffleIndex(pol, ++shfl_idx);
     det -= V*V;
 
-    // Assumption here is that the determinant
-    // of the brightness matrix is positive
-    // I^2 - Q^2 - U^2 - V^2 > 0
-    typename Tr::FT s = Po::sqrt(det);
+    // Square root of the determinant
+    typename Tr::FT r = std::abs(det);
+    typename Tr::CT s = Po::make_ct(
+        Po::sqrt((r + det)*half),
+        Po::sqrt((r - det)*half));
 
     // This gives us 2 0 0 2 2 0 0 2 2 0 0 2
     bool is_diag = ((int(cub::LaneId()) - 1) & 0x2) != 0;
     // Only add s if we're in a lane corresponding to
     // a diagonal matrix entry.
     if(is_diag)
-        { brightness.x += s; }
+    {
+        brightness.x += s.x;
+        brightness.y += s.y;
+    }
 
-    // Assumption here, trace and 2*s are positive
-    // real numbers. 2*s is positive from the
-    // assumption of a positive determinant.
-    // trace = 2*I > 0 follows from I being positive
-    // and real. (although apparently negative I's
-    // are positive: see Sunyaev-Zel'dovich effect).
-    typename Tr::FT t = Po::sqrt(trace + 2*s);
+    s.x *= two; s.y *= two;
+    s.x += trace;
+    // Square root of 2*s + trace
+    r = Po::abs(s);
+    typename Tr::CT t = Po::make_ct(
+        Po::sqrt((r + s.x)*half),
+        Po::copysign(Po::sqrt((r - s.x)*half), s.y));
 
-    // If both s and t are 0, this matrix does
-    // not have a square root. But then
-    // I,Q,U and V must all be zero. Set
-    if(t != T(0.0)) {
-        brightness.x /= t;
-        brightness.y /= t;
+    // Prevent nans.
+    typename Tr::FT square = t.x*t.x + t.y*t.y;
+
+    if(square > 0.0) {
+        typename Tr::CT b = brightness;
+        brightness.x = (b.x*t.x + b.y*t.y)/r;
+        brightness.y = (b.y*t.x - b.x*t.y)/r;
     }
 }
 

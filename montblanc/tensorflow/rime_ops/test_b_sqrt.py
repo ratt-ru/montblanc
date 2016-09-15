@@ -115,7 +115,7 @@ def b_sqrt(stokes, alpha, frequency, ref_freq):
     XY = tf.complex(power_sqrt*U/t      , power_sqrt*V/t   )
     YX = tf.complex(power_sqrt*U/t      , power_sqrt*(-V)/t)
     YY = tf.complex(power_sqrt*(I-Q+s)/t, dtype(0.0)       )
-    
+
     B_sqrt = tf.concat(3, [XX, XY, YX, YY])
 
     return B, B_sqrt
@@ -181,7 +181,7 @@ with tf.Session() as S:
     assert tf_b_sqrt_op_cpu.shape == (nsrc, ntime, nchan, 4)
     assert np_b_sqrt.shape == (nsrc, ntime, nchan, 4)
     assert np.allclose(tf_b_sqrt_op_cpu, np_b_sqrt)
-    assert np.allclose(tf_b_sqrt_op_gpu, np_b_sqrt, rtol=1e-3)
+    assert np.allclose(tf_b_sqrt_op_gpu, np_b_sqrt)
     assert np.allclose(tf_b_expr_cpu, np_b)
     assert np.allclose(tf_b_sqrt_expr_cpu, np_b_sqrt)
 
@@ -194,7 +194,7 @@ with tf.Session() as S:
     assert np.allclose(np_b_flat,
         np.einsum("...ij,...kj->...ik",
             np_b_sqrt_flat, np_b_sqrt_flat.conj()))
-    
+
     # Check that multiplying the square root matrix
     # by itself yields the original
     assert np.allclose(np_b_flat,

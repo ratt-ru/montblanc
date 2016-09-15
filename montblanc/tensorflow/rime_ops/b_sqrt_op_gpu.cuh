@@ -32,7 +32,7 @@ public:
         return montblanc::shrink_small_dims(
             dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
             X, Y, Z);
-    }        
+    }
 };
 
 // Specialise for double
@@ -48,11 +48,11 @@ public:
         return montblanc::shrink_small_dims(
             dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
             X, Y, Z);
-    }        
+    }
 };
 
 // For simpler partial specialisation
-typedef Eigen::GpuDevice GPUDevice;    
+typedef Eigen::GpuDevice GPUDevice;
 
 constexpr int BSQRT_NPOL = 4;
 
