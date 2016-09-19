@@ -53,7 +53,7 @@ from montblanc.config import RimeSolverConfig as Options
 ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 
 rime_lib_path = os.path.join(montblanc.get_montblanc_path(),
-    'tensorflow', 'rime_ops', 'rime.so')
+    'impl', 'rime', 'tensorflow', 'rime_ops', 'rime.so')
 rime = tf.load_op_library(rime_lib_path)
 
 DataSource = collections.namedtuple("DataSource", ['source', 'dtype', 'name'])
