@@ -34,7 +34,7 @@ from montblanc.config import RimeSolverConfig as Options
 
 FLOAT_PARAMS = {
     'BLOCKDIMX': 4,    # Number of channels*4 polarisations
-    'BLOCKDIMY': 8,     # Number of baselines
+    'BLOCKDIMY': 8,      # Number of baselines
     'BLOCKDIMZ': 32,     # Number of timesteps
     'maxregs': 48       # Maximum number of registers
 }
@@ -86,7 +86,7 @@ __constant__ rime_const_data C;
 #define LEXT(name) C.name.lower_extent
 #define UEXT(name) C.name.upper_extent
 #define DEXT(name) (C.name.upper_extent - C.name.lower_extent)
-
+ 
 #define NA (C.na.local_size)
 #define NBL (C.nbl.local_size)
 #define NCHAN (C.nchan.local_size)
@@ -140,10 +140,7 @@ void sersic_chi_squared_gradient_impl(
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
-
-    if(TIME >= DEXT(ntime) || BL >= DEXT(nbl) || POLCHAN >= DEXT(npolchan))
-        return;
-
+ 
     // --- Specialize BlockReduce for type float. 
     typedef cub::BlockReduce<T, BLOCKDIMX,cub::BLOCK_REDUCE_WARP_REDUCTIONS,BLOCKDIMY,BLOCKDIMZ> BlockReduceT; 
 
@@ -163,22 +160,28 @@ void sersic_chi_squared_gradient_impl(
 
     } shared;
 
+    int i, ANT1, ANT2;
     typename Tr::ct dev_vis[3];
+    dev_vis[0].x = 0.; dev_vis[1].x = 0; dev_vis[2].x = 0;
+    dev_vis[0].y = 0.; dev_vis[1].y = 0; dev_vis[2].y = 0;
+    typename Tr::ct delta;
+    delta.x = 0.; delta.y = 0.;
 
-    T & U = shared.uvw[threadIdx.z][threadIdx.y].x; 
-    T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
-    T & W = shared.uvw[threadIdx.z][threadIdx.y].z; 
-
-    int i;
-
-    // Figure out the antenna pairs
-    i = TIME*NBL + BL;   
-    int ANT1 = antenna1[i];
-    int ANT2 = antenna2[i];
-
-    // UVW coordinates vary by baseline and time, but not polarised channel
-    if(threadIdx.x == 0)
+    if (TIME < DEXT(ntime) && BL < DEXT(nbl) && POLCHAN < DEXT(npolchan))
     {
+
+      T & U = shared.uvw[threadIdx.z][threadIdx.y].x; 
+      T & V = shared.uvw[threadIdx.z][threadIdx.y].y; 
+      T & W = shared.uvw[threadIdx.z][threadIdx.y].z; 
+    
+      // Figure out the antenna pairs
+      i = TIME*NBL + BL;   
+      ANT1 = antenna1[i];
+      ANT2 = antenna2[i];
+  
+      // UVW coordinates vary by baseline and time, but not polarised channel
+      if(threadIdx.x == 0)
+      {
         // UVW, calculated from u_pq = u_p - u_q
         i = TIME*NA + ANT1;
         shared.uvw[threadIdx.z][threadIdx.y] = uvw[i];
@@ -188,49 +191,53 @@ void sersic_chi_squared_gradient_impl(
         U -= ant2_uvw.x;
         V -= ant2_uvw.y;
         W -= ant2_uvw.z;
-    }
+      }
 
-    // Wavelength varies by channel, but not baseline and time
-    // TODO uses 4 times the actually required space, since
-    // we don't need to store a frequency per polarisation
-    if(threadIdx.y == 0 && threadIdx.z == 0)
+      // Wavelength varies by channel, but not baseline and time
+      // TODO uses 4 times the actually required space, since
+      // we don't need to store a frequency per polarisation
+      if(threadIdx.y == 0 && threadIdx.z == 0)
         { shared.freq[threadIdx.x] = frequency[POLCHAN >> 2]; }
 
-    i = (TIME*NBL +BL)* NPOLCHAN + POLCHAN;
-    typename Tr::ct delta = observed_vis[i];
-    delta.x -= visibilities[i].x;
-    delta.y -= visibilities[i].y;
+      i = (TIME*NBL +BL)* NPOLCHAN + POLCHAN;
+      delta = observed_vis[i];
+      delta.x -= visibilities[i].x;
+      delta.y -= visibilities[i].y;
 
-    // Zero the polarisation if it is flagged
-    if(flag[i] > 0)
-    {
+      // Zero the polarisation if it is flagged
+      if(flag[i] > 0)
+      {
         delta.x = 0; delta.y = 0;
-    }
+      }
 
-    // Apply any necessary weighting factors
-    if(apply_weights)
-    {
+      // Apply any necessary weighting factors
+      if(apply_weights)
+      {
         T w = weight_vector[i];
         delta.x *= w;
         delta.y *= w;
+      }
     }
-
     int SRC_START = DEXT(npsrc) + DEXT(ngsrc);
     int SRC_STOP = SRC_START + DEXT(nssrc);
 
     // Loop over Sersic Sources
     for(int SRC = SRC_START; SRC < SRC_STOP; ++SRC)
     {
-        // sersic shape only varies by source. Shape parameters
-        // thus apply to the entire block and we can load them with
-        // only the first thread.
-        if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
-        {
-            i = SRC - SRC_START;                 shared.e1 = sersic_shape[i];
-            i += DEXT(nssrc);                    shared.e2 = sersic_shape[i];
-            i += DEXT(nssrc);                    shared.sersic_scale = sersic_shape[i];
-        }
-         __syncthreads();
+
+      // sersic shape only varies by source. Shape parameters
+      // thus apply to the entire block and we can load them with
+      // only the first thread.
+      if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+      {
+          i = SRC - SRC_START;                 shared.e1 = sersic_shape[i];
+          i += DEXT(nssrc);                    shared.e2 = sersic_shape[i];
+          i += DEXT(nssrc);                    shared.sersic_scale = sersic_shape[i];
+      }
+      __syncthreads();
+
+      if (TIME < DEXT(ntime) && BL < DEXT(nbl) && POLCHAN < DEXT(npolchan))
+      {
 
         // Create references to a
         // complicated part of shared memory
@@ -279,7 +286,7 @@ void sersic_chi_squared_gradient_impl(
         dev_vis[1].y = ant_one.y*dev_e2;
         dev_vis[2].x = ant_one.x*dev_scale;
         dev_vis[2].y = ant_one.y*dev_scale;
-   /*
+   
         for (int p = 0; p < 3; p++)
         {
           // Multiply the visibility derivative by antenna 1's g term
@@ -293,35 +300,36 @@ void sersic_chi_squared_gradient_impl(
           montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, ant2_g_term);    
           dev_vis[p] = ant1_g_term;
         }
-   
-    */
-        // Write partial derivative with respect to sersic parameters
-        for (int p=0; p<3; p++)
-        {
-          dev_vis[p].x *= delta.x;
-          dev_vis[p].y *= delta.y;
+ 
+      }   
+      // Write partial derivative with respect to sersic parameters
+      for (int p=0; p<3; p++)
+      {
+        dev_vis[p].x *= delta.x;
+        dev_vis[p].y *= delta.y;
             
-          dev_vis[p].x += dev_vis[p].y;
-          dev_vis[p].x *= 6;
-
-          __syncthreads();
-
-          // block reduction, result available only in the first thread
-          T aggregate = BlockReduceT(temp_storage).Sum(dev_vis[p].x);
-          
-          if(threadIdx.z == 0 and threadIdx.y == 0 && threadIdx.x == 0)
-                   shared.X2_grad_part[p] = aggregate;
-        }
-        
+        dev_vis[p].x += dev_vis[p].y;
+        dev_vis[p].x *= 6;
+         
         __syncthreads();
-        //atomic addition to avoid concurrent access in the device memory (contribution for a single particle)
-        // 3 different threads writes each a different component to avoid serialisation
-        if (threadIdx.x < 3 && threadIdx.y == 0 && threadIdx.z == 0)
-        {
-            i = SRC - SRC_START + threadIdx.x*DEXT(nssrc);
-            atomicAdd(&(X2_grad[i]), shared.X2_grad_part[threadIdx.x]);
-        }
+
+         // block reduction, result available only in the first thread
+         T aggregate = BlockReduceT(temp_storage).Sum(dev_vis[p].x);
+          
+         if(threadIdx.z == 0 and threadIdx.y == 0 && threadIdx.x == 0)
+                 shared.X2_grad_part[p] = aggregate;
+      }
+        
+      __syncthreads();
+      //atomic addition to avoid concurrent access in the device memory (contribution for a single particle)
+      // 3 different threads writes each a different component to avoid serialisation
+      if (threadIdx.x < 3 && threadIdx.y == 0 && threadIdx.z == 0)
+      {
+          i = SRC - SRC_START + threadIdx.x*DEXT(nssrc);
+          atomicAdd(&(X2_grad[i]), shared.X2_grad_part[threadIdx.x]);
+      }
     }
+  
 }
 
 extern "C" {
