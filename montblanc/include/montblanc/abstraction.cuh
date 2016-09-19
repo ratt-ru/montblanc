@@ -150,8 +150,16 @@ public:
         { return Po::atan2(0.0f, value); }
 
     __device__ __forceinline__ static
+    Tr::CT conj(const Tr::CT & value)
+        { return Po::make_ct(value.x, -value.y); }
+
+    __device__ __forceinline__ static
+    Tr::FT abs_squared(const Tr::CT & value)
+        { return value.x*value.x + value.y*value.y; }
+
+    __device__ __forceinline__ static
     Tr::FT abs(const Tr::CT & value)
-        { return Po::sqrt(value.x*value.x + value.y*value.y); }
+        { return Po::sqrt(Po::abs_squared(value)); }
 
     __device__ __forceinline__ static
     Tr::FT abs(const Tr::FT & value)
@@ -289,8 +297,16 @@ public:
         { return Po::atan2(0.0, value); }
 
     __device__ __forceinline__ static
+    Tr::CT conj(const Tr::CT & value)
+        { return Po::make_ct(value.x, -value.y); }
+
+    __device__ __forceinline__ static
+    Tr::FT abs_squared(const Tr::CT & value)
+        { return value.x*value.x + value.y*value.y; }
+
+    __device__ __forceinline__ static
     Tr::FT abs(const Tr::CT & value)
-        { return Po::sqrt(value.x*value.x + value.y*value.y); }
+        { return Po::sqrt(Po::abs_squared(value)); }
 
     __device__ __forceinline__ static
     Tr::FT abs(const Tr::FT & value)
