@@ -177,6 +177,18 @@ with tf.Session() as S:
     np_b, np_b_sqrt = b_sqrt_numpy(np_stokes, np_alpha, np_frequency, np_ref_freq)
     print 'Numpy CPU time %f' % (timeit.default_timer() - start)
 
+    assert np.allclose(tf_b_sqrt_op_cpu, tf_b_sqrt_op_gpu)
+
+    # Reshape for 2x2 jones multiply below
+    b_flat = np_b.reshape(-1,2,2)
+    b_sqrt_flat = tf_b_sqrt_op_cpu.reshape(-1,2,2)
+
+    # Check that multiplying the square root matrix
+    # by it's hermitian transpose yields the original
+    assert np.allclose(b_flat,
+        np.einsum("...ij,...kj->...ik",
+            b_sqrt_flat, b_sqrt_flat.conj()))
+
     # Check that our shapes and values agree with a certain tolerance
     assert tf_b_sqrt_op_cpu.shape == (nsrc, ntime, nchan, 4)
     assert np_b_sqrt.shape == (nsrc, ntime, nchan, 4)

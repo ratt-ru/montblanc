@@ -66,21 +66,23 @@ __global__ void rime_b_sqrt(
     const typename Traits::alpha_type * alpha,
     const typename Traits::frequency_type * frequency,
     const typename Traits::frequency_type * ref_freq,
-    typename Traits::B_sqrt_type * B_sqrt,
-    int nsrc, int ntime, int npolchan)
+    typename Traits::visibility_type * B_sqrt,
+    int nsrc, int ntime, int nchan)
 {
     // Simpler float and complex types
-    typedef typename Traits::FT FT;
-    typedef typename Traits::CT CT;
+    using FT = typename Traits::FT;
+    using CT = typename Traits::CT;
+    using ST = typename Traits::stokes_type;
+    using VT = typename Traits::visibility_type;
 
     typedef typename montblanc::kernel_policies<FT> Po;
     typedef typename montblanc::bsqrt::LaunchTraits<FT> LTr;
 
-    int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
+    int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
     int SRC = blockIdx.z*blockDim.z + threadIdx.z;
 
-    if(SRC >= nsrc || TIME >= ntime || POLCHAN >= npolchan)
+    if(SRC >= nsrc || TIME >= ntime || CHAN >= nchan)
         { return; }
 
     __shared__  FT freq_ratio[LTr::BLOCKDIMX];
@@ -90,28 +92,51 @@ __global__ void rime_b_sqrt(
     // one frequency per channel.
     if(threadIdx.y == 0 && threadIdx.z == 0)
     {
-        freq_ratio[threadIdx.x] = (frequency[POLCHAN >> 2] /
-            ref_freq[POLCHAN >>2]);
+        freq_ratio[threadIdx.x] = (frequency[CHAN] / ref_freq[CHAN]);
     }
 
     __syncthreads();
 
-    // Calculate the power term
+    // Calculate power term
     int i = SRC*ntime + TIME;
     FT power = Po::pow(freq_ratio[threadIdx.x], alpha[i]);
 
-    // Read in the stokes parameter,
-    // multiplying it by the power term
-    i = i*BSQRT_NPOL + bsqrt_pol<Traits>();
-    FT pol = stokes[i]*power;
-    CT B_square_root;
+    // Read in stokes parameters (IQUV)
+    ST _stokes = stokes[i];
+    FT & I = _stokes.x;
+    FT & Q = _stokes.y;
+    FT & U = _stokes.z;
+    FT & V = _stokes.w;
+    I *= power;
+    Q *= power;
+    U *= power;
+    V *= power;
 
-    // Create the square root of the brightness matrix
-    montblanc::create_brightness_sqrt<FT>(B_square_root, pol);
+    // Create the cholesky decomposition of the brightness matrix
+    // L00 = sqrt(I+Q)
+    // L01 = 0
+    // L10 = (U+iV)/sqrt(I+Q)
+    // L11 = sqrt(I - Q - L10*conj(L10))
+    VT B;
+    // sqrt(I+Q)
+    B.XX = Po::sqrt(Po::make_ct(I+Q, 0.0));
+    // (U-iV)/sqrt(I+Q)
+    B.YY = Po::make_ct(U, -V);
+    FT r2 = Po::abs_squared(B.XX);
+    B.YX = Po::make_ct(
+        (B.YY.x*B.XX.x + B.YY.y*B.XX.y)/r2,
+        (B.YY.y*B.XX.x - B.YY.x*B.XX.y)/r2);
 
-    // Write out the square root of the brightness
-    i = (SRC*ntime + TIME)*npolchan + POLCHAN;
-    B_sqrt[i] = B_square_root;
+    montblanc::complex_conjugate_multiply<FT>(B.XY, B.YX, B.YX);
+    B.XY.x = -B.XY.x;
+    B.XY.y = -B.XY.y;
+    B.XY.x += I - Q;
+
+    B.YY = Po::sqrt(B.XY);
+    B.XY = Po::make_ct(0.0, 0.0);
+
+    i = (SRC*ntime + TIME)*nchan + CHAN;
+    B_sqrt[i] = B;
 }
 
 template <typename FT, typename CT>
@@ -150,7 +175,6 @@ public:
         int nsrc = in_stokes.dim_size(0);
         int ntime = in_stokes.dim_size(1);
         int nchan = in_frequency.dim_size(0);
-        int npolchan = nchan*BSQRT_NPOL;
 
         // Reason about our output shape
         tf::TensorShape b_sqrt_shape({nsrc, ntime, nchan, 4});
@@ -170,9 +194,9 @@ public:
         typedef montblanc::bsqrt::LaunchTraits<FT> LTr;
 
         // Set up our kernel dimensions
-        dim3 blocks(LTr::block_size(npolchan, ntime, nsrc));
+        dim3 blocks(LTr::block_size(nchan, ntime, nsrc));
         dim3 grid(montblanc::grid_from_thread_block(
-            blocks, npolchan, ntime, nsrc));
+            blocks, nchan, ntime, nsrc));
 
         //printf("Threads per block: X %d Y %d Z %d\n",
         //    blocks.x, blocks.y, blocks.z);
@@ -189,14 +213,14 @@ public:
             in_frequency.flat<FT>().data());
         auto ref_freq = reinterpret_cast<const typename Tr::frequency_type *>(
             in_ref_freq.flat<FT>().data());
-        auto b_sqrt = reinterpret_cast<typename Tr::B_sqrt_type *>(
+        auto b_sqrt = reinterpret_cast<typename Tr::visibility_type *>(
             b_sqrt_ptr->flat<CT>().data());
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
         rime_b_sqrt<Tr> <<<grid, blocks, 0, stream>>>(
             stokes, alpha, frequency, ref_freq, b_sqrt,
-            nsrc, ntime, npolchan);
+            nsrc, ntime, nchan);
     }
 };
 

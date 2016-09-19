@@ -44,15 +44,18 @@ public:
 	typedef float FT;
 	typedef float2 CT;
 
+    typedef struct __align__(8) {
+        float2 XX, XY, YX, YY;
+    } visibility_type;
+
     // Input array types
     typedef float2 lm_type;
     typedef float3 uvw_type;
     typedef float frequency_type;
     typedef float2 complex_phase_type;
 
-    typedef float stokes_type;
+    typedef float4 stokes_type;
     typedef float alpha_type;
-    typedef float2 B_sqrt_type;
 
     typedef float2 point_error_type;
     typedef float2 antenna_scale_type;
@@ -190,15 +193,18 @@ public:
 	typedef double FT;
 	typedef double2 CT;
 
+    typedef struct __align__(16) {
+        double2 XX, XY, YX, YY;
+    } visibility_type;
+
     // Input array types
     typedef double2 lm_type;
     typedef double3 uvw_type;
     typedef double frequency_type;
     typedef double2 complex_phase_type;
 
-    typedef double stokes_type;
+    typedef double4 stokes_type;
     typedef double alpha_type;
-    typedef double2 B_sqrt_type;
 
     typedef double2 point_error_type;
     typedef double2 antenna_scale_type;

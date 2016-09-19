@@ -87,59 +87,23 @@ public:
                 const FT & U = stokes(src, time, iU);
                 const FT & V = stokes(src, time, iV);
 
-                // Compute the trace and determinant of the brightness matrix
-                // trace = I+Q + I-Q = 2I
-                // det = (I+Q)*(I-Q) - (U+iV)*(U-iV) = I**2-Q**2-U**2-V**2
-                // so we have real values in all cases
-                CT trace = CT(two*I, 0.0);
-                CT det = CT(I*I - Q*Q - U*U - V*V, 0.0);
-
-                // Precompute matrix terms
-                CT B0 = CT(I + Q, 0.0);
-                CT B1 = CT(U    ,  V );
-                CT B2 = CT(U    ,  -V);
-                CT B3 = CT(I - Q, 0.0);
-
-                // scalar matrix case
-                if(det.real() == I*I)
-                {
-                    B0 = std::sqrt(B0);
-                    B3 = std::sqrt(B3);
-                }
-                else
-                {
-                    // Complex square root of the determinant
-                    CT s = std::sqrt(det);
-                    CT t = std::sqrt(trace + two*s);
-
-                    B0 += s;
-                    B3 += s;
-
-                    // Complex division
-                    if(std::norm(t) > 0.0)
-                    {
-                        B0 /= t;
-                        B1 /= t;
-                        B2 /= t;
-                        B3 /= t;
-                    }
-                }
+                // Compute cholesky decomposition
+                CT L00 = std::sqrt(CT(I+Q));
+                CT L10 = CT(U, -V) / L00;
+                CT L11 = std::sqrt(CT(I-Q) - L10*std::conj(L10));
 
                 for(int chan=0; chan < nchan; ++chan)
                 {
-                    // Compute spectral index
-                    FT power = std::pow(
+                    // Compute square root of spectral index
+                    FT psqrt = std::pow(
                         frequency(chan)/ref_freq(chan),
-                        alpha(src, time));
-
-                    // Square root of spectral index
-                    FT psqrt = std::sqrt(power);
+                        alpha(src, time)*0.5);
 
                     // Assign square root of the brightness matrix
-                    b_sqrt(src, time, chan, XX) = B0*psqrt;
-                    b_sqrt(src, time, chan, XY) = B1*psqrt;
-                    b_sqrt(src, time, chan, YX) = B2*psqrt;
-                    b_sqrt(src, time, chan, YY) = B3*psqrt;
+                    b_sqrt(src, time, chan, XX) = L00*psqrt;
+                    b_sqrt(src, time, chan, XY) = 0.0;
+                    b_sqrt(src, time, chan, YX) = L10*psqrt;
+                    b_sqrt(src, time, chan, YY) = L11*psqrt;
                 }
             }
         }
