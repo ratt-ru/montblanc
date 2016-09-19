@@ -89,6 +89,18 @@ public:
 	Tr::FT sqrt(const Tr::FT & value)
 		{ return ::sqrtf(value); }
 
+    __device__ __forceinline__ static
+    Tr::CT sqrt(const Tr::CT & value)
+    {
+        constexpr typename Tr::FT half = 0.5;
+
+        typename Tr::FT r = Po::abs(value);
+        return Po::make_ct(
+            Po::sqrt((r + value.x)*half),
+            Po::copysign(
+                Po::sqrt((r - value.x)*half), value.y));
+    }
+
 	__device__ __forceinline__ static
 	Tr::FT min(const Tr::FT & lhs, const Tr::FT & rhs)
 		{ return ::fminf(lhs, rhs); }
@@ -215,6 +227,18 @@ public:
 	__device__ __forceinline__ static
 	Tr::FT sqrt(const Tr::FT & value)
 		{ return ::sqrt(value); }
+
+    __device__ __forceinline__ static
+    Tr::CT sqrt(const Tr::CT & value)
+    {
+        constexpr typename Tr::FT half = 0.5;
+
+        typename Tr::FT r = Po::abs(value);
+        return Po::make_ct(
+            Po::sqrt((r + value.x)*half),
+            Po::copysign(
+                Po::sqrt((r - value.x)*half), value.y));
+    }
 
 	__device__ __forceinline__ static
 	Tr::FT min(const Tr::FT & lhs, const Tr::FT & rhs)
