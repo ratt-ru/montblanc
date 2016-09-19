@@ -128,7 +128,8 @@ void create_brightness_sqrt(
     // det = I^2 - Q^2 - U^2 - V^2
     typename Tr::FT I = cub::ShuffleIndex(pol, shfl_idx);
     typename Tr::FT trace = two*I;
-    typename Tr::FT det = I*I;
+    typename Tr::FT I_squared = I*I;
+    typename Tr::FT det = I_squared;
 
     typename Tr::FT Q = cub::ShuffleIndex(pol, ++shfl_idx);
     det -= Q*Q;
@@ -139,14 +140,24 @@ void create_brightness_sqrt(
     typename Tr::FT V = cub::ShuffleIndex(pol, ++shfl_idx);
     det -= V*V;
 
+    // This gives us 2 0 0 2 2 0 0 2 2 0 0 2
+    bool is_diag = ((int(cub::LaneId()) - 1) & 0x2) != 0;
+
+    // Scalar matrix. Take square root of diagonals and return
+    if(det == I_squared)
+    {
+        if(is_diag)
+            { brightness = Po::sqrt(brightness); }
+
+        return;
+    }
+
     // Square root of the determinant
     typename Tr::FT r = std::abs(det);
     typename Tr::CT s = Po::make_ct(
         Po::sqrt((r + det)*half),
         Po::sqrt((r - det)*half));
 
-    // This gives us 2 0 0 2 2 0 0 2 2 0 0 2
-    bool is_diag = ((int(cub::LaneId()) - 1) & 0x2) != 0;
     // Only add s if we're in a lane corresponding to
     // a diagonal matrix entry.
     if(is_diag)
@@ -157,16 +168,19 @@ void create_brightness_sqrt(
 
     s.x *= two; s.y *= two;
     s.x += trace;
-    // Square root of 2*s + trace
+
     r = Po::abs(s);
-    typename Tr::CT t = Po::make_ct(
-        Po::sqrt((r + s.x)*half),
-        Po::copysign(Po::sqrt((r - s.x)*half), s.y));
 
     // Prevent nans.
-    typename Tr::FT square = t.x*t.x + t.y*t.y;
+    if(r > 0.0) {
+        // Square root of 2*s + trace
+        typename Tr::CT t = Po::make_ct(Po::sqrt((r + s.x)*half),
+            Po::copysign(Po::sqrt((r - s.x)*half), s.y));
 
-    if(square > 0.0) {
+        // We get this automagically
+        // r is the magnitude of 2*s + trace, which we take
+        // the square root of to obtain t. Hence
+        // r = t.x*t.x + t.y*t.y;
         typename Tr::CT b = brightness;
         brightness.x = (b.x*t.x + b.y*t.y)/r;
         brightness.y = (b.y*t.x - b.x*t.y)/r;

@@ -94,23 +94,35 @@ public:
                 CT trace = CT(two*I, 0.0);
                 CT det = CT(I*I - Q*Q - U*U - V*V, 0.0);
 
-                // Complex square root of the determinant
-                CT s = std::sqrt(det);
-                CT t = std::sqrt(trace + two*s);
-
                 // Precompute matrix terms
-                CT B0 = CT(I + Q, 0.0) + s;
+                CT B0 = CT(I + Q, 0.0);
                 CT B1 = CT(U    ,  V );
                 CT B2 = CT(U    ,  -V);
-                CT B3 = CT(I - Q, 0.0) + s;
+                CT B3 = CT(I - Q, 0.0);
 
-                // Complex division
-                if(std::norm(t) > 0.0)
+                // scalar matrix case
+                if(det.real() == I*I)
                 {
-                    B0 /= t;
-                    B1 /= t;
-                    B2 /= t;
-                    B3 /= t;
+                    B0 = std::sqrt(B0);
+                    B3 = std::sqrt(B3);
+                }
+                else
+                {
+                    // Complex square root of the determinant
+                    CT s = std::sqrt(det);
+                    CT t = std::sqrt(trace + two*s);
+
+                    B0 += s;
+                    B3 += s;
+
+                    // Complex division
+                    if(std::norm(t) > 0.0)
+                    {
+                        B0 /= t;
+                        B1 /= t;
+                        B2 /= t;
+                        B3 /= t;
+                    }
                 }
 
                 for(int chan=0; chan < nchan; ++chan)
