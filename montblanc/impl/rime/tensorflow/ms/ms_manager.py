@@ -126,9 +126,9 @@ def row_extents(cube, dim_order=None):
     if dim_order is None:
         dim_order = MS_DIM_ORDER
 
-    shape = cube.dim_global_size(*MS_DIM_ORDER)
-    lower = cube.dim_lower_extent(*MS_DIM_ORDER)
-    upper = tuple(u-1 for u in cube.dim_upper_extent(*MS_DIM_ORDER))
+    shape = cube.dim_global_size(*dim_order)
+    lower = cube.dim_lower_extent(*dim_order)
+    upper = tuple(u-1 for u in cube.dim_upper_extent(*dim_order))
 
     return (np.ravel_multi_index(lower, shape),
         np.ravel_multi_index(upper, shape) + 1)
