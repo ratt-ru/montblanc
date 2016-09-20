@@ -245,6 +245,21 @@ class MeasurementSetManager(object):
             mscube.update_dimension(dim, global_size=size,
                 local_size=size, lower_extent=0, upper_extent=size)
 
+        shape = mscube.dim_global_size(*MS_DIM_ORDER)
+        expected_rows = np.product(shape)
+
+        if not expected_rows == oms.nrows():
+            dim_desc = ", ".join('(%s,%s)' % (d, s) for
+                d, s in zip(MS_DIM_ORDER, shape))
+            row_desc = " x ".join('%s' % s for s in shape)
+
+            montblanc.log.warn("Encountered '{msr}' rows in '{ms}' "
+                "but expected '{rd} = {er}' after finding the following "
+                "dimensions by inspection: [{d}]. Irregular Measurement Sets "
+                "are not fully supported due to the generality of the format.".format(
+                    msr=oms.nrows(), ms=msname,
+                    er=expected_rows, rd=row_desc, d=dim_desc))
+
         # Have we indicated dimensions updates?
         self._dim_updates_indicated = False
 
