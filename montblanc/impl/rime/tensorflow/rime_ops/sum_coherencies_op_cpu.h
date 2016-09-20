@@ -13,7 +13,7 @@ MONTBLANC_NAMESPACE_BEGIN
 MONTBLANC_SUM_COHERENCIES_NAMESPACE_BEGIN
 
 // For simpler partial specialisation
-typedef Eigen::ThreadPoolDevice CPUDevice; 
+typedef Eigen::ThreadPoolDevice CPUDevice;
 
 // Specialise the SumCoherencies op for CPUs
 template <typename FT, typename CT>
@@ -31,10 +31,11 @@ public:
         const tf::Tensor & in_antenna2 = context->input(1);
         const tf::Tensor & in_shape = context->input(2);
         const tf::Tensor & in_ant_jones = context->input(3);
-        const tf::Tensor & in_flag = context->input(4);
-        const tf::Tensor & in_gterm = context->input(5);
-        const tf::Tensor & in_model_vis_in = context->input(6);
-        const tf::Tensor & in_apply_dies = context->input(7);
+        const tf::Tensor & in_neg_ant_jones = context->input(4);
+        const tf::Tensor & in_flag = context->input(5);
+        const tf::Tensor & in_gterm = context->input(6);
+        const tf::Tensor & in_model_vis_in = context->input(7);
+        const tf::Tensor & in_apply_dies = context->input(8);
 
         int nsrc = in_shape.dim_size(0);
         int ntime = in_shape.dim_size(1);
@@ -43,16 +44,17 @@ public:
         int na = in_ant_jones.dim_size(2);
         int npol = in_ant_jones.dim_size(4);
         int npolchan = nchan*npol;
-        
+
         // Allocate an output tensor
         tf::Tensor * model_vis_out_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
-            0, in_model_vis_in.shape(), &model_vis_out_ptr));     
+            0, in_model_vis_in.shape(), &model_vis_out_ptr));
 
         auto antenna1 = in_antenna1.tensor<int,2>();
         auto antenna2 = in_antenna2.tensor<int,2>();
         auto shape = in_shape.tensor<FT, 4>();
         auto ant_jones = in_ant_jones.tensor<CT, 5>();
+        auto neg_ant_jones = in_neg_ant_jones.tensor<tf::int8, 2>();
         auto flag = in_flag.tensor<tf::uint8, 4>();
         auto gterm = in_gterm.tensor<CT,4>();
         auto model_vis_in = in_model_vis_in.tensor<CT, 4>();
@@ -92,12 +94,14 @@ public:
                         CT b2 = std::conj(ant_jones(src, time, ant2, chan, 1)*s);
                         CT b3 = std::conj(ant_jones(src, time, ant2, chan, 3)*s);
 
+                        FT sign = neg_ant_jones(src, time);
+
                         // Multiply jones matrices and accumulate them
                         // in the sum terms
-                        s0 += a0*b0 + a1*b2;
-                        s1 += a0*b1 + a1*b3;
-                        s2 += a2*b0 + a3*b2;
-                        s3 += a2*b1 + a3*b3;
+                        s0 += sign*(a0*b0 + a1*b2);
+                        s1 += sign*(a0*b1 + a1*b3);
+                        s2 += sign*(a2*b0 + a3*b2);
+                        s3 += sign*(a2*b1 + a3*b3);
                     }
 
                     // Apply Direction Independent Effects if required

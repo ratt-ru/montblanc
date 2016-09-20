@@ -31,6 +31,7 @@ sim_script = os.path.join(meq_dir, 'turbo-sim.py')
 tigger_sky_file = os.path.join(meq_dir, 'sky_model.txt')
 
 # Directory in which we expect our beams to be located
+beam_on = 1
 beam_dir = os.path.join(data_dir, 'beams')
 beam_file_prefix = 'beam'
 base_beam_file = os.path.join(beam_dir, beam_file_prefix)
@@ -45,22 +46,20 @@ cfg_section = 'montblanc-compare'
 #=========================================
 
 source_coords = [[25,10],[30,5],[8,6],[23,7],[15,10]]
-IQUVs =  [[1.0,0,0,0], [2,0.5,0,0], [1.0,0,0,0], [1.0,0,0,0],[1.0,0,0,0]]
-alphas = [0.8, 0.7, 0.1, 0.2, 0.3]
-#source_coords = np.rad2deg([[0.0008, 0.0036]])
-#source_coords = [[0.0, 0.0] for i in xrange(5)]
+IQUVs =  [[1.0,0,0,0], [2,0.5,0,0], [-1.0,0,0,0], [0.8,0,0.0,0], [-0.8,0.1,-0.3,0.05]]
+alphas = [0.8, -0.7, 0.1, 0.2, -0.3]
+
 nsrc = len(source_coords)
 
 pt_lm = np.deg2rad(source_coords)
-#pt_stokes = np.tile([[1.,0.,0.,0.]], [nsrc, 1])
 pt_stokes = np.asarray(IQUVs)
 pt_alpha = np.asarray(alphas)
 
 ref_freq = 1.415e9
 
-assert pt_lm.shape == (nsrc, 2)
-assert pt_stokes.shape == (nsrc, 4)
-assert pt_alpha.shape == (nsrc,)
+assert pt_lm.shape == (nsrc, 2), pt_lm.shape
+assert pt_stokes.shape == (nsrc, 4), pt_stokes.shape
+assert pt_alpha.shape == (nsrc,), pt_alpha.shape
 
 print pt_lm.shape
 print pt_stokes.shape
@@ -96,6 +95,8 @@ cmd_list = ['python',
     '-c', cfg_file,
     # Configuration section
     '[{section}]'.format(section=cfg_section),
+    # Enable the beam?
+    'me.e_enable = {e}'.format(e=beam_on),
     # Measurement Set
     'ms_sel.msname={ms}'.format(ms=msfile),
     # Tigger sky file
@@ -156,9 +157,13 @@ slvr = montblanc.rime_solver(slvr_cfg)
 
 ms_mgr = MeasurementSetManager(msfile, slvr, slvr_cfg)
 
-source_providers = [MSSourceProvider(ms_mgr),
-    FitsBeamSourceProvider(beam_file_pattern),
-    RadioSourceProvider()]
+source_providers = []
+source_providers.append(MSSourceProvider(ms_mgr))
+
+if beam_on == 1:
+    source_providers.append(FitsBeamSourceProvider(beam_file_pattern))
+
+source_providers.append(RadioSourceProvider())
 
 sink_providers = [MSSinkProvider(ms_mgr, 'CORRECTED_DATA')]
 slvr.solve(source_providers=source_providers,

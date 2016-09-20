@@ -68,6 +68,7 @@ public:
 
     typedef int32_t antenna_type;
     typedef float2 ant_jones_type;
+    typedef int8_t neg_ant_jones_type;
     typedef uint8_t flag_type;
     typedef float weight_type;
     typedef float2 gterm_type;
@@ -218,6 +219,7 @@ public:
     typedef int32_t antenna_type;
     typedef double2 ant_jones_type;
     typedef uint8_t flag_type;
+    typedef int8_t neg_ant_jones_type;
     typedef double weight_type;
     typedef double2 gterm_type;
     typedef double2 vis_type;

@@ -67,6 +67,7 @@ __global__ void rime_b_sqrt(
     const typename Traits::frequency_type * frequency,
     const typename Traits::frequency_type * ref_freq,
     typename Traits::visibility_type * B_sqrt,
+    typename Traits::neg_ant_jones_type * neg_ant_jones,
     int nsrc, int ntime, int nchan)
 {
     // Simpler float and complex types
@@ -107,6 +108,16 @@ __global__ void rime_b_sqrt(
     FT & Q = _stokes.y;
     FT & U = _stokes.z;
     FT & V = _stokes.w;
+
+    // Sign variable, used to attempt to ensure
+    // positive definiteness of the brightness matrix
+    // and a valid Cholesky decomposition. Exists to
+    // handle cases where we have negative flux
+    FT sign = 1.0;
+
+    if(I + Q < 0.0)
+        { sign = -1.0; }
+
     I *= power;
     Q *= power;
     U *= power;
@@ -117,11 +128,13 @@ __global__ void rime_b_sqrt(
     // L01 = 0
     // L10 = (U+iV)/sqrt(I+Q)
     // L11 = sqrt(I - Q - L10*conj(L10))
+
+    // Use the YY and XY correlations as scratch space
     VT B;
     // sqrt(I+Q)
-    B.XX = Po::sqrt(Po::make_ct(I+Q, 0.0));
+    B.XX = Po::sqrt(Po::make_ct((I+Q)*sign, 0.0));
     // (U-iV)/sqrt(I+Q)
-    B.YY = Po::make_ct(U, -V);
+    B.YY = Po::make_ct(U*sign, -V*sign);
     FT r2 = Po::abs_squared(B.XX);
     B.YX = Po::make_ct(
         (B.YY.x*B.XX.x + B.YY.y*B.XX.y)/r2,
@@ -130,13 +143,19 @@ __global__ void rime_b_sqrt(
     montblanc::complex_conjugate_multiply<FT>(B.XY, B.YX, B.YX);
     B.XY.x = -B.XY.x;
     B.XY.y = -B.XY.y;
-    B.XY.x += I - Q;
+    B.XY.x += sign*(I - Q);
 
     B.YY = Po::sqrt(B.XY);
     B.XY = Po::make_ct(0.0, 0.0);
 
-    i = (SRC*ntime + TIME)*nchan + CHAN;
-    B_sqrt[i] = B;
+    i = SRC*ntime + TIME;
+
+    // Indicate that we inverted the sign of the brightness
+    // matrix to obtain the cholesky decomposition
+    if(CHAN == 0)
+        { neg_ant_jones[i] = (sign == 1.0 ? 1 : -1); }
+
+    B_sqrt[i*nchan + CHAN] = B;
 }
 
 template <typename FT, typename CT>
@@ -176,10 +195,9 @@ public:
         int ntime = in_stokes.dim_size(1);
         int nchan = in_frequency.dim_size(0);
 
-        // Reason about our output shape
+        // Reason about the shape of the b_sqrt tensor and
+        // create a pointer to it
         tf::TensorShape b_sqrt_shape({nsrc, ntime, nchan, 4});
-
-        // Create a pointer for the b_sqrt result
         tf::Tensor * b_sqrt_ptr = nullptr;
 
         // Allocate memory for the b_sqrt
@@ -188,6 +206,14 @@ public:
 
         if (b_sqrt_ptr->NumElements() == 0)
             { return; }
+
+        // Reason about shape of the invert tensor
+        // and create a pointer to it
+        tf::TensorShape invert_shape({nsrc, ntime});
+        tf::Tensor * invert_ptr = nullptr;
+
+        OP_REQUIRES_OK(context, context->allocate_output(
+            1, invert_shape, &invert_ptr));
 
         // Cast input into CUDA types defined within the Traits class
         typedef montblanc::kernel_traits<FT> Tr;
@@ -215,11 +241,14 @@ public:
             in_ref_freq.flat<FT>().data());
         auto b_sqrt = reinterpret_cast<typename Tr::visibility_type *>(
             b_sqrt_ptr->flat<CT>().data());
+        auto neg_ant_jones = reinterpret_cast<typename Tr::neg_ant_jones_type *>(
+            invert_ptr->flat<tf::int8>().data());
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
-        rime_b_sqrt<Tr> <<<grid, blocks, 0, stream>>>(
-            stokes, alpha, frequency, ref_freq, b_sqrt,
+        rime_b_sqrt<Tr> <<<grid, blocks, 0, stream>>>(stokes,
+            alpha, frequency, ref_freq,
+            b_sqrt, neg_ant_jones,
             nsrc, ntime, nchan);
     }
 };

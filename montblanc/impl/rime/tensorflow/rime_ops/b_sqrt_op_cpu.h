@@ -52,10 +52,9 @@ public:
         int ntime = in_stokes.dim_size(1);
         int nchan = in_frequency.dim_size(0);
 
-        // Reason about our output shape
+        // Reason about the shape of the b_sqrt tensor and
+        // create a pointer to it
         tf::TensorShape b_sqrt_shape({nsrc, ntime, nchan, 4});
-
-        // Create a pointer for the b_sqrt result
         tf::Tensor * b_sqrt_ptr = nullptr;
 
         // Allocate memory for the b_sqrt
@@ -65,11 +64,20 @@ public:
         if (b_sqrt_ptr->NumElements() == 0)
             { return; }
 
+        // Reason about shape of the invert tensor
+        // and create a pointer to it
+        tf::TensorShape invert_shape({nsrc, ntime});
+        tf::Tensor * invert_ptr = nullptr;
+
+        OP_REQUIRES_OK(context, context->allocate_output(
+            1, invert_shape, &invert_ptr));
+
         auto stokes = in_stokes.tensor<FT, 3>();
         auto alpha = in_alpha.tensor<FT, 2>();
         auto frequency = in_frequency.tensor<FT, 1>();
         auto ref_freq = in_ref_freq.tensor<FT, 1>();
         auto b_sqrt = b_sqrt_ptr->tensor<CT, 4>();
+        auto neg_ant_jones = invert_ptr->tensor<tf::int8, 2>();
 
         enum { iI, iQ, iU, iV };
         enum { XX, XY, YX, YY };
@@ -87,10 +95,22 @@ public:
                 const FT & U = stokes(src, time, iU);
                 const FT & V = stokes(src, time, iV);
 
+                // Sign variable, used to attempt to ensure
+                // positive definiteness of the brightness matrix
+                // and a valid Cholesky decomposition
+                FT sign = 1.0;
+
+                if(I + Q < 0)
+                    { sign = -1.0; }
+
                 // Compute cholesky decomposition
-                CT L00 = std::sqrt(CT(I+Q));
-                CT L10 = CT(U, -V) / L00;
-                CT L11 = std::sqrt(CT(I-Q) - L10*std::conj(L10));
+                CT L00 = std::sqrt(sign*CT(I+Q));
+                CT L10 = sign*CT(U, -V) / L00;
+                CT L11 = std::sqrt(sign*CT(I-Q) - L10*std::conj(L10));
+
+                // Indicate that we inverted the sign of the brightness
+                // matrix to obtain the cholesky decomposition
+                neg_ant_jones(src, time) = (sign == 1.0 ? 1 : -1);
 
                 for(int chan=0; chan < nchan; ++chan)
                 {
