@@ -26,6 +26,62 @@ import montblanc.util as mbu
 
 from montblanc.config import RimeSolverConfig as Options
 
+from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
+from montblanc.impl.rime.tensorflow.sources import (SourceProvider,
+    FitsBeamSourceProvider,
+    MSSourceProvider)
+from montblanc.impl.rime.tensorflow.sinks import (SinkProvider,
+    MSSinkProvider)
+
+class RadioSourceProvider(SourceProvider):
+
+    def name(self):
+        return "TF example"
+
+    def point_lm(self, context):
+        lm = np.empty(context.shape, context.dtype)
+
+        montblanc.log.info(context.array_schema.shape)
+        montblanc.log.info(context.iter_args)
+
+
+        (lt, ut), (lb, ub), (lc, uc) = context.dim_extents(
+            'ntime', 'nbl', 'nchan')
+
+        lm[:,0] = 0.0008
+        lm[:,1] = 0.0036
+
+
+        lm[:,:] = 0
+        return lm
+
+    def point_stokes(self, context):
+        stokes = np.empty(context.shape, context.dtype)
+        stokes[:,:,0] = 1
+        stokes[:,:,1:4] = 0
+        return stokes
+
+    def point_alpha(self, context):
+        return np.zeros(context.shape, context.dtype)
+
+    def frequency(self, context):
+        return np.full(context.shape, 1.415e9, context.dtype)
+
+    def ref_frequency(self, context):
+        ref_freq = np.empty(context.shape, context.dtype)
+        ref_freq[:] = 1.415e9
+
+        return ref_freq
+
+class RimeSinkProvider(SinkProvider):
+    def name(self):
+        return 'Sink'
+
+    def model_vis(self, context):
+        montblanc.log.info(context.data.ravel()[0:128].reshape(-1,4))
+        montblanc.log.info(context.data.mean())
+        montblanc.log.info(context.data.sum())
+
 if __name__ == '__main__':
     import sys
     import argparse
@@ -40,8 +96,6 @@ if __name__ == '__main__':
         type=int, default=0, help='Number of Gaussian Sources')
     parser.add_argument('-ns','--nssrc',dest='nssrc',
         type=int, default=0, help='Number of Sersic Sources')
-    parser.add_argument('-c','--count',dest='count',
-        type=int, default=10, help='Number of Iterations')
     parser.add_argument('-ac','--auto-correlations',dest='auto_correlations',
         type=lambda v: v.lower() in ("yes", "true", "t", "1"),
         choices=[True, False], default=False,
@@ -54,19 +108,34 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     # Set the logging level
-    montblanc.log.setLevel(logging.INFO)
+    montblanc.log.setLevel(logging.DEBUG)
+    [h.setLevel(logging.DEBUG) for h in montblanc.log.handlers]
 
     slvr_cfg = montblanc.rime_solver_cfg(
         ntime=10000, na=3000, nchan=128,
-        msfile=args.msfile,
-        beam_base_fits_name=args.beam,
-        data_source=Options.DATA_SOURCE_MS,
+        mem_budget=1024*1024*1024,
+        data_source=Options.DATA_SOURCE_DEFAULT,
         sources=montblanc.sources(point=args.npsrc,
             gaussian=args.ngsrc,
             sersic=args.nssrc),
-        init_weights='weight', weight_vector=False,
-        dtype='double', auto_correlations=args.auto_correlations,
+        dtype='double',
+        auto_correlations=args.auto_correlations,
         version=args.version)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
-        slvr.solve()
+        # Manages measurement sets
+        ms_mgr = MeasurementSetManager(args.msfile, slvr, slvr_cfg)
+
+        source_provs = []
+        # Read problem info from the MS, taking observed visibilities from MODEL_DAT
+        source_provs.append(MSSourceProvider(ms_mgr, 'MODEL_DATA'))
+        # Add a beam when you're ready
+        #source_provs.append(FitsBeamSourceProvider('beam_$(corr)_$(reim).fits'))
+        source_provs.append(RadioSourceProvider())
+
+        sink_provs = []
+        # Dump model visibilities into CORRECTED_DATA
+        sink_provs.append(MSSinkProvider(ms_mgr, 'CORRECTED_DATA'))
+
+        slvr.solve(source_providers=source_provs,
+            sink_providers=sink_provs)
