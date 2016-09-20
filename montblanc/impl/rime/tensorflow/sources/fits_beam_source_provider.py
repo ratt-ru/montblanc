@@ -199,19 +199,18 @@ def _cube_extents(axes, l_ax, m_ax, f_ax):
     # Return [[l_low, u_low, f_low], [l_high, u_high, f_high]]
     return np.array(extent_list).T
 
-def _create_axes(file_dict):
+def _create_axes(filenames, file_dict):
     """ Create a FitsAxes object """
 
     try:
         # Loop through the file_dictionary, finding the
         # first open FITS file.
         f = iter(f for tup in file_dict.itervalues()
-        for f in tup if f is not None).next()
+            for f in tup if f is not None).next()
     except StopIteration as e:
-        raise (ValueError("No FITS files were found "
-            "for filename schema '{s}'. "
-            "Filenames are '{f}'." .format(
-                s=self.filename_schema, f=file_dict.keys())),
+        raise (ValueError("No FITS files were found. "
+            "Searched filenames: '{f}'." .format(
+                f=filenames.values())),
                     None, sys.exc_info()[2])
 
 
@@ -287,7 +286,7 @@ class FitsBeamSourceProvider(SourceProvider):
         self._filename_schema = filename_schema
         self._filenames = _create_filenames(filename_schema)
         self._files = _open_fits_files(self._filenames)
-        self._axes = _create_axes(self._files)
+        self._axes = _create_axes(self._filenames, self._files)
         self._dim_indices = (l_ax, m_ax, f_ax) = _cube_dim_indices(
             self._axes)
         self._name = "FITS Beams '{s}'".format(s=self.filename_schema)
