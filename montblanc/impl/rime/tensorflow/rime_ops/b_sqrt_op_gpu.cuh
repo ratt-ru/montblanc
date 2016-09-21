@@ -67,7 +67,7 @@ __global__ void rime_b_sqrt(
     const typename Traits::frequency_type * frequency,
     const typename Traits::frequency_type * ref_freq,
     typename Traits::visibility_type * B_sqrt,
-    typename Traits::neg_ant_jones_type * neg_ant_jones,
+    typename Traits::sgn_brightness_type * sgn_brightness,
     int nsrc, int ntime, int nchan)
 {
     // Simpler float and complex types
@@ -75,6 +75,9 @@ __global__ void rime_b_sqrt(
     using CT = typename Traits::CT;
     using ST = typename Traits::stokes_type;
     using VT = typename Traits::visibility_type;
+
+    constexpr FT zero = 0.0;
+    constexpr FT one = 1.0;
 
     typedef typename montblanc::kernel_policies<FT> Po;
     typedef typename montblanc::bsqrt::LaunchTraits<FT> LTr;
@@ -109,50 +112,66 @@ __global__ void rime_b_sqrt(
     FT & U = _stokes.z;
     FT & V = _stokes.w;
 
-    // Sign variable, used to attempt to ensure
-    // positive definiteness of the brightness matrix
-    // and a valid Cholesky decomposition. Exists to
-    // handle cases where we have negative flux
-    FT sign = 1.0;
-
-    if(I + Q < 0.0)
-        { sign = -1.0; }
-
     I *= power;
     Q *= power;
     U *= power;
     V *= power;
 
+    // sgn variable, used to indicate whether
+    // brightness matrix is negative, zero or positive
+    FT IQ = I + Q;
+    FT sgn = (zero < IQ) - (IQ < zero);
+
+    // Indicate that we inverted the sgn of the brightness
+    // matrix to obtain the cholesky decomposition
+    i = SRC*ntime + TIME;
+    if(CHAN == 0)
+        { sgn_brightness[i] = sgn; }
+
+    // I *= sgn;
+    // Q *= sgn;
+    U *= sgn;
+    V *= sgn;
+    IQ *= sgn;
+
     // Create the cholesky decomposition of the brightness matrix
     // L00 = sqrt(I+Q)
     // L01 = 0
     // L10 = (U+iV)/sqrt(I+Q)
-    // L11 = sqrt(I - Q - L10*conj(L10))
+    // L11 = sqrt((I**2 - Q**2 - U**2 - V**2)/(I+Q))
 
     // Use the YY and XY correlations as scratch space
     VT B;
-    // sqrt(I+Q)
-    B.XX = Po::sqrt(Po::make_ct((I+Q)*sign, 0.0));
-    // (U-iV)/sqrt(I+Q)
-    B.YY = Po::make_ct(U*sign, -V*sign);
-    FT r2 = Po::abs_squared(B.XX);
-    B.YX = Po::make_ct(
-        (B.YY.x*B.XX.x + B.YY.y*B.XX.y)/r2,
-        (B.YY.y*B.XX.x - B.YY.x*B.XX.y)/r2);
+    // L00 = sqrt(I+Q)
+    B.XY.x = IQ; B.XY.y = zero;
+    B.XX = Po::sqrt(B.XY);
+    // Store L00 as a divisor of L10
+    B.XY = B.XX;
 
-    B.XY.x = sign*(I*I - Q*Q - U*U - V*V)/(I+Q);
-    B.XY.y = 0.0;
+    // Gracefully handle zero matrices
+    if(IQ == zero)
+    {
+        B.XY.x = one; B.XY.y = zero;
+        IQ = one;
+    }
 
+    // L10 = (U-iV)/sqrt(I+Q)
+    B.YY.x = U; B.YY.y = -V;
+    B.YX.x = B.YY.x*B.XY.x + B.YY.y*B.XY.y;
+    B.YX.y = B.YY.y*B.XY.x - B.YY.x*B.XY.y;
+    B.YY.x = one/Po::abs_squared(B.XY);
+    B.YX.x *= B.YY.x;
+    B.YX.y *= B.YY.x;
+
+    // L11 = sqrt((I**2 - Q**2 - U**2 - V**2)/(I+Q))
+    B.XY.x = (I*I - Q*Q - U*U - V*V)/IQ;
+    B.XY.y = zero;
     B.YY = Po::sqrt(B.XY);
-    B.XY = Po::make_ct(0.0, 0.0);
 
-    i = SRC*ntime + TIME;
+    // L01 = 0
+    B.XY.x = zero; B.XY.y = zero;
 
-    // Indicate that we inverted the sign of the brightness
-    // matrix to obtain the cholesky decomposition
-    if(CHAN == 0)
-        { neg_ant_jones[i] = (sign == 1.0 ? 1 : -1); }
-
+    // Write out the cholesky decomposition
     B_sqrt[i*nchan + CHAN] = B;
 }
 
@@ -239,14 +258,14 @@ public:
             in_ref_freq.flat<FT>().data());
         auto b_sqrt = reinterpret_cast<typename Tr::visibility_type *>(
             b_sqrt_ptr->flat<CT>().data());
-        auto neg_ant_jones = reinterpret_cast<typename Tr::neg_ant_jones_type *>(
+        auto sgn_brightness = reinterpret_cast<typename Tr::sgn_brightness_type *>(
             invert_ptr->flat<tf::int8>().data());
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
         rime_b_sqrt<Tr> <<<grid, blocks, 0, stream>>>(stokes,
             alpha, frequency, ref_freq,
-            b_sqrt, neg_ant_jones,
+            b_sqrt, sgn_brightness,
             nsrc, ntime, nchan);
     }
 };

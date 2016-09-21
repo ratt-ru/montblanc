@@ -77,40 +77,53 @@ public:
         auto frequency = in_frequency.tensor<FT, 1>();
         auto ref_freq = in_ref_freq.tensor<FT, 1>();
         auto b_sqrt = b_sqrt_ptr->tensor<CT, 4>();
-        auto neg_ant_jones = invert_ptr->tensor<tf::int8, 2>();
+        auto sgn_brightness = invert_ptr->tensor<tf::int8, 2>();
 
         enum { iI, iQ, iU, iV };
         enum { XX, XY, YX, YY };
 
-        constexpr FT two = 2.0;
-        constexpr FT half = 0.5;
+        constexpr FT zero = 0.0;
+        constexpr FT one = 1.0;
 
         for(int src=0; src < nsrc; ++src)
         {
             for(int time=0; time < ntime; ++time)
             {
                 // Reference stokes parameters
-                const FT & I = stokes(src, time, iI);
-                const FT & Q = stokes(src, time, iQ);
-                const FT & U = stokes(src, time, iU);
-                const FT & V = stokes(src, time, iV);
+                FT I = stokes(src, time, iI);
+                FT Q = stokes(src, time, iQ);
+                FT U = stokes(src, time, iU);
+                FT V = stokes(src, time, iV);
 
-                // Sign variable, used to attempt to ensure
-                // positive definiteness of the brightness matrix
+                // sgn variable, used to indicate whether
+                // brightness matrix is negative, zero or positive
                 // and a valid Cholesky decomposition
-                FT sign = 1.0;
+                FT IQ = I + Q;
+                FT sgn = (zero < IQ) - (IQ < zero);
+                // I *= sign;
+                // Q *= sign;
+                U *= sgn;
+                V *= sgn;
+                IQ *= sgn;
 
-                if(I + Q < 0)
-                    { sign = -1.0; }
+                // Indicate negative, zero or positive brightness matrix
+                sgn_brightness(src, time) = sgn;
 
                 // Compute cholesky decomposition
-                CT L00 = std::sqrt(sign*CT(I+Q));
-                CT L10 = sign*CT(U, -V) / L00;
-                CT L11 = std::sqrt(CT(sign*(I*I - Q*Q - U*U - V*V)/(I+Q), 0.0));
+                CT L00 = std::sqrt(CT(IQ, zero));
+                // Store L00 as a divisor of L10
+                CT div = L00;
 
-                // Indicate that we inverted the sign of the brightness
-                // matrix to obtain the cholesky decomposition
-                neg_ant_jones(src, time) = (sign == 1.0 ? 1 : -1);
+                // Gracefully handle zero matrices
+                if(IQ == zero)
+                {
+                    div = CT(one, zero);
+                    IQ = one;
+                }
+
+                CT L10 = CT(U, -V) / div;
+                FT L11_real = (I*I - Q*Q - U*U - V*V)/IQ;
+                CT L11 = std::sqrt(CT(L11_real, zero));
 
                 for(int chan=0; chan < nchan; ++chan)
                 {

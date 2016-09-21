@@ -44,7 +44,7 @@ __global__ void rime_sum_coherencies(
     const typename Traits::antenna_type * antenna2,
     const typename Traits::FT * shape,
     const typename Traits::ant_jones_type * ant_jones,
-    const typename Traits::neg_ant_jones_type * neg_ant_jones,
+    const typename Traits::sgn_brightness_type * sgn_brightness,
     const typename Traits::flag_type * flag,
     const typename Traits::gterm_type * gterm,
     const typename Traits::vis_type * model_vis_in,
@@ -100,7 +100,7 @@ __global__ void rime_sum_coherencies(
 
         // Load in and apply in sign inversions stemming from
         // cholesky decompositions that must be applied.
-        FT sign = FT(neg_ant_jones[base]);
+        FT sign = FT(sgn_brightness[base]);
         J1.x *= sign;
         J1.y *= sign;
 
@@ -158,7 +158,7 @@ public:
         const tf::Tensor & in_antenna2 = context->input(1);
         const tf::Tensor & in_shape = context->input(2);
         const tf::Tensor & in_ant_jones = context->input(3);
-        const tf::Tensor & in_neg_ant_jones = context->input(4);
+        const tf::Tensor & in_sgn_brightness = context->input(4);
         const tf::Tensor & in_flag = context->input(5);
         const tf::Tensor & in_gterm = context->input(6);
         const tf::Tensor & in_model_vis_in = context->input(7);
@@ -189,8 +189,8 @@ public:
             in_shape.flat<FT>().data());
         auto ant_jones = reinterpret_cast<const typename Tr::ant_jones_type *>(
             in_ant_jones.flat<CT>().data());
-        auto neg_ant_jones = reinterpret_cast<const typename Tr::neg_ant_jones_type *>(
-            in_neg_ant_jones.flat<tf::int8>().data());
+        auto sgn_brightness = reinterpret_cast<const typename Tr::sgn_brightness_type *>(
+            in_sgn_brightness.flat<tf::int8>().data());
         auto flag = reinterpret_cast<const typename Tr::flag_type *>(
             in_flag.flat<tf::uint8>().data());
         auto gterm = reinterpret_cast<const typename Tr::gterm_type *>(
@@ -213,7 +213,7 @@ public:
 
         // Call the rime_sum_coherencies CUDA kernel
         rime_sum_coherencies<Tr><<<grid, block, 0, device.stream()>>>(
-            antenna1, antenna2, shape, ant_jones, neg_ant_jones,
+            antenna1, antenna2, shape, ant_jones, sgn_brightness,
             flag, gterm, model_vis_in, apply_dies, model_vis_out,
             nsrc, ntime, nbl, na, nchan, npolchan);
     }

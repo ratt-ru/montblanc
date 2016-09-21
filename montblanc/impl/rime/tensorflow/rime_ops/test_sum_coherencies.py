@@ -20,16 +20,16 @@ np_ant1, np_ant2 = (np.tile(np_ant1, ntime).reshape(ntime, nbl),
     np.tile(np_ant2, ntime).reshape(ntime,nbl))
 np_shape = rf(nsrc, ntime, nbl, nchan)
 np_ant_jones = rf(nsrc, ntime, na, nchan, 4) + rf(nsrc, ntime, na, nchan, 4)*1j
-np_neg_ant_jones = np.random.randint(0, 2, size=(nsrc, ntime), dtype=np.int8)*2 - 1
+np_sgn_brightness = np.random.randint(0, 3, size=(nsrc, ntime), dtype=np.int8) - 1
 np_flag = np.random.randint(0, 2, size=(ntime, nbl, nchan, 4), dtype=np.uint8)
 np_gterm = rf(ntime, na, nchan, 4) + rf(ntime, na, nchan, 4)*1j
 np_model_vis = rf(ntime, nbl, nchan, 4) + rf(ntime, nbl, nchan, 4)*1j
 
 
 args = map(lambda v, n: tf.Variable(v, name=n),
-    [np_ant1, np_ant2, np_shape, np_ant_jones, np_neg_ant_jones,
+    [np_ant1, np_ant2, np_shape, np_ant_jones, np_sgn_brightness,
     np_flag, np_gterm, np_model_vis, np_apply_dies],
-    ["ant1", "ant2", "shape", "ant_jones", "neg_ant_jones",
+    ["ant1", "ant2", "shape", "ant_jones", "sgn_brightness",
     "flag", "gterm", "model_vis", "apply_dies"])
 
 # Pin the compute to the CPU

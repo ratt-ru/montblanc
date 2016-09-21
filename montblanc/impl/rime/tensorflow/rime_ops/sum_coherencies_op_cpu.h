@@ -31,7 +31,7 @@ public:
         const tf::Tensor & in_antenna2 = context->input(1);
         const tf::Tensor & in_shape = context->input(2);
         const tf::Tensor & in_ant_jones = context->input(3);
-        const tf::Tensor & in_neg_ant_jones = context->input(4);
+        const tf::Tensor & in_sgn_brightness = context->input(4);
         const tf::Tensor & in_flag = context->input(5);
         const tf::Tensor & in_gterm = context->input(6);
         const tf::Tensor & in_model_vis_in = context->input(7);
@@ -54,7 +54,7 @@ public:
         auto antenna2 = in_antenna2.tensor<int,2>();
         auto shape = in_shape.tensor<FT, 4>();
         auto ant_jones = in_ant_jones.tensor<CT, 5>();
-        auto neg_ant_jones = in_neg_ant_jones.tensor<tf::int8, 2>();
+        auto sgn_brightness = in_sgn_brightness.tensor<tf::int8, 2>();
         auto flag = in_flag.tensor<tf::uint8, 4>();
         auto gterm = in_gterm.tensor<CT,4>();
         auto model_vis_in = in_model_vis_in.tensor<CT, 4>();
@@ -94,7 +94,7 @@ public:
                         CT b2 = std::conj(ant_jones(src, time, ant2, chan, 1)*s);
                         CT b3 = std::conj(ant_jones(src, time, ant2, chan, 3)*s);
 
-                        FT sign = neg_ant_jones(src, time);
+                        FT sign = sgn_brightness(src, time);
 
                         // Multiply jones matrices and accumulate them
                         // in the sum terms

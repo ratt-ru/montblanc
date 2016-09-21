@@ -50,7 +50,7 @@ nsrc, ntime, na, nchan = 10, 50, 27, 32
 
 # Set up our numpy input arrays
 
-# Stokes parameters
+# Stokes parameters, should produce a positive definite matrix
 np_stokes = np.empty(shape=(nsrc, ntime, 4), dtype=dtype)
 Q = np_stokes[:,:,1] = np.random.random(size=(nsrc, ntime)) - 0.5
 U = np_stokes[:,:,2] = np.random.random(size=(nsrc, ntime)) - 0.5
@@ -59,8 +59,12 @@ noise = np.random.random(size=(nsrc, ntime))*0.1
 # Need I^2 = Q^2 + U^2 + V^2 + noise^2
 np_stokes[:,:,0] = np.sqrt(Q**2 + U**2 + V**2 + noise)
 
+# Choose random flux to invert
 mask = np.random.randint(0, 2, size=(nsrc, ntime)) == 1
 np_stokes[mask,0] = -np_stokes[mask,0]
+
+# Make the last matrix zero to test the positive semi-definite case
+np_stokes[-1,-1,:] = 0
 
 np_alpha = np.random.random(size=(nsrc, ntime)).astype(dtype)*0.8
 np_frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=dtype)
@@ -96,10 +100,6 @@ with tf.Session() as S:
 
     # Get our actual brightness matrices
     np_b = brightness_numpy(np_stokes, np_alpha, np_frequency, np_ref_freq)
-
-    # d = np.invert(np.isclose(invert_cpu, invert_gpu))
-    # print invert_cpu[d].ravel()[0:16]
-    # print invert_gpu[d].ravel()[0:16]
 
     # Check that our shapes and values agree with a certain tolerance
     assert tf_b_sqrt_op_cpu.shape == (nsrc, ntime, nchan, 4)

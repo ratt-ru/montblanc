@@ -343,6 +343,6 @@ A = [
     array_dict('cplx_phase', ('nsrc','ntime','na','nchan'), 'ct', temporary=True),
     array_dict('ejones', ('nsrc','ntime','na','nchan',4), 'ct', temporary=True),
     array_dict('ant_jones', ('nsrc','ntime','na','nchan',4), 'ct', temporary=True),
-    array_dict('neg_ant_jones', ('nsrc', 'ntime'), np.int8, temporary=True),
+    array_dict('sgn_brightness', ('nsrc', 'ntime'), np.int8, temporary=True),
     array_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', temporary=True),
 ]

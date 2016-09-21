@@ -568,7 +568,7 @@ class RimeSolver(MontblancTensorflowSolver):
             """
             cplx_phase = rime.phase(lm, uvw, frequency, CT=CT)
 
-            bsqrt, neg_ant_jones = rime.b_sqrt(stokes, alpha,
+            bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
                 frequency, ref_frequency, CT=CT)
 
             ejones = rime.e_beam(lm, frequency,
@@ -576,7 +576,7 @@ class RimeSolver(MontblancTensorflowSolver):
                 parallactic_angles,
                 beam_extents, ebeam)
 
-            return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT), neg_ant_jones
+            return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT), sgn_brightness
 
         # While loop condition for each point source type
         def point_cond(model_vis, npsrc, src_count):
@@ -595,10 +595,10 @@ class RimeSolver(MontblancTensorflowSolver):
             nsrc = tf.shape(lm)[0]
             src_count += nsrc
             npsrc +=  nsrc
-            ant_jones, neg_ant_jones = antenna_jones(lm, stokes, alpha)
+            ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
             shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
             model_vis = rime.sum_coherencies(antenna1, antenna2,
-                shape, ant_jones, neg_ant_jones, flag, gterm, model_vis,
+                shape, ant_jones, sgn_brightness, flag, gterm, model_vis,
                 apply_dies(src_count))
 
             return model_vis, npsrc, src_count
@@ -609,11 +609,11 @@ class RimeSolver(MontblancTensorflowSolver):
             nsrc = tf.shape(lm)[0]
             src_count += nsrc
             ngsrc += nsrc
-            ant_jones, neg_ant_jones = antenna_jones(lm, stokes, alpha)
+            ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
             gauss_shape = rime.gauss_shape(uvw, antenna1, antenna1,
                 frequency, gauss_params)
             model_vis = rime.sum_coherencies(antenna1, antenna2,
-                gauss_shape, ant_jones, neg_ant_jones, flag, gterm, model_vis,
+                gauss_shape, ant_jones, sgn_brightness, flag, gterm, model_vis,
                 apply_dies(src_count))
 
             return model_vis, ngsrc, src_count
@@ -624,11 +624,11 @@ class RimeSolver(MontblancTensorflowSolver):
             nsrc = tf.shape(lm)[0]
             src_count += nsrc
             nssrc += nsrc
-            ant_jones, neg_ant_jones = antenna_jones(lm, stokes, alpha)
+            ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
             sersic_shape = rime.sersic_shape(uvw, antenna1, antenna1,
                 frequency, sersic_params)
             model_vis = rime.sum_coherencies(antenna1, antenna2,
-                sersic_shape, ant_jones, neg_ant_jones, flag, gterm, model_vis,
+                sersic_shape, ant_jones, sgn_brightness, flag, gterm, model_vis,
                 apply_dies(src_count))
 
             return model_vis, nssrc, src_count
