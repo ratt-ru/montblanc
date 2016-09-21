@@ -106,7 +106,7 @@ public:
                 // Compute cholesky decomposition
                 CT L00 = std::sqrt(sign*CT(I+Q));
                 CT L10 = sign*CT(U, -V) / L00;
-                CT L11 = std::sqrt(sign*CT(I-Q) - L10*std::conj(L10));
+                CT L11 = std::sqrt(CT(sign*(I*I - Q*Q - U*U - V*V)/(I+Q), 0.0));
 
                 // Indicate that we inverted the sign of the brightness
                 // matrix to obtain the cholesky decomposition

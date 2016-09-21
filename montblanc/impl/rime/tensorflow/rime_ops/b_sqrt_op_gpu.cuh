@@ -140,10 +140,8 @@ __global__ void rime_b_sqrt(
         (B.YY.x*B.XX.x + B.YY.y*B.XX.y)/r2,
         (B.YY.y*B.XX.x - B.YY.x*B.XX.y)/r2);
 
-    montblanc::complex_conjugate_multiply<FT>(B.XY, B.YX, B.YX);
-    B.XY.x = -B.XY.x;
-    B.XY.y = -B.XY.y;
-    B.XY.x += sign*(I - Q);
+    B.XY.x = sign*(I*I - Q*Q - U*U - V*V)/(I+Q);
+    B.XY.y = 0.0;
 
     B.YY = Po::sqrt(B.XY);
     B.XY = Po::make_ct(0.0, 0.0);
