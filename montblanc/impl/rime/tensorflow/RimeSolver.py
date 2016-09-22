@@ -280,6 +280,11 @@ class RimeSolver(MontblancTensorflowSolver):
             for n, f in source.sources().iteritems()
             if n in self._queue_arrays})
 
+        # Get source strides out before the local sizes are modified during
+        # the source loops below
+        src_types = self._src_queues.keys()
+        src_strides = [int(i) for i in cube.dim_local_size(*src_types)]
+        src_queues = [self._src_queues[t] for t in src_types]
 
         chunks_fed = 0
         done = False
@@ -352,15 +357,19 @@ class RimeSolver(MontblancTensorflowSolver):
             chunks_fed += 1
 
             # For each source type, feed that source queue
-            for src_type, queue in self._src_queues.iteritems():
-                iter_args = [(src_type, cube.dim_local_size(src_type))]
+            for src_type, queue, stride in zip(src_types, src_queues, src_strides):
+                iter_args = [(src_type, stride)]
 
                 # Iterate over local_size chunks of the source
-                for dim_desc in cube.dim_iter(*iter_args, update_local_size=True):
+                for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
                     cube.update_dimensions(dim_desc)
 
-                    montblanc.log.debug("Enqueueing '{s}' '{t}' sources".format(
-                        s=dim_desc[0]['local_size'], t=src_type))
+                    montblanc.log.debug("Enqueueing '{ci}' '{s}' '{t}' sources".format(
+                        ci=chunk_i, s=dim_desc[0]['local_size'], t=src_type))
+
+                    # Determine array shapes and data types for this
+                    # portion of the hypercube
+                    array_schemas = cube.arrays(reify=True)
 
                     # Generate (name, placeholder, datasource, array descriptor)
                     # for the arrays required by each queue
@@ -750,7 +759,7 @@ def _uniq_log2_range(start, size, div):
 
     return np.flipud(np.unique(int_values))
 
-BUDGETING_DIMS = ['nbl', 'ntime', 'nsrc'] + mbu.source_nr_vars()
+BUDGETING_DIMS = ['ntime', 'nbl', 'nsrc'] + mbu.source_nr_vars()
 
 def _budget(cube, slvr_cfg):
     # Figure out a viable dimension configuration
@@ -758,24 +767,33 @@ def _budget(cube, slvr_cfg):
     mem_budget = slvr_cfg.get('mem_budget', 2*ONE_GB)
     bytes_required = cube.bytes_required()
 
-    dim_names = 'na', 'nbl', 'ntime', 'nsrc'
-    global_sizes =  na, nbl, ntime, nsrc = cube.dim_global_size(*dim_names)
+    src_dims = mbu.source_nr_vars() + [Options.NSRC]
+    dim_names = ['na', 'nbl', 'ntime'] + src_dims
+    global_sizes = cube.dim_global_size(*dim_names)
+    na, nbl, ntime = global_sizes[:3]
 
     # Keep track of original dimension sizes and any reductions that are applied
-    # Ignore 'na'
-    original_sizes = { r: s for r, s in zip(dim_names, global_sizes)[1:] }
+    original_sizes = { r: s for r, s in zip(dim_names, global_sizes) }
     applied_reductions = {}
 
     def _reduction():
         # Reduce over time first
-        for t in _uniq_log2_range(1, ntime, 5):
+        trange = _uniq_log2_range(1, ntime, 5)
+        for t in trange[0:1]:
             yield [('ntime', t)]
 
         # Attempt reduction over source
-        bs = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
+        sbs = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
+        srange = _uniq_log2_range(10, sbs, 5) if sbs > 10 else 10
+        src_dim_gs = global_sizes[3:]
 
-        if nsrc > bs:
-            yield [(d,nsrc) for d in [Options.NSRC] + mbu.source_nr_vars()]
+        for bs in srange:
+            yield [(d, bs if bs < gs else gs) for d, gs
+                in zip(src_dims, src_dim_gs)]
+
+        # Try the rest of the timesteps
+        for t in trange[1:]:
+            yield [('ntime', t)]
 
         # Reduce by baseline
         for bl in _uniq_log2_range(na, nbl, 5):
@@ -859,12 +877,15 @@ def _apply_source_provider_dim_updates(cube, source_providers):
         cube.update_dimension(n, local_size=ls, global_size=gs,
             lower_extent=0, upper_extent=ls)
 
-    # Handle total number of sources differently
+    # Handle global number of sources differently
     # It's equal to the number of
     # point's, gaussian's, sersic's combined
     nsrc = sum(cube.dim_global_size(*mbu.source_nr_vars()))
-    ls = cube.dim_local_size('nsrc')
-    ls = nsrc if ls > nsrc else ls
+
+    # Local number of sources will be the local size of whatever
+    # source type we're currently iterating over. So just take
+    # the maximum local size given the sources
+    ls = max(cube.dim_local_size(*mbu.source_nr_vars()))
 
     cube.update_dimension('nsrc',
         local_size=ls, global_size=nsrc,
