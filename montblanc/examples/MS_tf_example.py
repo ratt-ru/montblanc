@@ -33,45 +33,62 @@ from montblanc.impl.rime.tensorflow.sources import (SourceProvider,
 from montblanc.impl.rime.tensorflow.sinks import (SinkProvider,
     MSSinkProvider)
 
+from hypercube.dims import Dimension
+
 class RadioSourceProvider(SourceProvider):
+    """ Simulates a number of equally defined point sources """
+
+    def __init__(self, npsrc):
+        """ Simulate npsrc point sources """
+        self._npsrc = npsrc
 
     def name(self):
         return "TF example"
 
     def point_lm(self, context):
+        """ Return a lm coordinate array to montblanc """
         lm = np.empty(context.shape, context.dtype)
 
+        # Print the array schema
         montblanc.log.info(context.array_schema.shape)
+        # Print the space of iteration
         montblanc.log.info(context.iter_args)
 
-
+        # Get the extents of the time, baseline and chan dimension
         (lt, ut), (lb, ub), (lc, uc) = context.dim_extents(
             'ntime', 'nbl', 'nchan')
 
         lm[:,0] = 0.0008
         lm[:,1] = 0.0036
 
-
         lm[:,:] = 0
         return lm
 
     def point_stokes(self, context):
+        """ Return a stokes parameter array to montblanc """
         stokes = np.empty(context.shape, context.dtype)
         stokes[:,:,0] = 1
         stokes[:,:,1:4] = 0
         return stokes
 
     def point_alpha(self, context):
+        """ Return a spectral index (alpha) array to montblanc """
         return np.zeros(context.shape, context.dtype)
 
     def frequency(self, context):
+        """ Return a frequency array to montblanc """
         return np.full(context.shape, 1.415e9, context.dtype)
 
     def ref_frequency(self, context):
+        """ Return a reference frequency array to montblanc """
         ref_freq = np.empty(context.shape, context.dtype)
         ref_freq[:] = 1.415e9
 
         return ref_freq
+
+    def updated_dimensions(self):
+        """ Tell montblanc about dimension sizes (point sources only) """
+        return [Dimension('npsrc', self._npsrc)]
 
 class RimeSinkProvider(SinkProvider):
     def name(self):
@@ -92,10 +109,6 @@ if __name__ == '__main__':
         type=str, default='', help='Base beam filename')
     parser.add_argument('-np','--npsrc',dest='npsrc',
         type=int, default=10, help='Number of Point Sources')
-    parser.add_argument('-ng','--ngsrc',dest='ngsrc',
-        type=int, default=0, help='Number of Gaussian Sources')
-    parser.add_argument('-ns','--nssrc',dest='nssrc',
-        type=int, default=0, help='Number of Sersic Sources')
     parser.add_argument('-ac','--auto-correlations',dest='auto_correlations',
         type=lambda v: v.lower() in ("yes", "true", "t", "1"),
         choices=[True, False], default=False,
@@ -115,9 +128,6 @@ if __name__ == '__main__':
         ntime=10000, na=3000, nchan=128,
         mem_budget=1024*1024*1024,
         data_source=Options.DATA_SOURCE_DEFAULT,
-        sources=montblanc.sources(point=args.npsrc,
-            gaussian=args.ngsrc,
-            sersic=args.nssrc),
         dtype='double',
         auto_correlations=args.auto_correlations,
         version=args.version)
@@ -131,7 +141,7 @@ if __name__ == '__main__':
         source_provs.append(MSSourceProvider(ms_mgr, 'MODEL_DATA'))
         # Add a beam when you're ready
         #source_provs.append(FitsBeamSourceProvider('beam_$(corr)_$(reim).fits'))
-        source_provs.append(RadioSourceProvider())
+        source_provs.append(RadioSourceProvider(args.npsrc))
 
         sink_provs = []
         # Dump model visibilities into CORRECTED_DATA
