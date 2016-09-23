@@ -122,7 +122,6 @@ from montblanc.impl.rime.tensorflow.sources import (SourceProvider,
     FitsBeamSourceProvider)
 
 from montblanc.impl.rime.tensorflow.sinks import MSSinkProvider
-from hypercube.dims import Dimension
 
 class RadioSourceProvider(SourceProvider):
     def name(self):
@@ -144,7 +143,7 @@ class RadioSourceProvider(SourceProvider):
         return np.full(context.shape, ref_freq, context.dtype)
 
     def updated_dimensions(self):
-        return [Dimension('npsrc', pt_alpha.shape[0])]
+        return [('npsrc', pt_lm.shape[0])]
 
 slvr_cfg = montblanc.rime_solver_cfg(
     mem_budget=1024*1024*1024,

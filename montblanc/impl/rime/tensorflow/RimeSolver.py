@@ -45,6 +45,7 @@ from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
                                                   NullSinkProvider, MSSinkProvider)
 
 from hypercube import HyperCube
+from hypercube.dims import Dimension as HyperCubeDim
 import hypercube.util as hcu
 
 from montblanc.solvers import MontblancTensorflowSolver
@@ -364,7 +365,7 @@ class RimeSolver(MontblancTensorflowSolver):
                 for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
                     cube.update_dimensions(dim_desc)
 
-                    montblanc.log.debug("Enqueueing '{ci}' '{s}' '{t}' sources".format(
+                    montblanc.log.debug("'{ci}: Enqueueing '{s}' '{t}' sources".format(
                         ci=chunk_i, s=dim_desc[0]['local_size'], t=src_type))
 
                     # Determine array shapes and data types for this
@@ -844,10 +845,23 @@ def _apply_source_provider_dim_updates(cube, source_providers):
     # list of (global_size, provider_name) tuples
     mapping = collections.defaultdict(list)
 
+    def _transform_update(d):
+        if isinstance(d, tuple):
+            return HyperCubeDim(d[0], d[1])
+        elif isinstance(d, HyperCubeDim):
+            return d
+        else:
+            raise TypeError("Expected a hypercube dimension or "
+                "('dim_name', dim_size) tuple "
+                "for dimension update. Instead received "
+                "'{d}'".format(d=d))
+
+
+
     # Update the mapping, except for the nsrc dimension
     [mapping[d.name].append((d, prov.name()))
         for prov in source_providers
-        for d in prov.updated_dimensions()
+        for d in (_transform_update(d) for d in prov.updated_dimensions())
         if not d.name == 'nsrc' ]
 
     # Ensure that the global sizes we receive

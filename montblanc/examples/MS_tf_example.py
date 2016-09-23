@@ -33,8 +33,6 @@ from montblanc.impl.rime.tensorflow.sources import (SourceProvider,
 from montblanc.impl.rime.tensorflow.sinks import (SinkProvider,
     MSSinkProvider)
 
-from hypercube.dims import Dimension
-
 class RadioSourceProvider(SourceProvider):
     """ Simulates a number of equally defined point sources """
 
@@ -88,7 +86,7 @@ class RadioSourceProvider(SourceProvider):
 
     def updated_dimensions(self):
         """ Tell montblanc about dimension sizes (point sources only) """
-        return [Dimension('npsrc', self._npsrc)]
+        return [('npsrc', self._npsrc)]
 
 class RimeSinkProvider(SinkProvider):
     def name(self):
