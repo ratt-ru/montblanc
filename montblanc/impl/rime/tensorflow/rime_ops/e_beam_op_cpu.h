@@ -12,7 +12,7 @@
 namespace montblanc {
 namespace ebeam {
 // For simpler partial specialisation
-typedef Eigen::ThreadPoolDevice CPUDevice;    
+typedef Eigen::ThreadPoolDevice CPUDevice;
 
 template <typename FT, typename CT>
 inline void
@@ -49,7 +49,8 @@ public:
         const tf::Tensor & in_antenna_scaling = context->input(3);
         const tf::Tensor & in_parallactic_angle = context->input(4);
         const tf::Tensor & in_beam_extents = context->input(5);
-        const tf::Tensor & in_ebeam = context->input(6);
+        const tf::Tensor & in_beam_freq_map = context->input(6);
+        const tf::Tensor & in_ebeam = context->input(7);
 
         OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
             tf::errors::InvalidArgument("lm should be of shape (nsrc, 2)"))
@@ -131,16 +132,64 @@ public:
         auto point_errors = in_point_errors.tensor<FT, 4>();
         auto antenna_scaling = in_antenna_scaling.tensor<FT, 3>();
         auto parallactic_angle = in_parallactic_angle.tensor<FT, 2>();
+        auto beam_freq_map_flat = in_beam_freq_map.flat<FT>();
+        auto beam_freq_map_begin = beam_freq_map_flat.data();
+        auto beam_freq_map_end = beam_freq_map_begin + beam_freq_map_flat.size();
         auto e_beam = in_ebeam.tensor<CT, 4>();
         auto jones = jones_ptr->tensor<CT, 5>();
 
-        FT lmax = FT(cdata.beam_lw-1);
-        FT mmax = FT(cdata.beam_mh-1);
-        FT fmax = FT(cdata.beam_nud-1);
-        constexpr FT zero = 0;
+        constexpr FT zero = 0.0;
+        constexpr FT one = 1.0;
+
+        FT lmax = FT(cdata.beam_lw - one);
+        FT mmax = FT(cdata.beam_mh - one);
+        std::size_t fmax = cdata.beam_nud - 1;
+
+        // Precompute channel dimension data
+        std::vector<FT> vchan(cdata.nchan);
+        std::vector<FT> gchan0(cdata.nchan);
+        std::vector<FT> gchan1(cdata.nchan);
+        std::vector<FT> chd0(cdata.nchan);
+        std::vector<FT> chd1(cdata.nchan);
+
+        for(int chan=0; chan < cdata.nchan; chan++)
+        {
+            FT f = frequency(chan);
+
+            // This really should work, but for beam_freq_map[i] < f < beam_freq_map[i+1]
+            // it returns i+1...
+            // TODO: understand why
+            // std::size_t lchan = std::lower_bound(
+            //     beam_freq_map_begin,
+            //     beam_freq_map_end, f) - beam_freq_map_begin;
+
+            std::size_t uchan = std::upper_bound(
+                beam_freq_map_begin,
+                beam_freq_map_end, f) - beam_freq_map_begin;
+
+            uchan = std::min(uchan, fmax);
+
+            std::size_t lchan = std::max(std::size_t(0), uchan - 1);
+
+            FT lower_freq = *(beam_freq_map_begin + lchan);
+            FT upper_freq = *(beam_freq_map_begin + uchan);
+            FT freq_diff = upper_freq - lower_freq;
+
+            gchan0[chan] = FT(lchan);
+            gchan1[chan] = FT(uchan);
+            chd1[chan] = (f - lower_freq)/freq_diff;
+            chd0[chan] = (upper_freq - f)/freq_diff;
+
+            // printf("lfreq %.2f freq %.2f ufreq %.2f "
+            //     "lgrid %.1f ugrid %.1f "
+            //     "ldiff %.2f udiff %.2f\n",
+            //         lower_freq, f, upper_freq,
+            //         gchan0[chan], gchan1[chan],
+            //         chd0[chan], chd1[chan]);
+        }
 
         for(int time=0; time < cdata.ntime; ++time)
-        {                
+        {
             for(int ant=0; ant < cdata.na; ++ant)
             {
                 // Rotation angle
@@ -167,72 +216,68 @@ public:
                         // Shift into the cube coordinate system
                         vl = lscale*(vl - cdata.ll);
                         vm = mscale*(vm - cdata.lm);
-                        FT vchan = fscale*(frequency(chan) - cdata.lf);
 
                         vl = std::max(zero, std::min(vl, lmax));
                         vm = std::max(zero, std::min(vm, mmax));
-                        vchan = std::max(zero, std::min(vchan, fmax));
 
                         // Find the snapped grid coordinates
                         FT gl0 = std::floor(vl);
                         FT gm0 = std::floor(vm);
-                        FT gchan0 = std::floor(vchan);
 
-                        FT gl1 = std::min(FT(gl0+1.0), lmax);
-                        FT gm1 = std::min(FT(gm0+1.0), mmax);
-                        FT gchan1 = std::min(FT(gchan0+1.0), fmax);
+                        FT gl1 = std::min(FT(gl0+one), lmax);
+                        FT gm1 = std::min(FT(gm0+one), mmax);
 
                         // Difference between grid and offset coordinates
                         FT ld = vl - gl0;
                         FT md = vm - gm0;
-                        FT chd = vchan - gchan0;
 
                         for(int pol=0; pol<EBEAM_NPOL; ++pol)
                         {
-                            std::complex<FT> pol_sum = {0.0, 0.0};
-                            FT abs_sum = 0.0;
+                            std::complex<FT> pol_sum = {zero, zero};
+                            FT abs_sum = zero;
 
                             // Load in the complex values from the E beam
                             // at the supplied coordinate offsets.
                             // Save the complex sum in pol_sum
                             // and the sum of abs in abs_sum
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl0, gm0, gchan0,
+                                gl0, gm0, gchan0[chan],
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
-                                (1.0f-ld)*(1.0f-md)*(1.0f-chd));
+                                (one-ld)*(one-md)*(chd0[chan]));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl1, gm0, gchan0,
+                                gl1, gm0, gchan0[chan],
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
-                                ld*(1.0f-md)*(1.0f-chd));
+                                ld*(one-md)*(chd0[chan]));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl0, gm1, gchan0,
+                                gl0, gm1, gchan0[chan],
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
-                                (1.0f-ld)*md*(1.0f-chd));
+                                (one-ld)*md*(chd0[chan]));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl1, gm1, gchan0,
+                                gl1, gm1, gchan0[chan],
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
-                                ld*md*(1.0f-chd));
+                                ld*md*(chd0[chan]));
+
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl0, gm0, gchan1,
+                                gl0, gm0, gchan1[chan],
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
-                                (1.0f-ld)*(1.0f-md)*chd);
+                                (one-ld)*(one-md)*chd1[chan]);
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl1, gm0, gchan1,
+                                gl1, gm0, gchan1[chan],
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
-                                ld*(1.0f-md)*chd);
+                                ld*(one-md)*chd1[chan]);
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl0, gm1, gchan1,
+                                gl0, gm1, gchan1[chan],
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
-                                (1.0f-ld)*md*chd);
+                                (one-ld)*md*chd1[chan]);
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                                gl1, gm1, gchan1,
+                                gl1, gm1, gchan1[chan],
                                 cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
-                                ld*md*chd);
+                                ld*md*chd1[chan]);
 
                             // Normalising factor for the polarised sum
-                            FT norm = 1.0 / std::abs(pol_sum);
+                            FT norm = one / std::abs(pol_sum);
                             if(!std::isfinite(norm))
-                                { norm = 1.0; }
+                                { norm = one; }
 
                             // Multiply in the absolute value
                             pol_sum.real(pol_sum.real() * norm * abs_sum);
