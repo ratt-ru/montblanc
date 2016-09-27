@@ -219,6 +219,10 @@ def test_sersic_shape(ctx):
 
     return A
 
+_freq_low = 1e9
+_freq_high = 2e9
+_ref_freq = 1.5e9
+
 # List of arrays
 A = [
     # UVW Coordinates
@@ -237,12 +241,12 @@ A = [
     # Frequency and Reference Frequency arrays
     # TODO: This is incorrect when channel local is not the same as channel global
     array_dict('frequency', ('nchan',), 'ft',
-        default = lambda c: np.linspace(1e9, 2e9, c.shape[0]),
-        test    = lambda c: np.linspace(1e9, 2e9, c.shape[0])),
+        default = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0]),
+        test    = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0])),
 
     array_dict('ref_frequency', ('nchan',), 'ft',
-        default = lambda c: np.full(c.shape, 1.5e9, c.dtype),
-        test    = lambda c: np.full(c.shape, 1.5e9, c.dtype)),
+        default = lambda c: np.full(c.shape, _ref_freq, c.dtype),
+        test    = lambda c: np.full(c.shape, _ref_freq, c.dtype)),
 
     # Holographic Beam
 
@@ -265,8 +269,8 @@ A = [
     # First 3 values are lower coordinate for (l, m, frequency)
     # while the last 3 are the upper coordinates
     array_dict('beam_extents', (6,), 'ft',
-        default  = lambda c: c.dtype([-1, -1, 1e9, 1, 1, 2e9]),
-        test     = lambda c: c.dtype([-1, -1, 1e9, 1, 1, 2e9])),
+        default  = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
+        test     = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high])),
 
     # Beam cube
     array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
