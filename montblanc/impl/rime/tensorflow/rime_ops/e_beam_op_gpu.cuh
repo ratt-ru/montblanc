@@ -32,7 +32,7 @@ public:
         return montblanc::shrink_small_dims(
             dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
             X, Y, Z);
-    }        
+    }
 };
 
 // Specialise for double
@@ -48,12 +48,12 @@ public:
         return montblanc::shrink_small_dims(
             dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
             X, Y, Z);
-    }        
+    }
 };
 
 
 // For simpler partial specialisation
-typedef Eigen::GpuDevice GPUDevice;    
+typedef Eigen::GpuDevice GPUDevice;
 
 // Constant GPU memory. Note that declaring constant memory
 // with templates is a bit tricky, so we declare it as
@@ -62,7 +62,7 @@ typedef Eigen::GpuDevice GPUDevice;
 __constant__ montblanc::ebeam::const_data<double> beam_constant;
 
 // Helper class for casting constant data to appropriate type
-template <typename T> 
+template <typename T>
 struct holder
 {
     using bc = typename montblanc::ebeam::const_data<T>;
@@ -123,6 +123,7 @@ __global__ void rime_e_beam(
     const typename Traits::point_error_type * point_errors,
     const typename Traits::antenna_scale_type * antenna_scaling,
     const typename Traits::FT * parallactic_angle,
+    const typename Traits::FT * beam_freq_map,
     const typename Traits::CT * ebeam,
     typename Traits::CT * jones)
 {
@@ -155,7 +156,7 @@ __global__ void rime_e_beam(
         FT chd[BLOCKCHANS];    // difference between gchan0 and actual grid position
         // pointing errors
         point_error_type pe[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][BLOCKCHANS];
-        // antenna scaling        
+        // antenna scaling
         antenna_scale_type as[LTr::BLOCKDIMY][BLOCKCHANS];
     } shared;
     int i;
@@ -233,7 +234,7 @@ __global__ void rime_e_beam(
         FT gl1 = Po::min(gl0 + 1.0, cdata->beam_lw-1);
         // Offset of snapped coordinate from grid position
         FT ld = l - gl0;
-        
+
         // M coordinate
         // rotate
         FT m = rlm.x*shared.pa_sin[threadIdx.z][threadIdx.y] +
@@ -318,7 +319,7 @@ __global__ void rime_e_beam(
         pol_sum.y *= norm * abs_sum;
         i = ((SRC*cdata->ntime + TIME)*cdata->na + ANT)*cdata->npolchan + POLCHAN;
         jones[i] = pol_sum;
-    }        
+    }
 }
 
 template <typename FT, typename CT>
@@ -351,7 +352,8 @@ public:
         const tf::Tensor & in_antenna_scaling = context->input(3);
         const tf::Tensor & in_parallactic_angle = context->input(4);
         const tf::Tensor & in_beam_extents = context->input(5);
-        const tf::Tensor & in_ebeam = context->input(6);
+        const tf::Tensor & in_beam_freq_map = context->input(6);
+        const tf::Tensor & in_ebeam = context->input(7);
 
         OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
             tf::errors::InvalidArgument("lm should be of shape (nsrc, 2)"))
@@ -418,7 +420,7 @@ public:
             pinned_allocator));
 
         // Cast raw bytes to the constant data structure type
-        montblanc::ebeam::const_data<FT> * cdata_ptr = 
+        montblanc::ebeam::const_data<FT> * cdata_ptr =
             reinterpret_cast<montblanc::ebeam::const_data<FT> *>(
                 cdata_tensor.flat<uint8_t>().data());
 
@@ -470,18 +472,21 @@ public:
         auto antenna_scaling = reinterpret_cast<
             const typename Tr::antenna_scale_type *>(
                 in_antenna_scaling.flat<FT>().data());
-        auto ebeam = reinterpret_cast<
-            const typename Tr::CT *>(
-                in_ebeam.flat<CT>().data());
         auto jones = reinterpret_cast<typename Tr::CT *>(
                 jones_ptr->flat<CT>().data());
         auto parallactic_angle = reinterpret_cast<
             const typename Tr::FT *>(
                 in_parallactic_angle.tensor<FT, 2>().data());
+        auto beam_freq_map = reinterpret_cast<
+            const typename Tr::FT *>(
+                in_beam_freq_map.tensor<FT, 1>().data());
+        auto ebeam = reinterpret_cast<
+            const typename Tr::CT *>(
+                in_ebeam.flat<CT>().data());
 
         rime_e_beam<Tr><<<grid, blocks, 0, stream>>>(
-            lm, frequency, point_errors, antenna_scaling, 
-            parallactic_angle, ebeam, jones);
+            lm, frequency, point_errors, antenna_scaling,
+            parallactic_angle, beam_freq_map, ebeam, jones);
 
     }
 };
