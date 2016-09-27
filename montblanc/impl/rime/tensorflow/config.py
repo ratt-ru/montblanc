@@ -272,6 +272,10 @@ A = [
         default  = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
         test     = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high])),
 
+    array_dict('beam_freq_map', ('beam_nud',), 'ft',
+        default  = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0]),
+        test     = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0])),
+
     # Beam cube
     array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
