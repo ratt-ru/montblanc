@@ -48,7 +48,7 @@ args = map(lambda n, s: tf.Variable(n, name=s),
     [np_lm, np_frequency, np_point_errors, np_antenna_scaling,
     np_parallactic_angle, np_beam_extents, np_beam_freq_map, np_e_beam],
     ["lm", "frequency", "point_errors", "antenna_scaling",
-    "parallactic_angles", "beam_extents", "np_beam_freq_map", "e_beam"])
+    "parallactic_angles", "beam_extents", "beam_freq_map", "e_beam"])
 
 # Get an expression for the e beam op on the CPU
 with tf.device('/cpu:0'):
@@ -87,3 +87,5 @@ with tf.Session() as S:
             i=incorrect,
             t=d.size,
             pa=proportion_acceptable)
+
+    assert np.count_nonzero(tf_e_beam_op_cpu) > 0.8*tf_e_beam_op_cpu.size

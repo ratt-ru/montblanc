@@ -55,6 +55,11 @@ public:
 // For simpler partial specialisation
 typedef Eigen::GpuDevice GPUDevice;
 
+// Limit the BEAM_NUD dimension we're prepared to handle
+// Mostly because of the second index beam
+// frequency mapping in shared memory
+constexpr std::size_t BEAM_NUD_LIMIT = 128;
+
 // Constant GPU memory. Note that declaring constant memory
 // with templates is a bit tricky, so we declare it as
 // double (the largest type it should take) and cast it using
@@ -90,6 +95,33 @@ __device__ __forceinline__ int ebeam_pol()
 // Get the current channel from the thread ID
 __device__ __forceinline__ int thread_chan()
     { return threadIdx.x >> 2; }
+
+template <typename Traits, typename Policies>
+__device__ __forceinline__
+void find_freq_bounds(int & lower, int & upper,
+    const typename Traits::FT * beam_freq_map,
+    const typename Traits::FT frequency)
+{
+    using FT = typename Traits::FT;
+
+    lower = 0;
+    upper = cdata->beam_nud;
+
+    // Warp divergence here, unlikely
+    // to be a big deal though
+    while(lower < upper)
+    {
+        int i = (lower + upper)/2;
+
+        if(frequency < beam_freq_map[i])
+            { upper = i; }
+        else
+            { lower = i + 1; }
+    }
+
+    upper = lower;
+    lower = upper - 1;
+}
 
 template <typename Traits, typename Policies>
 __device__ __forceinline__
@@ -142,11 +174,14 @@ __global__ void rime_e_beam(
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
     constexpr int BLOCKCHANS = LTr::BLOCKDIMX >> 2;
+    constexpr FT zero = 0.0f;
+    constexpr FT one = 1.0f;
 
     if(TIME >= cdata->ntime || ANT >= cdata->na || POLCHAN >= cdata->npolchan)
         { return; }
 
     __shared__ struct {
+        FT beam_freq_map[BEAM_NUD_LIMIT];
         FT lscale;             // l axis scaling factor
         FT mscale;             // m axis scaling factor
         FT pa_sin[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];  // sin of parallactic angle
@@ -159,8 +194,20 @@ __global__ void rime_e_beam(
         // antenna scaling
         antenna_scale_type as[LTr::BLOCKDIMY][BLOCKCHANS];
     } shared;
+
     int i;
 
+
+    // 3D thread ID
+    i = threadIdx.z*blockDim.x*blockDim.y
+        + threadIdx.y*blockDim.x
+        + threadIdx.x;
+
+    // Load in the beam frequency mapping
+    if(i < cdata->beam_nud)
+    {
+        shared.beam_freq_map[i] = beam_freq_map[i];
+    }
 
     // Precompute l and m scaling factors in shared memory
     if(threadIdx.z == 0 && threadIdx.y == 0 && threadIdx.z == 0)
@@ -176,7 +223,6 @@ __global__ void rime_e_beam(
         shared.pe[threadIdx.z][threadIdx.y][thread_chan()] = point_errors[i];
     }
 
-
     // Antenna scaling factors vary by antenna and channel, but not timestep
     if(threadIdx.z == 0 && ebeam_pol() == 0)
     {
@@ -184,21 +230,29 @@ __global__ void rime_e_beam(
         shared.as[threadIdx.y][thread_chan()] = antenna_scaling[i];
     }
 
+    // Think this is needed so all beam_freq_map values are loaded
+    __syncthreads();
+
     // Frequency vary by channel, but not timestep or antenna
     if(threadIdx.z == 0 && threadIdx.y == 0 && ebeam_pol() == 0)
     {
         // Channel coordinate
         // channel grid position
-        FT freqscale = FT(cdata->beam_nud-1) / (cdata->uf - cdata->lf);
-        FT chan = freqscale * (frequency[POLCHAN >> 2] - cdata->lf);
-        // clamp to grid edges
-        chan = Po::clamp(chan, 0.0, cdata->beam_nud-1);
+        FT freq = frequency[POLCHAN >> 2];
+        int lower, upper;
+
+        find_freq_bounds<Traits, Po>(lower, upper, beam_freq_map, freq);
+
         // Snap to grid coordinate
-        shared.gchan0[thread_chan()] = Po::floor(chan);
-        shared.gchan1[thread_chan()] = Po::min(cdata->beam_nud-1,
-            shared.gchan0[thread_chan()] + 1.0);
+        shared.gchan0[thread_chan()] = FT(lower);
+        shared.gchan1[thread_chan()] = FT(upper);
+
+        FT lower_freq = beam_freq_map[lower];
+        FT upper_freq = beam_freq_map[upper];
+        FT freq_diff = upper_freq - lower_freq;
+
         // Offset of snapped coordinate from grid position
-        shared.chd[thread_chan()] = chan - shared.gchan0[thread_chan()];
+        shared.chd[thread_chan()] = (freq - lower_freq)/freq_diff;
     }
 
     // Parallactic angles vary by time and antenna, but not channel
@@ -228,10 +282,10 @@ __global__ void rime_e_beam(
         // l grid position
         l = shared.lscale * (l - cdata->ll);
         // clamp to grid edges
-        l = Po::clamp(0.0, l, cdata->beam_lw-1);
+        l = Po::clamp(zero, l, cdata->beam_lw-1);
         // Snap to grid coordinate
         FT gl0 = Po::floor(l);
-        FT gl1 = Po::min(gl0 + 1.0, cdata->beam_lw-1);
+        FT gl1 = Po::min(gl0 + one, cdata->beam_lw-1);
         // Offset of snapped coordinate from grid position
         FT ld = l - gl0;
 
@@ -246,15 +300,15 @@ __global__ void rime_e_beam(
         // m grid position
         m = shared.mscale * (m - cdata->lm);
         // clamp to grid edges
-        m = Po::clamp(0.0, m, cdata->beam_mh-1);
+        m = Po::clamp(zero, m, cdata->beam_mh-1);
         // Snap to grid position
         FT gm0 = Po::floor(m);
-        FT gm1 = Po::min(gm0 + 1.0, cdata->beam_mh-1);
+        FT gm1 = Po::min(gm0 + one, cdata->beam_mh-1);
         // Offset of snapped coordinate from grid position
         FT md = m - gm0;
 
-        CT pol_sum = Po::make_ct(0.0, 0.0);
-        FT abs_sum = FT(0.0);
+        CT pol_sum = Po::make_ct(zero, zero);
+        FT abs_sum = FT(zero);
         // A simplified trilinear weighting is used here. Given
         // point x between points x1 and x2, with function f
         // provided values f(x1) and f(x2) at these points.
@@ -286,26 +340,26 @@ __global__ void rime_e_beam(
         // at the supplied coordinate offsets.
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl0, gm0, shared.gchan0[thread_chan()],
-            (1.0f-ld)*(1.0f-md)*(1.0f-shared.chd[thread_chan()]));
+            (one-ld)*(one-md)*(one-shared.chd[thread_chan()]));
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl1, gm0, shared.gchan0[thread_chan()],
-            ld*(1.0f-md)*(1.0f-shared.chd[thread_chan()]));
+            ld*(one-md)*(one-shared.chd[thread_chan()]));
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl0, gm1, shared.gchan0[thread_chan()],
-            (1.0f-ld)*md*(1.0f-shared.chd[thread_chan()]));
+            (one-ld)*md*(one-shared.chd[thread_chan()]));
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl1, gm1, shared.gchan0[thread_chan()],
-            ld*md*(1.0f-shared.chd[thread_chan()]));
+            ld*md*(one-shared.chd[thread_chan()]));
 
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl0, gm0, shared.gchan1[thread_chan()],
-            (1.0f-ld)*(1.0f-md)*shared.chd[thread_chan()]);
+            (one-ld)*(one-md)*shared.chd[thread_chan()]);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl1, gm0, shared.gchan1[thread_chan()],
-            ld*(1.0f-md)*shared.chd[thread_chan()]);
+            ld*(one-md)*shared.chd[thread_chan()]);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl0, gm1, shared.gchan1[thread_chan()],
-            (1.0f-ld)*md*shared.chd[thread_chan()]);
+            (one-ld)*md*shared.chd[thread_chan()]);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl1, gm1, shared.gchan1[thread_chan()],
             ld*md*shared.chd[thread_chan()]);
@@ -434,6 +488,10 @@ public:
         cdata_ptr->beam_lw = in_ebeam.dim_size(0);
         cdata_ptr->beam_mh = in_ebeam.dim_size(1);
         cdata_ptr->beam_nud = in_ebeam.dim_size(2);
+
+        OP_REQUIRES(context, cdata_ptr->beam_nud < BEAM_NUD_LIMIT,
+            tf::errors::InvalidArgument("beam_nud must be less than '" +
+                std::to_string(BEAM_NUD_LIMIT) + "' for the GPU beam."));
 
         // Extract beam extents
         auto beam_extents = in_beam_extents.tensor<FT, 1>();

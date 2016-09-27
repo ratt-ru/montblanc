@@ -146,7 +146,6 @@ public:
         std::size_t fmax = cdata.beam_nud - 1;
 
         // Precompute channel dimension data
-        std::vector<FT> vchan(cdata.nchan);
         std::vector<FT> gchan0(cdata.nchan);
         std::vector<FT> gchan1(cdata.nchan);
         std::vector<FT> chd0(cdata.nchan);

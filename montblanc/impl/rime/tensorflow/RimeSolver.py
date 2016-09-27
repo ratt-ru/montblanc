@@ -510,7 +510,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         self._dde_queue = create_queue_wrapper('dde',
             QUEUE_SIZE, ['ebeam', 'antenna_scaling', 'point_errors',
-                'parallactic_angles', 'beam_extents'], dfs)
+                'parallactic_angles', 'beam_freq_map', 'beam_extents'], dfs)
 
         self._point_source_queue = create_queue_wrapper('point_source',
             QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
@@ -559,7 +559,8 @@ class RimeSolver(MontblancTensorflowSolver):
         observed_vis, flag, weight = self._observation_queue.dequeue()
         gterm = self._die_queue.dequeue()
         (ebeam, antenna_scaling, point_errors,
-            parallactic_angles, beam_extents) = self._dde_queue.dequeue()
+            parallactic_angles, beam_freq_map,
+            beam_extents) = self._dde_queue.dequeue()
 
         # Infer chunk dimensions
         model_vis_shape = tf.shape(model_vis)
@@ -584,7 +585,7 @@ class RimeSolver(MontblancTensorflowSolver):
             ejones = rime.e_beam(lm, frequency,
                 point_errors, antenna_scaling,
                 parallactic_angles,
-                beam_extents, ebeam)
+                beam_extents, beam_freq_map, ebeam)
 
             return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT), sgn_brightness
 
