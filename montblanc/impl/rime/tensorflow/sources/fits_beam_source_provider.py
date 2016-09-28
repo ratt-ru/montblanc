@@ -348,7 +348,8 @@ class FitsBeamSourceProvider(SourceProvider):
     def beam_freq_map(self, context):
         """ Return the frequency map associated with the beam """
         lower_freq, upper_freq = self._cube_extents[:,2]
-        return np.linspace(lower_freq, upper_freq, context.shape[0])
+        return np.linspace(lower_freq, upper_freq,
+            context.shape[0], endpoint=True)
 
     def updated_dimensions(self):
         # Dimension updates bave been indicated, don't send them again
