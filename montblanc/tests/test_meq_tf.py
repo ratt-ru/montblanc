@@ -6,10 +6,6 @@ import tempfile
 import numpy as np
 import pyrap.tables as pt
 
-import Tigger
-import Tigger.Models.SkyModel as tsm
-from Tigger.Models.Formats.AIPSCCFITS import lm_to_radec
-
 #=========================================
 # Directory and Script Configuration
 #=========================================
@@ -41,6 +37,27 @@ beam_file_pattern = ''.join((base_beam_file, '_$(corr)_$(reim).fits'))
 meqpipe_actual = subprocess.check_output(['which', meqpipe]).strip()
 cfg_section = 'montblanc-compare'
 
+#======================================================
+# Configure the beam files with frequencies from the MS
+#======================================================
+
+from montblanc.impl.rime.tensorflow.sources.fits_beam_source_provider import (
+    _create_filenames, _open_fits_files)
+
+# Extract frequencies from the MS
+with pt.table(msfile + '::SPECTRAL_WINDOW', ack=False) as SW:
+    frequency = SW.getcol('CHAN_FREQ')[0]
+
+bandwidth = frequency[-1] - frequency[0]
+filenames = _create_filenames(beam_file_pattern)
+files = _open_fits_files(filenames)
+fgen = (f for (re, im) in files.itervalues() for f in (re, im))
+
+for f in fgen:
+    f[0].header['CRVAL3'] = frequency[0]
+    f[0].header['CDELT3'] = bandwidth / (f[0].header['NAXIS3']-1)
+    f.close()
+
 #=========================================
 # Source Configuration
 #=========================================
@@ -66,8 +83,10 @@ print pt_stokes.shape
 print pt_alpha.shape
 
 #=========================================
-# Create Tigger LSM
+# Create Tigger ASCII sky model
 #=========================================
+
+from Tigger.Models.Formats.AIPSCCFITS import lm_to_radec
 
 # Need the phase centre for lm_to_radec
 with pt.table(msfile + '::FIELD', ack=False) as F:

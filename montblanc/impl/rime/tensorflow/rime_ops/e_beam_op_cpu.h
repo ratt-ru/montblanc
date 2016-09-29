@@ -176,15 +176,19 @@ public:
 
             gchan0[chan] = FT(lchan);
             gchan1[chan] = FT(uchan);
-            chd1[chan] = (f - lower_freq)/freq_diff;
             chd0[chan] = (upper_freq - f)/freq_diff;
+            chd1[chan] = (f - lower_freq)/freq_diff;
+
+            // FT value = chd0[chan]*lower_freq + chd1[chan]*upper_freq;
 
             // printf("lfreq %.2f freq %.2f ufreq %.2f "
             //     "lgrid %.1f ugrid %.1f "
-            //     "ldiff %.2f udiff %.2f\n",
+            //     "ldiff %.2f udiff %.2f "
+            //     "value %.2f\n diff %.2f\n",
             //         lower_freq, f, upper_freq,
             //         gchan0[chan], gchan1[chan],
-            //         chd0[chan], chd1[chan]);
+            //         chd0[chan], chd1[chan],
+            //         value, value-f);
         }
 
         for(int time=0; time < cdata.ntime; ++time)
