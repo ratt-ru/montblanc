@@ -32,6 +32,7 @@ beam_dir = os.path.join(data_dir, 'beams')
 beam_file_prefix = 'beam'
 base_beam_file = os.path.join(beam_dir, beam_file_prefix)
 beam_file_pattern = ''.join((base_beam_file, '_$(corr)_$(reim).fits'))
+l_axis = '-X'
 
 # Find the location of the meqtree pipeliner script
 meqpipe_actual = subprocess.check_output(['which', meqpipe]).strip()
@@ -126,6 +127,8 @@ cmd_list = ['python',
     'img_sel.imaging_column={c}'.format(c=model_data_column),
     # Beam FITS file pattern
     'pybeams_fits.filename_pattern={p}'.format(p=beam_file_pattern),
+    # FITS L AXIS
+    'pybeams_fits.l_axis={l}'.format(l=l_axis),
     sim_script,
     '=simulate'
     ]
@@ -180,7 +183,7 @@ source_providers.append(MSSourceProvider(ms_mgr))
 
 if beam_on == 1:
     beam_prov = FitsBeamSourceProvider(beam_file_pattern,
-        l_axis='X', m_axis='Y')
+        l_axis=l_axis, m_axis='Y')
     source_providers.append(beam_prov)
 
 source_providers.append(RadioSourceProvider())
