@@ -179,7 +179,9 @@ source_providers = []
 source_providers.append(MSSourceProvider(ms_mgr))
 
 if beam_on == 1:
-    source_providers.append(FitsBeamSourceProvider(beam_file_pattern))
+    beam_prov = FitsBeamSourceProvider(beam_file_pattern,
+        l_axis='X', m_axis='Y')
+    source_providers.append(beam_prov)
 
 source_providers.append(RadioSourceProvider())
 

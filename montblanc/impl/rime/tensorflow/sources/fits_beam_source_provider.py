@@ -69,7 +69,7 @@ class FitsAxes(object):
             for n in axr]
 
         # Check for custom irregular grid format.
-	# Currently only implemented for FREQ dimension.
+        # Currently only implemented for FREQ dimension.
         irregular_grid = [[header.get('G%s%d' % (self._ctype, j), None)
             for j in range(1, self._naxis[i]+1)]
             for i in range(ndims)]
@@ -158,7 +158,6 @@ class FitsAxes(object):
 
 CORRELATIONS = ('xx', 'xy', 'yx', 'yy')
 REIM = ('re', 'im')
-BEAM_DIMS = ('L', 'M', 'FREQ')
 
 def _create_filenames(filename_schema):
     """
@@ -205,15 +204,6 @@ def _open_fits_files(filenames):
     return collections.OrderedDict(
             (corr, tuple(_fh(fn) for fn in files))
         for corr, files in filenames.iteritems() )
-
-def _cube_dim_indices(axes):
-    # Identify L, M and FREQ axis indices
-    l_ax, m_ax, f_ax = (axes.iaxis(d) for d in BEAM_DIMS)
-    # Try use X and Y if we an't find L and M
-    l_ax, m_ax = (axes.iaxis(d) if i == -1 else i
-        for i, d in zip([l_ax, m_ax], ['X', 'Y']))
-
-    return (l_ax, m_ax, f_ax)
 
 def _cube_extents(axes, l_ax, m_ax, f_ax):
     # List of (lower, upper) extent tuples for the given dimensions
@@ -303,45 +293,49 @@ class FitsBeamSourceProvider(SourceProvider):
     inferrred from the first file found and subsequent files should match
     that shape.
     """
-    def __init__(self, filename_schema):
+    def __init__(self, filename_schema, l_axis=None, m_axis=None):
         """
         """
+        if l_axis is None:
+            l_axis = 'L'
+
+        if m_axis is None:
+            m_axis = 'M'
+
+        if l_axis[0] == '-':
+            self._l_axis, self._l_axis_sign = l_axis[1:], -1
+        else:
+            self._l_axis, self._l_axis_sign = l_axis, 1
+
+        if m_axis[0] == '-':
+            self._m_axis, self._m_axis_sign = m_axis[1:], -1
+        else:
+            self._m_axis, self._m_axis_sign = m_axis, 1
+
+        beam_dims = (self._l_axis, self._m_axis, 'FREQ')
+
         self._filename_schema = filename_schema
-        self._filenames = _create_filenames(filename_schema)
-        self._files = _open_fits_files(self._filenames)
-        self._axes = _create_axes(self._filenames, self._files)
-        self._dim_indices = (l_ax, m_ax, f_ax) = _cube_dim_indices(
-            self._axes)
-        self._name = "FITS Beams '{s}'".format(s=self.filename_schema)
+        self._name = "FITS Beams '{s}'".format(s=filename_schema)
+        self._filenames = filenames = _create_filenames(filename_schema)
+        self._files = files = _open_fits_files(filenames)
+        self._axes = axes = _create_axes(filenames, files)
+        self._dim_indices = dim_indices = l_ax, m_ax, f_ax = tuple(
+            axes.iaxis(d) for d in beam_dims)
 
         # Complain if we can't find required axes
-        for i, ax in enumerate(zip(self._dim_indices, BEAM_DIMS)):
+        for i, ax in zip(dim_indices, beam_dims):
             if i == -1:
                 raise ValueError("'%s' axis not found!" % ax)
 
-        self._cube_extents = _cube_extents(self._axes, l_ax, m_ax, f_ax)
-        self._shape = tuple(self._axes.naxis[d] for d in self._dim_indices) + (4,)
-
-        self._beam_freq_map = self._axes.grid[f_ax]
+        self._cube_extents = _cube_extents(axes, l_ax, m_ax, f_ax)
+        self._shape = tuple(axes.naxis[d] for d in dim_indices) + (4,)
+        self._beam_freq_map = axes.grid[f_ax]
 
         self._cache = collections.defaultdict(dict)
 
-        # Now create a hypercube describing the dimensions
-        self._cube = cube = HyperCube()
-
-        cube.register_dimension('beam_lw',
-            self._axes.naxis[l_ax],
-            description='E Beam cube l width')
-
-        cube.register_dimension('beam_mh',
-            self._axes.naxis[m_ax],
-            description='E Beam cube m height')
-
-        cube.register_dimension('beam_nud',
-            self._axes.naxis[f_ax],
-            description='E Beam cube frequency depth')
-
-        self._dim_updates_indicated = False
+        # Now describe our dimension sizes
+        self._dim_updates = [(n, axes.naxis[i]) for n, i
+            in zip(('beam_lw', 'beam_mh', 'beam_nud'), (l_ax, m_ax, f_ax))]
 
     def name(self):
         return self._name
@@ -351,16 +345,21 @@ class FitsBeamSourceProvider(SourceProvider):
         """ Feeds the ebeam cube """
         if context.shape != self.shape:
             raise ValueError("Partial feeding of the "
-                "beam cube is not yet supported.")
+                "beam cube is not yet supported %s %s." % (context.shape, self.shape))
 
         ebeam = np.empty(context.shape, context.dtype)
+        # Reverse directions if necessary
+        l = slice(None, None, self._l_axis_sign)
+        m = slice(None, None, self._m_axis_sign)
 
         # Iterate through the correlations,
         # assigning real and imaginary data, if present,
         # otherwise zeroing the correlation
         for i, (re, im) in enumerate(self._files.itervalues()):
-            ebeam[:,:,:,i].real[:] = re[0].data.T if re is not None else 0
-            ebeam[:,:,:,i].imag[:] = im[0].data.T if im is not None else 0
+            real = re[0].data.T[l,m,:] if re is not None else 0
+            imag = im[0].data.T[l,m,:] if im is not None else 0
+            ebeam[:,:,:,i].real[:] = real
+            ebeam[:,:,:,i].imag[:] = imag
 
         return ebeam
 
@@ -375,13 +374,7 @@ class FitsBeamSourceProvider(SourceProvider):
         return self._beam_freq_map
 
     def updated_dimensions(self):
-        # Dimension updates bave been indicated, don't send them again
-        if self._dim_updates_indicated is True:
-            return ()
-
-        self._dim_updates_indicated = True
-        return [self._cube.dimension(k,copy=False)
-            for k in ('beam_lw', 'beam_mh', 'beam_nud')]
+        return self._dim_updates
 
     @property
     def filename_schema(self):
