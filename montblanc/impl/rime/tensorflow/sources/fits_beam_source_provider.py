@@ -68,6 +68,25 @@ class FitsAxes(object):
         self._cunit = [header.get('CUNIT%d'%n, '').strip().upper()
             for n in axr]
 
+        # Check for custom irregular grid format.
+	# Currently only implemented for FREQ dimension.
+        irregular_grid = [[header.get('G%s%d' % (self._ctype, j), None)
+            for j in range(1, self._naxis[i]+1)]
+            for i in range(ndims)]
+
+        # Irregular grids are only valid if values exist for all grid points
+        valid = [all(x is not None for x in irregular_grid[i])
+            for i in range(ndims)]
+
+        def _regular_grid(a, i):
+            """ Construct a regular grid from a FitsAxes object and index """
+            R = np.arange(0.0, float(a.naxis[i]))
+            return (R - a.crpix[i])*a.cdelta[i] + a.crval[i]
+
+        # Set up the grid
+        self._grid = [_regular_grid(self, i) if not valid[i]
+            else np.asarray(irregular_grid[i]) for i in range(ndims)]
+
         # Copy original CRVAL and CRDELTA in case they are scaled
         self._scale = [1.0 for n in axr]
         self._crval0 = [v for v in self._crval]
@@ -85,6 +104,10 @@ class FitsAxes(object):
             return self._iaxis[name]
         except KeyError:
             return -1
+
+    @property
+    def grid(self):
+        return self._grid
 
     @property
     def crpix(self):
@@ -299,6 +322,8 @@ class FitsBeamSourceProvider(SourceProvider):
         self._cube_extents = _cube_extents(self._axes, l_ax, m_ax, f_ax)
         self._shape = tuple(self._axes.naxis[d] for d in self._dim_indices) + (4,)
 
+        self._beam_freq_map = self._axes.grid[f_ax]
+
         self._cache = collections.defaultdict(dict)
 
         # Now create a hypercube describing the dimensions
@@ -347,9 +372,7 @@ class FitsBeamSourceProvider(SourceProvider):
     @cache_fits_read
     def beam_freq_map(self, context):
         """ Return the frequency map associated with the beam """
-        lower_freq, upper_freq = self._cube_extents[:,2]
-        return np.linspace(lower_freq, upper_freq,
-            context.shape[0], endpoint=True)
+        return self._beam_freq_map
 
     def updated_dimensions(self):
         # Dimension updates bave been indicated, don't send them again
