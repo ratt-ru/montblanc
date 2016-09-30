@@ -50,6 +50,7 @@ from montblanc.impl.rime.tensorflow.sources.fits_beam_source_provider import (
 # Extract frequencies from the MS
 with pt.table(msfile + '::SPECTRAL_WINDOW', ack=False) as SW:
     frequency = SW.getcol('CHAN_FREQ')[0]
+    ref_freq = SW.getcol('REF_FREQUENCY')[0]
 
 bandwidth = frequency[-1] - frequency[0]
 filenames = _create_filenames(beam_file_pattern)
@@ -74,8 +75,6 @@ nsrc = len(source_coords)
 pt_lm = np.deg2rad(source_coords)
 pt_stokes = np.asarray(IQUVs)
 pt_alpha = np.asarray(alphas)
-
-ref_freq = 1.415e9
 
 assert pt_lm.shape == (nsrc, 2), pt_lm.shape
 assert pt_stokes.shape == (nsrc, 4), pt_stokes.shape
