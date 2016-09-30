@@ -1,6 +1,7 @@
 import itertools
 import os
 import subprocess
+import sys
 import tempfile
 
 import numpy as np
@@ -15,7 +16,8 @@ data_dir = 'data'
 
 # Directory in which we expect our measurement set to be located
 msfile = os.path.join(data_dir, 'WSRT.MS')
-model_data_column = 'MODEL_DATA'
+meq_vis_column = 'MODEL_DATA'
+mb_vis_column = 'CORRECTED_DATA'
 
 # Directory in which meqtree-related files are read/written
 meq_dir = 'meqtrees'
@@ -90,7 +92,7 @@ print pt_alpha.shape
 from Tigger.Models.Formats.AIPSCCFITS import lm_to_radec
 
 # Need the phase centre for lm_to_radec
-with pt.table(msfile + '::FIELD', ack=False) as F:
+with pt.table(msfile + '::FIELD', ack=False, readonly=True) as F:
     ra0, dec0 = F.getcol('PHASE_DIR')[0][0]
 
 # Create the tigger sky model
@@ -122,9 +124,9 @@ cmd_list = ['python',
     # Tigger sky file
     'tiggerlsm.filename={sm}'.format(sm=tigger_sky_file),
     # Output column
-    'ms_sel.output_column={c}'.format(c=model_data_column),
+    'ms_sel.output_column={c}'.format(c=meq_vis_column),
     # Imaging Column
-    'img_sel.imaging_column={c}'.format(c=model_data_column),
+    'img_sel.imaging_column={c}'.format(c=meq_vis_column),
     # Beam FITS file pattern
     'pybeams_fits.filename_pattern={p}'.format(p=beam_file_pattern),
     # FITS L AXIS
@@ -188,7 +190,7 @@ if beam_on == 1:
 
 source_providers.append(RadioSourceProvider())
 
-sink_providers = [MSSinkProvider(ms_mgr, 'CORRECTED_DATA')]
+sink_providers = [MSSinkProvider(ms_mgr, mb_vis_column)]
 slvr.solve(source_providers=source_providers,
     sink_providers=sink_providers)
 
@@ -198,4 +200,67 @@ for obj in source_providers + sink_providers + [ms_mgr]:
 # Call the meqtrees simulation script, dumping visibilities into MODEL_DATA
 subprocess.call(cmd_list)
 
+# Compare MeqTree and Montblanc visibilities
+with pt.table(msfile, ack=False, readonly=True) as MS:
+    ntime, nbl, nchan = slvr.dim_global_size('ntime', 'nbl', 'nchan')
+    shape = (ntime, nbl, nchan, 4)
+    meq_vis = MS.getcol(meq_vis_column).reshape(shape)
+    mb_vis = MS.getcol(mb_vis_column).reshape(shape)
 
+    # Compare
+    close = np.isclose(meq_vis, mb_vis)
+    not_close = np.invert(close)
+    problems = np.nonzero(not_close)
+
+    # Everything agrees, exit
+    if problems[0].size == 0:
+        print 'Montblanc and MeqTree visibilities agree'
+        sys.exit(1)
+
+    bad_vis_file = 'bad_visiblities.txt'
+
+    # Some visibilities differ, do some analysis
+    print ("Montblanc differs from MeqTrees by {nc}/{t} visibilities. "
+        "Writing them out to '{bvf}'").format(
+        nc=problems[0].size, t=not_close.size, bvf=bad_vis_file)
+
+    abs_diff = np.abs(meq_vis - mb_vis)
+    rmsd = np.sqrt(np.sum(abs_diff**2)/abs_diff.size)
+    nrmsd = rmsd / (np.max(abs_diff) - np.min(abs_diff))
+    print 'RMSD {rmsd} NRMSD {nrmsd}'.format(rmsd=rmsd, nrmsd=nrmsd)
+
+    # Plot a histogram of the difference
+    try:
+        import matplotlib
+        matplotlib.use('pdf')
+        import matplotlib.pyplot as plt
+    except:
+        print "Exception importing matplotlib %s" % sys.exc_info[2]
+    else:
+        nr_of_bins = 100
+        n, bins, patches = plt.hist(abs_diff.flatten(),
+            bins=np.logspace(np.log10(1e-10), np.log10(1.0), nr_of_bins))
+
+        plt.gca().set_xscale("log")
+        plt.xlabel('Magnitude Difference')
+        plt.ylabel('Counts')
+        plt.grid(True)
+
+        plt.savefig('histogram.pdf')
+
+    mb_problems = mb_vis[problems]
+    meq_problems = meq_vis[problems]
+    difference = mb_problems - meq_problems
+    amplitude = np.abs(difference)
+
+    # Create an iterator over the first 100 problematic visibilities
+    t = (np.asarray(problems).T, mb_problems, meq_problems, difference, amplitude)
+    it = enumerate(itertools.izip(*t))
+    it = itertools.islice(it, 0, 1000, 1)
+
+    # Write out the problematic visibilities to file
+    with open(bad_vis_file, 'w') as f:
+        for i, (p, mb, meq, d, amp) in it:
+            f.write("{i} {t} Montblanc: {mb} MeqTrees: {meq} "
+                "Difference {d} Absolute Difference {ad} \n".format(
+                    i=i, t=p, mb=mb, meq=meq, d=d, ad=amp))
