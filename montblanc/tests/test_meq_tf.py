@@ -66,11 +66,23 @@ for f in fgen:
 # Source Configuration
 #=========================================
 
-source_coords = [[25,10],[-30,-5],[8,6],[-23,7],[15,10], [-6, 5]]
-IQUVs =  [[1.0,0,0,0], [2,0.5,0,0], [-1.0,0,0,0], [0.8,0,0.0,0], [-0.8,0.1,-0.3,0.05], [0,0,0,0]]
-alphas = [0.8, -0.7, 0.1, 0.2, -0.3, 0.5]
+np.random.seed(0)
+nsrc = 1
+rf = np.random.random
 
-nsrc = len(source_coords)
+# Source coordinates between -30 and 30 degrees
+source_coords = np.empty(shape=(nsrc, 2), dtype=np.float64)
+IQUVs = np.empty(shape=(nsrc, 4), dtype=np.float64)
+I, Q, U, V = IQUVs[:,0], IQUVs[:,1], IQUVs[:,2], IQUVs[:,3]
+alphas = np.empty(shape=(nsrc,), dtype=np.float64)
+
+source_coords[:] = (rf(size=source_coords.shape) - 0.5)*60
+Q[:] = rf(size=Q.shape)*0.1
+U[:] = rf(size=U.shape)*0.1
+V[:] = rf(size=V.shape)*0.1
+I[:] = np.sqrt(Q**2 + U**2 + V**2)
+
+alphas[:] = 2*(np.random.random(size=alphas.size) - 0.5)
 
 pt_lm = np.deg2rad(source_coords)
 pt_stokes = np.asarray(IQUVs)
