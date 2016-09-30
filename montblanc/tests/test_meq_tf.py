@@ -216,7 +216,7 @@ with pt.table(msfile, ack=False, readonly=True) as MS:
         print 'Montblanc and MeqTree visibilities agree'
         sys.exit(1)
 
-    bad_vis_file = 'bad_visiblities.txt'
+    bad_vis_file = 'bad_visibilities.txt'
 
     # Some visibilities differ, do some analysis
     print ("Montblanc differs from MeqTrees by {nc}/{t} visibilities. "
