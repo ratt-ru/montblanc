@@ -205,9 +205,11 @@ def _open_fits_files(filenames):
             (corr, tuple(_fh(fn) for fn in files))
         for corr, files in filenames.iteritems() )
 
-def _cube_extents(axes, l_ax, m_ax, f_ax):
+def _cube_extents(axes, l_ax, m_ax, f_ax, l_sign, m_sign):
     # List of (lower, upper) extent tuples for the given dimensions
-    extent_list = [axes.extents[i] for i in (l_ax, m_ax, f_ax)]
+    it = zip((l_ax, m_ax, f_ax), (l_sign, m_sign, 1.0))
+    # Get the extents, flipping the sign on either end if required
+    extent_list = [tuple(s*e for e in axes.extents[i]) for i, s in it]
 
     # Return [[l_low, u_low, f_low], [l_high, u_high, f_high]]
     return np.array(extent_list).T
@@ -237,6 +239,10 @@ def _create_axes(filenames, file_dict):
             axes.set_axis_scale(i, np.pi/180.0)
 
     return axes
+
+def _axis_and_sign(ax_str):
+    """ Extract axis and sign from given axis string """
+    return (ax_str[1:], -1.0) if ax_str[0] == '-' else (ax_str, 1.0)
 
 def cache_fits_read(method):
     """
@@ -296,23 +302,10 @@ class FitsBeamSourceProvider(SourceProvider):
     def __init__(self, filename_schema, l_axis=None, m_axis=None):
         """
         """
-        if l_axis is None:
-            l_axis = 'L'
+        l_axis, l_sign = _axis_and_sign('L' if l_axis is None else l_axis)
+        m_axis, m_sign = _axis_and_sign('M' if m_axis is None else m_axis)
 
-        if m_axis is None:
-            m_axis = 'M'
-
-        if l_axis[0] == '-':
-            self._l_axis, self._l_axis_sign = l_axis[1:], -1
-        else:
-            self._l_axis, self._l_axis_sign = l_axis, 1
-
-        if m_axis[0] == '-':
-            self._m_axis, self._m_axis_sign = m_axis[1:], -1
-        else:
-            self._m_axis, self._m_axis_sign = m_axis, 1
-
-        beam_dims = (self._l_axis, self._m_axis, 'FREQ')
+        beam_dims = (l_axis, m_axis, 'FREQ')
 
         self._filename_schema = filename_schema
         self._name = "FITS Beams '{s}'".format(s=filename_schema)
@@ -327,7 +320,8 @@ class FitsBeamSourceProvider(SourceProvider):
             if i == -1:
                 raise ValueError("'%s' axis not found!" % ax)
 
-        self._cube_extents = _cube_extents(axes, l_ax, m_ax, f_ax)
+        self._cube_extents = _cube_extents(axes, l_ax, m_ax, f_ax,
+            l_sign, m_sign)
         self._shape = tuple(axes.naxis[d] for d in dim_indices) + (4,)
         self._beam_freq_map = axes.grid[f_ax]
 
@@ -348,18 +342,13 @@ class FitsBeamSourceProvider(SourceProvider):
                 "beam cube is not yet supported %s %s." % (context.shape, self.shape))
 
         ebeam = np.empty(context.shape, context.dtype)
-        # Reverse directions if necessary
-        l = slice(None, None, self._l_axis_sign)
-        m = slice(None, None, self._m_axis_sign)
 
         # Iterate through the correlations,
         # assigning real and imaginary data, if present,
         # otherwise zeroing the correlation
         for i, (re, im) in enumerate(self._files.itervalues()):
-            real = re[0].data.T[l,m,:] if re is not None else 0
-            imag = im[0].data.T[l,m,:] if im is not None else 0
-            ebeam[:,:,:,i].real[:] = real
-            ebeam[:,:,:,i].imag[:] = imag
+            ebeam[:,:,:,i].real[:] = 0 if re is None else re[0].data.T
+            ebeam[:,:,:,i].imag[:] = 0 if im is None else im[0].data.T
 
         return ebeam
 
