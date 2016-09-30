@@ -108,12 +108,12 @@ with pt.table(msfile + '::FIELD', ack=False, readonly=True) as F:
 
 # Create the tigger sky model
 with open(tigger_sky_file, 'w') as f:
+    f.write('#format: ra_d dec_d i q u v spi freq0\n')
     it = enumerate(itertools.izip(pt_lm, pt_stokes, pt_alpha))
     for i, ((l, m), (I, Q, U, V), alpha) in it:
         ra, dec = lm_to_radec(l, m, ra0, dec0)
         l, m = np.rad2deg([ra,dec])
 
-        f.write('#format: ra_d dec_d i q u v spi freq0\n')
         f.write('{l:.20f} {m:.20f} {i} {q} {u} {v} {spi} {rf:.20f}\n'.format(
             l=l, m=m, i=I, q=Q, u=U, v=V, spi=alpha, rf=ref_freq))
 
