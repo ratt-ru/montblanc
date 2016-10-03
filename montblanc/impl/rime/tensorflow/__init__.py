@@ -17,3 +17,12 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
+
+import os
+
+def load_tf_lib():
+    """ Load the tensorflow library """
+    import tensorflow as tf
+    path = os.path.dirname(__file__)
+    rime_lib_path = os.path.join(path, 'rime_ops', 'rime.so')
+    return tf.load_op_library(rime_lib_path)

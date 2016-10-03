@@ -30,6 +30,7 @@ from tensorflow.python.client import timeline
 
 import montblanc
 import montblanc.util as mbu
+from montblanc.impl.rime.tensorflow import load_tf_lib
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
 
 from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
@@ -53,9 +54,7 @@ from montblanc.config import RimeSolverConfig as Options
 
 ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 
-rime_lib_path = os.path.join(montblanc.get_montblanc_path(),
-    'impl', 'rime', 'tensorflow', 'rime_ops', 'rime.so')
-rime = tf.load_op_library(rime_lib_path)
+rime = load_tf_lib()
 
 DataSource = collections.namedtuple("DataSource", ['source', 'dtype', 'name'])
 DataSink = collections.namedtuple("DataSink", ['sink', 'name'])
@@ -105,8 +104,13 @@ class RimeSolver(MontblancTensorflowSolver):
         # Tensorflow Session
         #===================
 
+        tf_server_target = slvr_cfg.get('tf_server_target', None)
+
         # Create the tensorflow session object
-        self._tf_session = tf.Session()
+        if tf_server_target is None:
+            self._tf_session = tf.Session()
+        else:
+            self._tf_session = tf.Session(tf_server_target)
 
         #================================
         # Queue Data Source Configuration
