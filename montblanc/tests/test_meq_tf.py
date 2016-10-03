@@ -67,34 +67,38 @@ for f in fgen:
 #=========================================
 
 np.random.seed(0)
-nsrc = 1
+nsrc = 100
 rf = np.random.random
 
-# Source coordinates between -30 and 30 degrees
 source_coords = np.empty(shape=(nsrc, 2), dtype=np.float64)
-IQUVs = np.empty(shape=(nsrc, 4), dtype=np.float64)
-I, Q, U, V = IQUVs[:,0], IQUVs[:,1], IQUVs[:,2], IQUVs[:,3]
+stokes = np.empty(shape=(nsrc, 4), dtype=np.float64)
+I, Q, U, V = stokes[:,0], stokes[:,1], stokes[:,2], stokes[:,3]
 alphas = np.empty(shape=(nsrc,), dtype=np.float64)
 
-source_coords[:] = (rf(size=source_coords.shape) - 0.5)*60
+# Zero some sources
+zero_srcs = np.random.randint(nsrc, size=(2,))
+# Create sources with both positive and negative flux
+sign = 2*np.random.randint(2, size=I.shape) - 1
+
+# Source coordinates between -1.5 and 1.5 degrees
+source_coords[:] = (rf(size=source_coords.shape) - 0.5)*3
 Q[:] = rf(size=Q.shape)*0.1
 U[:] = rf(size=U.shape)*0.1
 V[:] = rf(size=V.shape)*0.1
-I[:] = np.sqrt(Q**2 + U**2 + V**2)
+I[:] = sign*np.sqrt(Q**2 + U**2 + V**2)
+
+# Zero the selected stokes parameters
+source_coords[zero_srcs,:] = 0
 
 alphas[:] = 2*(np.random.random(size=alphas.size) - 0.5)
 
 pt_lm = np.deg2rad(source_coords)
-pt_stokes = np.asarray(IQUVs)
+pt_stokes = np.asarray(stokes)
 pt_alpha = np.asarray(alphas)
 
 assert pt_lm.shape == (nsrc, 2), pt_lm.shape
 assert pt_stokes.shape == (nsrc, 4), pt_stokes.shape
 assert pt_alpha.shape == (nsrc,), pt_alpha.shape
-
-print pt_lm.shape
-print pt_stokes.shape
-print pt_alpha.shape
 
 #=========================================
 # Create Tigger ASCII sky model
