@@ -10,8 +10,14 @@ DEPDIR:=.d
 $(shell mkdir -p $(DEPDIR) >/dev/null)
 DEPFLAGS=-MT $@ -MMD -MP -MF $(DEPDIR)/$*.Td
 
-# Define our sources, objects and libraries
-SOURCES=$(wildcard *.cpp *.cu)
+# Define our sources, compiling CUDA code if it's enabled
+ifeq ($(TF_CUDA), 1)
+	SOURCES=$(wildcard *.cpp *.cu)
+else
+	SOURCES=$(wildcard *.cpp)
+endif
+
+# Define objects and library
 OBJECTS=$(addsuffix .o, $(basename $(SOURCES)))
 LIBRARY=rime.so
 
