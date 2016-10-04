@@ -27,7 +27,7 @@ template <typename T>
 struct make_complex_functor
 {
     typedef std::complex<T> result_type;
-    
+
     EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE result_type
     operator()(T real, T imag) const
         { return std::complex<T>(real, imag); }
@@ -92,6 +92,7 @@ public:
 
 #if RIME_PHASE_CPU_STRATEGY == RIME_PHASE_LOOP_STRATEGY
         // Compute the complex phase
+        #pragma omp parallel for
         for(int src=0; src<nsrc; ++src)
         {
             FT l = lm(src,0);

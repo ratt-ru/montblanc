@@ -85,6 +85,7 @@ public:
         constexpr FT zero = 0.0;
         constexpr FT one = 1.0;
 
+        #pragma omp parallel for collapse(2)
         for(int src=0; src < nsrc; ++src)
         {
             for(int time=0; time < ntime; ++time)

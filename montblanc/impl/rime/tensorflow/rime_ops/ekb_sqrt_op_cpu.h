@@ -13,7 +13,7 @@ MONTBLANC_NAMESPACE_BEGIN
 MONTBLANC_EKB_SQRT_NAMESPACE_BEGIN
 
 // For simpler partial specialisation
-typedef Eigen::ThreadPoolDevice CPUDevice; 
+typedef Eigen::ThreadPoolDevice CPUDevice;
 
 // Specialise the EKBSqrt op for CPUs
 template <typename FT, typename CT>
@@ -69,6 +69,7 @@ public:
         auto ejones = in_ejones.tensor<CT, 5>();
         auto ant_jones = ant_jones_ptr->tensor<CT, 5>();
 
+        #pragma omp parallel for collapse(4)
         for(int src=0; src < nsrc; ++src)
         {
             for(int time=0; time < ntime; ++time)

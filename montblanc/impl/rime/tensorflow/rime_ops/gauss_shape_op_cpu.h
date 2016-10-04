@@ -15,7 +15,7 @@ MONTBLANC_NAMESPACE_BEGIN
 MONTBLANC_GAUSS_SHAPE_NAMESPACE_BEGIN
 
 // For simpler partial specialisation
-typedef Eigen::ThreadPoolDevice CPUDevice; 
+typedef Eigen::ThreadPoolDevice CPUDevice;
 
 // Specialise the GaussShape op for CPUs
 template <typename FT>
@@ -63,12 +63,14 @@ public:
         auto gauss_params = in_gauss_params.tensor<FT, 2>();
         auto gauss_shape = gauss_shape_ptr->tensor<FT, 4>();
 
+        #pragma omp parallel
         for(int gsrc=0; gsrc < ngsrc; ++gsrc)
         {
             auto el = gauss_params(0,gsrc);
             auto em = gauss_params(1,gsrc);
             auto eR = gauss_params(2,gsrc);
 
+            #pragma omp for collapse(2)
             for(int time=0; time < ntime; ++time)
             {
                 for(int bl=0; bl < nbl; ++bl)

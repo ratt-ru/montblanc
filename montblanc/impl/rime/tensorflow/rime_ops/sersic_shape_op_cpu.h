@@ -15,7 +15,7 @@ MONTBLANC_NAMESPACE_BEGIN
 MONTBLANC_SERSIC_SHAPE_NAMESPACE_BEGIN
 
 // For simpler partial specialisation
-typedef Eigen::ThreadPoolDevice CPUDevice; 
+typedef Eigen::ThreadPoolDevice CPUDevice;
 
 // Specialise the SersicShape op for CPUs
 template <typename FT>
@@ -65,12 +65,14 @@ public:
 
         constexpr FT one = FT(1.0);
 
+        #pragma omp parallel
         for(int ssrc=0; ssrc < nssrc; ++ssrc)
         {
             auto e1 = sersic_params(0,ssrc);
             auto e2 = sersic_params(1,ssrc);
             auto ss = sersic_params(2,ssrc);
 
+            #pragma omp for collapse(2)
             for(int time=0; time < ntime; ++time)
             {
                 for(int bl=0; bl < nbl; ++bl)
@@ -91,7 +93,7 @@ public:
                         FT u1 = u*(one + e1) + v*e2;
                         u1 *= scaled_freq;
                         u1 *= ss/(one - e1*e1 - e2*e2);
-                        
+
                         FT v1 = u*e2 + v*(one - e1);
                         v1 *= scaled_freq;
                         v1 *= ss/(one - e1*e1 - e2*e2);

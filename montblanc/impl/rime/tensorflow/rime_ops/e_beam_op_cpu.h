@@ -151,6 +151,7 @@ public:
         std::vector<FT> chd0(cdata.nchan);
         std::vector<FT> chd1(cdata.nchan);
 
+        #pragma omp parallel for
         for(int chan=0; chan < cdata.nchan; chan++)
         {
             FT f = frequency(chan);
@@ -191,6 +192,7 @@ public:
             //         value, value-f);
         }
 
+        #pragma omp parallel for collapse(2)
         for(int time=0; time < cdata.ntime; ++time)
         {
             for(int ant=0; ant < cdata.na; ++ant)

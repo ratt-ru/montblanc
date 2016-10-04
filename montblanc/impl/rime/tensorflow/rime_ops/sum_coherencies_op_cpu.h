@@ -61,6 +61,7 @@ public:
         auto model_vis_out = model_vis_out_ptr->tensor<CT, 4>();
         auto apply_dies = in_apply_dies.tensor<bool, 0>()(0);
 
+        #pragma omp parallel for collapse(2)
         for(int time=0; time<ntime; ++time)
         {
             for(int bl=0; bl<nbl; ++bl)
