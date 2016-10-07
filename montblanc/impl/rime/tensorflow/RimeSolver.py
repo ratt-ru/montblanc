@@ -620,7 +620,7 @@ class RimeSolver(MontblancTensorflowSolver):
             src_count += nsrc
             ngsrc += nsrc
             ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
-            gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna1,
+            gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
                 D.frequency, gauss_params)
             model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
                 gauss_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
@@ -635,7 +635,7 @@ class RimeSolver(MontblancTensorflowSolver):
             src_count += nsrc
             nssrc += nsrc
             ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
-            sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna1,
+            sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
                 D.frequency, sersic_params)
             model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
                 sersic_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
