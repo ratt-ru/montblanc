@@ -19,35 +19,27 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import collections
-import itertools
-import os
 
-from attrdict import AttrDict
 import concurrent.futures as cf
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
+from attrdict import AttrDict
 
 import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow import load_tf_lib
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
-
 from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
-
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
                                                     MSSourceProvider, FitsBeamSourceProvider)
-
-# TODO: Move this into a separate package
-from montblanc.impl.rime.tensorflow.sources.queue_wrapper import (
+from montblanc.impl.rime.tensorflow.queue_wrapper import (
     create_queue_wrapper)
 
 from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
                                                   NullSinkProvider, MSSinkProvider)
 
-from hypercube import HyperCube
 from hypercube.dims import Dimension as HyperCubeDim
-import hypercube.util as hcu
 
 from montblanc.solvers import MontblancTensorflowSolver
 from montblanc.config import RimeSolverConfig as Options
