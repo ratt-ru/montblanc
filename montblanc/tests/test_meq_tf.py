@@ -67,38 +67,48 @@ for f in fgen:
 #=========================================
 
 np.random.seed(0)
-nsrc = 100
 rf = np.random.random
+dtype = np.float64
 
-source_coords = np.empty(shape=(nsrc, 2), dtype=np.float64)
-stokes = np.empty(shape=(nsrc, 4), dtype=np.float64)
-I, Q, U, V = stokes[:,0], stokes[:,1], stokes[:,2], stokes[:,3]
-alphas = np.empty(shape=(nsrc,), dtype=np.float64)
+def get_point_sources(nsrc):
+    source_coords = np.empty(shape=(nsrc, 2), dtype=dtype)
+    stokes = np.empty(shape=(nsrc, 4), dtype=dtype)
+    I, Q, U, V = stokes[:,0], stokes[:,1], stokes[:,2], stokes[:,3]
+    alphas = np.empty(shape=(nsrc,), dtype=dtype)
 
-# Zero some sources
-zero_srcs = np.random.randint(nsrc, size=(2,))
-# Create sources with both positive and negative flux
-sign = 2*np.random.randint(2, size=I.shape) - 1
+    # Zero some sources
+    zero_srcs = np.random.randint(nsrc, size=(2,))
+    # Create sources with both positive and negative flux
+    sign = 2*np.random.randint(2, size=I.shape) - 1
 
-# Source coordinates between -1.5 and 1.5 degrees
-source_coords[:] = (rf(size=source_coords.shape) - 0.5)*3
-Q[:] = rf(size=Q.shape)*0.1
-U[:] = rf(size=U.shape)*0.1
-V[:] = rf(size=V.shape)*0.1
-I[:] = sign*np.sqrt(Q**2 + U**2 + V**2)
+    # Source coordinates between -1.5 and 1.5 degrees
+    source_coords[:] = (rf(size=source_coords.shape) - 0.5)*3
+    Q[:] = rf(size=Q.shape)*0.1
+    U[:] = rf(size=U.shape)*0.1
+    V[:] = rf(size=V.shape)*0.1
+    I[:] = sign*np.sqrt(Q**2 + U**2 + V**2)
 
-# Zero the selected stokes parameters
-source_coords[zero_srcs,:] = 0
+    # Zero the selected stokes parameters
+    source_coords[zero_srcs,:] = 0
 
-alphas[:] = 2*(np.random.random(size=alphas.size) - 0.5)
+    alphas[:] = 2*(np.random.random(size=alphas.size) - 0.5)
 
-pt_lm = np.deg2rad(source_coords)
-pt_stokes = np.asarray(stokes)
-pt_alpha = np.asarray(alphas)
+    return np.deg2rad(source_coords), np.asarray(stokes), np.asarray(alphas)
+
+def get_gaussian_sources(nsrc):
+    c, s, a = get_point_sources(nsrc)
+    gauss_shape = np.empty(shape=(3, nsrc), dtype=np.float64)
+    gauss_shape = rf(size=gauss_shape.shape)
+    return c, s, a, gauss_shape
+
+nsrc = 5
+pt_lm, pt_stokes, pt_alpha = get_point_sources(nsrc)
 
 assert pt_lm.shape == (nsrc, 2), pt_lm.shape
 assert pt_stokes.shape == (nsrc, 4), pt_stokes.shape
 assert pt_alpha.shape == (nsrc,), pt_alpha.shape
+
+g_lm, g_stokes, g_alpha, g_shape = get_gaussian_sources(nsrc)
 
 #=========================================
 # Create Tigger ASCII sky model
@@ -112,7 +122,7 @@ with pt.table(msfile + '::FIELD', ack=False, readonly=True) as F:
 
 # Create the tigger sky model
 with open(tigger_sky_file, 'w') as f:
-    f.write('#format: ra_d dec_d i q u v spi freq0\n')
+    f.write('#format: ra_d dec_d i q u v spi freq0 emaj_s emin_s pa_d\n')
     it = enumerate(itertools.izip(pt_lm, pt_stokes, pt_alpha))
     for i, ((l, m), (I, Q, U, V), alpha) in it:
         ra, dec = lm_to_radec(l, m, ra0, dec0)
@@ -120,6 +130,21 @@ with open(tigger_sky_file, 'w') as f:
 
         f.write('{l:.20f} {m:.20f} {i} {q} {u} {v} {spi} {rf:.20f}\n'.format(
             l=l, m=m, i=I, q=Q, u=U, v=V, spi=alpha, rf=ref_freq))
+
+    it = enumerate(itertools.izip(g_lm, g_stokes, g_alpha, g_shape.T))
+    for i, ((l, m), (I, Q, U, V), alpha, (el, em, er)) in it:
+        ra, dec = lm_to_radec(l, m, ra0, dec0)
+        l, m = np.rad2deg([ra,dec])
+        # Convert to seconds
+        el, em = np.asarray([el, em])*648000./np.pi
+        # Convert to degrees
+        er *= 180.0/np.pi
+
+        f.write('{l:.20f} {m:.20f} {i} {q} {u} {v} {spi} {rf:.20f} '
+                '{el} {em} {er}\n'.format(
+                    l=l, m=m, i=I, q=Q, u=U, v=V, spi=alpha, rf=ref_freq,
+                    el=el, em=em, er=er))
+
 
 #=========================================
 # Call MeqTrees
@@ -178,11 +203,37 @@ class RadioSourceProvider(SourceProvider):
         (lp, up), (lt, ut) = context.dim_extents('npsrc', 'ntime')
         return np.tile(pt_alpha[lp:up, np.newaxis], [1, ut-lt])
 
+    def gaussian_lm(self, context):
+        lg, ug = context.dim_extents('ngsrc')
+        return g_lm[lg:ug, :]
+
+    def gaussian_stokes(self, context):
+        (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
+        return np.tile(g_stokes[lg:ug, np.newaxis, :], [1, ut-lt, 1])
+
+    def gaussian_alpha(self, context):
+        (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
+        return np.tile(pt_alpha[lg:ug, np.newaxis], [1, ut-lt])
+
+    def gaussian_shape(self, context):
+        (lg, ug) = context.dim_extents('ngsrc')
+        gauss_shape = g_shape[lg:ug]
+        #print 'Gaussian Shape %s' % gauss_shape.shape
+        emaj = gauss_shape[0].copy()
+        emin = gauss_shape[1].copy()
+        pa = gauss_shape[2].copy()
+
+        gauss_shape[0] = emaj * np.sin(pa)
+        gauss_shape[1] = emaj * np.cos(pa)
+        gauss_shape[2] = emin / emaj
+
+        return gauss_shape
+
     def ref_frequency(self, context):
         return np.full(context.shape, ref_freq, context.dtype)
 
     def updated_dimensions(self):
-        return [('npsrc', pt_lm.shape[0])]
+        return [('npsrc', pt_lm.shape[0]), ('ngsrc', g_lm.shape[0])]
 
 slvr_cfg = montblanc.rime_solver_cfg(
     mem_budget=1024*1024*1024,
