@@ -1,8 +1,9 @@
-import numpy as np
-import tensorflow as tf
-import pyrap.tables as pt
+import collections
+import itertools
 import sys
-import types
+
+from attrdict import AttrDict
+import tensorflow as tf
 
 def _get_queue_types(fed_arrays, data_sources):
     """
@@ -71,6 +72,14 @@ class QueueWrapper(object):
 
     def dequeue(self):
         return self._queue.dequeue()
+
+    def dequeue_to_dict(self):
+        return {k: v for k, v in itertools.izip(
+            self._fed_arrays, self._queue.dequeue())}
+
+    def dequeue_to_attrdict(self):
+        return AttrDict((k, v) for k, v in itertools.izip(
+            self._fed_arrays, self._queue.dequeue()))
 
     @property
     def close_op(self):
