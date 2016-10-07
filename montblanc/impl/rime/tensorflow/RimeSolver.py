@@ -92,9 +92,9 @@ class RimeSolver(MontblancTensorflowSolver):
         self.register_properties(P)
         self.register_arrays(A)
 
-        #===================
-        # Tensorflow Session
-        #===================
+        #==========================================
+        # Tensorflow Session and Thread Coordinator
+        #==========================================
 
         tf_server_target = slvr_cfg.get('tf_server_target', None)
 
@@ -103,6 +103,8 @@ class RimeSolver(MontblancTensorflowSolver):
             self._tf_session = tf.Session()
         else:
             self._tf_session = tf.Session(tf_server_target)
+
+        self._tf_coord = tf_coord = tf.train.Coordinator()
 
         #================================
         # Queue Data Source Configuration
