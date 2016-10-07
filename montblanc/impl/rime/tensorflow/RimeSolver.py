@@ -234,7 +234,7 @@ class RimeSolver(MontblancTensorflowSolver):
         #==========================
         # Tensorflow initialisation
         #==========================
-        self._tf_expr = self._construct_tensorflow_expression(dfs)
+        self._tf_expr = self._construct_tensorflow_expression(dfs, self)
         self._tf_session.run(tf.initialize_all_variables())
 
         #================
@@ -294,11 +294,10 @@ class RimeSolver(MontblancTensorflowSolver):
         # source providers, if they're associated with
         # input queue arrays
         data_sources = self._default_data_sources.copy()
-        data_sources.update({
-            n: DataSource(f, cube.array(n).dtype, source.name())
-            for source in source_providers
-            for n, f in source.sources().iteritems()
-            if n in self._queue_arrays})
+        data_sources.update({n: DataSource(f, cube.array(n).dtype, source.name())
+                                for source in source_providers
+                                for n, f in source.sources().iteritems()
+                                if n in self._input_queue_sources})
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
@@ -502,35 +501,28 @@ class RimeSolver(MontblancTensorflowSolver):
 
         montblanc.log.info('Done consuming {n} chunks'.format(n=chunks_consumed))
 
-    def _construct_tensorflow_expression(self, dfs):
+    def _construct_tensorflow_expression(self, dfs, cube):
         """ Constructs a tensorflow expression for computing the RIME """
 
         QUEUE_SIZE = 10
 
         # TODO: don't create these queues on the object instance,
         # instead we should return them
+
+        # Create the queue feeding parameters into the system
         self._parameter_queue = create_queue_wrapper('descriptors',
             QUEUE_SIZE, ['descriptor'], dfs)
 
-        self._input_queue = create_queue_wrapper('input',
-            QUEUE_SIZE, ['descriptor','model_vis'], dfs)
+        # Take all arrays flagged as input
+        input_arrays = [a.name for a in cube.arrays().itervalues()
+                        if a.get('input', False) == True]
 
-        self._uvw_queue = create_queue_wrapper('uvw',
-            QUEUE_SIZE, ['uvw', 'antenna1', 'antenna2'], dfs)
+        # Create the queue for holding the input
+        self._input_queue = create_queue_wrapper('input', QUEUE_SIZE,
+                                                 ['descriptor'] + input_arrays,
+                                                 dfs)
 
-        self._observation_queue = create_queue_wrapper('observation',
-            QUEUE_SIZE, ['observed_vis', 'flag', 'weight'], dfs)
-
-        self._frequency_queue = create_queue_wrapper('frequency',
-            QUEUE_SIZE, ['frequency', 'ref_frequency'], dfs)
-
-        self._die_queue = create_queue_wrapper('gterm',
-            QUEUE_SIZE, ['gterm'], dfs)
-
-        self._dde_queue = create_queue_wrapper('dde',
-            QUEUE_SIZE, ['ebeam', 'antenna_scaling', 'point_errors',
-                'parallactic_angles', 'beam_freq_map', 'beam_extents'], dfs)
-
+        # Create source input queues
         self._point_source_queue = create_queue_wrapper('point_source',
             QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
 
@@ -542,8 +534,8 @@ class RimeSolver(MontblancTensorflowSolver):
             QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
                 'sersic_shape'], dfs)
 
-        self._output_queue = create_queue_wrapper('output',
-            QUEUE_SIZE, ['descriptor', 'model_vis'], dfs)
+        self._output_queue = create_queue_wrapper('output', QUEUE_SIZE,
+            ['descriptor', 'model_vis'], dfs)
 
         # TODO: don't create objects on the object instance,
         # instead we should return them
@@ -556,35 +548,23 @@ class RimeSolver(MontblancTensorflowSolver):
         }
 
         # Visibility chunk queues to feed
-        self._chunk_queues = [self._input_queue,
-            self._frequency_queue,
-            self._uvw_queue,
-            self._observation_queue,
-            self._die_queue,
-            self._dde_queue]
+        self._chunk_queues = [self._input_queue]
 
         # Set of arrays that the queues feed
-        self._queue_arrays = { a
-            for q in self._chunk_queues + self._src_queues.values()
-            for a in q.fed_arrays }
+        self._input_queue_sources = {a
+                                     for q in self._chunk_queues + self._src_queues.values()
+                                     for a in q.fed_arrays}
 
         zero = tf.constant(0)
         src_count = zero
 
         # Pull RIME inputs out of the feed queues
-        frequency, ref_frequency = self._frequency_queue.dequeue()
-        descriptor, model_vis = self._input_queue.dequeue()
-        uvw, antenna1, antenna2 = self._uvw_queue.dequeue()
-        observed_vis, flag, weight = self._observation_queue.dequeue()
-        gterm = self._die_queue.dequeue()
-        (ebeam, antenna_scaling, point_errors,
-            parallactic_angles, beam_freq_map,
-            beam_extents) = self._dde_queue.dequeue()
+        D = self._input_queue.dequeue_to_attrdict()
 
         # Infer chunk dimensions
-        model_vis_shape = tf.shape(model_vis)
+        model_vis_shape = tf.shape(D.model_vis)
         ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
-        FT, CT = uvw.dtype, model_vis.dtype
+        FT, CT = D.uvw.dtype, D.model_vis.dtype
 
         def apply_dies(src_count):
             """ Have we reached the maximum source count """
@@ -596,15 +576,15 @@ class RimeSolver(MontblancTensorflowSolver):
 
             lm, stokes and alpha are the source variables.
             """
-            cplx_phase = rime.phase(lm, uvw, frequency, CT=CT)
+            cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
 
             bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
-                frequency, ref_frequency, CT=CT)
+                D.frequency, D.ref_frequency, CT=CT)
 
-            ejones = rime.e_beam(lm, frequency,
-                point_errors, antenna_scaling,
-                parallactic_angles,
-                beam_extents, beam_freq_map, ebeam)
+            ejones = rime.e_beam(lm, D.frequency,
+                D.point_errors, D.antenna_scaling,
+                D.parallactic_angles,
+                D.beam_extents, D.beam_freq_map, D.ebeam)
 
             return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT), sgn_brightness
 
@@ -627,8 +607,8 @@ class RimeSolver(MontblancTensorflowSolver):
             npsrc +=  nsrc
             ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
             shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
-            model_vis = rime.sum_coherencies(antenna1, antenna2,
-                shape, ant_jones, sgn_brightness, flag, gterm, model_vis,
+            model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
+                shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
                 apply_dies(src_count))
 
             return model_vis, npsrc, src_count
@@ -640,10 +620,10 @@ class RimeSolver(MontblancTensorflowSolver):
             src_count += nsrc
             ngsrc += nsrc
             ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
-            gauss_shape = rime.gauss_shape(uvw, antenna1, antenna1,
-                frequency, gauss_params)
-            model_vis = rime.sum_coherencies(antenna1, antenna2,
-                gauss_shape, ant_jones, sgn_brightness, flag, gterm, model_vis,
+            gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna1,
+                D.frequency, gauss_params)
+            model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
+                gauss_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
                 apply_dies(src_count))
 
             return model_vis, ngsrc, src_count
@@ -655,10 +635,10 @@ class RimeSolver(MontblancTensorflowSolver):
             src_count += nsrc
             nssrc += nsrc
             ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
-            sersic_shape = rime.sersic_shape(uvw, antenna1, antenna1,
-                frequency, sersic_params)
-            model_vis = rime.sum_coherencies(antenna1, antenna2,
-                sersic_shape, ant_jones, sgn_brightness, flag, gterm, model_vis,
+            sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna1,
+                D.frequency, sersic_params)
+            model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
+                sersic_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
                 apply_dies(src_count))
 
             return model_vis, nssrc, src_count
@@ -666,7 +646,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Evaluate point sources
         model_vis, npsrc, src_count = tf.while_loop(
             point_cond, point_body,
-            [model_vis, zero, src_count])
+            [D.model_vis, zero, src_count])
 
         # Evaluate gaussians
         model_vis, ngsrc, src_count = tf.while_loop(
@@ -679,10 +659,10 @@ class RimeSolver(MontblancTensorflowSolver):
             [model_vis, zero, src_count])
 
         # Create enqueue operation
-        enqueue_op = self._output_queue.queue.enqueue([descriptor, model_vis])
+        enqueue_op = self._output_queue.queue.enqueue([D.descriptor, model_vis])
 
         # Return descriptor and enqueue operation
-        return descriptor, enqueue_op
+        return D.descriptor, enqueue_op
 
     def solve(self, *args, **kwargs):
         #  Obtain source and sink providers, including internal providers

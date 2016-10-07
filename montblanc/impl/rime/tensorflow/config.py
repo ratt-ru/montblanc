@@ -228,64 +228,77 @@ A = [
     # UVW Coordinates
     array_dict('uvw', ('ntime', 'na', 3), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = rand_uvw),
+        test    = rand_uvw,
+        input   = True),
 
     array_dict('antenna1', ('ntime', 'nbl'), np.int32,
         default = default_antenna1,
-        test    = default_antenna1),
+        test    = default_antenna1,
+        input   = True),
 
     array_dict('antenna2', ('ntime', 'nbl'), np.int32,
         default = default_antenna2,
-        test    = default_antenna2),
+        test    = default_antenna2,
+        input   = True),
 
     # Frequency and Reference Frequency arrays
     # TODO: This is incorrect when channel local is not the same as channel global
     array_dict('frequency', ('nchan',), 'ft',
         default = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0]),
-        test    = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0])),
+        test    = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0]),
+        input   = True),
 
     array_dict('ref_frequency', ('nchan',), 'ft',
         default = lambda c: np.full(c.shape, _ref_freq, c.dtype),
-        test    = lambda c: np.full(c.shape, _ref_freq, c.dtype)),
+        test    = lambda c: np.full(c.shape, _ref_freq, c.dtype),
+        input   = True),
 
     # Holographic Beam
 
     # Pointing errors
     array_dict('point_errors', ('ntime','na','nchan',2), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-2),
+        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-2,
+        input   = True),
 
     # Antenna scaling factors
     array_dict('antenna_scaling', ('na','nchan',2), 'ft',
         default = lambda c: np.ones(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype)),
+        test    = lambda c: rf(c.shape, c.dtype),
+        input   = True),
 
     # Parallactic angles at each timestep for each antenna
     array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
-        default  = lambda c: np.zeros(c.shape, c.dtype),
-        test     = lambda c: rf(c.shape, c.dtype)*np.pi),
+        default = lambda c: np.zeros(c.shape, c.dtype),
+        test    = lambda c: rf(c.shape, c.dtype)*np.pi,
+        input   = True),
 
     # Extents of the beam.
     # First 3 values are lower coordinate for (l, m, frequency)
     # while the last 3 are the upper coordinates
     array_dict('beam_extents', (6,), 'ft',
-        default  = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
-        test     = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high])),
+        default = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
+        test    = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
+        input   = True),
 
     array_dict('beam_freq_map', ('beam_nud',), 'ft',
         default  = lambda c: np.linspace(_freq_low, _freq_high,
                                 c.shape[0], endpoint=True),
         test     = lambda c: np.linspace(_freq_low, _freq_high,
-                                c.shape[0], endpoint=True)),
+                                c.shape[0], endpoint=True),
+        input   = True),
+
     # Beam cube
     array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
-        test    = lambda c: rc(c.shape, c.dtype)),
+        test    = lambda c: rc(c.shape, c.dtype),
+        input   = True),
 
     # Direction-Independent Effects
     array_dict('gterm', ('ntime', 'na', 'nchan', 4), 'ct',
         default = identity_on_pols,
-        test    = lambda c: rc(c.shape, c.dtype)),
+        test    = lambda c: rc(c.shape, c.dtype),
+        input   = True),
 
     # Point Source Definitions
     array_dict('point_lm', ('npsrc',2), 'ft',
@@ -332,20 +345,25 @@ A = [
     array_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
         default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: np.random.random_integers(0, 1,
-            size=c.shape).astype(np.uint8)),
+            size=c.shape).astype(np.uint8),
+        input   = True),
     # Weight array
     array_dict('weight', ('ntime','nbl','nchan',4), 'ft',
         default = lambda c: np.ones(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype)),
+        test    = lambda c: rf(c.shape, c.dtype),
+        input   = True),
     # Observed Visibilities
     array_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rc(c.shape, c.dtype)),
+        test    = lambda c: rc(c.shape, c.dtype),
+        input   = True),
 
     # Model Visibilities
     array_dict('model_vis', ('ntime','nbl','nchan',4), 'ct',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rc(c.shape, c.dtype)),
+        test    = lambda c: rc(c.shape, c.dtype),
+        input   = True,
+        output  = True),
 
     # Result arrays
     array_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', temporary=True),
