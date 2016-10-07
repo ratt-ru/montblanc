@@ -19,6 +19,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import collections
+import threading
 
 import concurrent.futures as cf
 import numpy as np
@@ -50,6 +51,17 @@ rime = load_tf_lib()
 
 DataSource = collections.namedtuple("DataSource", ['source', 'dtype', 'name'])
 DataSink = collections.namedtuple("DataSink", ['sink', 'name'])
+
+
+class TensorflowThread(threading.Thread):
+    def __init__(self, group=None, target=None, name=None, coordinator=None, *args, **kwargs):
+        super(TensorflowThread, self).__init__(group, target, name, *args, **kwargs)
+        self._tf_coord = coordinator
+
+    def run(self):
+        while not self._tf_coord.should_stop():
+            self._tf_coord.request_stop()
+
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
@@ -203,8 +215,17 @@ class RimeSolver(MontblancTensorflowSolver):
             for n, p in self.properties().iteritems() })
 
         #======================
+        # Threads
+        #======================
+
+        self._parameter_thread = TensorflowThread(name="parameter_thread",
+                                                  coordinator=tf_coord)
+        self._parameter_thread.start()
+
+        #======================
         # Thread pool executors
         #======================
+
         self._parameter_executor = cf.ThreadPoolExecutor(1)
         self._feed_executor = cf.ThreadPoolExecutor(1)
         self._compute_executor = cf.ThreadPoolExecutor(1)
