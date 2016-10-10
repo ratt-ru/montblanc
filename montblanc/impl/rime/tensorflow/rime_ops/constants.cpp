@@ -17,6 +17,12 @@ template <> const double
 constants<double>::pi = M_PI;
 
 template <> const float
+constants<float>::sqrt_two = std::sqrt(2.0);
+
+template <> const double
+constants<double>::sqrt_two = std::sqrt(2.0);
+
+template <> const float
 constants<float>::fwhm2int = 1.0/std::sqrt(std::log(256.0));
 template <> const double
 constants<double>::fwhm2int = 1.0/std::sqrt(std::log(256.0));
@@ -29,11 +35,11 @@ constants<double>::two_pi_over_c =
     2.0f*constants<double>::lightspeed/constants<double>::pi;
 
 template <> const float
-constants<float>::gauss_scale =
-    constants<float>::fwhm2int*constants<float>::pi/constants<float>::lightspeed;
+constants<float>::gauss_scale = (constants<float>::fwhm2int*constants<float>::sqrt_two
+    *constants<float>::pi)/constants<float>::lightspeed;
 
 template <> const double
-constants<double>::gauss_scale =
-    constants<double>::fwhm2int*constants<double>::pi/constants<double>::lightspeed;
+constants<double>::gauss_scale = (constants<double>::fwhm2int*constants<double>::sqrt_two
+    *constants<double>::pi)/constants<double>::lightspeed;
 
 }

@@ -9,6 +9,7 @@ struct constants
     static const FT lightspeed;
     static const FT pi;
     static const FT fwhm2int;
+    static const FT sqrt_two;
     static const FT two_pi_over_c;
     static const FT gauss_scale;
 };
