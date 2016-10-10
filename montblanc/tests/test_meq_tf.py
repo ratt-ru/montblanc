@@ -76,20 +76,21 @@ def get_point_sources(nsrc):
     I, Q, U, V = stokes[:,0], stokes[:,1], stokes[:,2], stokes[:,3]
     alphas = np.empty(shape=(nsrc,), dtype=dtype)
 
-    # Zero some sources
-    zero_srcs = np.random.randint(nsrc, size=(2,))
-    # Create sources with both positive and negative flux
-    sign = 2*np.random.randint(2, size=I.shape) - 1
-
     # Source coordinates between -1.5 and 1.5 degrees
     source_coords[:] = (rf(size=source_coords.shape) - 0.5)*3
     Q[:] = rf(size=Q.shape)*0.1
     U[:] = rf(size=U.shape)*0.1
     V[:] = rf(size=V.shape)*0.1
-    I[:] = sign*np.sqrt(Q**2 + U**2 + V**2)
+    I[:] = np.sqrt(Q**2 + U**2 + V**2)
 
-    # Zero the selected stokes parameters
-    source_coords[zero_srcs,:] = 0
+    # Zero and invert selected stokes parameters
+    if nsrc > 0:
+        zero_srcs = np.random.randint(nsrc, size=(2,))
+        source_coords[zero_srcs,:] = 0
+
+        # Create sources with both positive and negative flux
+        sign = 2*np.random.randint(2, size=I.shape) - 1
+        I[:] *= sign
 
     alphas[:] = 2*(np.random.random(size=alphas.size) - 0.5)
 
@@ -98,17 +99,18 @@ def get_point_sources(nsrc):
 def get_gaussian_sources(nsrc):
     c, s, a = get_point_sources(nsrc)
     gauss_shape = np.empty(shape=(3, nsrc), dtype=np.float64)
-    gauss_shape = rf(size=gauss_shape.shape)
+    gauss_shape[:] = rf(size=gauss_shape.shape)
     return c, s, a, gauss_shape
 
-nsrc = 5
-pt_lm, pt_stokes, pt_alpha = get_point_sources(nsrc)
+npsrc, ngsrc = 50, 50
 
-assert pt_lm.shape == (nsrc, 2), pt_lm.shape
-assert pt_stokes.shape == (nsrc, 4), pt_stokes.shape
-assert pt_alpha.shape == (nsrc,), pt_alpha.shape
+pt_lm, pt_stokes, pt_alpha = get_point_sources(npsrc)
 
-g_lm, g_stokes, g_alpha, g_shape = get_gaussian_sources(nsrc)
+assert pt_lm.shape == (npsrc, 2), pt_lm.shape
+assert pt_stokes.shape == (npsrc, 4), pt_stokes.shape
+assert pt_alpha.shape == (npsrc,), pt_alpha.shape
+
+g_lm, g_stokes, g_alpha, g_shape = get_gaussian_sources(ngsrc)
 
 #=========================================
 # Create Tigger ASCII sky model
@@ -213,21 +215,23 @@ class RadioSourceProvider(SourceProvider):
 
     def gaussian_alpha(self, context):
         (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
-        return np.tile(pt_alpha[lg:ug, np.newaxis], [1, ut-lt])
+        return np.tile(g_alpha[lg:ug, np.newaxis], [1, ut-lt])
 
     def gaussian_shape(self, context):
         (lg, ug) = context.dim_extents('ngsrc')
-        gauss_shape = g_shape[lg:ug]
-        #print 'Gaussian Shape %s' % gauss_shape.shape
-        emaj = gauss_shape[0].copy()
-        emin = gauss_shape[1].copy()
-        pa = gauss_shape[2].copy()
+        gauss_shape = g_shape[:,lg:ug]
+        emaj = gauss_shape[0]
+        emin = gauss_shape[1]
+        pa = gauss_shape[2]
 
-        gauss_shape[0] = emaj * np.sin(pa)
-        gauss_shape[1] = emaj * np.cos(pa)
-        gauss_shape[2] = emin / emaj
+        gauss = np.empty(context.shape, dtype=context.dtype)
 
-        return gauss_shape
+        gauss[0,:] = emaj * np.sin(pa)
+        gauss[1,:] = emaj * np.cos(pa)
+        emaj[emaj == 0.0] = 1.0
+        gauss[2,:] = emin / emaj
+
+        return gauss
 
     def ref_frequency(self, context):
         return np.full(context.shape, ref_freq, context.dtype)
