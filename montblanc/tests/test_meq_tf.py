@@ -132,18 +132,18 @@ with open(tigger_sky_file, 'w') as f:
             l=l, m=m, i=I, q=Q, u=U, v=V, spi=alpha, rf=ref_freq))
 
     it = enumerate(itertools.izip(g_lm, g_stokes, g_alpha, g_shape.T))
-    for i, ((l, m), (I, Q, U, V), alpha, (el, em, er)) in it:
+    for i, ((l, m), (I, Q, U, V), alpha, (emaj, emin, pa)) in it:
         ra, dec = lm_to_radec(l, m, ra0, dec0)
         l, m = np.rad2deg([ra,dec])
         # Convert to seconds
-        el, em = np.asarray([el, em])*648000./np.pi
+        emaj, emin = np.asarray([emaj, emin])*648000./np.pi
         # Convert to degrees
-        er *= 180.0/np.pi
+        pa *= 180.0/np.pi
 
         f.write('{l:.20f} {m:.20f} {i} {q} {u} {v} {spi} {rf:.20f} '
-                '{el} {em} {er}\n'.format(
+                '{emaj} {emin} {pa}\n'.format(
                     l=l, m=m, i=I, q=Q, u=U, v=V, spi=alpha, rf=ref_freq,
-                    el=el, em=em, er=er))
+                    emaj=emaj, emin=emin, pa=pa))
 
 
 #=========================================
