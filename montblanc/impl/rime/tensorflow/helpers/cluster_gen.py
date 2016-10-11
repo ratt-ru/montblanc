@@ -26,7 +26,7 @@ args = parser.parse_args()
 def get_ip_address(ifname):
     """ Hack to get IP address from the interface """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    
+
     return socket.inet_ntoa(fcntl.ioctl(
         s.fileno(),
         0x8915,  # SIOCGIFADDR
@@ -113,7 +113,57 @@ finally:
     host_socket.close()
     logging.info('Closing host socket {h}'.format(h=host_address))
 
+logging.info("Cluster specification\n{c}".format(c=cluster))
+
 if args.start is True:
     import tensorflow as tf
+    import numpy as np
+    import time
+
     server = tf.train.Server(cluster, job_name='master', task_index=0)
-    server.join()
+    logging.info("Server Target is '{st}'".format(st=server.target))
+
+    values = []
+
+    g = tf.Graph()
+
+    with g.as_default():
+        with tf.device('/job:master/task:0'):
+            with tf.container('shared'):
+                queue_in = tf.FIFOQueue(10, [tf.int32],
+                    name='queue_in',
+                    shared_name='master_queue_in')
+
+                queue_out = tf.FIFOQueue(10, [tf.string],
+                    name='queue_out',
+                    shared_name='master_queue_out')
+
+                tmp = tf.Variable([100, 1000], dtype=tf.int32, name='master_tmp')
+
+                q1 = queue_in.enqueue(1, name='q1')
+                q2 = queue_in.enqueue(2, name='q2')
+                q3 = queue_in.enqueue(3, name='q3')
+                q4 = queue_in.enqueue(4, name='q4')
+
+                do_enq = tf.group(q4, q3, q2, q1)
+
+        for t in range(len(cluster['worker'])):
+            with tf.device('/job:worker/task:{t}'.format(t=t)):
+                A = tf.Variable(tf.ones(shape=(10,), dtype=tf.float32), name='a')
+                B = tf.Variable(tf.ones(shape=(10,), dtype=tf.float32), name='b')
+                C = A + B*2
+                values.append(C)
+
+        init_op = tf.initialize_variables([A, B, tmp])
+
+        result = tf.pack(values)
+
+        do_deq = queue_out.dequeue()
+
+    with tf.Session(server.target, graph=g) as S:
+        S.run(init_op)
+        S.run(do_enq)
+        print 'Worker result', S.run(result)
+        print 'Dequeue result', S.run(do_deq)
+
+        time.sleep(2)
