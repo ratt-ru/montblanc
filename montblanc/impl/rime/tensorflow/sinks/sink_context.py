@@ -20,6 +20,8 @@
 
 import inspect
 
+from montblanc.impl.rime.tensorflow.context_help import context_help
+
 def _get_public_attributes(obj):
     """ Return the public attributes on an object """
     return set(n for n, m in inspect.getmembers(obj) if not n.startswith('_'))
@@ -106,5 +108,8 @@ class SinkContext(object):
             return getattr(self, name)
         else:
             raise AttributeError(name)
+
+    def help(self, display_cube=False):
+        return context_help(self, display_cube)
 
 _sink_context_attributes = _get_public_attributes(SinkContext)

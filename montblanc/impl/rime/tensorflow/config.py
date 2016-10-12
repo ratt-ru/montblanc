@@ -223,55 +223,89 @@ _freq_low = 1e9
 _freq_high = 2e9
 _ref_freq = 1.5e9
 
+RADIANS = "Radians"
+HERTZ = "Hertz"
+METERS = "Meters"
+JANSKYS = "Janskys"
+DIMENSIONLESS = "Dimensionless"
+
+LM_DESCRIPTION = ("(l,m) coordinates for {st} sources. "
+            "Offset relative to the phase centre.")
+STOKES_DESCRIPTION = ("(I,Q,U,V) Stokes parameters.")
+ALPHA_DESCRIPTION = ("Power term describing the distribution of a source's flux "
+            "over frequency. Distribution is calculated as (nu/nu_ref)^alpha "
+            "where nu is frequency.")
+
 # List of arrays
 A = [
     # UVW Coordinates
     array_dict('uvw', ('ntime', 'na', 3), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
         test    = rand_uvw,
-        input   = True),
+        input   = True,
+        description = "UVW antenna coordinates, normalised "
+            "relative to a reference antenna.",
+        units   = METERS),
 
     array_dict('antenna1', ('ntime', 'nbl'), np.int32,
         default = default_antenna1,
         test    = default_antenna1,
-        input   = True),
+        input   = True,
+        description = "Index of the first antenna "
+            "of the baseline pair."),
 
     array_dict('antenna2', ('ntime', 'nbl'), np.int32,
         default = default_antenna2,
         test    = default_antenna2,
-        input   = True),
+        input   = True,
+        description = "Index of the second antenna "
+            "of the baseline pair."),
 
     # Frequency and Reference Frequency arrays
     # TODO: This is incorrect when channel local is not the same as channel global
     array_dict('frequency', ('nchan',), 'ft',
         default = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0]),
         test    = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0]),
-        input   = True),
+        input   = True,
+        description = "Frequency. Frequencies from multiple bands "
+            "are stacked on top of each other. ",
+        units   = HERTZ),
 
     array_dict('ref_frequency', ('nchan',), 'ft',
         default = lambda c: np.full(c.shape, _ref_freq, c.dtype),
         test    = lambda c: np.full(c.shape, _ref_freq, c.dtype),
-        input   = True),
+        input   = True,
+        description = "The reference frequency associated with the "
+            " channel's band.",
+        units   = HERTZ),
 
     # Holographic Beam
 
     # Pointing errors
-    array_dict('point_errors', ('ntime','na','nchan',2), 'ft',
+    array_dict('point_errors', ('ntime','na','nchan', 2), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-2,
-        input   = True),
+        input   = True,
+        description = "Pointing errors for each antenna. "
+            "The components express an offset in the (l,m) plane.",
+        units   = RADIANS),
 
     # Antenna scaling factors
     array_dict('antenna_scaling', ('na','nchan',2), 'ft',
         default = lambda c: np.ones(c.shape, c.dtype),
         test    = lambda c: rf(c.shape, c.dtype),
-        input   = True),
+        input   = True,
+        description = "Antenna scaling factors for each antenna. "
+            "The components express a scale in the (l,m) plane.",
+        units   = DIMENSIONLESS),
 
     # Parallactic angles at each timestep for each antenna
     array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: rf(c.shape, c.dtype)*np.pi,
-        input   = True),
+        input   = True,
+        description = "Parallactic angles for each antenna.",
+        units   = RADIANS),
 
     # Extents of the beam.
     # First 3 values are lower coordinate for (l, m, frequency)
@@ -279,65 +313,106 @@ A = [
     array_dict('beam_extents', (6,), 'ft',
         default = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
         test    = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
-        input   = True),
+        input   = True,
+        description = "Extents of the holographic beam cube. "
+            "[l_low, m_low, freq_low, l_high, m_high, freq_high].",
+        units   = "[{r}, {r}, {h}, {r}, {r}, {h}]".format(r=RADIANS, h=HERTZ)),
 
     array_dict('beam_freq_map', ('beam_nud',), 'ft',
         default  = lambda c: np.linspace(_freq_low, _freq_high,
                                 c.shape[0], endpoint=True),
         test     = lambda c: np.linspace(_freq_low, _freq_high,
                                 c.shape[0], endpoint=True),
-        input   = True),
+        input   = True,
+        description = "A map describing the frequency associated with each "
+            "slice of the frequency dimension of the holographic beam cube.",
+        units   = HERTZ),
 
     # Beam cube
     array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
         test    = lambda c: rc(c.shape, c.dtype),
-        input   = True),
+        input   = True,
+        description = "Holographic beam cube providing "
+            "a discretised representation of the antenna beam pattern. "
+            "Used to simulate the Direction Dependent Effects (DDE) "
+            " or E term of the RIME."
+            "Composed of a frequency stack of (l,m) images.",
+        units   = DIMENSIONLESS),
 
     # Direction-Independent Effects
     array_dict('gterm', ('ntime', 'na', 'nchan', 4), 'ct',
         default = identity_on_pols,
         test    = lambda c: rc(c.shape, c.dtype),
-        input   = True),
+        input   = True,
+        description = "Array providing the Direction Independent Effects (DIE) "
+            "or G term of the RIME, term for each antenna.",
+        units   = DIMENSIONLESS),
 
     # Point Source Definitions
     array_dict('point_lm', ('npsrc',2), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1),
+        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1,
+        description = LM_DESCRIPTION.format(st="point"),
+        units   = RADIANS),
     array_dict('point_stokes', ('npsrc','ntime', 4), 'ft',
         default = default_stokes,
-        test    = rand_stokes),
+        test    = rand_stokes,
+        description = STOKES_DESCRIPTION,
+        units   = JANSKYS),
     array_dict('point_alpha', ('npsrc','ntime'), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype)*0.1),
+        test    = lambda c: rf(c.shape, c.dtype)*0.1,
+        description = ALPHA_DESCRIPTION,
+        units   = DIMENSIONLESS),
 
     # Gaussian Source Definitions
     array_dict('gaussian_lm', ('ngsrc',2), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1),
+        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1,
+        description = LM_DESCRIPTION.format(st="gaussian"),
+        units   = RADIANS),
     array_dict('gaussian_stokes', ('ngsrc','ntime', 4), 'ft',
         default = default_stokes,
-        test    = rand_stokes),
+        test    = rand_stokes,
+        description = STOKES_DESCRIPTION,
+        units   = JANSKYS),
     array_dict('gaussian_alpha', ('ngsrc','ntime'), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype)*0.1),
+        test    = lambda c: rf(c.shape, c.dtype)*0.1,
+        description = ALPHA_DESCRIPTION,
+        units   = DIMENSIONLESS),
     array_dict('gaussian_shape', (3, 'ngsrc'), 'ft',
         default = default_gaussian_shape,
-        test    = rand_gaussian_shape),
+        test    = rand_gaussian_shape,
+        description = "Parameters describing the shape of a gaussian source. "
+            "(lproj, mproj, ratio) where lproj and mproj are the projections of "
+            "the major and minor ellipse axes onto the l and m axes. "
+            "Ratio is ratio of the minor/major axes.",
+        units   = "({r}, {r}, {d})".format(r=RADIANS, d=DIMENSIONLESS)),
 
     # Sersic Source Definitions
     array_dict('sersic_lm', ('nssrc',2), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1),
+        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1,
+        description = LM_DESCRIPTION.format(st="sersic"),
+        units   = "Radians"),
     array_dict('sersic_stokes', ('nssrc','ntime', 4), 'ft',
         default = default_stokes,
-        test    = rand_stokes),
+        test    = rand_stokes,
+        description = STOKES_DESCRIPTION,
+        units   = JANSKYS),
     array_dict('sersic_alpha', ('nssrc','ntime'), 'ft',
         default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype)*0.1),
+        test    = lambda c: rf(c.shape, c.dtype)*0.1,
+        description = ALPHA_DESCRIPTION,
+        units   = DIMENSIONLESS),
     array_dict('sersic_shape', (3, 'nssrc'), 'ft',
         default = default_sersic_shape,
-        test    = test_sersic_shape),
+        test    = test_sersic_shape,
+        description = "Parameters describing the shape of a sersic source. "
+            "(e1, e2, eR). Further information is required here.",
+        units   = "({r}, {r}, {d})".format(r=RADIANS, d=DIMENSIONLESS)),
 
     # Observation Data
 
@@ -346,24 +421,35 @@ A = [
         default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: np.random.random_integers(0, 1,
             size=c.shape).astype(np.uint8),
-        input   = True),
+        input   = True,
+        description = "Indicates whether a visibility should be flagged when "
+            "computing a Residual or Chi-Squared value.",
+        unut    = DIMENSIONLESS),
     # Weight array
     array_dict('weight', ('ntime','nbl','nchan',4), 'ft',
         default = lambda c: np.ones(c.shape, c.dtype),
         test    = lambda c: rf(c.shape, c.dtype),
-        input   = True),
+        input   = True,
+        description = "Weight applied to the difference of observed and model "
+            "visibilities when computing a Chi-Squared value.",
+        units   = DIMENSIONLESS),
     # Observed Visibilities
     array_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
         default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: rc(c.shape, c.dtype),
-        input   = True),
+        input   = True,
+        description = "Observed visibilities, used to compute residuals and "
+            "Chi-Squared values."),
 
     # Model Visibilities
     array_dict('model_vis', ('ntime','nbl','nchan',4), 'ct',
         default = lambda c: np.zeros(c.shape, c.dtype),
         test    = lambda c: rc(c.shape, c.dtype),
         input   = True,
-        output  = True),
+        output  = True,
+        description = "Model visibilities. If supplied as input, visibilities from "
+            "the model will be added to these initial values. "
+            "If requested as output, this is the output of the RIME."),
 
     # Result arrays
     array_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', temporary=True),
