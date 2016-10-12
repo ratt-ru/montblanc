@@ -31,26 +31,18 @@ from hypercube import HyperCube
 from montblanc.config import RimeSolverConfig as Options
 
 import montblanc.util as mbu
-import montblanc.src_types as mbs
 
-class RIMESolver(HyperCube):
-    def __init__(self, *args, **kwargs):
+class RIMESolver(object):
+    def __init__(self, slvr_cfg):
         """
         RIMESolver Constructor
 
-        Keyword Arguments
+        Arguments
         ---------
             slvr_cfg : dictionary
                 Contains configuration options for this solver
         """
-
-        super(RIMESolver, self).__init__(*args, **kwargs)
-        # Store the solver configuration
-
-        self._slvr_cfg = slvr_cfg = kwargs.get('slvr_cfg', None)
-
-        if slvr_cfg is None:
-            raise ValueError("Expected a 'slvr_cfg' keyword.")
+        self._slvr_cfg = slvr_cfg
 
         # Configure our floating point and complex types
         if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
@@ -62,6 +54,9 @@ class RIMESolver(HyperCube):
         else:
             raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
 
+        # Maintain a hypercube
+        self._cube = HyperCube()
+
         # Should we use the weight vector when computing the X2?
         self._use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR)
 
@@ -70,6 +65,10 @@ class RIMESolver(HyperCube):
 
         # Is this solver outputting visibilities or residuals
         self._visibility_output = slvr_cfg.get(Options.VISIBILITY_OUTPUT)
+
+    @property
+    def hypercube(self):
+        return self._cube
 
     def is_float(self):
         return self.ft == np.float32
@@ -89,75 +88,6 @@ class RIMESolver(HyperCube):
     def is_autocorrelated(self):
         """ Does this solver handle autocorrelations? """
         return self._is_auto_correlated == True
-
-    def default_base_ant_pairs(self):
-        """
-        Return a list of two arrays containing the
-        default antenna pairs for each baseline.
-        """
-        na = self.dim_local_size('na')
-        k = 0 if self.is_autocorrelated() else 1
-        return np.triu_indices(na, k)
-
-    def register_default_dimensions(self):
-        """ Register the default dimensions for a RIME solver """
-
-        # Pull out the configuration options for the basics
-        autocor = self._slvr_cfg.get(Options.AUTO_CORRELATIONS, False)
-        ntime = self._slvr_cfg.get(Options.NTIME)
-        na = self._slvr_cfg.get(Options.NA)
-        nbands = self._slvr_cfg.get(Options.NBANDS)
-        nchan = self._slvr_cfg.get(Options.NCHAN)
-        npol = self._slvr_cfg.get(Options.NPOL)
-
-        # Register these dimensions on this solver.
-        self.register_dimension('ntime', ntime,
-            description=Options.NTIME_DESCRIPTION)
-        self.register_dimension('na', na,
-            description=Options.NA_DESCRIPTION)
-        self.register_dimension('nbands', nbands,
-            description=Options.NBANDS_DESCRIPTION)
-        self.register_dimension('nchan', nchan,
-            description=Options.NCHAN_DESCRIPTION)
-        self.register_dimension(Options.NPOL, npol,
-            description=Options.NPOL_DESCRIPTION)
-
-        # Now get the size of the registered dimensions
-        ntime, na, nchan, npol = self.dim_local_size(
-            'ntime', 'na', 'nchan', 'npol')
-
-        # Infer number of baselines from number of antenna,
-        # use this as the default value if not specific
-        # baseline numbers were provided
-        nbl = mbu.nr_of_baselines(na, autocor)
-        nbl = self._slvr_cfg.get(Options.NBL, nbl)
-
-        # Register the baseline dimension
-        self.register_dimension('nbl', nbl,
-            description=Options.NBL_DESCRIPTION)
-
-        nbl = self.dim_local_size('nbl')
-
-        # Register dependent dimensions
-        self.register_dimension('npolchan', nchan*npol,
-            description='Polarised channels')
-        self.register_dimension('nvis', ntime*nbl*nchan,
-            description='Visibilities')
-
-        # Convert the source types, and their numbers
-        # to their number variables and numbers
-        # { 'point':10 } => { 'npsrc':10 }
-        src_cfg = self._slvr_cfg[Options.SOURCES]
-        src_nr_vars = mbu.sources_to_nr_vars(src_cfg)
-        # Sum to get the total number of sources
-        self.register_dimension('nsrc', sum(src_nr_vars.itervalues()),
-            description=Options.NSRC_DESCRIPTION)
-
-        # Register the individual source types
-        for nr_var, nr_of_src in src_nr_vars.iteritems():
-            self.register_dimension(nr_var, nr_of_src,
-                description='{t} sources'.format(t=mbs.SOURCE_DIM_TYPES[nr_var]),
-                zero_valid=True)
 
     def type_dict(self):
         """ Returns a dictionary mapping strings to concrete types """
@@ -196,157 +126,6 @@ class RIMESolver(HyperCube):
     def config(self):
         """ Returns the configuration dictionary for this solver """
         return self._slvr_cfg
-
-    def register_array(self, name, shape, dtype, **kwargs):
-        """
-        Register an array with this Solver object.
-
-        Arguments
-        ----------
-            name : string
-                name of the array.
-            shape : integer/string or tuple of integers/strings
-                Shape of the array.
-            dtype : data-type
-                The data-type for the array.
-
-        Returns
-        -------
-            A dictionary describing this array.
-        """
-
-        # Substitute any string types when calling the parent
-        return super(RIMESolver, self).register_array(name, shape,
-            mbu.dtype_from_str(dtype, self.type_dict()),
-            **kwargs)
-
-    def register_property(self, name, dtype, default, **kwargs):
-        """
-        Registers a property with this Solver object
-
-        Arguments
-        ----------
-            name : string
-                The name of the property.
-            dtype : data-type
-                The data-type of this property
-            default :
-                Default value for the property.
-
-        Returns
-        -------
-            A dictionary describing this property.
-
-        """
-
-        # Substitute any string types when calling the parent
-        return super(RIMESolver, self).register_property(name,
-            mbu.dtype_from_str(dtype, self.type_dict()),
-            default, **kwargs)
-
-    def create_arrays(self, ignore=None, supplied=None):
-        """
-        Create any necessary arrays on the solver.
-
-        Arguments
-        ---------
-            ignore : list
-                List of array names to ignore.
-            supplied : dictionary
-                A dictionary of supplied arrays to create
-                on the solver, keyed by name. Note that
-                these arrays will not be initialised by
-                montblanc, it is the responsibility of the
-                user to initialise them.
-        """
-        raise NotImplementedError()
-
-    @staticmethod
-    def _arrays_to_create(reified_arrays, ignore, supplied):
-        """
-        Given reified_arrays, arrays to ignore and supplied arrays,
-        work out which arrays must be created.
-        """
-
-        # Work out which arrays we shouldn't create
-        dont_create = set(ignore)
-        dont_create.update(supplied.iterkeys())
-
-        return { n: a for n, a
-            in reified_arrays.iteritems()
-            if n not in dont_create }
-
-    @staticmethod
-    def _validate_supplied_arrays(reified_arrays, supplied):
-        """
-        Validate that the supplied arrays matched the shape
-        and type of the reified arrays
-        """
-
-        for k, a in supplied.iteritems():
-            expected_shape = reified_arrays[k].shape
-
-            if a.shape != expected_shape:
-                raise ValueError("Supplied array '{sn}'s' shape '{ss}' "
-                    "does not match the expected shape of '{es}'".format(
-                        sn=k, ss=a.shape, es=expected_shape))
-
-    def init_array(self, name, ary, value):
-        # No defaults are supplied
-        if value is None:
-            ary.fill(0)
-        # The array is defaulted with some function
-        elif isinstance(value, types.MethodType):
-            try:
-                signature(value).bind(self, ary)
-            except TypeError:
-                raise TypeError(('The signature of the function supplied '
-                    'for setting the value on array %s is incorrect. '
-                    'The function signature has the form f(slvr, ary), '
-                    'where f is some function that will set values '
-                    'on the array, slvr is a Solver object which provides '
-                    'useful information to the function, '
-                    'and ary is the NumPy array which must be '
-                    'initialised with values.') % (name))
-
-            returned_ary = value(self, ary)
-
-            if returned_ary is not None:
-                ary[:] = returned_ary
-        elif isinstance(value, types.LambdaType):
-            try:
-                signature(value).bind(self, ary)
-            except TypeError:
-                raise TypeError(('The signature of the lambda supplied '
-                    'for setting the value on array %s is incorrect. '
-                    'The function signature has the form lambda slvr, ary:, '
-                    'where lambda provides functionality for setting values '
-                    'on the array, slvr is a Solver object which provides '
-                    'useful information to the function, '
-                    'and ary is the NumPy array which must be '
-                    'initialised with values.') % (name))
-
-            returned_ary = value(self, ary)
-
-            if returned_ary is not None:
-                ary[:] = returned_ary
-        # Got an ndarray, try set it equal
-        elif isinstance(value, np.ndarray):
-            try:
-                ary[:] = value
-            except BaseException as e:
-                raise ValueError(('Tried to assign array %s with '
-                    'value NumPy array, but this failed '
-                    'with %s') % (name, repr(e)))
-        # Assume some sort of value has been supplied
-        # Give it to NumPy
-        else:
-            try:
-                ary.fill(value)
-            except BaseException as e:
-                raise ValueError(('Tried to fill array %s with '
-                    'value value %s, but NumPy\'s fill function '
-                    'failed with %s') % (name, value, repr(e)))
 
     def solve(self):
         """ Solve the RIME """

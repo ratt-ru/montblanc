@@ -248,7 +248,7 @@ slvr_cfg = montblanc.rime_solver_cfg(
 
 slvr = montblanc.rime_solver(slvr_cfg)
 
-ms_mgr = MeasurementSetManager(msfile, slvr, slvr_cfg)
+ms_mgr = MeasurementSetManager(msfile, slvr.hypercube, slvr_cfg)
 
 source_providers = []
 source_providers.append(MSSourceProvider(ms_mgr))
@@ -272,7 +272,7 @@ subprocess.call(cmd_list)
 
 # Compare MeqTree and Montblanc visibilities
 with pt.table(msfile, ack=False, readonly=True) as MS:
-    ntime, nbl, nchan = slvr.dim_global_size('ntime', 'nbl', 'nchan')
+    ntime, nbl, nchan = slvr.hypercube.dim_global_size('ntime', 'nbl', 'nchan')
     shape = (ntime, nbl, nchan, 4)
     meq_vis = MS.getcol(meq_vis_column).reshape(shape)
     mb_vis = MS.getcol(mb_vis_column).reshape(shape)

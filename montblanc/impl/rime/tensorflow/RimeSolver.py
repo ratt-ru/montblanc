@@ -80,18 +80,20 @@ class RimeSolver(MontblancTensorflowSolver):
         # Register hypercube Dimensions
         #=========================================
 
-        self.register_default_dimensions()
+        cube, slvr_cfg = self.hypercube, self.config()
+
+        mbu.register_default_dimensions(cube, slvr_cfg)
 
         # Configure the dimensions of the beam cube
-        self.register_dimension('beam_lw',
+        cube.register_dimension('beam_lw',
             slvr_cfg[Options.E_BEAM_WIDTH],
             description='E Beam cube l width')
 
-        self.register_dimension('beam_mh',
+        cube.register_dimension('beam_mh',
             slvr_cfg[Options.E_BEAM_HEIGHT],
             description='E Beam cube m height')
 
-        self.register_dimension('beam_nud',
+        cube.register_dimension('beam_nud',
             slvr_cfg[Options.E_BEAM_DEPTH],
             description='E Beam cube nu depth')
 
@@ -101,8 +103,19 @@ class RimeSolver(MontblancTensorflowSolver):
 
         from montblanc.impl.rime.tensorflow.config import (A, P)
 
-        self.register_properties(P)
-        self.register_arrays(A)
+
+        def _massage_dtypes(A, T):
+            def _massage_dtype_in_dict(D):
+                new_dict = D.copy()
+                new_dict['dtype'] = mbu.dtype_from_str(D['dtype'], T)
+                return new_dict
+
+            return [_massage_dtype_in_dict(D) for D in A]
+
+
+        T = self.type_dict()
+        cube.register_properties(_massage_dtypes(P, T))
+        cube.register_arrays(_massage_dtypes(A, T))
 
         #==========================================
         # Tensorflow Session and Thread Coordinator
@@ -136,7 +149,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         self._default_data_sources = dfs = {
             n: DataSource(a.get(queue_data_source), a.dtype, queue_data_source)
-            for n, a in self.arrays().iteritems()
+            for n, a in cube.arrays().iteritems()
             if not a.temporary }
 
         montblanc.log.info("Data source '{dfs}'".format(dfs=data_source))
@@ -212,7 +225,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Create placeholder variables for properties
         self._property_ph_vars = AttrDict({
             n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
-            for n, p in self.properties().iteritems() })
+            for n, p in cube.properties().iteritems() })
 
         #======================
         # Threads
@@ -234,7 +247,7 @@ class RimeSolver(MontblancTensorflowSolver):
         #==========================
         # Tensorflow initialisation
         #==========================
-        self._tf_expr = self._construct_tensorflow_expression(dfs, self)
+        self._tf_expr = self._construct_tensorflow_expression(dfs, cube)
         self._tf_session.run(tf.initialize_all_variables())
 
         #================
@@ -254,7 +267,7 @@ class RimeSolver(MontblancTensorflowSolver):
         session = self._tf_session
 
         # Copy dimensions of the main cube
-        cube = self.copy()
+        cube = self.hypercube.copy()
 
         # Get space of iteration
         iter_args = _iter_args(self._iter_dims, cube)
@@ -285,7 +298,7 @@ class RimeSolver(MontblancTensorflowSolver):
         session = self._tf_session
 
         # Maintain a hypercube based on the main cube
-        cube = self.copy()
+        cube = self.hypercube.copy()
 
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
@@ -417,10 +430,12 @@ class RimeSolver(MontblancTensorflowSolver):
         chunks_computed = 0
         done = False
 
-        feed_dict = { ph: self.dim_global_size(n) for
+        cube = self.hypercube
+
+        feed_dict = { ph: cube.dim_global_size(n) for
             n, ph in self._src_ph_vars.iteritems() }
 
-        feed_dict.update({ ph: getattr(self, n) for
+        feed_dict.update({ ph: getattr(cube, n) for
             n, ph in self._property_ph_vars.iteritems() })
 
         while not done:
@@ -466,7 +481,7 @@ class RimeSolver(MontblancTensorflowSolver):
         done = False
 
         # Maintain a hypercube based on the main cube
-        cube = self.copy()
+        cube = self.hypercube.copy()
 
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
@@ -676,14 +691,14 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Apply any dimension updates from the source provider
         # to the hypercube
-        bytes_required = _apply_source_provider_dim_updates(self,
+        bytes_required = _apply_source_provider_dim_updates(self.hypercube,
             source_providers)
 
         # If we use more memory than previously,
         # perform another budgeting operation
         # to make sure everything fits
         if bytes_required > self._previous_budget:
-            self._previous_budget = _budget(self, self.config())
+            self._previous_budget = _budget(self.hypercube, self.config())
 
         try:
             params = self._parameter_executor.submit(self._parameter_feed)

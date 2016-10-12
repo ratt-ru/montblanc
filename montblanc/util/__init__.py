@@ -172,7 +172,7 @@ def dict_array_bytes_required(arrays, template):
 
 __DIM_REDUCTION_RE = re.compile(    # Capture Groups and Subgroups
     "^\s*(?P<name>[A-Za-z0-9_]*?)"  # 1.   Dimension name
-    "(?:\s*?=\s*?"                  # 2.   White spaces and =  
+    "(?:\s*?=\s*?"                  # 2.   White spaces and =
         "(?P<value>[0-9]*?)"        # 2.1  A value
         "(?P<percent>\%?)"          # 2.2  Possibly followed by a percentage
     ")?\s*?$")                      #      Capture group 2 possibly occurs
@@ -391,7 +391,7 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
     Also clamp number of threads to the problem dimension size,
     if necessary
     """
-    
+
     # Shift threads from the z dimension
     # into the y dimension
     while blockdimz > dimz:
@@ -464,9 +464,9 @@ def parallactic_angles(field_centre, antenna_positions, times):
     fc_rad = pm.direction('J2000',
         *(pq.quantity(f,'rad') for f in field_centre))
 
-    parallactic_angles = np.asarray([ 
+    parallactic_angles = np.asarray([
         # Set antenna position as the reference frame
-        pm.do_frame(rp) and 
+        pm.do_frame(rp) and
         # Set current time as the reference frame
         pm.do_frame(pm.epoch("UTC",pq.quantity(t,"s"))) and
         # Now compute the parallactic angle
@@ -474,6 +474,71 @@ def parallactic_angles(field_centre, antenna_positions, times):
         for t in times for rp in reference_positions])
 
     return parallactic_angles.reshape(ntime, na)
+
+def register_default_dimensions(cube, slvr_cfg):
+    """ Register the default dimensions for a RIME solver """
+
+    from montblanc.config import RimeSolverConfig as Options
+    import montblanc.src_types as mbs
+
+    # Pull out the configuration options for the basics
+    autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS)
+    ntime = slvr_cfg.get(Options.NTIME)
+    na = slvr_cfg.get(Options.NA)
+    nbands = slvr_cfg.get(Options.NBANDS)
+    nchan = slvr_cfg.get(Options.NCHAN)
+    npol = slvr_cfg.get(Options.NPOL)
+
+    # Register these dimensions on this solver.
+    cube.register_dimension('ntime', ntime,
+        description=Options.NTIME_DESCRIPTION)
+    cube.register_dimension('na', na,
+        description=Options.NA_DESCRIPTION)
+    cube.register_dimension('nbands', nbands,
+        description=Options.NBANDS_DESCRIPTION)
+    cube.register_dimension('nchan', nchan,
+        description=Options.NCHAN_DESCRIPTION)
+    cube.register_dimension(Options.NPOL, npol,
+        description=Options.NPOL_DESCRIPTION)
+
+    # Now get the size of the registered dimensions
+    ntime, na, nchan, npol = cube.dim_local_size(
+        'ntime', 'na', 'nchan', 'npol')
+
+    # Infer number of baselines from number of antenna,
+    # use this as the default value if not specific
+    # baseline numbers were provided
+    nbl = nr_of_baselines(na, autocor)
+    nbl = slvr_cfg.get(Options.NBL, nbl)
+
+    # Register the baseline dimension
+    cube.register_dimension('nbl', nbl,
+        description=Options.NBL_DESCRIPTION)
+
+    nbl = cube.dim_local_size('nbl')
+
+    # Register dependent dimensions
+    cube.register_dimension('npolchan', nchan*npol,
+        description='Polarised channels')
+    cube.register_dimension('nvis', ntime*nbl*nchan,
+        description='Visibilities')
+
+    # Convert the source types, and their numbers
+    # to their number variables and numbers
+    # { 'point':10 } => { 'npsrc':10 }
+    src_cfg = slvr_cfg[Options.SOURCES]
+    src_nr_vars = sources_to_nr_vars(src_cfg)
+    # Sum to get the total number of sources
+    cube.register_dimension('nsrc', sum(src_nr_vars.itervalues()),
+        description=Options.NSRC_DESCRIPTION)
+
+    # Register the individual source types
+    for nr_var, nr_of_src in src_nr_vars.iteritems():
+        cube.register_dimension(nr_var, nr_of_src,
+            description='{t} sources'.format(t=mbs.SOURCE_DIM_TYPES[nr_var]),
+            zero_valid=True)
+
+
 
 class ContextWrapper(object):
     """ Context Manager Wrapper for CUDA Contexts! """
