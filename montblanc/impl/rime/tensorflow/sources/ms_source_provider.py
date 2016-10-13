@@ -25,8 +25,6 @@ import types
 
 import numpy as np
 
-from hypercube import HyperCube
-
 import montblanc.util as mbu
 from montblanc.config import RimeSolverConfig as Options
 import montblanc.impl.rime.tensorflow.ms.ms_manager as MS

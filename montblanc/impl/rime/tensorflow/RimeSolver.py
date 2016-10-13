@@ -186,7 +186,7 @@ class RimeSolver(MontblancTensorflowSolver):
             msfile = slvr_cfg.get(Options.MS_FILE)
 
             self._ms_manager = mgr = MeasurementSetManager(msfile,
-                self, slvr_cfg)
+                slvr_cfg)
 
             self._source_providers.append(MSSourceProvider(mgr,
                 slvr_cfg[Options.MS_VIS_INPUT_COLUMN]))

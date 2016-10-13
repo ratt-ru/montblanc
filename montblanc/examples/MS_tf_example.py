@@ -132,7 +132,7 @@ if __name__ == '__main__':
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
         # Manages measurement sets
-        ms_mgr = MeasurementSetManager(args.msfile, slvr, slvr_cfg)
+        ms_mgr = MeasurementSetManager(args.msfile, slvr_cfg)
 
         source_provs = []
         # Read problem info from the MS, taking observed visibilities from MODEL_DAT

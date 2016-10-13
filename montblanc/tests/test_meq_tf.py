@@ -248,7 +248,7 @@ slvr_cfg = montblanc.rime_solver_cfg(
 
 slvr = montblanc.rime_solver(slvr_cfg)
 
-ms_mgr = MeasurementSetManager(msfile, slvr.hypercube, slvr_cfg)
+ms_mgr = MeasurementSetManager(msfile, slvr_cfg)
 
 source_providers = []
 source_providers.append(MSSourceProvider(ms_mgr))

@@ -137,17 +137,12 @@ def uvw_row_extents(cube):
     return row_extents(cube, UVW_DIM_ORDER)
 
 class MeasurementSetManager(object):
-    def __init__(self, msname, cube, slvr_cfg):
+    def __init__(self, msname, slvr_cfg):
         super(MeasurementSetManager, self).__init__()
 
         self._msname = msname
         # Create dictionary of tables
         self._tables = { k: open_table(msname, k) for k in SUBTABLE_KEYS }
-        self._cube = mscube = HyperCube()
-
-        # Register the main cube dimensions
-        mscube.register_dimensions(cube.dimensions(copy=False))
-        mscube.register_arrays(cube.arrays())
 
         if not pt.tableexists(msname):
             raise ValueError("'{ms}' does not exist "
@@ -166,7 +161,7 @@ class MeasurementSetManager(object):
         if pol.nrows() > 1:
             raise ValueError("Multiple polarization configurations!")
 
-        npol = pol.getcol('NUM_CORR')[0]
+        self._npol = npol = pol.getcol('NUM_CORR')[0]
 
         if npol != 4:
             raise ValueError('Expected four polarizations')
@@ -219,21 +214,21 @@ class MeasurementSetManager(object):
         t_orderby = orderby_clause(['ntime'], unique=True)
         t_query = "SELECT FROM $otblms {c}".format(c=t_orderby)
         self._tables[ORDERED_TIME_TABLE] = ot = pt.taql(t_query)
-        ntime = ot.nrows()
+        self._ntime = ntime = ot.nrows()
 
         # Count number of baselines in the MS
         bl_orderby = orderby_clause(['nbl'], unique=True)
         bl_query = "SELECT FROM $otblms {c}".format(c=bl_orderby)
         self._tables[ORDERED_BASELINE_TABLE] = obl = pt.taql(bl_query)
-        nbl = obl.nrows()
+        self._nbl = nbl = obl.nrows()
 
         # Number of channels per band
         self._nchanperband = chan_per_band[0]
 
-        nchan = sum(chan_per_band)
-        nbands = len(chan_per_band)
-        npolchan = npol*nchan
-        nvis = ntime*nbl*nchan
+        self._nchan = nchan = sum(chan_per_band)
+        self._nbands = nbands = len(chan_per_band)
+        self._npolchan = npolchan = npol*nchan
+        self._nvis = nvis = ntime*nbl*nchan
 
         # Update the cube with dimension information
         # obtained from the MS
@@ -241,11 +236,10 @@ class MeasurementSetManager(object):
             sum(chan_per_band), len(chan_per_band), npol,
             npolchan, nvis]
 
-        for dim, size in zip(UPDATE_DIMENSIONS, updated_sizes):
-            mscube.update_dimension(dim, global_size=size,
-                local_size=size, lower_extent=0, upper_extent=size)
+        self._dim_sizes = dim_sizes = { dim: size for dim, size
+            in zip(UPDATE_DIMENSIONS, updated_sizes) }
 
-        shape = mscube.dim_global_size(*MS_DIM_ORDER)
+        shape = tuple(dim_sizes[d] for d in MS_DIM_ORDER)
         expected_rows = np.product(shape)
 
         if not expected_rows == oms.nrows():
@@ -286,7 +280,7 @@ class MeasurementSetManager(object):
             return ()
 
         self._dim_updates_indicated = True
-        return [self._cube.dimension(k, copy=False) for k in UPDATE_DIMENSIONS]
+        return [(k, v) for k, v in self._dim_sizes.iteritems()]
 
     @property
     def auto_correlations(self):
