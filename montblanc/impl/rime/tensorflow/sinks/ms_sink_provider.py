@@ -42,7 +42,7 @@ class MSSinkProvider(SinkProvider):
         try:
             coldesc = self._manager.column_descriptors[column]
         except KeyError as e:
-            coldesec = None
+            coldesc = None
 
         # Try to get the shape from the descriptor
         if coldesc is not None:
