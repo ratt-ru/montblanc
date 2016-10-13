@@ -20,6 +20,7 @@
 
 import collections
 import threading
+import sys
 
 import concurrent.futures as cf
 import numpy as np
@@ -345,25 +346,36 @@ class RimeSolver(MontblancTensorflowSolver):
             data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32, 'Internal')
 
             def _get_data(data_source, context):
-                # Invoke the data source
-                data = data_source.source(context)
+                try:
+                    # Try and get data from the data source
+                    data = data_source.source(context)
 
-                # Complain about None values
-                if data is None:
-                    raise ValueError("'None' returned from "
-                        "data source '{n}'".format(n=context.name))
+                    # Complain about None values
+                    if data is None:
+                        raise ValueError("'None' returned from "
+                            "data source '{n}'".format(n=context.name))
+                    elif not isinstance(data, np.ndarray):
+                        raise TypeError("Data source '{n}' did not "
+                            "return a numpy array, returned a '{t}'".format(
+                                t=type(data)))
 
-                # Check that the data matches the expected shape
-                same = (data.shape == context.shape and
-                        data.dtype == context.dtype)
+                    # Check that the data matches the expected shape
+                    same = (data.shape == context.shape and
+                            data.dtype == context.dtype)
 
-                if not same:
-                    raise ValueError("Expected data of shape '{esh}' and "
-                        "dtype '{edt}' for data source '{n}', but "
-                        "shape '{rsh}' and '{rdt}' was found instead".format(
-                            n=context.name,
-                            esh=context.shape, edt=context.dtype,
-                            rsh=data.shape, rdt=data.dtype))
+                    if not same:
+                        raise ValueError("Expected data of shape '{esh}' and "
+                            "dtype '{edt}' for data source '{n}', but "
+                            "shape '{rsh}' and '{rdt}' was found instead".format(
+                                n=context.name,
+                                esh=context.shape, edt=context.dtype,
+                                rsh=data.shape, rdt=data.dtype))
+                except Exception as e:
+                    ex = ValueError("An exception occurred while "
+                        "obtaining data from data source '{ds}'\n\n"
+                        "{help}".format(ds=context.name, help=context.help()))
+
+                    raise ex, None, sys.exc_info()[2]
 
                 return data
 
@@ -505,11 +517,23 @@ class RimeSolver(MontblancTensorflowSolver):
             dims = self._transcoder.decode(descriptor)
             cube.update_dimensions(dims)
 
+            def _supply_data(data_sink, context):
+                try:
+                    data_sink.sink(context)
+                except Exception as e:
+                    ex = ValueError("An exception occurred while "
+                        "supplying data to data sink '{ds}'\n\n"
+                        "{help}".format(ds=context.name, help=context.help()))
+
+                    raise ex, None, sys.exc_info()[2]
+
+
             # For each array in our output, call the associated data sink
             for n, a in zip(self._output_queue.fed_arrays[1:], output[1:]):
                 sink_context = SinkContext(n, cube, self.config(), global_iter_args,
                     cube.array(n) if n in cube.arrays() else {}, a)
-                data_sinks[n].sink(sink_context)
+
+                _supply_data(data_sinks[n], sink_context)
 
             # Are we done?
             done = _last_chunk(dims)

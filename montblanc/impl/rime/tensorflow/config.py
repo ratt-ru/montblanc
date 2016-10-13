@@ -447,9 +447,11 @@ A = [
         test    = lambda c: rc(c.shape, c.dtype),
         input   = True,
         output  = True,
-        description = "Model visibilities. If supplied as input, visibilities from "
-            "the model will be added to these initial values. "
-            "If requested as output, this is the output of the RIME."),
+        description = "Model visibilities. In the context of input, these values "
+            "will be added to the model visibilities computed by the RIME. "
+            "This mechanism allows visibilities to be accumulated over different "
+            "models, for example. However, they are zeroed by default."
+            "In the context of output, these are the RIME model visibilities "),
 
     # Result arrays
     array_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', temporary=True),
