@@ -118,10 +118,12 @@ logging.info("Cluster specification\n{c}".format(c=cluster))
 if args.start is True:
     import tensorflow as tf
     import montblanc
+    import time
 
     server = tf.train.Server(cluster, job_name='master', task_index=0)
     logging.info("Server Target is '{st}'".format(st=server.target))
-    logging.info("Server Definition is '{sd}'".format(sd=server.server_def))
+    logging.info("Server Job Name is '{j}'".format(j=server.server_def.job_name))
+    logging.info("Server Task Index is '{t}'".format(t=server.server_def.task_index))
 
     slvr_cfg = montblanc.rime_solver_cfg(
         mem_budget=1024*1024*1024,
@@ -137,4 +139,4 @@ if args.start is True:
 
     logging.info("Created tensorflow solver")
 
-
+    time.sleep(1)

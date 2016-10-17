@@ -20,14 +20,16 @@
 
 import collections
 import itertools
+import json
 import threading
+import time
 import sys
 
+from attrdict import AttrDict
 import concurrent.futures as cf
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
-from attrdict import AttrDict
 
 import montblanc
 import montblanc.util as mbu
@@ -75,7 +77,107 @@ class RimeSolver(MontblancTensorflowSolver):
             slvr_cfg : SolverConfiguration
                 Solver Configuration variables
         """
+
+        #==============================================
+        # Obtain tensorflow server target, job and task
+        #==============================================
+
+        try:
+            self._tf_server_target = tf_server_target = (
+                slvr_cfg['tf_server_target'])
+        except KeyError as e:
+            raise (ValueError("'tf_server_target' missing "
+                            "from solver configuration!"),
+                None, sys.exc_info()[2])
+
+        self._tf_job_name = job_name = slvr_cfg.get('tf_job_name', None)
+        self._tf_task_index = task_index = slvr_cfg.get('tf_task_index', None)
+
+        local_device = '/job:{j}/task:{t}'.format(j=job_name, t=task_index)
+
+        montblanc.log.debug("Local device is {l}".format(l=local_device))
+
+        #===============================================
+        # Transmit/Receive the configuration from master
+        #===============================================
+
+        def _construct_shared_configuration(master, slvr_cfg):
+            """ Create shared configuration state """
+            def _create_shared_config_actual(master, slvr_cfg):
+                """
+                Create shared configuration state
+                in the 'shared' container
+                """
+                name = "master_configuration"
+                value = json.dumps(slvr_cfg) if master else "dummy"
+
+                with tf.container('shared'):
+                    q = tf.FIFOQueue(1000,
+                        [tf.string, tf.string, tf.int32], [(1,), (1,), (1,)],
+                        name='gpu_queue', shared_name='shared_gpu_queue')
+                    s = tf.Variable(value, name=name)
+
+                return s, q
+
+            # If we're master actually create the shared
+            # configuration, pinned to ourself.
+            if master:
+                with tf.device(local_device):
+                    return _create_shared_config_actual(master, slvr_cfg)
+            # Otherwise, we're a worker, obtain access
+            # to shared configuration via the container
+            else:
+                return _create_shared_config_actual(master, slvr_cfg)
+
+        # Construct a graph for transmission/reception of configuration
+        cfg_graph = tf.Graph()
+        with cfg_graph.as_default():
+            shared_cfg, gpu_queue = _construct_shared_configuration(
+                self.is_master(), slvr_cfg)
+
+        montblanc.log.debug("Created graph")
+
+        # Create session for transmission/reception of configuration
+        with tf.Session(tf_server_target, graph=cfg_graph) as S:
+            # Initialise the configuration if we're the master
+            if self.is_master():
+                montblanc.log.debug("Initialising shared configuration")
+                S.run(tf.initialize_variables([shared_cfg]))
+                montblanc.log.debug("Done initialising shared configuration")
+            # Otherwise get the string and decode the json
+            else:
+                montblanc.log.debug("Receiving shared configuration")
+
+                # The server may not have initialized this variable
+                # Wait a bit for some iterations
+                for i in xrange(5):
+                    if not S.run(tf.is_variable_initialized(shared_cfg)):
+                        montblanc.log.debug("{i} Waiting a second for "
+                            "server configuration".format(i=i))
+                        time.sleep(1)
+
+                slvr_cfg = json.loads(S.run(shared_cfg))
+                montblanc.log.debug("Received shared configuration")
+                # Replace job name and task index with local information
+                slvr_cfg['tf_job_name'] = job_name
+                slvr_cfg['tf_task_index'] = task_index
+
+                from tensorflow.python.client import device_lib
+
+        #=============================================
+        # Defer to parent construct with configuration
+        #=============================================
+
         super(RimeSolver, self).__init__(slvr_cfg)
+
+        #==========================================
+        # Tensorflow Session
+        #==========================================
+
+        montblanc.log.debug("Attaching session to tensorflow server "
+            "'{tfs}'".format(tfs=tf_server_target))
+
+        self._tf_session = tf.Session(tf_server_target)
 
         #=========================================
         # Register hypercube Dimensions
@@ -265,6 +367,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         self._tf_session = tf.Session(tf_server_target, graph=compute_graph)
         self._tf_session.run(init_op)
+
+    def is_master(self):
+        return self._tf_job_name == 'master' and self._tf_task_index == 0
 
     def _parameter_feed(self):
         try:

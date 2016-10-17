@@ -76,21 +76,21 @@ except KeyError as e:
 if args.start is True:
     import tensorflow as tf
     import montblanc
+    from montblanc.impl.rime.tensorflow.RimeSolver import RimeSolver
 
-    server = tf.train.Server(cluster, job_name='master', task_index=0)
+    server = tf.train.Server(cluster, job_name=job, task_index=task)
     logging.info("Server Target is '{st}'".format(st=server.target))
-    logging.info("Server Definition is '{sd}'".format(sd=server.server_def))
+    logging.info("Server Job Name is '{j}'".format(j=server.server_def.job_name))
+    logging.info("Server Task Index is '{t}'".format(t=server.server_def.task_index))
 
-    slvr_cfg = montblanc.rime_solver_cfg(
-        mem_budget=1024*1024*1024,
-        data_source='default',
-        dtype='double',
-        auto_correlations=False,
-        version='tf',
-        tf_server_target=server.target,
-        tf_job_name=server.server_def.job_name,
-        tf_task_index=server.server_def.task_index)
+    import time
 
-    slvr = montblanc.rime_solver(slvr_cfg)
+    slvr_cfg = {
+        'tf_server_target' : server.target,
+        'tf_job_name' : server.server_def.job_name,
+        'tf_task_index' : server.server_def.task_index,
+    }
+
+    slvr = RimeSolver(slvr_cfg)
 
     logging.info("Created tensorflow solver")
