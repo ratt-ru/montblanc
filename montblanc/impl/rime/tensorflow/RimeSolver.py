@@ -119,13 +119,20 @@ class RimeSolver(MontblancTensorflowSolver):
         cube.register_arrays(_massage_dtypes(A, T))
 
         #==========================================
-        # Tensorflow Session and Thread Coordinator
+        # Tensorflow Graph and Session
         #==========================================
 
-        # Create the tensorflow session object
-        # Use supplied target, if present
         tf_server_target = slvr_cfg.get('tf_server_target', '')
-        self._tf_session = tf.Session(tf_server_target)
+
+        # Create tensorflow session object
+        if not tf_server_target:
+            raise ValueError("'tf_server_target' missing from solver configuration!")
+        else:
+            montblanc.log.debug("Attaching session to tensorflow server "
+                "'{tfs}'".format(tfs=tf_server_target))
+            self._tf_session = tf.Session(tf_server_target)
+            self._tf_job_name = slvr_cfg.get('tf_job_name', None)
+            self._tf_task_index = slvr_cfg.get('tf_job_index', None)
 
         #================================
         # Queue Data Source Configuration

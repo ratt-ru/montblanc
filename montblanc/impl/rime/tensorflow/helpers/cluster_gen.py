@@ -117,53 +117,24 @@ logging.info("Cluster specification\n{c}".format(c=cluster))
 
 if args.start is True:
     import tensorflow as tf
-    import numpy as np
-    import time
+    import montblanc
 
     server = tf.train.Server(cluster, job_name='master', task_index=0)
     logging.info("Server Target is '{st}'".format(st=server.target))
+    logging.info("Server Definition is '{sd}'".format(sd=server.server_def))
 
-    values = []
+    slvr_cfg = montblanc.rime_solver_cfg(
+        mem_budget=1024*1024*1024,
+        data_source='default',
+        dtype='double',
+        auto_correlations=False,
+        version='tf',
+        tf_server_target=server.target,
+        tf_job_name=server.server_def.job_name,
+        tf_task_index=server.server_def.task_index)
 
-    g = tf.Graph()
+    slvr = montblanc.rime_solver(slvr_cfg)
 
-    with g.as_default():
-        with tf.device('/job:master/task:0'):
-            with tf.container('shared'):
-                queue_in = tf.FIFOQueue(10, [tf.int32],
-                    name='queue_in',
-                    shared_name='master_queue_in')
+    logging.info("Created tensorflow solver")
 
-                queue_out = tf.FIFOQueue(10, [tf.string],
-                    name='queue_out',
-                    shared_name='master_queue_out')
 
-                tmp = tf.Variable([100, 1000], dtype=tf.int32, name='master_tmp')
-
-                q1 = queue_in.enqueue(1, name='q1')
-                q2 = queue_in.enqueue(2, name='q2')
-                q3 = queue_in.enqueue(3, name='q3')
-                q4 = queue_in.enqueue(4, name='q4')
-
-                do_enq = tf.group(q4, q3, q2, q1)
-
-        for t in range(len(cluster['worker'])):
-            with tf.device('/job:worker/task:{t}'.format(t=t)):
-                A = tf.Variable(tf.ones(shape=(10,), dtype=tf.float32), name='a')
-                B = tf.Variable(tf.ones(shape=(10,), dtype=tf.float32), name='b')
-                C = A + B*2
-                values.append(C)
-
-        init_op = tf.initialize_variables([A, B, tmp])
-
-        result = tf.pack(values)
-
-        do_deq = queue_out.dequeue()
-
-    with tf.Session(server.target, graph=g) as S:
-        S.run(init_op)
-        S.run(do_enq)
-        print 'Worker result', S.run(result)
-        print 'Dequeue result', S.run(do_deq)
-
-        time.sleep(2)

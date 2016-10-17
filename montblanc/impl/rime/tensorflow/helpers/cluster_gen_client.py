@@ -75,40 +75,22 @@ except KeyError as e:
 
 if args.start is True:
     import tensorflow as tf
-    import numpy as np
-    import time
+    import montblanc
 
-    server = tf.train.Server(cluster, job_name=job, task_index=task)
+    server = tf.train.Server(cluster, job_name='master', task_index=0)
     logging.info("Server Target is '{st}'".format(st=server.target))
+    logging.info("Server Definition is '{sd}'".format(sd=server.server_def))
 
-    g = tf.Graph()
+    slvr_cfg = montblanc.rime_solver_cfg(
+        mem_budget=1024*1024*1024,
+        data_source='default',
+        dtype='double',
+        auto_correlations=False,
+        version='tf',
+        tf_server_target=server.target,
+        tf_job_name=server.server_def.job_name,
+        tf_task_index=server.server_def.task_index)
 
-    with g.as_default():
-        with tf.container('shared'):
-            queue_in = tf.FIFOQueue(10, [tf.int32],
-                name='queue_in',
-                shared_name='master_queue_in')
+    slvr = montblanc.rime_solver(slvr_cfg)
 
-            queue_out = tf.FIFOQueue(10, [tf.string],
-                name='queue_out',
-                shared_name='master_queue_out')
-
-            tmp = tf.Variable(-1, tf.float32, name='master_tmp')
-
-        do_deq = queue_in.dequeue()
-        do_enq = queue_out.enqueue("Hello World")
-
-    with tf.Session(server.target, graph=g) as S:
-        S.run(tf.initialize_local_variables())
-        print S.run([do_deq])
-        print S.run([do_deq])
-        print S.run([do_deq])
-        print S.run([do_deq])
-
-        print 'Value of master_tmp={mt}.'.format(mt=S.run(tmp))
-
-        S.run(do_enq)
-
-        time.sleep(2)
-
-
+    logging.info("Created tensorflow solver")
