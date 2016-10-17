@@ -229,14 +229,6 @@ class RimeSolver(MontblancTensorflowSolver):
             for n, p in cube.properties().iteritems() })
 
         #======================
-        # Threads
-        #======================
-
-        self._parameter_thread = TensorflowThread(name="parameter_thread",
-                                                  coordinator=tf_coord)
-        self._parameter_thread.start()
-
-        #======================
         # Thread pool executors
         #======================
 
