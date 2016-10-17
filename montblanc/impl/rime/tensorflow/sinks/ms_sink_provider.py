@@ -37,6 +37,7 @@ class MSSinkProvider(SinkProvider):
 
     def model_vis(self, context):
         column = self._vis_column
+        msshape = None
 
         # Do we have a column descriptor for the supplied column?
         try:
