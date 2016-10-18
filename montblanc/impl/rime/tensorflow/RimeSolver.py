@@ -45,6 +45,7 @@ from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
                                                   NullSinkProvider, MSSinkProvider)
 
 from hypercube.dims import Dimension as HyperCubeDim
+import hypercube.util as hcu
 
 from montblanc.solvers import MontblancTensorflowSolver
 from montblanc.config import RimeSolverConfig as Options
@@ -65,6 +66,128 @@ class TensorflowThread(threading.Thread):
     def run(self):
         while not self._tf_coord.should_stop():
             self._tf_coord.request_stop()
+
+
+def transmit_receive_config(tf_server_target,
+    job_name, task_index, master, slvr_cfg):
+    """
+    If master, transmit solver configuration and receive GPU device config
+    If worker, transmit GPU device config and receive solver configuration
+    """
+
+    local_device = '/job:{j}/task:{t}'.format(j=job_name, t=task_index)
+    montblanc.log.debug("Local device is {l}".format(l=local_device))
+
+    def _construct_shared_configuration(master, slvr_cfg):
+        """ Create shared configuration state """
+        def _create_shared_config_actual(master, slvr_cfg):
+            """
+            Create shared configuration state
+            in the 'shared' container
+            """
+            name = "master_configuration"
+            value = json.dumps(slvr_cfg) if master else "dummy"
+
+            D = AttrDict()
+
+            with tf.container('shared'):
+                D.gpu_queue = tf.FIFOQueue(1000,
+                    [tf.string, tf.string, tf.int32], [(), (), ()],
+                    name='gpu_queue', shared_name='shared_gpu_queue')
+                D.shared_cfg = tf.Variable(value, name=name)
+
+            return D
+
+        # If we're master actually create the shared
+        # configuration, pinned to ourself.
+        if master:
+            with tf.device(local_device):
+                return _create_shared_config_actual(master, slvr_cfg)
+        # Otherwise, we're a worker, obtain access
+        # to shared configuration via the container
+        else:
+            return _create_shared_config_actual(master, slvr_cfg)
+
+    # Construct a graph for transmission/reception of configuration
+    cfg_graph = tf.Graph()
+    with cfg_graph.as_default():
+        D = _construct_shared_configuration(master, slvr_cfg)
+
+        # Create placholders for enqueue operations
+        D.local_dev_ph = tf.placeholder(tf.string)
+        D.gpu_dev_ph = tf.placeholder(tf.string)
+        D.gpu_mem_size_ph = tf.placeholder(tf.int32)
+
+        # Construct some ops for interacting with the
+        # shared queue
+        gpu_enqueue_op = D.gpu_queue.enqueue(
+            [D.local_dev_ph, D.gpu_dev_ph, D.gpu_mem_size_ph])
+        gpu_dequeue_op = D.gpu_queue.dequeue()
+        gpu_size_op = D.gpu_queue.size()
+
+    montblanc.log.debug("Created configuration graph")
+
+    # Create session for transmission/reception of configuration
+    with tf.Session(tf_server_target, graph=cfg_graph) as S:
+        # If we're master, transmit the shared configuration
+        # and receive gpu configuration
+        if master:
+            montblanc.log.debug("Initialising shared configuration")
+            S.run(tf.initialize_variables([D.shared_cfg]))
+            montblanc.log.debug("Done initialising shared configuration")
+
+            #time.sleep(1)
+
+            montblanc.log.debug("Reading worker GPU configuration")
+            # Now read the gpu configuration from each node
+            while S.run(gpu_size_op) > 0:
+                _local_dev, _gpu_name, _gpu_mem = S.run(gpu_dequeue_op)
+                montblanc.log.info("Found gpu {g} "
+                    "with size {s} on device {d}".format(
+                        d=_local_dev, g=_gpu_name, s=hcu.fmt_bytes(_gpu_mem,)))
+
+            montblanc.log.debug("Worker GPU configuration read")
+
+        # If we're a work, transmit gpu configuration and received
+        # shared configuration
+        else:
+            montblanc.log.debug("Transmitting GPU configuration")
+            from tensorflow.python.client import device_lib
+
+            gpus = [x for x in device_lib.list_local_devices()
+                if x.device_type == 'GPU']
+
+            for gpu in gpus:
+                # If the session is attaching to a tf.train.Server.target,
+                # the server will have grabbed the GPU memory. So
+                # these memory
+                montblanc.log.debug("Enqueuing {n} with size {s}".format(
+                    n=gpu.name, s=gpu.memory_limit))
+                S.run(gpu_enqueue_op, feed_dict={
+                    D.local_dev_ph : local_device,
+                    D.gpu_dev_ph : gpu.name,
+                    D.gpu_mem_size_ph : gpu.memory_limit,
+                })
+
+            montblanc.log.debug("GPU configuration transmitted")
+
+            montblanc.log.debug("Receiving shared configuration")
+
+            # The server may not have initialized this variable
+            # Wait a bit for some iterations
+            for i in xrange(5):
+                if not S.run(tf.is_variable_initialized(D.shared_cfg)):
+                    montblanc.log.debug("{i} Waiting a second for "
+                        "server configuration".format(i=i))
+                    time.sleep(1)
+
+            slvr_cfg = json.loads(S.run(D.shared_cfg))
+            montblanc.log.debug("Received shared configuration")
+            # Replace job name and task index with local information
+            slvr_cfg['tf_job_name'] = job_name
+            slvr_cfg['tf_task_index'] = task_index
+
+    return slvr_cfg
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
@@ -93,76 +216,12 @@ class RimeSolver(MontblancTensorflowSolver):
         self._tf_job_name = job_name = slvr_cfg.get('tf_job_name', None)
         self._tf_task_index = task_index = slvr_cfg.get('tf_task_index', None)
 
-        local_device = '/job:{j}/task:{t}'.format(j=job_name, t=task_index)
-
-        montblanc.log.debug("Local device is {l}".format(l=local_device))
-
         #===============================================
-        # Transmit/Receive the configuration from master
+        # Transmit/Receive master/worker configuration
         #===============================================
 
-        def _construct_shared_configuration(master, slvr_cfg):
-            """ Create shared configuration state """
-            def _create_shared_config_actual(master, slvr_cfg):
-                """
-                Create shared configuration state
-                in the 'shared' container
-                """
-                name = "master_configuration"
-                value = json.dumps(slvr_cfg) if master else "dummy"
-
-                with tf.container('shared'):
-                    q = tf.FIFOQueue(1000,
-                        [tf.string, tf.string, tf.int32], [(1,), (1,), (1,)],
-                        name='gpu_queue', shared_name='shared_gpu_queue')
-                    s = tf.Variable(value, name=name)
-
-                return s, q
-
-            # If we're master actually create the shared
-            # configuration, pinned to ourself.
-            if master:
-                with tf.device(local_device):
-                    return _create_shared_config_actual(master, slvr_cfg)
-            # Otherwise, we're a worker, obtain access
-            # to shared configuration via the container
-            else:
-                return _create_shared_config_actual(master, slvr_cfg)
-
-        # Construct a graph for transmission/reception of configuration
-        cfg_graph = tf.Graph()
-        with cfg_graph.as_default():
-            shared_cfg, gpu_queue = _construct_shared_configuration(
-                self.is_master(), slvr_cfg)
-
-        montblanc.log.debug("Created graph")
-
-        # Create session for transmission/reception of configuration
-        with tf.Session(tf_server_target, graph=cfg_graph) as S:
-            # Initialise the configuration if we're the master
-            if self.is_master():
-                montblanc.log.debug("Initialising shared configuration")
-                S.run(tf.initialize_variables([shared_cfg]))
-                montblanc.log.debug("Done initialising shared configuration")
-            # Otherwise get the string and decode the json
-            else:
-                montblanc.log.debug("Receiving shared configuration")
-
-                # The server may not have initialized this variable
-                # Wait a bit for some iterations
-                for i in xrange(5):
-                    if not S.run(tf.is_variable_initialized(shared_cfg)):
-                        montblanc.log.debug("{i} Waiting a second for "
-                            "server configuration".format(i=i))
-                        time.sleep(1)
-
-                slvr_cfg = json.loads(S.run(shared_cfg))
-                montblanc.log.debug("Received shared configuration")
-                # Replace job name and task index with local information
-                slvr_cfg['tf_job_name'] = job_name
-                slvr_cfg['tf_task_index'] = task_index
-
-                from tensorflow.python.client import device_lib
+        slvr_cfg = transmit_receive_config(tf_server_target,
+            job_name, task_index, self.is_master(), slvr_cfg)
 
         #=============================================
         # Defer to parent construct with configuration
