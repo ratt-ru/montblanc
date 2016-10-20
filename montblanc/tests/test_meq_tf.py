@@ -76,8 +76,8 @@ def get_point_sources(nsrc):
     I, Q, U, V = stokes[:,0], stokes[:,1], stokes[:,2], stokes[:,3]
     alphas = np.empty(shape=(nsrc,), dtype=dtype)
 
-    # Source coordinates between -1.5 and 1.5 degrees
-    source_coords[:] = (rf(size=source_coords.shape) - 0.5)*3
+    # Source coordinates between -0.5 and 0.5 degrees
+    source_coords[:] = (rf(size=source_coords.shape) - 0.5)
     Q[:] = rf(size=Q.shape)*0.1
     U[:] = rf(size=U.shape)*0.1
     V[:] = rf(size=V.shape)*0.1
