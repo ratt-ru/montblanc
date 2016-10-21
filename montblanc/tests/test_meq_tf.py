@@ -7,6 +7,8 @@ import tempfile
 import numpy as np
 import pyrap.tables as pt
 
+rf = np.random.random
+
 #=========================================
 # Directory and Script Configuration
 #=========================================
@@ -53,21 +55,47 @@ with pt.table(msfile + '::SPECTRAL_WINDOW', ack=False) as SW:
     ref_freq = SW.getcol('REF_FREQUENCY')[0]
 
 bandwidth = frequency[-1] - frequency[0]
+
+# Get filenames from pattern and open the files
 filenames = _create_filenames(beam_file_pattern)
 files = _open_fits_files(filenames)
 fgen = (f for (re, im) in files.itervalues() for f in (re, im))
 
-for f in fgen:
-    f[0].header['CRVAL3'] = frequency[0]
-    f[0].header['CDELT3'] = bandwidth / (f[0].header['NAXIS3']-1)
-    f.close()
+# Set up the frequencies in each FITS file
+for file in fgen:
+    with file:
+        header = file[0].header
+        bandwidth_delta = bandwidth / (header['NAXIS3']-1)
+        header['CRVAL3'] = frequency[0]
+        header['CDELT3'] = bandwidth_delta
+
+        # Remove existing GFREQ data
+        try:
+            del header['GFREQ?*']
+        except:
+            pass
+
+        # Uncomment to fall back to standard frequency interpolation
+        #continue
+
+        # Generate a linear space of grid frequencies
+        # Jitter them randomly, except for the endpoints
+        gfrequency = np.linspace(frequency[0], frequency[-1], header['NAXIS3']-1)
+        frequency_jitter = (rf(size=gfrequency.shape)-0.5)*0.1*bandwidth_delta
+        frequency_jitter[0] = frequency_jitter[-1] = 0.0
+        gfrequency += frequency_jitter
+
+        # Check that gfrequency is strictly ordered
+        assert np.all(np.diff(gfrequency) > 0.0)
+
+        for i, gfreq in enumerate(gfrequency, 1):
+            header['GFREQ%d' % i] = gfreq
 
 #=========================================
 # Source Configuration
 #=========================================
 
 np.random.seed(0)
-rf = np.random.random
 dtype = np.float64
 
 def get_point_sources(nsrc):
