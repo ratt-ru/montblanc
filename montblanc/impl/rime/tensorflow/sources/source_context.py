@@ -18,13 +18,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import functools
 import inspect
+import types
+
+from hypercube import HyperCube
 
 from montblanc.impl.rime.tensorflow.context_help import context_help
-
-def _get_public_attributes(obj):
-	""" Return the public attributes on an object """
-	return set(n for n, m in inspect.getmembers(obj) if not n.startswith('_'))
 
 class _setter_property(object):
     def __init__(self, func, doc=None):
@@ -34,95 +34,109 @@ class _setter_property(object):
     def __set__(self, obj, value):
         return self.func(obj, value)
 
+class SourceContextMetaClass(type):
+    """ MetaClass for Sink Contexts """
+    def __init__(cls, name, bases, dct):
+        """ Proxy public methods on the HyperCube """
+        def public_member_predicate(m):
+            return inspect.ismethod(m) and not m.__name__.startswith('_')
+
+        hc_members = inspect.getmembers(HyperCube, public_member_predicate)
+        sc_members = inspect.getmembers(cls, public_member_predicate)
+
+        intersect = set.intersection(
+            set(m[0] for m in hc_members),
+            set(m[0] for m in sc_members))
+
+        if len(intersect) > 0:
+            raise ValueError("Proxying methods failed on class '{c}'. "
+                "The following members '{m}' conflicted with class '{hc}'."
+                    .format(c=cls.__name__, m=list(intersect), hc=HyperCube.__name__))
+
+        def wrap_cube_method(name, method):
+            def _proxy(self, *args, **kwargs):
+                return getattr(self._cube, name)(*args, **kwargs)
+
+            wrap = functools.update_wrapper(_proxy, method)
+            spec = inspect.getargspec(method)
+            fmt_args = inspect.formatargspec(formatvalue=lambda v: '=_default', *spec)
+            call_args = inspect.formatargspec(formatvalue=lambda v: '', *spec)
+
+            wrap.__doc__ = (
+                'def {}{}:\n'
+                '\t""" {} """\n'
+                '\treturn _proxy{}').format(name, fmt_args, method.__doc__, call_args)
+
+            return wrap
+
+        for name, method in hc_members:
+            setattr(cls, name, wrap_cube_method(name, method.__func__))
+
+        super(SourceContextMetaClass, cls).__init__(name, bases, dct)
+
 class SourceContext(object):
-	"""
-	Context for queue arrays.
+    """
+    Context for queue arrays.
 
-	Proxies attributes of a hypercube and provides access to configuration
-	"""
-	__slots__ = ('_cube', '_cfg', '_name', '_shape', '_dtype',
-		'_iter_args', '_array_schema', '_cube_attributes')
+    Proxies attributes of a hypercube and provides access to configuration
+    """
+    __slots__ = ('_cube', '_cfg', '_name', '_shape', '_dtype',
+        '_iter_args', '_array_schema', '_cube_attributes')
 
-	def __init__(self, name, cube, slvr_cfg, iter_args, array_schema, shape, dtype):
-		self._name = name
-		self._cube = cube
-		self._cfg = slvr_cfg
-		self._iter_args = iter_args
-		self._array_schema = array_schema
-		self._shape = shape
-		self._dtype = dtype
+    __metaclass__ = SourceContextMetaClass
 
-        # TODO: Only do _get_public_attributes once for
-        # cube and slvr_cfg below. It's probably enough
-        # to do this at a class level and SourceContexts
-        # are created fairly often
-		self._cube_attributes = _get_public_attributes(cube)
+    def __init__(self, name, cube, slvr_cfg, iter_args, array_schema, shape, dtype):
+        self._name = name
+        self._cube = cube
+        self._cfg = slvr_cfg
+        self._iter_args = iter_args
+        self._array_schema = array_schema
+        self._shape = shape
+        self._dtype = dtype
 
-		# Fall over if there's any intersection between the
-		# public attributes the current class and the
-		# union of the hypercube and the configuration attributes
-		intersect = set.intersection(_source_context_attributes,
-			set.union(self._cube_attributes, _get_public_attributes(slvr_cfg)))
+    @_setter_property
+    def cube(self, value):
+        self._cube = value
 
-		if len(intersect) > 0:
-			raise ValueError("'{i}' attributes intersected on context"
-				.format(i=list(intersect)))
+    @property
+    def cfg(self):
+        return self._cfg
 
-	@_setter_property
-	def cube(self, value):
-		self._cube = value
+    @cfg.setter
+    def cfg(self, value):
+        self._cfg = value
 
-	@property
-	def cfg(self):
-		return self._cfg
+    @property
+    def shape(self):
+        return self._shape
 
-	@cfg.setter
-	def cfg(self, value):
-		self._cfg = value
+    @shape.setter
+    def shape(self, value):
+        self._shape = value
 
-	@property
-	def shape(self):
-		return self._shape
+    @property
+    def dtype(self):
+        return self._dtype
 
-	@shape.setter
-	def shape(self, value):
-		self._shape = value
+    @dtype.setter
+    def dtype(self, value):
+        self._dtype = value
 
-	@property
-	def dtype(self):
-		return self._dtype
+    @property
+    def name(self):
+        return self._name
 
-	@dtype.setter
-	def dtype(self, value):
-		self._dtype = value
+    @name.setter
+    def name(self, value):
+        self._name = value
 
-	@property
-	def name(self):
-		return self._name
+    @property
+    def array_schema(self):
+        return self._array_schema
 
-	@name.setter
-	def name(self, value):
-		self._name = value
+    @property
+    def iter_args(self):
+        return self._iter_args
 
-	@property
-	def array_schema(self):
-		return self._array_schema
-
-	@property
-	def iter_args(self):
-		return self._iter_args
-
-	def __getattr__(self, name):
-		# Defer to the hypercube
-		if name in self._cube_attributes:
-			return getattr(self._cube, name)
-		# Avoid recursive calls to getattr
-		elif hasattr(self, name):
-			return getattr(self, name)
-		else:
-			raise AttributeError(name)
-
-	def help(self, display_cube=False):
-		return context_help(self, display_cube)
-
-_source_context_attributes = _get_public_attributes(SourceContext)
+    def help(self, display_cube=False):
+        return context_help(self, display_cube)

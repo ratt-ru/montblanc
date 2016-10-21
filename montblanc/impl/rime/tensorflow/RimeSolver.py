@@ -365,7 +365,8 @@ class RimeSolver(MontblancTensorflowSolver):
                 except Exception as e:
                     ex = ValueError("An exception occurred while "
                         "obtaining data from data source '{ds}'\n\n"
-                        "{help}".format(ds=context.name, help=context.help()))
+                        "{e}\n\n"
+                        "{help}".format(e=str(e), ds=context.name, help=context.help()))
 
                     raise ex, None, sys.exc_info()[2]
 
