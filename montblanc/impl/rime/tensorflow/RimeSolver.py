@@ -236,15 +236,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         super(RimeSolver, self).__init__(slvr_cfg)
 
-        #==========================================
-        # Tensorflow Session
-        #==========================================
-
-        montblanc.log.debug("Attaching session to tensorflow server "
-            "'{tfs}'".format(tfs=server))
-
-        self._tf_session = tf.Session(server)
-
         #=========================================
         # Register hypercube Dimensions
         #=========================================
@@ -286,22 +277,6 @@ class RimeSolver(MontblancTensorflowSolver):
         cube.register_properties(_massage_dtypes(P, T))
         cube.register_arrays(_massage_dtypes(A, T))
 
-        #==========================================
-        # Tensorflow Graph and Session
-        #==========================================
-
-        tf_server_target = slvr_cfg.get('tf_server_target', '')
-
-        # Create tensorflow session object
-        if not tf_server_target:
-            raise ValueError("'tf_server_target' missing from solver configuration!")
-        else:
-            montblanc.log.debug("Attaching session to tensorflow server "
-                "'{tfs}'".format(tfs=tf_server_target))
-            self._tf_session = tf.Session(tf_server_target)
-            self._tf_job_name = slvr_cfg.get('tf_job_name', None)
-            self._tf_task_index = slvr_cfg.get('tf_job_index', None)
-
         #================================
         # Queue Data Source Configuration
         #================================
@@ -338,10 +313,11 @@ class RimeSolver(MontblancTensorflowSolver):
         # Data Sources and Sinks
         #=======================
 
-        # Construct list of data sources internal to the solver
-        # Any data sources specified in the solve() method will
+        # Construct list of data sources/sinks internal to the solver
+        # Any data sources/sinks specified in the solve() method will
         # override these
         self._source_providers = []
+        self._sink_providers = [NullSinkProvider()]
 
         #==================
         # Data Source Cache
@@ -349,15 +325,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         self._source_cache = {}
         self._source_cache_lock = threading.Lock()
-
-        #==================
-        # Data Sinks
-        #==================
-
-        # Construct list of data sinks internal to the solver
-        # Any data sinks specified in the solve() method will
-        # override these.
-        self._sink_providers = [NullSinkProvider()]
 
         #==================
         # Memory Budgeting
@@ -403,9 +370,18 @@ class RimeSolver(MontblancTensorflowSolver):
         # Tensorflow Session
         #==========================================
 
+        #==========================================
+        # Tensorflow Graph and Session
+        #==========================================
+
+        tf_server_target = slvr_cfg.get('tf_server_target', '')
+
+        # Create tensorflow session object
+        if not tf_server_target:
+            raise ValueError("'tf_server_target' missing from solver configuration!")
+
         montblanc.log.debug("Attaching session to tensorflow server "
             "'{tfs}'".format(tfs=tf_server_target))
-
         self._tf_session = tf.Session(tf_server_target, graph=compute_graph)
         self._tf_session.run(init_op)
 

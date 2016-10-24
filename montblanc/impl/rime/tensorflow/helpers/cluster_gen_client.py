@@ -94,3 +94,5 @@ if args.start is True:
     slvr = RimeSolver(slvr_cfg)
 
     logging.info("Created tensorflow solver")
+
+    time.sleep(1)
