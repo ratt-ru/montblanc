@@ -164,9 +164,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         dfs['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32, 'Internal')
 
-        #==================
-        # Data Sources
-        #==================
+        #=======================
+        # Data Sources and Sinks
+        #=======================
 
         self._ms_manager = None
 
@@ -214,19 +214,11 @@ class RimeSolver(MontblancTensorflowSolver):
         # For deciding whether to rebudget
         self._previous_budget = 0
 
-        #======================
-        # Tensorflow Placeholders
-        #======================
-
-        # Create placholder variables for source counts
-        self._src_ph_vars = AttrDict({
-            n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
-            for n in ['nsrc'] + mbu.source_nr_vars()})
-
-        # Create placeholder variables for properties
-        self._property_ph_vars = AttrDict({
-            n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
-            for n, p in cube.properties().iteritems() })
+        #================
+        # Cube Transcoder
+        #================
+        self._iter_dims = ['ntime', 'nbl']
+        self._transcoder = CubeDimensionTranscoder(self._iter_dims)
 
         #======================
         # Thread pool executors
@@ -237,18 +229,42 @@ class RimeSolver(MontblancTensorflowSolver):
         self._compute_executor = cf.ThreadPoolExecutor(1)
         self._consumer_executor = cf.ThreadPoolExecutor(1)
 
-        #==========================
-        # Tensorflow initialisation
-        #==========================
-        self._tf_queues = self._construct_tensorflow_queues(dfs, cube)
-        self._tf_expr = self._construct_tensorflow_expression(self._tf_queues)
-        self._tf_session.run(tf.initialize_all_variables())
+        #=========================
+        # Tensorflow Compute Graph
+        #=========================
 
-        #================
-        # Cube Transcoder
-        #================
-        self._iter_dims = ['ntime', 'nbl']
-        self._transcoder = CubeDimensionTranscoder(self._iter_dims)
+        # Create all tensorflow constructs within the compute graph
+        with tf.Graph().as_default() as compute_graph:
+
+            # Create placholder variables for source counts
+            self._src_ph_vars = AttrDict({
+                n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
+                for n in ['nsrc'] + mbu.source_nr_vars()})
+
+            # Create placeholder variables for properties
+            self._property_ph_vars = AttrDict({
+                n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
+                for n, p in cube.properties().iteritems() })
+
+            # Create queues and expression
+            self._tf_queues = self._construct_tensorflow_queues(dfs, cube)
+            self._tf_expr = self._construct_tensorflow_expression(self._tf_queues)
+
+            # Initialisation operation
+            init_op = tf.initialize_all_variables()
+
+            # Now forbid modification of the graph
+            compute_graph.finalize()
+
+        #==========================================
+        # Tensorflow Session
+        #==========================================
+
+        montblanc.log.debug("Attaching session to tensorflow server "
+            "'{tfs}'".format(tfs=tf_server_target))
+
+        self._tf_session = tf.Session(tf_server_target, graph=compute_graph)
+        self._tf_session.run(init_op)
 
     def _parameter_feed(self):
         try:
