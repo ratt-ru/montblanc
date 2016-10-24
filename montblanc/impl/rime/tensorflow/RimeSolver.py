@@ -247,8 +247,9 @@ class RimeSolver(MontblancTensorflowSolver):
                 for n, p in cube.properties().iteritems() })
 
             # Create queues and expression
-            self._tf_queues = self._construct_tensorflow_queues(dfs, cube)
-            self._tf_expr = self._construct_tensorflow_expression(self._tf_queues)
+            self._tf_queues = _construct_tensorflow_queues(dfs, cube)
+            self._tf_expr = _construct_tensorflow_expression(
+                self._tf_queues, self._src_ph_vars)
 
             # Initialisation operation
             init_op = tf.initialize_all_variables()
@@ -553,167 +554,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         montblanc.log.info('Done consuming {n} chunks'.format(n=chunks_consumed))
 
-    def _construct_tensorflow_queues(self, dfs, cube):
-        QUEUE_SIZE = 10
-
-        Q = AttrDict()
-
-        # Create the queue feeding parameters into the system
-        Q.parameter_queue = create_queue_wrapper('descriptors',
-            QUEUE_SIZE, ['descriptor'], dfs)
-
-        # Take all arrays flagged as input
-        input_arrays = [a.name for a in cube.arrays().itervalues()
-                        if a.get('input', False) == True]
-
-        # Create the queue for holding the input
-        Q.input_queue = create_queue_wrapper('input', QUEUE_SIZE,
-                                                 ['descriptor'] + input_arrays,
-                                                 dfs)
-
-        # Create source input queues
-        Q.point_source_queue = create_queue_wrapper('point_source',
-            QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
-
-        Q.gaussian_source_queue = create_queue_wrapper('gaussian_source',
-            QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
-                'gaussian_shape'], dfs)
-
-        Q.sersic_source_queue = create_queue_wrapper('sersic_source',
-            QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
-                'sersic_shape'], dfs)
-
-        Q.output_queue = create_queue_wrapper('output', QUEUE_SIZE,
-            ['descriptor', 'model_vis'], dfs)
-
-        # TODO: don't create objects on the object instance,
-        # instead we should return them
-
-        # Source queues to feed
-        Q.src_queues = src_queues = {
-            'npsrc' : Q.point_source_queue,
-            'ngsrc' : Q.gaussian_source_queue,
-            'nssrc' : Q.sersic_source_queue,
-        }
-
-        # Set of arrays that the queues feed
-        Q.input_queue_sources = {a
-                                 for q in [Q.input_queue] + src_queues.values()
-                                 for a in q.fed_arrays}
-
-        return Q
-
-    def _construct_tensorflow_expression(self, queues):
-        """ Constructs a tensorflow expression for computing the RIME """
-        zero = tf.constant(0)
-        src_count = zero
-
-        # Pull RIME inputs out of the feed queues
-        D = queues.input_queue.dequeue_to_attrdict()
-
-        # Infer chunk dimensions
-        model_vis_shape = tf.shape(D.model_vis)
-        ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
-        FT, CT = D.uvw.dtype, D.model_vis.dtype
-
-        def apply_dies(src_count):
-            """ Have we reached the maximum source count """
-            return tf.greater_equal(src_count, self._src_ph_vars.nsrc)
-
-        def antenna_jones(lm, stokes, alpha):
-            """
-            Compute the jones terms for each antenna.
-
-            lm, stokes and alpha are the source variables.
-            """
-            cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
-
-            bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
-                D.frequency, D.ref_frequency, CT=CT)
-
-            ejones = rime.e_beam(lm, D.frequency,
-                D.point_errors, D.antenna_scaling,
-                D.parallactic_angles,
-                D.beam_extents, D.beam_freq_map, D.ebeam)
-
-            return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT), sgn_brightness
-
-        # While loop condition for each point source type
-        def point_cond(model_vis, npsrc, src_count):
-            return tf.less(npsrc, self._src_ph_vars.npsrc)
-
-        def gaussian_cond(model_vis, ngsrc, src_count):
-            return tf.less(ngsrc, self._src_ph_vars.ngsrc)
-
-        def sersic_cond(model_vis, nssrc, src_count):
-            return tf.less(nssrc, self._src_ph_vars.nssrc)
-
-        # While loop bodies
-        def point_body(model_vis, npsrc, src_count):
-            """ Accumulate visiblities for point source batch """
-            lm, stokes, alpha = queues.point_source_queue.dequeue()
-            nsrc = tf.shape(lm)[0]
-            src_count += nsrc
-            npsrc +=  nsrc
-            ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
-            shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
-            model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-                shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
-                apply_dies(src_count))
-
-            return model_vis, npsrc, src_count
-
-        def gaussian_body(model_vis, ngsrc, src_count):
-            """ Accumulate visiblities for gaussian source batch """
-            lm, stokes, alpha, gauss_params = queues.gaussian_source_queue.dequeue()
-            nsrc = tf.shape(lm)[0]
-            src_count += nsrc
-            ngsrc += nsrc
-            ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
-            gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
-                D.frequency, gauss_params)
-            model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-                gauss_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
-                apply_dies(src_count))
-
-            return model_vis, ngsrc, src_count
-
-        def sersic_body(model_vis, nssrc, src_count):
-            """ Accumulate visiblities for sersic source batch """
-            lm, stokes, alpha, sersic_params = queues.sersic_source_queue.dequeue()
-            nsrc = tf.shape(lm)[0]
-            src_count += nsrc
-            nssrc += nsrc
-            ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
-            sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
-                D.frequency, sersic_params)
-            model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-                sersic_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
-                apply_dies(src_count))
-
-            return model_vis, nssrc, src_count
-
-        # Evaluate point sources
-        model_vis, npsrc, src_count = tf.while_loop(
-            point_cond, point_body,
-            [D.model_vis, zero, src_count])
-
-        # Evaluate gaussians
-        model_vis, ngsrc, src_count = tf.while_loop(
-            gaussian_cond, gaussian_body,
-            [model_vis, zero, src_count])
-
-        # Evaluate sersics
-        model_vis, nssrc, src_count = tf.while_loop(
-            sersic_cond, sersic_body,
-            [model_vis, zero, src_count])
-
-        # Create enqueue operation
-        enqueue_op = queues.output_queue.queue.enqueue([D.descriptor, model_vis])
-
-        # Return descriptor and enqueue operation
-        return D.descriptor, enqueue_op
-
     def solve(self, *args, **kwargs):
         #  Obtain source and sink providers, including internal providers
         source_providers = (self._source_providers +
@@ -790,6 +630,169 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def __exit__(self, etype, evalue, etrace):
         self.close()
+
+
+def _construct_tensorflow_queues(dfs, cube):
+    QUEUE_SIZE = 10
+
+    Q = AttrDict()
+
+    # Create the queue feeding parameters into the system
+    Q.parameter_queue = create_queue_wrapper('descriptors',
+        QUEUE_SIZE, ['descriptor'], dfs)
+
+    # Take all arrays flagged as input
+    input_arrays = [a.name for a in cube.arrays().itervalues()
+                    if a.get('input', False) == True]
+
+    # Create the queue for holding the input
+    Q.input_queue = create_queue_wrapper('input', QUEUE_SIZE,
+                                             ['descriptor'] + input_arrays,
+                                             dfs)
+
+    # Create source input queues
+    Q.point_source_queue = create_queue_wrapper('point_source',
+        QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
+
+    Q.gaussian_source_queue = create_queue_wrapper('gaussian_source',
+        QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
+            'gaussian_shape'], dfs)
+
+    Q.sersic_source_queue = create_queue_wrapper('sersic_source',
+        QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
+            'sersic_shape'], dfs)
+
+    Q.output_queue = create_queue_wrapper('output', QUEUE_SIZE,
+        ['descriptor', 'model_vis'], dfs)
+
+    # TODO: don't create objects on the object instance,
+    # instead we should return them
+
+    # Source queues to feed
+    Q.src_queues = src_queues = {
+        'npsrc' : Q.point_source_queue,
+        'ngsrc' : Q.gaussian_source_queue,
+        'nssrc' : Q.sersic_source_queue,
+    }
+
+    # Set of arrays that the queues feed
+    Q.input_queue_sources = {a
+                             for q in [Q.input_queue] + src_queues.values()
+                             for a in q.fed_arrays}
+
+    return Q
+
+def _construct_tensorflow_expression(queues, src_ph_vars):
+    """ Constructs a tensorflow expression for computing the RIME """
+    zero = tf.constant(0)
+    src_count = zero
+
+    # Pull RIME inputs out of the feed queues
+    D = queues.input_queue.dequeue_to_attrdict()
+
+    # Infer chunk dimensions
+    model_vis_shape = tf.shape(D.model_vis)
+    ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
+    FT, CT = D.uvw.dtype, D.model_vis.dtype
+
+    def apply_dies(src_count):
+        """ Have we reached the maximum source count """
+        return tf.greater_equal(src_count, src_ph_vars.nsrc)
+
+    def antenna_jones(lm, stokes, alpha):
+        """
+        Compute the jones terms for each antenna.
+
+        lm, stokes and alpha are the source variables.
+        """
+        cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
+
+        bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
+            D.frequency, D.ref_frequency, CT=CT)
+
+        ejones = rime.e_beam(lm, D.frequency,
+            D.point_errors, D.antenna_scaling,
+            D.parallactic_angles,
+            D.beam_extents, D.beam_freq_map, D.ebeam)
+
+        return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT), sgn_brightness
+
+    # While loop condition for each point source type
+    def point_cond(model_vis, npsrc, src_count):
+        return tf.less(npsrc, src_ph_vars.npsrc)
+
+    def gaussian_cond(model_vis, ngsrc, src_count):
+        return tf.less(ngsrc, src_ph_vars.ngsrc)
+
+    def sersic_cond(model_vis, nssrc, src_count):
+        return tf.less(nssrc, src_ph_vars.nssrc)
+
+    # While loop bodies
+    def point_body(model_vis, npsrc, src_count):
+        """ Accumulate visiblities for point source batch """
+        lm, stokes, alpha = queues.point_source_queue.dequeue()
+        nsrc = tf.shape(lm)[0]
+        src_count += nsrc
+        npsrc +=  nsrc
+        ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
+        shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
+        model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
+            shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
+            apply_dies(src_count))
+
+        return model_vis, npsrc, src_count
+
+    def gaussian_body(model_vis, ngsrc, src_count):
+        """ Accumulate visiblities for gaussian source batch """
+        lm, stokes, alpha, gauss_params = queues.gaussian_source_queue.dequeue()
+        nsrc = tf.shape(lm)[0]
+        src_count += nsrc
+        ngsrc += nsrc
+        ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
+        gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
+            D.frequency, gauss_params)
+        model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
+            gauss_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
+            apply_dies(src_count))
+
+        return model_vis, ngsrc, src_count
+
+    def sersic_body(model_vis, nssrc, src_count):
+        """ Accumulate visiblities for sersic source batch """
+        lm, stokes, alpha, sersic_params = queues.sersic_source_queue.dequeue()
+        nsrc = tf.shape(lm)[0]
+        src_count += nsrc
+        nssrc += nsrc
+        ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
+        sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
+            D.frequency, sersic_params)
+        model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
+            sersic_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
+            apply_dies(src_count))
+
+        return model_vis, nssrc, src_count
+
+    # Evaluate point sources
+    model_vis, npsrc, src_count = tf.while_loop(
+        point_cond, point_body,
+        [D.model_vis, zero, src_count])
+
+    # Evaluate gaussians
+    model_vis, ngsrc, src_count = tf.while_loop(
+        gaussian_cond, gaussian_body,
+        [model_vis, zero, src_count])
+
+    # Evaluate sersics
+    model_vis, nssrc, src_count = tf.while_loop(
+        sersic_cond, sersic_body,
+        [model_vis, zero, src_count])
+
+    # Create enqueue operation
+    enqueue_op = queues.output_queue.queue.enqueue([D.descriptor, model_vis])
+
+    # Return descriptor and enqueue operation
+    return D.descriptor, enqueue_op
+
 
 
 def _last_chunk(dims):
