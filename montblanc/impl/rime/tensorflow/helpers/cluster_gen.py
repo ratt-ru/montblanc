@@ -133,7 +133,8 @@ if args.start is True:
         version='tf',
         tf_server_target=server.target,
         tf_job_name=server.server_def.job_name,
-        tf_task_index=server.server_def.task_index)
+        tf_task_index=server.server_def.task_index,
+        tf_cluster=cluster)
 
     slvr = montblanc.rime_solver(slvr_cfg)
 

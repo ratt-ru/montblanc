@@ -227,6 +227,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         slvr_cfg = Strat(server, job, task).execute(slvr_cfg)
 
+        # The cluster definition should be present
+        assert 'tf_cluster' in slvr_cfg
+
         #=============================================
         # Defer to parent construct with configuration
         #=============================================
