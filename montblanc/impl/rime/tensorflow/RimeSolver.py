@@ -240,7 +240,8 @@ class RimeSolver(MontblancTensorflowSolver):
         #==========================
         # Tensorflow initialisation
         #==========================
-        self._tf_expr = self._construct_tensorflow_expression(dfs, cube)
+        self._tf_queues = self._construct_tensorflow_queues(dfs, cube)
+        self._tf_expr = self._construct_tensorflow_expression(self._tf_queues)
         self._tf_session.run(tf.initialize_all_variables())
 
         #================
@@ -261,6 +262,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Copy dimensions of the main cube
         cube = self.hypercube.copy()
+        Q = self._tf_queues
 
         # Get space of iteration
         iter_args = _iter_args(self._iter_dims, cube)
@@ -270,9 +272,9 @@ class RimeSolver(MontblancTensorflowSolver):
         for i, d in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
             cube.update_dimensions(d)
             descriptor = self._transcoder.encode(cube.dimensions(copy=False))
-            feed_dict = {self._parameter_queue.placeholders[0] : descriptor }
+            feed_dict = {Q.parameter_queue.placeholders[0] : descriptor }
             montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
-            session.run(self._parameter_queue.enqueue_op, feed_dict=feed_dict)
+            session.run(Q.parameter_queue.enqueue_op, feed_dict=feed_dict)
             parameters_fed += 1
 
         montblanc.log.info("Done feeding {n} parameters.".format(
@@ -292,6 +294,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Maintain a hypercube based on the main cube
         cube = self.hypercube.copy()
+        Q = self._tf_queues
 
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
@@ -299,17 +302,18 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct data sources from those supplied by the
         # source providers, if they're associated with
         # input queue arrays
+        input_queue_sources = Q.input_queue_sources
         data_sources = self._default_data_sources.copy()
         data_sources.update({n: DataSource(f, cube.array(n).dtype, source.name())
                                 for source in source_providers
                                 for n, f in source.sources().iteritems()
-                                if n in self._input_queue_sources})
+                                if n in input_queue_sources})
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
-        src_types = self._src_queues.keys()
+        src_types = Q.src_queues.keys()
         src_strides = [int(i) for i in cube.dim_local_size(*src_types)]
-        src_queues = [self._src_queues[t] for t in src_types]
+        src_queues = [Q.src_queues[t] for t in src_types]
 
         chunks_fed = 0
         done = False
@@ -317,7 +321,7 @@ class RimeSolver(MontblancTensorflowSolver):
         while not done:
             try:
                 # Get the descriptor describing a portion of the RIME
-                descriptor = session.run(self._parameter_queue.dequeue_op)
+                descriptor = session.run(Q.parameter_queue.dequeue_op)
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
 
@@ -374,9 +378,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Generate (name, placeholder, datasource, array schema)
             # for the arrays required by each queue
+            iq = Q.input_queue
             gen = [(a, ph, data_sources[a], array_schemas[a])
-                for q in self._chunk_queues
-                for ph, a in zip(q.placeholders, q.fed_arrays)]
+                for ph, a in zip(iq.placeholders, iq.fed_arrays)]
 
             # Create a feed dictionary by calling the data source functors
             feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
@@ -388,8 +392,7 @@ class RimeSolver(MontblancTensorflowSolver):
             montblanc.log.debug("Enqueueing chunk {i} {d}".format(
                 i=chunks_fed, d=descriptor))
 
-            session.run([q.enqueue_op for q in self._chunk_queues],
-                feed_dict=feed_dict)
+            session.run(Q.input_queue.enqueue_op, feed_dict=feed_dict)
 
             chunks_fed += 1
 
@@ -487,6 +490,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Maintain a hypercube based on the main cube
         cube = self.hypercube.copy()
+        Q = self._tf_queues
 
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
@@ -499,12 +503,12 @@ class RimeSolver(MontblancTensorflowSolver):
 
 
         while not done:
-            output = S.run(self._output_queue.dequeue_op)
+            output = S.run(Q.output_queue.dequeue_op)
             chunks_consumed += 1
 
             # Expect the descriptor in the first tuple position
             assert len(output) > 0
-            assert self._output_queue.fed_arrays[0] == 'descriptor'
+            assert Q.output_queue.fed_arrays[0] == 'descriptor'
 
             descriptor = output[0]
             dims = self._transcoder.decode(descriptor)
@@ -522,7 +526,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
 
             # For each array in our output, call the associated data sink
-            for n, a in zip(self._output_queue.fed_arrays[1:], output[1:]):
+            for n, a in zip(Q.output_queue.fed_arrays[1:], output[1:]):
                 sink_context = SinkContext(n, cube, self.config(), global_iter_args,
                     cube.array(n) if n in cube.arrays() else {}, a)
 
@@ -533,16 +537,13 @@ class RimeSolver(MontblancTensorflowSolver):
 
         montblanc.log.info('Done consuming {n} chunks'.format(n=chunks_consumed))
 
-    def _construct_tensorflow_expression(self, dfs, cube):
-        """ Constructs a tensorflow expression for computing the RIME """
-
+    def _construct_tensorflow_queues(self, dfs, cube):
         QUEUE_SIZE = 10
 
-        # TODO: don't create these queues on the object instance,
-        # instead we should return them
+        Q = AttrDict()
 
         # Create the queue feeding parameters into the system
-        self._parameter_queue = create_queue_wrapper('descriptors',
+        Q.parameter_queue = create_queue_wrapper('descriptors',
             QUEUE_SIZE, ['descriptor'], dfs)
 
         # Take all arrays flagged as input
@@ -550,48 +551,49 @@ class RimeSolver(MontblancTensorflowSolver):
                         if a.get('input', False) == True]
 
         # Create the queue for holding the input
-        self._input_queue = create_queue_wrapper('input', QUEUE_SIZE,
+        Q.input_queue = create_queue_wrapper('input', QUEUE_SIZE,
                                                  ['descriptor'] + input_arrays,
                                                  dfs)
 
         # Create source input queues
-        self._point_source_queue = create_queue_wrapper('point_source',
+        Q.point_source_queue = create_queue_wrapper('point_source',
             QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
 
-        self._gaussian_source_queue = create_queue_wrapper('gaussian_source',
+        Q.gaussian_source_queue = create_queue_wrapper('gaussian_source',
             QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
                 'gaussian_shape'], dfs)
 
-        self._sersic_source_queue = create_queue_wrapper('sersic_source',
+        Q.sersic_source_queue = create_queue_wrapper('sersic_source',
             QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
                 'sersic_shape'], dfs)
 
-        self._output_queue = create_queue_wrapper('output', QUEUE_SIZE,
+        Q.output_queue = create_queue_wrapper('output', QUEUE_SIZE,
             ['descriptor', 'model_vis'], dfs)
 
         # TODO: don't create objects on the object instance,
         # instead we should return them
 
         # Source queues to feed
-        self._src_queues  = {
-            'npsrc' : self._point_source_queue,
-            'ngsrc' : self._gaussian_source_queue,
-            'nssrc' : self._sersic_source_queue,
+        Q.src_queues = src_queues = {
+            'npsrc' : Q.point_source_queue,
+            'ngsrc' : Q.gaussian_source_queue,
+            'nssrc' : Q.sersic_source_queue,
         }
 
-        # Visibility chunk queues to feed
-        self._chunk_queues = [self._input_queue]
-
         # Set of arrays that the queues feed
-        self._input_queue_sources = {a
-                                     for q in self._chunk_queues + self._src_queues.values()
-                                     for a in q.fed_arrays}
+        Q.input_queue_sources = {a
+                                 for q in [Q.input_queue] + src_queues.values()
+                                 for a in q.fed_arrays}
 
+        return Q
+
+    def _construct_tensorflow_expression(self, queues):
+        """ Constructs a tensorflow expression for computing the RIME """
         zero = tf.constant(0)
         src_count = zero
 
         # Pull RIME inputs out of the feed queues
-        D = self._input_queue.dequeue_to_attrdict()
+        D = queues.input_queue.dequeue_to_attrdict()
 
         # Infer chunk dimensions
         model_vis_shape = tf.shape(D.model_vis)
@@ -633,7 +635,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # While loop bodies
         def point_body(model_vis, npsrc, src_count):
             """ Accumulate visiblities for point source batch """
-            lm, stokes, alpha = self._point_source_queue.dequeue()
+            lm, stokes, alpha = queues.point_source_queue.dequeue()
             nsrc = tf.shape(lm)[0]
             src_count += nsrc
             npsrc +=  nsrc
@@ -647,7 +649,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         def gaussian_body(model_vis, ngsrc, src_count):
             """ Accumulate visiblities for gaussian source batch """
-            lm, stokes, alpha, gauss_params = self._gaussian_source_queue.dequeue()
+            lm, stokes, alpha, gauss_params = queues.gaussian_source_queue.dequeue()
             nsrc = tf.shape(lm)[0]
             src_count += nsrc
             ngsrc += nsrc
@@ -662,7 +664,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         def sersic_body(model_vis, nssrc, src_count):
             """ Accumulate visiblities for sersic source batch """
-            lm, stokes, alpha, sersic_params = self._sersic_source_queue.dequeue()
+            lm, stokes, alpha, sersic_params = queues.sersic_source_queue.dequeue()
             nsrc = tf.shape(lm)[0]
             src_count += nsrc
             nssrc += nsrc
@@ -691,7 +693,7 @@ class RimeSolver(MontblancTensorflowSolver):
             [model_vis, zero, src_count])
 
         # Create enqueue operation
-        enqueue_op = self._output_queue.queue.enqueue([D.descriptor, model_vis])
+        enqueue_op = queues.output_queue.queue.enqueue([D.descriptor, model_vis])
 
         # Return descriptor and enqueue operation
         return D.descriptor, enqueue_op
