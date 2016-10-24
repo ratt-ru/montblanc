@@ -209,25 +209,23 @@ class RimeSolver(MontblancTensorflowSolver):
         #==============================================
 
         try:
-            self._tf_server_target = tf_server_target = (
-                slvr_cfg['tf_server_target'])
+            server, job, task = (slvr_cfg[n] for n in ('tf_server_target',
+                                                        'tf_job_name',
+                                                        'tf_task_index'))
         except KeyError as e:
-            raise (ValueError("'tf_server_target' missing "
-                            "from solver configuration!"),
-                None, sys.exc_info()[2])
+            msg = "'%s' missing from solver configuration!" % e.message
+            raise (KeyError(msg), None, sys.exc_info()[2])
 
-        self._tf_job_name = job_name = slvr_cfg.get('tf_job_name', None)
-        self._tf_task_index = task_index = slvr_cfg.get('tf_task_index', None)
+        self._is_master = job == "master" and task == 0
 
         #===============================================
         # Transmit/Receive master/worker configuration
         #===============================================
 
-        Strat = (MasterConfigurationStrategy if self.is_master()
+        Strat = (MasterConfigurationStrategy if self._is_master
             else WorkerConfigurationStrategy)
 
-        tr_strat = Strat(tf_server_target, job_name, task_index)
-        slvr_cfg = tr_strat.execute(slvr_cfg)
+        slvr_cfg = Strat(server, job, task).execute(slvr_cfg)
 
         #=============================================
         # Defer to parent construct with configuration
@@ -240,9 +238,9 @@ class RimeSolver(MontblancTensorflowSolver):
         #==========================================
 
         montblanc.log.debug("Attaching session to tensorflow server "
-            "'{tfs}'".format(tfs=tf_server_target))
+            "'{tfs}'".format(tfs=server))
 
-        self._tf_session = tf.Session(tf_server_target)
+        self._tf_session = tf.Session(server)
 
         #=========================================
         # Register hypercube Dimensions
@@ -409,7 +407,7 @@ class RimeSolver(MontblancTensorflowSolver):
         self._tf_session.run(init_op)
 
     def is_master(self):
-        return self._tf_job_name == 'master' and self._tf_task_index == 0
+        return self._is_master
 
     def _parameter_feed(self):
         try:
