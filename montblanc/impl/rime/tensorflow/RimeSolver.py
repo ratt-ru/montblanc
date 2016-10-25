@@ -122,15 +122,10 @@ class RimeSolver(MontblancTensorflowSolver):
         # Tensorflow Session and Thread Coordinator
         #==========================================
 
-        tf_server_target = slvr_cfg.get('tf_server_target', None)
-
         # Create the tensorflow session object
-        if tf_server_target is None:
-            self._tf_session = tf.Session()
-        else:
-            self._tf_session = tf.Session(tf_server_target)
-
-        self._tf_coord = tf_coord = tf.train.Coordinator()
+        # Use supplied target, if present
+        tf_server_target = slvr_cfg.get('tf_server_target', '')
+        self._tf_session = tf.Session(tf_server_target)
 
         #================================
         # Queue Data Source Configuration
