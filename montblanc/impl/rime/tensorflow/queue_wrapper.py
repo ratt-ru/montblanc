@@ -18,7 +18,7 @@ def _get_queue_types(fed_arrays, data_sources):
             .format(k=e.message)), None, sys.exc_info()[2]
 
 class QueueWrapper(object):
-    def __init__(self, name, queue_size, fed_arrays, data_sources):
+    def __init__(self, name, queue_size, fed_arrays, data_sources, shared_name=None):
         self._name = name
         self._fed_arrays = fed_arrays
         self._data_sources = data_sources
@@ -31,7 +31,8 @@ class QueueWrapper(object):
             for n, dt in zip(fed_arrays, self._queue_types)]
 
         # Create a FIFOQueue of a given size with the supplied queue types
-        self._queue = tf.FIFOQueue(queue_size, self._queue_types, name=name)
+        self._queue = tf.FIFOQueue(queue_size,
+            self._queue_types, name=name, shared_name=shared_name)
 
         # Create enqueue operation using placeholders
         self._enqueue_op = self._queue.enqueue(self.placeholders)
@@ -100,7 +101,7 @@ class QueueWrapper(object):
             s=len(self._queue_types),
             t=self._queue_types)
 
-def create_queue_wrapper(name, queue_size, fed_arrays, data_sources):
+def create_queue_wrapper(name, queue_size, fed_arrays, data_sources, *args, **kwargs):
     """
     Arguments
         name: string
@@ -113,4 +114,4 @@ def create_queue_wrapper(name, queue_size, fed_arrays, data_sources):
             (lambda/method, dtype) tuples, keyed on array names
 
     """
-    return QueueWrapper(name, queue_size, fed_arrays, data_sources)
+    return QueueWrapper(name, queue_size, fed_arrays, data_sources, *args, **kwargs)
