@@ -279,7 +279,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Copy dimensions of the main cube
         cube = self.hypercube.copy()
-        Q = self._tf_queues
+        LQ = self._tf_queues.local
 
         # Get space of iteration
         iter_args = _iter_args(self._iter_dims, cube)
@@ -289,9 +289,9 @@ class RimeSolver(MontblancTensorflowSolver):
         for i, d in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
             cube.update_dimensions(d)
             descriptor = self._transcoder.encode(cube.dimensions(copy=False))
-            feed_dict = {Q.parameter.placeholders[0] : descriptor }
+            feed_dict = {LQ.parameter.placeholders[0] : descriptor }
             montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
-            session.run(Q.parameter.enqueue_op, feed_dict=feed_dict)
+            session.run(LQ.parameter.enqueue_op, feed_dict=feed_dict)
             parameters_fed += 1
 
         montblanc.log.info("Done feeding {n} parameters.".format(
@@ -311,7 +311,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Maintain a hypercube based on the main cube
         cube = self.hypercube.copy()
-        Q = self._tf_queues
+        LQ = self._tf_queues.local
 
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
@@ -319,7 +319,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct data sources from those supplied by the
         # source providers, if they're associated with
         # input queue arrays
-        input_queue_sources = Q.input_queue_sources
+        input_queue_sources = LQ.input_queue_sources
         data_sources = self._default_data_sources.copy()
         data_sources.update({n: DataSource(f, cube.array(n).dtype, source.name())
                                 for source in source_providers
@@ -328,9 +328,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
-        src_types = Q.src_queues.keys()
+        src_types = LQ.src_queues.keys()
         src_strides = [int(i) for i in cube.dim_local_size(*src_types)]
-        src_queues = [Q.src_queues[t] for t in src_types]
+        src_queues = [LQ.src_queues[t] for t in src_types]
 
         chunks_fed = 0
         done = False
@@ -338,7 +338,7 @@ class RimeSolver(MontblancTensorflowSolver):
         while not done:
             try:
                 # Get the descriptor describing a portion of the RIME
-                descriptor = session.run(Q.parameter.dequeue_op)
+                descriptor = session.run(LQ.parameter.dequeue_op)
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
 
@@ -395,7 +395,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Generate (name, placeholder, datasource, array schema)
             # for the arrays required by each queue
-            iq = Q.input
+            iq = LQ.input
             gen = [(a, ph, data_sources[a], array_schemas[a])
                 for ph, a in zip(iq.placeholders, iq.fed_arrays)]
 
@@ -409,7 +409,7 @@ class RimeSolver(MontblancTensorflowSolver):
             montblanc.log.debug("Enqueueing chunk {i} {d}".format(
                 i=chunks_fed, d=descriptor))
 
-            session.run(Q.input.enqueue_op, feed_dict=feed_dict)
+            session.run(LQ.input.enqueue_op, feed_dict=feed_dict)
 
             chunks_fed += 1
 
@@ -507,7 +507,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Maintain a hypercube based on the main cube
         cube = self.hypercube.copy()
-        Q = self._tf_queues
+        LQ = self._tf_queues.local
 
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
@@ -520,12 +520,12 @@ class RimeSolver(MontblancTensorflowSolver):
 
 
         while not done:
-            output = S.run(Q.output.dequeue_op)
+            output = S.run(LQ.output.dequeue_op)
             chunks_consumed += 1
 
             # Expect the descriptor in the first tuple position
             assert len(output) > 0
-            assert Q.output.fed_arrays[0] == 'descriptor'
+            assert LQ.output.fed_arrays[0] == 'descriptor'
 
             descriptor = output[0]
             dims = self._transcoder.decode(descriptor)
@@ -543,7 +543,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
 
             # For each array in our output, call the associated data sink
-            for n, a in zip(Q.output.fed_arrays[1:], output[1:]):
+            for n, a in zip(LQ.output.fed_arrays[1:], output[1:]):
                 sink_context = SinkContext(n, cube, self.config(), global_iter_args,
                     cube.array(n) if n in cube.arrays() else {}, a)
 
@@ -636,9 +636,11 @@ def _construct_tensorflow_queues(dfs, cube):
     QUEUE_SIZE = 10
 
     Q = AttrDict()
+    # Reference local queues
+    Q.local = local = AttrDict()
 
     # Create the queue feeding parameters into the system
-    Q.parameter = create_queue_wrapper('descriptors',
+    local.parameter = create_queue_wrapper('descriptors',
         QUEUE_SIZE, ['descriptor'], dfs)
 
     # Take all arrays flagged as input
@@ -646,38 +648,38 @@ def _construct_tensorflow_queues(dfs, cube):
                     if a.get('input', False) == True]
 
     # Create the queue for holding the input
-    Q.input = create_queue_wrapper('input', QUEUE_SIZE,
-                                             ['descriptor'] + input_arrays,
-                                             dfs)
+    local.input = create_queue_wrapper('input', QUEUE_SIZE,
+                                     ['descriptor'] + input_arrays,
+                                     dfs)
 
     # Create source input queues
-    Q.point_source = create_queue_wrapper('point_source',
+    local.point_source = create_queue_wrapper('point_source',
         QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
 
-    Q.gaussian_source = create_queue_wrapper('gaussian_source',
+    local.gaussian_source = create_queue_wrapper('gaussian_source',
         QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
             'gaussian_shape'], dfs)
 
-    Q.sersic_source = create_queue_wrapper('sersic_source',
+    local.sersic_source = create_queue_wrapper('sersic_source',
         QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
             'sersic_shape'], dfs)
 
-    Q.output = create_queue_wrapper('output', QUEUE_SIZE,
+    local.output = create_queue_wrapper('output', QUEUE_SIZE,
         ['descriptor', 'model_vis'], dfs)
 
     # TODO: don't create objects on the object instance,
     # instead we should return them
 
     # Source queues to feed
-    Q.src_queues = src_queues = {
-        'npsrc' : Q.point_source,
-        'ngsrc' : Q.gaussian_source,
-        'nssrc' : Q.sersic_source,
+    local.src_queues = src_queues = {
+        'npsrc' : local.point_source,
+        'ngsrc' : local.gaussian_source,
+        'nssrc' : local.sersic_source,
     }
 
     # Set of arrays that the queues feed
-    Q.input_queue_sources = {a
-                             for q in [Q.input] + src_queues.values()
+    local.input_queue_sources = {a
+                             for q in [local.input] + src_queues.values()
                              for a in q.fed_arrays}
 
     return Q
@@ -687,8 +689,10 @@ def _construct_tensorflow_expression(queues, src_ph_vars):
     zero = tf.constant(0)
     src_count = zero
 
+    LQ = queues.local
+
     # Pull RIME inputs out of the feed queues
-    D = queues.input.dequeue_to_attrdict()
+    D = LQ.input.dequeue_to_attrdict()
 
     # Infer chunk dimensions
     model_vis_shape = tf.shape(D.model_vis)
@@ -730,7 +734,7 @@ def _construct_tensorflow_expression(queues, src_ph_vars):
     # While loop bodies
     def point_body(model_vis, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
-        lm, stokes, alpha = queues.point_source.dequeue()
+        lm, stokes, alpha = LQ.point_source.dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         npsrc +=  nsrc
@@ -744,7 +748,7 @@ def _construct_tensorflow_expression(queues, src_ph_vars):
 
     def gaussian_body(model_vis, ngsrc, src_count):
         """ Accumulate visiblities for gaussian source batch """
-        lm, stokes, alpha, gauss_params = queues.gaussian_source.dequeue()
+        lm, stokes, alpha, gauss_params = LQ.gaussian_source.dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         ngsrc += nsrc
@@ -759,7 +763,7 @@ def _construct_tensorflow_expression(queues, src_ph_vars):
 
     def sersic_body(model_vis, nssrc, src_count):
         """ Accumulate visiblities for sersic source batch """
-        lm, stokes, alpha, sersic_params = queues.sersic_source.dequeue()
+        lm, stokes, alpha, sersic_params = LQ.sersic_source.dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         nssrc += nsrc
@@ -788,7 +792,7 @@ def _construct_tensorflow_expression(queues, src_ph_vars):
         [model_vis, zero, src_count])
 
     # Create enqueue operation
-    enqueue_op = queues.output.queue.enqueue([D.descriptor, model_vis])
+    enqueue_op = LQ.output.queue.enqueue([D.descriptor, model_vis])
 
     # Return descriptor and enqueue operation
     return D.descriptor, enqueue_op
