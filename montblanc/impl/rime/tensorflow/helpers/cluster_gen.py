@@ -140,4 +140,6 @@ if args.start is True:
 
     logging.info("Created tensorflow solver")
 
-    time.sleep(1)
+    slvr.solve()
+
+    time.sleep(10)
