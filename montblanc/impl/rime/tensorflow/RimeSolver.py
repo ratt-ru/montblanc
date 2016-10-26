@@ -394,11 +394,25 @@ class RimeSolver(MontblancTensorflowSolver):
             raise
 
     def _parameter_feed_impl(self):
+        def _make_hashring(remote_parameter_queues):
+            from uhashring import HashRing
+
+            node_config = { '%s_%s' % (j,t) : {
+                'weight': 100,
+                'vnodes': 40,
+                'hostname': j,
+                'port': t }
+                for j, t, q in remote_parameter_queues }
+
+            return HashRing(node_config, replicas=4, compat=False)
+
         session = self._tf_session
 
         # Copy dimensions of the main cube
         cube = self.hypercube.copy()
-        LQ = self._tf_feed_data.local
+        RPQ = self._tf_feed_data.remote.parameter
+
+        hashring = _make_hashring(RPQ)
 
         # Get space of iteration
         iter_args = _iter_args(self._iter_dims, cube)
@@ -407,11 +421,28 @@ class RimeSolver(MontblancTensorflowSolver):
         # Iterate through the hypercube space
         for i, d in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
             cube.update_dimensions(d)
+
+            # Construct a descriptor describing a portion of the problem
             descriptor = self._transcoder.encode(cube.dimensions(copy=False))
-            feed_dict = {LQ.parameter.placeholders[0] : descriptor }
-            montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
-            session.run(LQ.parameter.enqueue_op, feed_dict=feed_dict)
+
+            # Hash the descriptor to obtain the node to send it to
+            node = hashring.get(descriptor)
+
+            # Get the remote queue
+            j, t, queue = RPQ[node['port']]
+
+            # Feed the queue with the descriptor
+            montblanc.log.debug('{i} Placing {d} on {ds}'.format(i=i,
+                d=descriptor, ds=tf.DeviceSpec(job=j,task=t).to_string()))
+
+            feed_dict = { queue.placeholders[0] : descriptor }
+            montblanc.log.info("Enqueue operation device {}".format(queue.enqueue_op.device))
+            session.run(queue.enqueue_op, feed_dict=feed_dict)
             parameters_fed += 1
+
+        # Indicate EOF to workers
+        for j, t, q in RPQ:
+            session.run(queue.enqueue_op, feed_dict={ q.placeholders[0]: [-1] })
 
         montblanc.log.info("Done feeding {n} parameters.".format(
             n=parameters_fed))
@@ -452,11 +483,14 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Make it read-only so we can hash the contents
             descriptor.flags.writeable = False
+            montblanc.log.info("Received descriptor {}".format(descriptor))
+
+            if descriptor[0] == -1:
+                done = True
+                continue
 
             # Decode the descriptor and update our cube dimensions
             dims = self._transcoder.decode(descriptor)
-            # Are we done?
-            done = _last_chunk(dims)
             cube.update_dimensions(dims)
 
             # Determine array shapes and data types for this
