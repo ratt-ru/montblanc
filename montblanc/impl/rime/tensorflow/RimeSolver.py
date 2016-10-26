@@ -361,7 +361,7 @@ class RimeSolver(MontblancTensorflowSolver):
                 self._tf_feed_data)
 
             # Initialisation operation
-            init_op = tf.initialize_all_variables()
+            init_op = tf.initialize_local_variables()
 
             # Now forbid modification of the graph
             compute_graph.finalize()
