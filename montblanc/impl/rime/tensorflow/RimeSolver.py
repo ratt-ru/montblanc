@@ -227,8 +227,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
         slvr_cfg = Strat(server, job, task).execute(slvr_cfg)
 
-        # The cluster definition should be present
-        assert 'tf_cluster' in slvr_cfg
+        # Extract the cluster definition
+        cluster = slvr_cfg['tf_cluster']
 
         #=============================================
         # Defer to parent construct with configuration
@@ -356,7 +356,7 @@ class RimeSolver(MontblancTensorflowSolver):
         with tf.Graph().as_default() as compute_graph:
             # Create feed data and expression
             self._tf_feed_data = _construct_tensorflow_feed_data(dfs,
-                cube, self._iter_dims)
+                cube, cluster, job, task, self._iter_dims)
             self._tf_expr = _construct_tensorflow_expression(
                 self._tf_feed_data)
 
@@ -370,19 +370,13 @@ class RimeSolver(MontblancTensorflowSolver):
         # Tensorflow Session
         #==========================================
 
-        #==========================================
-        # Tensorflow Graph and Session
-        #==========================================
-
-        tf_server_target = slvr_cfg.get('tf_server_target', '')
-
-        # Create tensorflow session object
-        if not tf_server_target:
-            raise ValueError("'tf_server_target' missing from solver configuration!")
+        self._tf_server = server
+        self._tf_job = job
+        self._tf_task = task
 
         montblanc.log.debug("Attaching session to tensorflow server "
-            "'{tfs}'".format(tfs=tf_server_target))
-        self._tf_session = tf.Session(tf_server_target, graph=compute_graph)
+            "'{tfs}'".format(tfs=server))
+        self._tf_session = tf.Session(server, graph=compute_graph)
         self._tf_session.run(init_op)
 
     def is_master(self):
@@ -751,12 +745,15 @@ class RimeSolver(MontblancTensorflowSolver):
         self.close()
 
 
-def _construct_tensorflow_feed_data(dfs, cube, iter_dims):
+def _construct_tensorflow_feed_data(dfs, cube, cluster,
+        job, task, iter_dims):
+
     QUEUE_SIZE = 10
 
     FD = AttrDict()
-    # Reference local queues
+    # Reference local and remote queues
     FD.local = local = AttrDict()
+    FD.remote = remote = AttrDict()
 
     # Create placholder variables for source counts
     FD.src_ph_vars = AttrDict({
@@ -767,6 +764,47 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims):
     FD.property_ph_vars = AttrDict({
         n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
         for n, p in cube.properties().iteritems() })
+
+    local.parameter = None
+    remote.parameter = parameter = {}
+
+    is_worker = job == 'worker'
+    is_master = job == 'master' and task == 0
+
+    pqn = lambda j, t: '_'.join([j, str(t), 'parameter_queue'])
+    mkq = lambda sn: create_queue_wrapper('descriptors',
+        QUEUE_SIZE, ['descriptor'], dfs, shared_name=sn)
+
+    if is_worker:
+
+        montblanc.log.info("Creating parameter queue")
+        # If this a worker, create the queue receiving parameters
+        dev_spec = tf.DeviceSpec(job=job, task=task)
+
+        with tf.device(dev_spec), tf.container('shared'):
+            shared_name = pqn(job, task)
+            local.parameter = mkq(shared_name)
+
+    elif is_master:
+
+        montblanc.log.info("Accessing remote parameter queue")
+        montblanc.log.info("Remote parameters {}".format(remote.parameter))
+
+        wjob = 'worker'
+        nworkers = len(cluster[wjob])
+
+        with tf.container('shared'):
+            for t in xrange(nworkers):
+                shared_name = pqn(wjob, t)
+                montblanc.log.info("Accessing queue {}".format(shared_name))
+                parameter[(wjob, task)] = mkq(shared_name)
+
+        montblanc.log.info("Remote parameters {}".format(remote.parameter))
+
+        for (j ,t), q in remote.parameter.iteritems():
+            montblanc.log.info((j, t, q.queue.name))
+    else:
+        raise ValueError("Unhandled job/task pair ({},{})".format(job, task))
 
     #========================================================
     # Determine which arrays need feeding once/multiple times
