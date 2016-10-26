@@ -383,6 +383,10 @@ class RimeSolver(MontblancTensorflowSolver):
         return self._is_master
 
     def _parameter_feed(self):
+        # Only the master feeds descriptors
+        if not self.is_master():
+            return
+
         try:
             self._parameter_feed_impl()
         except Exception as e:
@@ -414,6 +418,11 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def _feed(self, cube, data_sources, global_iter_args):
         """ Feed stub """
+
+        # Only workers feed data
+        if self.is_master():
+            return
+
         try:
             self._feed_impl(cube, data_sources, global_iter_args)
         except Exception as e:
@@ -524,6 +533,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def _compute_impl(self):
         """ Implementation of computation """
+
         #run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE,
         #    timeout_in_ms=10000)
         run_options =tf.RunOptions()
@@ -563,6 +573,10 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def _compute(self):
         """ Compute stub """
+        # Only workers compute
+        if self.is_master():
+            return
+
         try:
             return self._compute_impl()
         except Exception as e:
@@ -571,6 +585,10 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def _consume(self, sink_providers):
         """ Consume stub """
+        # Only workers consume data
+        if self.is_master():
+            return
+
         try:
             return self._consume_impl(sink_providers)
         except Exception as e:
