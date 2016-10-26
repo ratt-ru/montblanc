@@ -784,7 +784,7 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
         for n, p in cube.properties().iteritems() })
 
     local.parameter = None
-    remote.parameter = parameter = {}
+    remote.parameter = parameter = []
 
     is_worker = job == 'worker'
     is_master = job == 'master' and task == 0
@@ -795,9 +795,10 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
 
     if is_worker:
 
-        montblanc.log.info("Creating parameter queue")
         # If this a worker, create the queue receiving parameters
         dev_spec = tf.DeviceSpec(job=job, task=task)
+        montblanc.log.info("Creating parameter queue on {ds}".format(
+            ds=dev_spec.to_string()))
 
         with tf.device(dev_spec), tf.container('shared'):
             shared_name = pqn(job, task)
@@ -814,12 +815,15 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
         with tf.container('shared'):
             for t in xrange(nworkers):
                 shared_name = pqn(wjob, t)
+                dev_spec = tf.DeviceSpec(job=wjob, task=t)
                 montblanc.log.info("Accessing queue {}".format(shared_name))
-                parameter[(wjob, task)] = mkq(shared_name)
+
+                with tf.device(dev_spec):
+                    parameter.append((wjob, task, mkq(shared_name)))
 
         montblanc.log.info("Remote parameters {}".format(remote.parameter))
 
-        for (j ,t), q in remote.parameter.iteritems():
+        for j ,t, q in remote.parameter:
             montblanc.log.info((j, t, q.queue.name))
     else:
         raise ValueError("Unhandled job/task pair ({},{})".format(job, task))
