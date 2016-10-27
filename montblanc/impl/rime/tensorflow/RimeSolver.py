@@ -374,6 +374,8 @@ class RimeSolver(MontblancTensorflowSolver):
         self._tf_job = job
         self._tf_task = task
 
+        self._tf_coord = tf.train.Coordinator()
+
         montblanc.log.debug("Attaching session to tensorflow server "
             "'{tfs}'".format(tfs=server))
         self._tf_session = tf.Session(server, graph=compute_graph)
@@ -444,6 +446,8 @@ class RimeSolver(MontblancTensorflowSolver):
         for j, t, q in RPQ:
             session.run(queue.enqueue_op, feed_dict={ q.placeholders[0]: [-1] })
 
+        self._tf_coord.request_stop()
+
         montblanc.log.info("Done feeding {n} parameters.".format(
             n=parameters_fed))
 
@@ -472,9 +476,8 @@ class RimeSolver(MontblancTensorflowSolver):
         src_queues = [LQ.src_queues[t] for t in src_types]
 
         chunks_fed = 0
-        done = False
 
-        while not done:
+        while not self._tf_coord.should_stop():
             try:
                 # Get the descriptor describing a portion of the RIME
                 descriptor = session.run(LQ.parameter.dequeue_op)
@@ -486,7 +489,7 @@ class RimeSolver(MontblancTensorflowSolver):
             montblanc.log.info("Received descriptor {}".format(descriptor))
 
             if descriptor[0] == -1:
-                done = True
+                self._tf_coord.request_stop()
                 continue
 
             # Decode the descriptor and update our cube dimensions
@@ -576,7 +579,6 @@ class RimeSolver(MontblancTensorflowSolver):
         S = self._tf_session
         FD = self._tf_feed_data
         chunks_computed = 0
-        done = False
 
         cube = self.hypercube
 
@@ -586,7 +588,7 @@ class RimeSolver(MontblancTensorflowSolver):
         feed_dict.update({ ph: getattr(cube, n) for
             n, ph in FD.property_ph_vars.iteritems() })
 
-        while not done:
+        while not self._tf_coord.should_stop():
             descriptor, enq = S.run(self._tf_expr,
                 feed_dict=feed_dict,
                 options=run_options,
@@ -594,7 +596,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Are we done?
             dims = self._transcoder.decode(descriptor)
-            done = _last_chunk(dims)
             chunks_computed += 1
 
         montblanc.log.info("Done computing {n} chunks."
@@ -634,7 +635,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         S = self._tf_session
         chunks_consumed = 0
-        done = False
 
         # Maintain a hypercube based on the main cube
         cube = self.hypercube.copy()
@@ -650,7 +650,7 @@ class RimeSolver(MontblancTensorflowSolver):
             if not n == 'descriptor' }
 
 
-        while not done:
+        while not self._tf_coord.should_stop():
             output = S.run(LQ.output.dequeue_op)
             chunks_consumed += 1
 
@@ -682,9 +682,6 @@ class RimeSolver(MontblancTensorflowSolver):
                     a, input_data)
 
                 _supply_data(data_sinks[n], sink_context)
-
-            # Are we done?
-            done = _last_chunk(dims)
 
         montblanc.log.info('Done consuming {n} chunks'.format(n=chunks_consumed))
 
@@ -744,6 +741,8 @@ class RimeSolver(MontblancTensorflowSolver):
         self._tf_session.run([fo.assign_op for fo in LQ.feed_once.itervalues()],
             feed_dict=feed_dict)
 
+        not_done = []
+
         try:
             params = self._parameter_executor.submit(self._parameter_feed)
             feed = self._feed_executor.submit(self._feed, cube, data_sources,
@@ -753,7 +752,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
             not_done = [params, feed, compute, consume]
 
-            while True:
+            while not self._tf_coord.should_stop():
                 # TODO: timeout not strictly necessary
                 done, not_done = cf.wait(not_done,
                     timeout=1.0,
@@ -771,6 +770,9 @@ class RimeSolver(MontblancTensorflowSolver):
             raise
         except:
             montblanc.log.exception('Solving exception')
+
+        # Cancel any running futures
+        [f.cancel() for f in not_done]
 
     def close(self):
         # Shutdown thread executors
