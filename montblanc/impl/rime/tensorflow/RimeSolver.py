@@ -431,20 +431,20 @@ class RimeSolver(MontblancTensorflowSolver):
             node = hashring.get(descriptor)
 
             # Get the remote queue
-            j, t, queue = RPQ[node['port']]
+            job, task, queue = RPQ[node['port']]
 
             # Feed the queue with the descriptor
             montblanc.log.debug('{i} Placing {d} on {ds}'.format(i=i,
-                d=descriptor, ds=tf.DeviceSpec(job=j,task=t).to_string()))
+                d=descriptor,
+                ds=tf.DeviceSpec(job=job,task=task).to_string()))
 
             feed_dict = { queue.placeholders[0] : descriptor }
-            montblanc.log.info("Enqueue operation device {}".format(queue.enqueue_op.device))
             session.run(queue.enqueue_op, feed_dict=feed_dict)
             parameters_fed += 1
 
         # Indicate EOF to workers
-        for j, t, q in RPQ:
-            session.run(queue.enqueue_op, feed_dict={ q.placeholders[0]: [-1] })
+        for job, task, queue in RPQ:
+            session.run(queue.enqueue_op, feed_dict={ queue.placeholders[0]: [-1] })
 
         self._tf_coord.request_stop()
 
