@@ -70,7 +70,7 @@ class FitsAxes(object):
 
         # Check for custom irregular grid format.
         # Currently only implemented for FREQ dimension.
-        irregular_grid = [[header.get('G%s%d' % (self._ctype, j), None)
+        irregular_grid = [[header.get('G%s%d' % (self._ctype[i], j), None)
             for j in range(1, self._naxis[i]+1)]
             for i in range(ndims)]
 
