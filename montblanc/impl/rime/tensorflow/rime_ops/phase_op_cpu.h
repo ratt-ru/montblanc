@@ -6,9 +6,9 @@
 // Required in order for Eigen::ThreadPoolDevice to be an actual type
 #define EIGEN_USE_THREADS
 
-#define RIME_PHASE_LOOP_STRATEGY 0
+#define RIME_PHASE_OPENMP_STRATEGY 0
 #define RIME_PHASE_EIGEN_STRATEGY 1
-#define RIME_PHASE_CPU_STRATEGY RIME_PHASE_LOOP_STRATEGY
+#define RIME_PHASE_CPU_STRATEGY RIME_PHASE_OPENMP_STRATEGY
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -90,7 +90,8 @@ public:
         constexpr FT lightspeed = 299792458.0;
         constexpr FT minus_two_pi_over_c = -2*M_PI/lightspeed;
 
-#if RIME_PHASE_CPU_STRATEGY == RIME_PHASE_LOOP_STRATEGY
+#if RIME_PHASE_CPU_STRATEGY == RIME_PHASE_OPENMP_STRATEGY
+
         // Compute the complex phase
         #pragma omp parallel for
         for(int src=0; src<nsrc; ++src)
@@ -122,56 +123,21 @@ public:
 
 #elif RIME_PHASE_CPU_STRATEGY == RIME_PHASE_EIGEN_STRATEGY
         // Doing it this way might give us SIMD's and threading automatically...
-        // but compared to the above, it creates an expression tree and I don't
-        // know how to evaluate the final result yet...
-
         const CPUDevice & device = context->eigen_device<CPUDevice>();
 
-#if !defined(EIGEN_HAS_INDEX_LIST)
-        Eigen::DSizes<int, 4> lm_shape( nsrc, 1,     1,  1);
-        Eigen::DSizes<int, 4> uvw_shape( 1,    ntime, na, 1);
-        Eigen::DSizes<int, 4> freq_shape(1,    1,     1,  nsrc);
-#else
-        Eigen::IndexList<int,
-            Eigen::type2index<1>,
-            Eigen::type2index<1>,
-            Eigen::type2index<1> > lm_shape;
-        lm_shape.set(0, nsrc);
-
-        Eigen::IndexList<Eigen::type2index<1>,
-            int,
-            int,
-            Eigen::type2index<1> > uvw_shape;
-        uvw_shape.set(1, ntime);
-        uvw_shape.set(2, na);
-
-        Eigen::IndexList<Eigen::type2index<1>,
-            Eigen::type2index<1>,
-            Eigen::type2index<1>,
-            int > freq_shape;
-        freq_shape.set(3, nchan);
-#endif
+        // Shapes for reshaping and broadcasting
+        Eigen::DSizes<int, 4>   lm_shape(nsrc, 1,     1,  1    );
+        Eigen::DSizes<int, 4>  uvw_shape(1,    ntime, na, 1    );
+        Eigen::DSizes<int, 4> freq_shape(1,    1,     1,  nchan);
 
         auto l = lm.slice(
                 Eigen::DSizes<int, 2>(0,    0),
                 Eigen::DSizes<int, 2>(nsrc, 1))
             .reshape(lm_shape);
-
         auto m = lm.slice(
                 Eigen::DSizes<int, 2>(0,    1),
-                Eigen::DSizes<int, 2>(nsrc, 2))
+                Eigen::DSizes<int, 2>(nsrc, 1))
             .reshape(lm_shape);
-
-
-        // Create a tensor to hold one as a constant
-        Eigen::Tensor<FT, 1> one(1);
-        one[0] = 1.0;
-
-        // Create a tensor to hold -2*pi/C
-        Eigen::Tensor<FT, 1> minus_two_pi_over_c(1);
-        minus_two_pi_over_c[0] = FT(-2*M_PI/lightspeed);
-
-        auto n = (one - l*l - m*m).sqrt() - one;
 
         auto u = uvw.slice(
                 Eigen::DSizes<int, 3>(0,     0,  0),
@@ -180,24 +146,37 @@ public:
 
         auto v = uvw.slice(
                 Eigen::DSizes<int, 3>(0,     0,  1),
-                Eigen::DSizes<int, 3>(ntime, na, 2))
+                Eigen::DSizes<int, 3>(ntime, na, 1))
             .reshape(uvw_shape);
 
         auto w = uvw.slice(
                 Eigen::DSizes<int, 3>(0,     0,  2),
-                Eigen::DSizes<int, 3>(ntime, na, 3))
+                Eigen::DSizes<int, 3>(ntime, na, 1))
             .reshape(uvw_shape);
 
-        auto f = frequency.reshape(freq_shape);
+        // Compute n
+        auto n = (l.constant(1.0) - l*l - m*m).sqrt() - l.constant(1.0);
 
-        auto phase = minus_two_pi_over_c*(l*u + m*v + n*w)*f/lightspeed;
-        // eigen is missing sin and cos members on TensorBase
-        // call them with unaryExpr
+        // Compute the real phase
+        auto real_phase = (
+            l.broadcast(uvw_shape)*u.broadcast(lm_shape) +
+            m.broadcast(uvw_shape)*v.broadcast(lm_shape) +
+            n.broadcast(uvw_shape)*w.broadcast(lm_shape))
+                .broadcast(freq_shape);
+
+        // Reshape and broadcast frequency to match real_phase
+        auto f = frequency.reshape(freq_shape).broadcast(
+            Eigen::DSizes<int, 4>(nsrc, ntime, na, 1));
+
+        // Calculate the phase
+        auto phase = real_phase*f*real_phase.constant(minus_two_pi_over_c);
         auto sinp = phase.unaryExpr(Eigen::internal::scalar_sin_op<FT>());
         auto cosp = phase.unaryExpr(Eigen::internal::scalar_cos_op<FT>());
 
-        complex_phase.device(device) = sinp.binaryExpr(
-            cosp, make_complex_functor<FT>());
+        // Now compute the complex phase by combining the cosine
+        // and sine of the phase to from a complex number
+        complex_phase.device(device) = cosp.binaryExpr(
+            sinp, make_complex_functor<FT>());
 #endif
     }
 };
