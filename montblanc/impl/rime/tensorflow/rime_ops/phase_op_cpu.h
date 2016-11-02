@@ -125,33 +125,48 @@ public:
         // Doing it this way might give us SIMD's and threading automatically...
         const CPUDevice & device = context->eigen_device<CPUDevice>();
 
+        using idx0 = Eigen::type2index<0>;
+        using idx1 = Eigen::type2index<1>;
+        using idx2 = Eigen::type2index<2>;
+
         // Shapes for reshaping and broadcasting
-        Eigen::DSizes<int, 4>   lm_shape(nsrc, 1,     1,  1    );
-        Eigen::DSizes<int, 4>  uvw_shape(1,    ntime, na, 1    );
-        Eigen::DSizes<int, 4> freq_shape(1,    1,     1,  nchan);
+        Eigen::IndexList<int, idx1, idx1, idx1> lm_shape;
+        lm_shape.set(0, nsrc);
 
-        auto l = lm.slice(
-                Eigen::DSizes<int, 2>(0,    0),
-                Eigen::DSizes<int, 2>(nsrc, 1))
+        Eigen::IndexList<idx1, int, int, idx1> uvw_shape;
+        uvw_shape.set(1, ntime);
+        uvw_shape.set(2, na);
+
+        Eigen::IndexList<idx1, idx1, idx1, int> freq_shape;
+        freq_shape.set(3, nchan);
+
+        Eigen::IndexList<idx0, idx0> l_slice_offset;
+        Eigen::IndexList<idx0, idx1> m_slice_offset;
+
+        Eigen::IndexList<int, idx1> lm_slice_size;
+        lm_slice_size.set(0, nsrc);
+
+        // Slice lm to get l and m arrays
+        auto l = lm.slice(l_slice_offset, lm_slice_size)
             .reshape(lm_shape);
-        auto m = lm.slice(
-                Eigen::DSizes<int, 2>(0,    1),
-                Eigen::DSizes<int, 2>(nsrc, 1))
+        auto m = lm.slice(m_slice_offset, lm_slice_size)
             .reshape(lm_shape);
 
-        auto u = uvw.slice(
-                Eigen::DSizes<int, 3>(0,     0,  0),
-                Eigen::DSizes<int, 3>(ntime, na, 1))
+        Eigen::IndexList<idx0, idx0, idx0> u_slice_offset;
+        Eigen::IndexList<idx0, idx0, idx1> v_slice_offset;
+        Eigen::IndexList<idx0, idx0, idx2> w_slice_offset;
+        Eigen::IndexList<int, int, idx1> uvw_slice_size;
+        uvw_slice_size.set(0, ntime);
+        uvw_slice_size.set(1,  na);
+
+        // Slice uvw to get u, v and w arrays
+        auto u = uvw.slice(u_slice_offset, uvw_slice_size)
             .reshape(uvw_shape);
 
-        auto v = uvw.slice(
-                Eigen::DSizes<int, 3>(0,     0,  1),
-                Eigen::DSizes<int, 3>(ntime, na, 1))
+        auto v = uvw.slice(v_slice_offset, uvw_slice_size)
             .reshape(uvw_shape);
 
-        auto w = uvw.slice(
-                Eigen::DSizes<int, 3>(0,     0,  2),
-                Eigen::DSizes<int, 3>(ntime, na, 1))
+        auto w = uvw.slice(w_slice_offset, uvw_slice_size)
             .reshape(uvw_shape);
 
         // Compute n
@@ -164,12 +179,20 @@ public:
             n.broadcast(uvw_shape)*w.broadcast(lm_shape))
                 .broadcast(freq_shape);
 
-        // Reshape and broadcast frequency to match real_phase
-        auto f = frequency.reshape(freq_shape).broadcast(
-            Eigen::DSizes<int, 4>(nsrc, ntime, na, 1));
+        Eigen::IndexList<int, int, int, idx1> freq_broad;
+        freq_broad.set(0, nsrc);
+        freq_broad.set(1, ntime);
+        freq_broad.set(2, na);
 
+        // Reshape and broadcast frequency to match real_phase
+        auto f = frequency.reshape(freq_shape).broadcast(freq_broad);
+
+        // Evaluate common sub-expression early so that its
+        // not recomputed twice for sin and cosine.
+        Eigen::Tensor<FT, 4, Eigen::RowMajor> phase(nsrc, ntime, na, nchan);
+        phase.device(device) = real_phase*f*real_phase.constant(minus_two_pi_over_c);
         // Calculate the phase
-        auto phase = real_phase*f*real_phase.constant(minus_two_pi_over_c);
+        //auto phase = real_phase*f*real_phase.constant(minus_two_pi_over_c);
         auto sinp = phase.unaryExpr(Eigen::internal::scalar_sin_op<FT>());
         auto cosp = phase.unaryExpr(Eigen::internal::scalar_cos_op<FT>());
 
