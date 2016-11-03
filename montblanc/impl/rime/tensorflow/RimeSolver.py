@@ -566,6 +566,11 @@ class RimeSolver(MontblancTensorflowSolver):
 
                     session.run(queue.enqueue_op, feed_dict=feed_dict)
 
+
+        # Close all local queues
+        session.run([q.close_op for q in (
+            [LQ.input] + LQ.src_queues.values() + [LQ.output])])
+
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
     def _compute_impl(self):
