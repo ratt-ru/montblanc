@@ -142,4 +142,4 @@ if args.start is True:
 
     slvr.solve()
 
-    time.sleep(10)
+    time.sleep(3)
