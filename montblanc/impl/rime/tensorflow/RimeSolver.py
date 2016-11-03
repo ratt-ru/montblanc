@@ -594,10 +594,14 @@ class RimeSolver(MontblancTensorflowSolver):
             n, ph in FD.property_ph_vars.iteritems() })
 
         while not self._tf_coord.should_stop():
-            descriptor, enq = S.run(self._tf_expr,
-                feed_dict=feed_dict,
-                options=run_options,
-                run_metadata=run_metadata)
+            try:
+                descriptor, enq = S.run(self._tf_expr,
+                    feed_dict=feed_dict,
+                    options=run_options,
+                    run_metadata=run_metadata)
+            except (tf.errors.OutOfRangeError, tf.errors.CancelledError) as e:
+                self._tf_coord.request_stop()
+                continue
 
             # Are we done?
             dims = self._transcoder.decode(descriptor)
@@ -656,7 +660,12 @@ class RimeSolver(MontblancTensorflowSolver):
 
 
         while not self._tf_coord.should_stop():
-            output = S.run(LQ.output.dequeue_op)
+            try:
+                output = S.run(LQ.output.dequeue_op)
+            except (tf.errors.OutOfRangeError, tf.errors.CancelledError) as e:
+                self._tf_coord.request_stop()
+                continue
+
             chunks_consumed += 1
 
             # Expect the descriptor in the first tuple position
