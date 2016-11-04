@@ -868,7 +868,7 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
                 montblanc.log.info("Accessing queue {}".format(shared_name))
 
                 with tf.device(wdev_spec):
-                    parameter.append((wjob, task, mkq(shared_name)))
+                    parameter.append((wjob, t, mkq(shared_name)))
 
         montblanc.log.info("Remote parameters {}".format(remote.parameter))
 
