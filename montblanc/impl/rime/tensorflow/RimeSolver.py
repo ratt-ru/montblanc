@@ -842,11 +842,11 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
     pqn = lambda j, t: '_'.join([j, str(t), 'parameter_queue'])
     mkq = lambda sn: create_queue_wrapper('descriptors',
         QUEUE_SIZE, ['descriptor'], dfs, shared_name=sn)
+    dev_spec = tf.DeviceSpec(job=job, task=task)
 
     if is_worker:
 
         # If this a worker, create the queue receiving parameters
-        dev_spec = tf.DeviceSpec(job=job, task=task)
         montblanc.log.info("Creating parameter queue on {ds}".format(
             ds=dev_spec.to_string()))
 
@@ -865,10 +865,10 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
         with tf.container('shared'):
             for t in xrange(nworkers):
                 shared_name = pqn(wjob, t)
-                dev_spec = tf.DeviceSpec(job=wjob, task=t)
+                wdev_spec = tf.DeviceSpec(job=wjob, task=t)
                 montblanc.log.info("Accessing queue {}".format(shared_name))
 
-                with tf.device(dev_spec):
+                with tf.device(wdev_spec):
                     parameter.append((wjob, task, mkq(shared_name)))
 
         montblanc.log.info("Remote parameters {}".format(remote.parameter))
@@ -903,40 +903,38 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
     # require feeding multiple times
     #======================================
 
-    # Create the queue feeding parameters into the system
-    local.parameter = create_queue_wrapper('descriptors',
-        QUEUE_SIZE, ['descriptor'], dfs)
+    with tf.device(dev_spec):
+        # Create the queue for holding the input
+        local.input = create_queue_wrapper('input', QUEUE_SIZE,
+                    ['descriptor'] + [a.name for a in feed_all],
+                    dfs)
 
-    # Create the queue for holding the input
-    local.input = create_queue_wrapper('input', QUEUE_SIZE,
-                ['descriptor'] + [a.name for a in feed_all],
-                dfs)
+        # Create source input queues
+        local.point_source = create_queue_wrapper('point_source',
+            QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
 
-    # Create source input queues
-    local.point_source = create_queue_wrapper('point_source',
-        QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
+        local.gaussian_source = create_queue_wrapper('gaussian_source',
+            QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
+                'gaussian_shape'], dfs)
 
-    local.gaussian_source = create_queue_wrapper('gaussian_source',
-        QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
-            'gaussian_shape'], dfs)
+        local.sersic_source = create_queue_wrapper('sersic_source',
+            QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
+                'sersic_shape'], dfs)
 
-    local.sersic_source = create_queue_wrapper('sersic_source',
-        QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
-            'sersic_shape'], dfs)
-
-    # Source queues to feed
-    local.src_queues = src_queues = {
-        'npsrc' : local.point_source,
-        'ngsrc' : local.gaussian_source,
-        'nssrc' : local.sersic_source,
-    }
+        # Source queues to feed
+        local.src_queues = src_queues = {
+            'npsrc' : local.point_source,
+            'ngsrc' : local.gaussian_source,
+            'nssrc' : local.sersic_source,
+        }
 
     #======================================
     # The single output queue
     #======================================
 
-    local.output = create_queue_wrapper('output', QUEUE_SIZE,
-        ['descriptor', 'model_vis'], dfs)
+    with tf.device(dev_spec):
+        local.output = create_queue_wrapper('output',
+            QUEUE_SIZE, ['descriptor', 'model_vis'], dfs)
 
     #=================================================
     # Create tensorflow queues which are fed only once
@@ -961,8 +959,9 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
 
     # Create placeholders, variables and assign operators
     # for data sources that we will only feed once
-    local.feed_once = { a.name : _make_feed_once_tuple(a)
-        for a in feed_once }
+    with tf.device(dev_spec):
+        local.feed_once = { a.name : _make_feed_once_tuple(a)
+            for a in feed_once }
 
     #=======================================================
     # Construct the list of data sources that need feeding
