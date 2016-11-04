@@ -28,7 +28,7 @@ class NullSinkProvider(SinkProvider):
         return "Null"
 
     def model_vis(self, context):
-        array_schema = context.array(context.name, reify=True)
+        array_schema = context.array(context.name)
         slices = context.slice_index(*array_schema.shape)
         slice_str = ','.join('%s:%s' % (s.start, s.stop) for s in slices)
         montblanc.log.info("Received '{n}[{sl}]"
