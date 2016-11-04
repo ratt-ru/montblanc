@@ -147,9 +147,11 @@ public:
         lm_slice_size.set(0, nsrc);
 
         // Slice lm to get l and m arrays
-        auto l = lm.slice(l_slice_offset, lm_slice_size)
+        Eigen::Tensor<FT, 4, Eigen::RowMajor> l(nsrc,1,1,1);
+        l.device(device) = lm.slice(l_slice_offset, lm_slice_size)
             .reshape(lm_shape);
-        auto m = lm.slice(m_slice_offset, lm_slice_size)
+        Eigen::Tensor<FT, 4, Eigen::RowMajor> m(nsrc,1,1,1);
+        m.device(device) = lm.slice(m_slice_offset, lm_slice_size)
             .reshape(lm_shape);
 
         Eigen::IndexList<idx0, idx0, idx0> u_slice_offset;
@@ -170,13 +172,14 @@ public:
             .reshape(uvw_shape);
 
         // Compute n
-        auto n = (l.constant(1.0) - l*l - m*m).sqrt() - l.constant(1.0);
+        auto n = (l.constant(1.0) - l.square() - m.square()).sqrt()
+            - l.constant(1.0);
 
         // Compute the real phase
         auto real_phase = (
-            l.broadcast(uvw_shape)*u.broadcast(lm_shape) +
-            m.broadcast(uvw_shape)*v.broadcast(lm_shape) +
-            n.broadcast(uvw_shape)*w.broadcast(lm_shape))
+            l.broadcast(uvw_shape)*u.eval().broadcast(lm_shape) +
+            m.broadcast(uvw_shape)*v.eval().broadcast(lm_shape) +
+            n.broadcast(uvw_shape)*w.eval().broadcast(lm_shape))
                 .broadcast(freq_shape);
 
         Eigen::IndexList<int, int, int, idx1> freq_broad;
