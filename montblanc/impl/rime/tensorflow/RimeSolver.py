@@ -477,7 +477,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         chunks_fed = 0
 
-        while not self._tf_coord.should_stop():
+        while True:
             try:
                 # Get the descriptor describing a portion of the RIME
                 descriptor = session.run(LQ.parameter.dequeue_op)
@@ -489,8 +489,7 @@ class RimeSolver(MontblancTensorflowSolver):
             montblanc.log.info("Received descriptor {}".format(descriptor))
 
             if descriptor[0] == -1:
-                self._tf_coord.request_stop()
-                continue
+                break
 
             # Decode the descriptor and update our cube dimensions
             dims = self._transcoder.decode(descriptor)
@@ -568,8 +567,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
 
         # Close all local queues
-        session.run([q.close_op for q in (
-            [LQ.input] + LQ.src_queues.values() + [LQ.output])])
+        # session.run([q.close_op for q in (
+        #     [LQ.input] + LQ.src_queues.values() + [LQ.output])])
 
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
@@ -583,9 +582,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         S = self._tf_session
         FD = self._tf_feed_data
-        chunks_computed = 0
-
         cube = self.hypercube
+
+        chunks_computed = 0
 
         feed_dict = { ph: cube.dim_global_size(n) for
             n, ph in FD.src_ph_vars.iteritems() }
