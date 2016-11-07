@@ -80,18 +80,22 @@ class SinkContext(object):
 
     Proxies attributes of a hypercube and provides access to configuration
     """
-    __slots__ = ('_cube', '_cfg', '_name', '_data',
+    __slots__ = ('_cube', '_cfg', '_name', '_data', '_input_cache',
         '_cube_attributes', '_iter_args', '_array_schema')
 
     __metaclass__ = SinkContextMetaClass
 
-    def __init__(self, name, cube, slvr_cfg, iter_args, array_schema, data):
+    def __init__(self, name, cube, slvr_cfg,
+            iter_args, array_schema,
+            data, input_cache):
+
         self._name = name
         self._cube = cube
         self._iter_args = iter_args
         self._array_schema = array_schema
         self._cfg = slvr_cfg
         self._data = data
+        self._input_cache = input_cache
 
     @_setter_property
     def cube(self, value):
@@ -116,6 +120,10 @@ class SinkContext(object):
     @property
     def data(self):
         return self._data
+
+    @property
+    def input(self):
+        return self._input_cache
 
     @property
     def name(self):

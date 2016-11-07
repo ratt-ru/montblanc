@@ -188,6 +188,13 @@ class RimeSolver(MontblancTensorflowSolver):
                 slvr_cfg[Options.MS_VIS_INPUT_COLUMN]))
 
         #==================
+        # Data Source Cache
+        #==================
+
+        self._source_cache = {}
+        self._source_cache_lock = threading.Lock()
+
+        #==================
         # Data Sinks
         #==================
 
@@ -316,9 +323,9 @@ class RimeSolver(MontblancTensorflowSolver):
         # input queue arrays
         input_queue_sources = LQ.input_queue_sources
         data_sources = self._default_data_sources.copy()
-        data_sources.update({n: DataSource(f, cube.array(n).dtype, source.name())
-                                for source in source_providers
-                                for n, f in source.sources().iteritems()
+        data_sources.update({n: DataSource(f, cube.array(n).dtype, prov.name())
+                                for prov in source_providers
+                                for n, f in prov.sources().iteritems()
                                 if n in input_queue_sources})
 
         # Get source strides out before the local sizes are modified during
@@ -336,6 +343,9 @@ class RimeSolver(MontblancTensorflowSolver):
                 descriptor = session.run(LQ.parameter.dequeue_op)
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
+
+            # Make it read-only so we can hash the contents
+            descriptor.flags.writeable = False
 
             # Decode the descriptor and update our cube dimensions
             dims = self._transcoder.decode(descriptor)
@@ -391,15 +401,26 @@ class RimeSolver(MontblancTensorflowSolver):
             # Generate (name, placeholder, datasource, array schema)
             # for the arrays required by each queue
             iq = LQ.input
-            gen = [(a, ph, data_sources[a], array_schemas[a])
-                for ph, a in zip(iq.placeholders, iq.fed_arrays)]
+            gen = ((a, ph, data_sources[a], array_schemas[a])
+                for ph, a in zip(iq.placeholders, iq.fed_arrays))
 
-            # Create a feed dictionary by calling the data source functors
-            feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
+            # Get input data by calling the data source functors
+            input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
                     self.config(), global_iter_args,
                     cube.array(a) if a in cube.arrays() else {},
-                    ad.shape, ad.dtype))
-                for (a, ph, ds, ad) in gen }
+                    ad.shape, ad.dtype)))
+                for (a, ph, ds, ad) in gen]
+
+            # Create a feed dictionary from the input data
+            feed_dict = { ph: data for (a, ph, data) in input_data }
+
+            # Cache the inputs for this chunk of data,
+            # so that sinks can access them
+            input_cache = { a: data for (a, ph, data) in input_data }
+
+            # Guard access to the cache with a lock
+            with self._source_cache_lock:
+                self._source_cache[descriptor.data] = input_cache
 
             montblanc.log.debug("Enqueueing chunk {i} {d}".format(
                 i=chunks_fed, d=descriptor))
@@ -508,9 +529,9 @@ class RimeSolver(MontblancTensorflowSolver):
         global_iter_args = _iter_args(self._iter_dims, cube)
 
         # Get data sinks from supplied providers
-        data_sinks = { n: DataSink(f, sink.name())
-            for sink in sink_providers
-            for n, f in sink.sinks().iteritems()
+        data_sinks = { n: DataSink(f, prov.name())
+            for prov in sink_providers
+            for n, f in prov.sinks().iteritems()
             if not n == 'descriptor' }
 
 
@@ -523,6 +544,9 @@ class RimeSolver(MontblancTensorflowSolver):
             assert LQ.output.fed_arrays[0] == 'descriptor'
 
             descriptor = output[0]
+            # Make it read-only so we can hash the contents
+            descriptor.flags.writeable = False
+
             dims = self._transcoder.decode(descriptor)
             cube.update_dimensions(dims)
 
@@ -536,11 +560,21 @@ class RimeSolver(MontblancTensorflowSolver):
 
                     raise ex, None, sys.exc_info()[2]
 
+            # Obtain and remove input data from the source cache
+            with self._source_cache_lock:
+                try:
+                    input_data = self._source_cache.pop(descriptor.data)
+                except KeyError:
+                    raise ValueError("No input data cache available "
+                        "in source cache for descriptor {}!"
+                            .format(descriptor))
 
             # For each array in our output, call the associated data sink
             for n, a in zip(LQ.output.fed_arrays[1:], output[1:]):
-                sink_context = SinkContext(n, cube, self.config(), global_iter_args,
-                    cube.array(n) if n in cube.arrays() else {}, a)
+                sink_context = SinkContext(n, cube,
+                    self.config(), global_iter_args,
+                    cube.array(n) if n in cube.arrays() else {},
+                    a, input_data)
 
                 _supply_data(data_sinks[n], sink_context)
 
