@@ -258,6 +258,10 @@ def cache_fits_read(method):
 
     @functools.wraps(method)
     def memoizer(self, context):
+        # Defer to the method if no caching is enabled
+        if not self._is_cached:
+            return method(self, context)
+
         D = context.dimensions(copy=False)
         # (lower, upper) else (0, d)
         idx = ((D[d].lower_extent, D[d].upper_extent) if d in D
@@ -299,7 +303,8 @@ class FitsBeamSourceProvider(SourceProvider):
     inferrred from the first file found and subsequent files should match
     that shape.
     """
-    def __init__(self, filename_schema, l_axis=None, m_axis=None):
+    def __init__(self, filename_schema, l_axis=None, m_axis=None,
+        cache=False):
         """
         """
         l_axis, l_sign = _axis_and_sign('L' if l_axis is None else l_axis)
@@ -325,6 +330,7 @@ class FitsBeamSourceProvider(SourceProvider):
         self._shape = tuple(axes.naxis[d] for d in dim_indices) + (4,)
         self._beam_freq_map = axes.grid[f_ax]
 
+        self._is_cached = cache
         self._cache = collections.defaultdict(dict)
 
         # Now describe our dimension sizes

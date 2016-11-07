@@ -44,6 +44,10 @@ def cache_ms_read(method):
 
     @functools.wraps(method)
     def memoizer(self, context):
+        # Defer to the method if no caching is enabled
+        if not self._is_cached:
+            return method(self, context)
+
         D = context.dimensions(copy=False)
         # (lower, upper) else (0, d)
         idx = ((D[d].lower_extent, D[d].upper_extent) if d in D
@@ -62,7 +66,7 @@ def cache_ms_read(method):
     return memoizer
 
 class MSSourceProvider(SourceProvider):
-    def __init__(self, manager, vis_column=None):
+    def __init__(self, manager, vis_column=None, cache=False):
         # Cache columns on the object
         # Handle these columns slightly differently
         # They're used to compute the parallactic angle
@@ -82,6 +86,8 @@ class MSSourceProvider(SourceProvider):
         # Cache the phase direction for the field
         self._phase_dir = manager.field_table.getcol(MS.PHASE_DIR,
             startrow=manager.field_id, nrow=1)[0][0]
+
+        self._is_cached = cache
 
         self._cache = collections.defaultdict(dict)
 
