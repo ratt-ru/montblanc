@@ -262,11 +262,8 @@ def cache_fits_read(method):
         if not self._is_cached:
             return method(self, context)
 
-        D = context.dimensions(copy=False)
-        # (lower, upper) else (0, d)
-        idx = ((D[d].lower_extent, D[d].upper_extent) if d in D
-            else (0, d) for d in context.array(context.name).shape)
-        # Construct the key for the above index
+        # Construct the key for the given index
+        idx = context.array_extents(context.name)
         key = tuple(i for t in idx for i in t)
         # Access the sub-cache for this array
         array_cache = self._cache[context.name]

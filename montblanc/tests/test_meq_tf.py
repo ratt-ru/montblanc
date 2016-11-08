@@ -279,11 +279,11 @@ slvr = montblanc.rime_solver(slvr_cfg)
 ms_mgr = MeasurementSetManager(msfile, slvr_cfg)
 
 source_providers = []
-source_providers.append(MSSourceProvider(ms_mgr))
+source_providers.append(MSSourceProvider(ms_mgr, cache=True))
 
 if beam_on == 1:
     beam_prov = FitsBeamSourceProvider(beam_file_pattern,
-        l_axis=l_axis, m_axis='Y')
+        l_axis=l_axis, m_axis='Y', cache=True)
     source_providers.append(beam_prov)
 
 source_providers.append(RadioSourceProvider())
