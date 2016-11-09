@@ -19,6 +19,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import collections
+import itertools
 import threading
 import sys
 
@@ -52,7 +53,7 @@ rime = load_tf_lib()
 
 DataSource = collections.namedtuple("DataSource", ['source', 'dtype', 'name'])
 DataSink = collections.namedtuple("DataSink", ['sink', 'name'])
-
+FeedOnce = collections.namedtuple("FeedOnce", ['ph', 'var', 'assign_op'])
 
 class TensorflowThread(threading.Thread):
     def __init__(self, group=None, target=None, name=None, coordinator=None, *args, **kwargs):
@@ -194,6 +195,14 @@ class RimeSolver(MontblancTensorflowSolver):
         self._source_cache = {}
         self._source_cache_lock = threading.Lock()
 
+        #=========================
+        # Threading Infrastructure
+        #=========================
+
+        # Event used by the feed thread to signal
+        # the compute thread
+        self._compute_start_event = threading.Event()
+
         #==================
         # Data Sinks
         #==================
@@ -249,7 +258,8 @@ class RimeSolver(MontblancTensorflowSolver):
                 for n, p in cube.properties().iteritems() })
 
             # Create queues and expression
-            self._tf_queues = _construct_tensorflow_queues(dfs, cube)
+            self._tf_queues = _construct_tensorflow_queues(dfs, cube,
+                self._iter_dims)
             self._tf_expr = _construct_tensorflow_expression(
                 self._tf_queues, self._src_ph_vars)
 
@@ -320,13 +330,13 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Construct data sources from those supplied by the
         # source providers, if they're associated with
-        # input queue arrays
-        input_queue_sources = LQ.input_queue_sources
+        # input sources
+        input_sources = LQ.input_sources
         data_sources = self._default_data_sources.copy()
         data_sources.update({n: DataSource(f, cube.array(n).dtype, prov.name())
                                 for prov in source_providers
                                 for n, f in prov.sources().iteritems()
-                                if n in input_queue_sources})
+                                if n in input_sources})
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
@@ -397,6 +407,29 @@ class RimeSolver(MontblancTensorflowSolver):
                     raise ex, None, sys.exc_info()[2]
 
                 return data
+
+            # Handle variables that should only be fed once
+            if chunks_fed == 0:
+                # Construct a feed dictionary from data sources
+                feed_dict = {  ph: _get_data(data_sources[k],
+                        SourceContext(k, cube,
+                            self.config(), global_iter_args,
+                            cube.array(k) if k in cube.arrays() else {},
+                            array_schemas[k].shape,
+                            array_schemas[k].dtype))
+                    for k, (ph, var, assign_op)
+                    in LQ.feed_once.iteritems() }
+
+                # Construct a list of assign operations
+                assign_ops = [fo.assign_op for fo
+                    in LQ.feed_once.itervalues()]
+
+                # Run the assign operations
+                session.run(assign_ops, feed_dict=feed_dict)
+
+                # Signal that compute can now start
+                self._compute_start_event.set()
+
 
             # Generate (name, placeholder, datasource, array schema)
             # for the arrays required by each queue
@@ -478,6 +511,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         feed_dict.update({ ph: getattr(cube, n) for
             n, ph in self._property_ph_vars.iteritems() })
+
+        # Wait for feed thread to signal that compute can start
+        self._compute_start_event.wait()
 
         while not done:
             descriptor, enq = S.run(self._tf_expr,
@@ -605,6 +641,7 @@ class RimeSolver(MontblancTensorflowSolver):
             self._previous_budget = _budget(self.hypercube, self.config())
 
         try:
+            self._compute_start_event.clear()
             params = self._parameter_executor.submit(self._parameter_feed)
             feed = self._feed_executor.submit(self._feed, source_providers)
             compute = self._compute_executor.submit(self._compute)
@@ -661,25 +698,46 @@ class RimeSolver(MontblancTensorflowSolver):
         self.close()
 
 
-def _construct_tensorflow_queues(dfs, cube):
+def _construct_tensorflow_queues(dfs, cube, iter_dims):
     QUEUE_SIZE = 10
 
     Q = AttrDict()
     # Reference local queues
     Q.local = local = AttrDict()
 
+    #========================================================
+    # Determine which arrays need feeding once/multiple times
+    #========================================================
+
+    # Take all arrays flagged as input
+    input_arrays = [a for a in cube.arrays().itervalues()
+                    if a.get('input', False) == True]
+
+    def _partition(pred, iterable):
+        t1, t2 = itertools.tee(iterable)
+        return (itertools.ifilterfalse(pred, t1),
+            itertools.ifilter(pred, t2))
+
+    # Convert to set
+    iter_dims = set(iter_dims)
+
+    iterating = lambda a: len(iter_dims.intersection(a.shape)) > 0
+    feed_once, feed_all = _partition(iterating, input_arrays)
+    feed_once, feed_all = list(feed_once), list(feed_all)
+
+    #======================================
+    # Create tensorflow queues which
+    # require feeding multiple times
+    #======================================
+
     # Create the queue feeding parameters into the system
     local.parameter = create_queue_wrapper('descriptors',
         QUEUE_SIZE, ['descriptor'], dfs)
 
-    # Take all arrays flagged as input
-    input_arrays = [a.name for a in cube.arrays().itervalues()
-                    if a.get('input', False) == True]
-
     # Create the queue for holding the input
     local.input = create_queue_wrapper('input', QUEUE_SIZE,
-                                     ['descriptor'] + input_arrays,
-                                     dfs)
+                ['descriptor'] + [a.name for a in feed_all],
+                dfs)
 
     # Create source input queues
     local.point_source = create_queue_wrapper('point_source',
@@ -693,12 +751,6 @@ def _construct_tensorflow_queues(dfs, cube):
         QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
             'sersic_shape'], dfs)
 
-    local.output = create_queue_wrapper('output', QUEUE_SIZE,
-        ['descriptor', 'model_vis'], dfs)
-
-    # TODO: don't create objects on the object instance,
-    # instead we should return them
-
     # Source queues to feed
     local.src_queues = src_queues = {
         'npsrc' : local.point_source,
@@ -706,10 +758,51 @@ def _construct_tensorflow_queues(dfs, cube):
         'nssrc' : local.sersic_source,
     }
 
-    # Set of arrays that the queues feed
-    local.input_queue_sources = {a
-                             for q in [local.input] + src_queues.values()
-                             for a in q.fed_arrays}
+    #======================================
+    # The single output queue
+    #======================================
+
+    local.output = create_queue_wrapper('output', QUEUE_SIZE,
+        ['descriptor', 'model_vis'], dfs)
+
+    #=================================================
+    # Create tensorflow queues which are fed only once
+    # via an assign operation
+    #=================================================
+
+    def _make_feed_once_tuple(array):
+        dtype = dfs[array.name].dtype
+
+        ph = tf.placeholder(dtype=dtype,
+            name=a.name + "_placeholder")
+
+        var = tf.Variable(tf.zeros(shape=(1,), dtype=dtype),
+            validate_shape=False,
+            name=array.name)
+
+        op = tf.assign(var, ph, validate_shape=False)
+        #op = tf.Print(op, [tf.shape(var), tf.shape(op)],
+        #    message="Assigning {}".format(array.name))
+
+        return FeedOnce(ph, var, op)
+
+    # Create placeholders, variables and assign operators
+    # for data sources that we will only feed once
+    local.feed_once = { a.name : _make_feed_once_tuple(a)
+        for a in feed_once }
+
+    #=======================================================
+    # Construct the list of data sources that need feeding
+    #=======================================================
+
+    # Data sources from input queues
+    input_sources = {a for q in [local.input] + src_queues.values()
+        for a in q.fed_arrays}
+
+    # Data sources from feed once variables
+    input_sources.update(local.feed_once.keys())
+
+    local.input_sources = input_sources
 
     return Q
 
@@ -722,6 +815,7 @@ def _construct_tensorflow_expression(queues, src_ph_vars):
 
     # Pull RIME inputs out of the feed queues
     D = LQ.input.dequeue_to_attrdict()
+    D.update({k: fo.var for k, fo in LQ.feed_once.iteritems()})
 
     # Infer chunk dimensions
     model_vis_shape = tf.shape(D.model_vis)
