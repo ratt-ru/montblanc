@@ -64,15 +64,15 @@ def cache_ms_read(method):
 
 class MSSourceProvider(SourceProvider):
     def __init__(self, manager, vis_column=None, cache=False):
-        # Cache columns on the object
-        # Handle these columns slightly differently
-        # They're used to compute the parallactic angle
-        # TODO: Fit them into the cache_ms_read strategy at some point
-
         self._manager = manager
         self._name = "Measurement Set '{ms}'".format(ms=manager.msname)
 
         self._vis_column = 'DATA' if vis_column is None else vis_column
+
+        # Cache columns on the object
+        # Handle these columns slightly differently
+        # They're used to compute the parallactic angle
+        # TODO: Fit them into the cache_ms_read strategy at some point
 
         # Cache antenna positions
         self._antenna_positions = manager.antenna_table.getcol(MS.POSITION)
