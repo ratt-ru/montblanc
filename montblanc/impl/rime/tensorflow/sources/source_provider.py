@@ -46,9 +46,31 @@ class AbstractSourceProvider(object):
         """ Return an iterable/mapping of hypercube arrays to update """
         raise NotImplementedError()
 
+def find_sources(obj):
+    """
+    Returns a dictionary of source methods found on this object,
+    keyed on method name. Source methods are identified by
+    (self, context) arguments on this object. For example:
+
+    def f(self, context):
+        ...
+
+    is a source method, but
+
+    def f(self, ctx):
+        ...
+
+    is not.
+
+    """
+    SOURCE_ARGSPEC = ['self', 'context']
+
+    return { n: m for n, m in inspect.getmembers(obj, inspect.ismethod)
+        if inspect.getargspec(m)[0] == SOURCE_ARGSPEC }
+
+
 class SourceProvider(AbstractSourceProvider):
 
-    SOURCE_ARGSPEC = ['self', 'context']
 
     def close(self):
         """ Perform any required cleanup. """
@@ -76,10 +98,12 @@ class SourceProvider(AbstractSourceProvider):
 
         """
 
-        return { n: m for n, m
-            in inspect.getmembers(self, inspect.ismethod)
-            if inspect.getargspec(m)[0] == self.SOURCE_ARGSPEC
-        }
+        try:
+            return self._sources
+        except AttributeError:
+            self._sources = find_sources(self)
+
+        return self._sources
 
     def updated_dimensions(self):
         """ Return an iterable/mapping of hypercube dimensions to update """

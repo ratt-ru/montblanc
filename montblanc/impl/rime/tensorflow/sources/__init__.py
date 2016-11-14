@@ -19,7 +19,8 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 from montblanc.impl.rime.tensorflow.sources.source_context import SourceContext
-from montblanc.impl.rime.tensorflow.sources.source_provider import SourceProvider
+from montblanc.impl.rime.tensorflow.sources.source_provider import (SourceProvider,
+    find_sources)
 from montblanc.impl.rime.tensorflow.sources.ms_source_provider import MSSourceProvider
 from montblanc.impl.rime.tensorflow.sources.np_source_provider import NumpySourceProvider
 from montblanc.impl.rime.tensorflow.sources.fits_beam_source_provider import FitsBeamSourceProvider
@@ -28,7 +29,7 @@ def test():
     import argparse
     import copy
     import time
-   
+
     import numpy as np
 
     parser = argparse.ArgumentParser()
