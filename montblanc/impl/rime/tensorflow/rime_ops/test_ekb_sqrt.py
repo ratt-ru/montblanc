@@ -3,8 +3,9 @@ import os
 import numpy as np
 import tensorflow as tf
 
-# Load the shared library with the operation
-rime = tf.load_op_library(os.path.join(os.getcwd(), 'rime.so'))
+# Load the library containing the custom operation
+from montblanc.impl.rime.tensorflow import load_tf_lib
+rime = load_tf_lib()
 
 dtype = np.float64
 ctype = np.complex64 if dtype == np.float32 else np.complex128

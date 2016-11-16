@@ -17,7 +17,7 @@ MONTBLANC_NAMESPACE_BEGIN
 MONTBLANC_GAUSS_SHAPE_NAMESPACE_BEGIN
 
 // For simpler partial specialisation
-typedef Eigen::GpuDevice GPUDevice; 
+typedef Eigen::GpuDevice GPUDevice;
 
 // Traits class defined by float types
 template <typename FT> class LaunchTraits;
@@ -131,14 +131,6 @@ public:
         const tf::Tensor & in_frequency = context->input(3);
         const tf::Tensor & in_gauss_params = context->input(4);
 
-        OP_REQUIRES(context, in_uvw.dims() == 3 && in_uvw.dim_size(2) == 3,
-            tf::errors::InvalidArgument(
-                "uvw should be of shape (ntime, na, 3)"))
-
-        OP_REQUIRES(context, in_gauss_params.dims() == 2 && in_gauss_params.dim_size(0) == 3,
-            tf::errors::InvalidArgument(
-                "gauss_params should be of shape (3, ngsrc)"))
-
         int ntime = in_uvw.dim_size(0);
         int na = in_uvw.dim_size(1);
         int nbl = in_antenna1.dim_size(1);
@@ -150,7 +142,7 @@ public:
         // Allocate an output tensor
         tf::Tensor * gauss_shape_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
-            0, gauss_shape_shape, &gauss_shape_ptr));        
+            0, gauss_shape_shape, &gauss_shape_ptr));
 
         using LTr = LaunchTraits<FT>;
         using Tr = montblanc::kernel_traits<FT>;
@@ -160,7 +152,7 @@ public:
             nchan, nbl, ntime);
         dim3 grid(montblanc::grid_from_thread_block(
             block, nchan, nbl, ntime));
-        
+
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
         auto uvw = reinterpret_cast<const typename Tr::uvw_type *>(

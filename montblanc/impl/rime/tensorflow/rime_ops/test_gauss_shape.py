@@ -3,7 +3,9 @@ import os
 import numpy as np
 import tensorflow as tf
 
-rime = tf.load_op_library(os.path.join(os.getcwd(), 'rime.so'))
+# Load the library containing the custom operation
+from montblanc.impl.rime.tensorflow import load_tf_lib
+rime = load_tf_lib()
 
 dtype = np.float32
 ngsrc, ntime, na, nchan = 10, 15, 7, 16

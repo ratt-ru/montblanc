@@ -49,7 +49,7 @@ ${project_namespace_start}
 ${op_namespace_start}
 
 // For simpler partial specialisation
-typedef Eigen::ThreadPoolDevice CPUDevice; 
+typedef Eigen::ThreadPoolDevice CPUDevice;
 
 // Specialise the ${opname} op for CPUs
 template <typename FT>
@@ -68,7 +68,7 @@ public:
         // Allocate an output tensor
         tf::Tensor * output_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
-            0, in_input.shape(), &output_ptr));        
+            0, in_input.shape(), &output_ptr));
 
 
         int N = in_input.dim_size(0);
@@ -94,14 +94,51 @@ ${project_namespace_stop}
 CPP_SOURCE_TEMPLATE = string.Template(
 """#include "${cpp_header_file}"
 
+#include "tensorflow/core/framework/shape_inference.h"
+
 ${project_namespace_start}
 ${op_namespace_start}
+
+using tensorflow::shape_inference::InferenceContext;
+using tensorflow::shape_inference::ShapeHandle;
+using tensorflow::shape_inference::DimensionHandle;
+using tensorflow::Status;
+
+auto shape_function = [](InferenceContext* c) {
+    // Dummies for tests
+    ShapeHandle input;
+    DimensionHandle d;
+
+    ShapeHandle in = c->input(0);
+
+    // Assert that in has 1 dimension
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in, 1, &input),
+        "in shape must be [N, ] but is " + c->DebugString(in));
+
+    // Assert that in has a certain size
+    // TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in, 0), N, &d),
+    //     "in shape must be [N, ] but is " + c->DebugString(in));
+
+    // Infer the shape of the output tensor,
+    // in this case, the same shape as our input tensor
+    ShapeHandle out = c->MakeShape({
+        c->Dim(in, 0)
+    });
+
+    // Set the shape of the first output
+    c->set_output(0, out);
+
+    // printf("output shape %s\n", c->DebugString(out).c_str());;
+
+    return Status::OK();
+};
 
 // Register the ${opname} operator.
 REGISTER_OP("${opname}")
     .Input("in: FT")
     .Output("out: FT")
-    .Attr("FT: {double, float} = DT_FLOAT");
+    .Attr("FT: {double, float} = DT_FLOAT")
+    .SetShapeFn(shape_function);
 
 // Register a CPU kernel for ${opname} that handles floats
 REGISTER_KERNEL_BUILDER(
@@ -145,7 +182,7 @@ ${project_namespace_start}
 ${op_namespace_start}
 
 // For simpler partial specialisation
-typedef Eigen::GpuDevice GPUDevice; 
+typedef Eigen::GpuDevice GPUDevice;
 
 // LaunchTraits struct defining
 // kernel block sizes for floats and doubles
@@ -198,14 +235,14 @@ public:
         // Allocate an output tensor
         tf::Tensor * output_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
-            0, in_input.shape(), &output_ptr));        
+            0, in_input.shape(), &output_ptr));
 
         using LTr = LaunchTraits<FT>;
 
         // Set up our CUDA thread block and grid
         dim3 block(LTr::BLOCKDIMX);
         dim3 grid((N + block.x - 1)/block.x);
-        
+
         // Get the GPU device
         const auto & device = context->eigen_device<GPUDevice>();
 
@@ -273,6 +310,11 @@ import tensorflow as tf
 
 # Load the shared library with the operation
 ${module} = tf.load_op_library(os.path.join(os.getcwd(),'${library}'))
+
+# Register the shape function for the operation
+from tensorflow.python.framework import common_shapes
+from tensorflow.python.framework import ops
+ops.RegisterShape("${opname}")(common_shapes.call_cpp_shape_fn)
 
 # Create some input and wrap it in a tensorflow Variable
 np_array = np.random.random(size=512*1024).astype(np.float32)

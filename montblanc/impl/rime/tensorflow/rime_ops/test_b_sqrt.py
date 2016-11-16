@@ -5,7 +5,8 @@ import numpy as np
 import tensorflow as tf
 
 # Load the library containing the custom operation
-rime = tf.load_op_library(os.path.join(os.getcwd(), 'rime.so'))
+from montblanc.impl.rime.tensorflow import load_tf_lib
+rime = load_tf_lib()
 
 def b_sqrt_op(stokes, alpha, frequency, ref_freq):
     """

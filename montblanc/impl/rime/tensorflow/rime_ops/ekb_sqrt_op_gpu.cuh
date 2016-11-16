@@ -17,7 +17,7 @@ MONTBLANC_NAMESPACE_BEGIN
 MONTBLANC_EKB_SQRT_NAMESPACE_BEGIN
 
 // For simpler partial specialisation
-typedef Eigen::GpuDevice GPUDevice; 
+typedef Eigen::GpuDevice GPUDevice;
 
 // LaunchTraits struct defining
 // kernel block sizes for floats and doubles
@@ -80,7 +80,7 @@ __global__ void rime_ekb_sqrt(
         montblanc::complex_multiply_in_place<FT>(cplx_phase, brightness_sqrt);
 
         i = src_time_ant*npolchan + polchan;
-        CT E = ejones[i];      
+        CT E = ejones[i];
 
         // Load in the E Beam and multiply by KB
         montblanc::jones_multiply_4x4_in_place<FT>(E, cplx_phase);
@@ -115,29 +115,12 @@ public:
         int npol = in_bsqrt.dim_size(3);
         int npolchan = nchan*npol;
 
-        OP_REQUIRES(context, in_bsqrt.dims() == 4 &&
-            in_bsqrt.dim_size(0) == nsrc &&
-            in_bsqrt.dim_size(1) == ntime &&
-            in_bsqrt.dim_size(2) == nchan &&
-            in_bsqrt.dim_size(3) == npol,
-            tf::errors::InvalidArgument(
-                "bsqrt should be of shape (nsrc,ntime,nchan,npol)"))
-
-        OP_REQUIRES(context, in_ejones.dims() == 5 &&
-            in_ejones.dim_size(0) == nsrc &&
-            in_ejones.dim_size(1) == ntime &&
-            in_ejones.dim_size(2) == na &&
-            in_ejones.dim_size(3) == nchan &&
-            in_ejones.dim_size(4) == npol,
-            tf::errors::InvalidArgument(
-                "ejones should be of shape (nsrc,ntime,na,nchan,npol)"))
-
         tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
 
         // Allocate an output tensor
         tf::Tensor * ant_jones_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
-            0, ant_jones_shape, &ant_jones_ptr));        
+            0, ant_jones_shape, &ant_jones_ptr));
 
         using LTr = LaunchTraits<FT>;
         using Tr =  montblanc::kernel_traits<FT>;
@@ -148,7 +131,7 @@ public:
             npolchan, na, ntime);
         dim3 grid(montblanc::grid_from_thread_block(
             block, npolchan, na, ntime));
-        
+
         // Get the GPU device
         const auto & device = context->eigen_device<GPUDevice>();
 

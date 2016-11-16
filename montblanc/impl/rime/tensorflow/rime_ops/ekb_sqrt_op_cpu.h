@@ -39,23 +39,6 @@ public:
         int nchan = in_complex_phase.dim_size(3);
         int npol = in_bsqrt.dim_size(3);
 
-        OP_REQUIRES(context, in_bsqrt.dims() == 4 &&
-            in_bsqrt.dim_size(0) == nsrc &&
-            in_bsqrt.dim_size(1) == ntime &&
-            in_bsqrt.dim_size(2) == nchan &&
-            in_bsqrt.dim_size(3) == npol,
-            tf::errors::InvalidArgument(
-                "bsqrt should be of shape (nsrc,ntime,nchan,npol)"))
-
-        OP_REQUIRES(context, in_ejones.dims() == 5 &&
-            in_ejones.dim_size(0) == nsrc &&
-            in_ejones.dim_size(1) == ntime &&
-            in_ejones.dim_size(2) == na &&
-            in_ejones.dim_size(3) == nchan &&
-            in_ejones.dim_size(4) == npol,
-            tf::errors::InvalidArgument(
-                "ejones should be of shape (nsrc,ntime,na,nchan,npol)"))
-
         tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
 
         // Allocate an output tensor

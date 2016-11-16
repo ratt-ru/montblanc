@@ -409,36 +409,6 @@ public:
         const tf::Tensor & in_beam_freq_map = context->input(6);
         const tf::Tensor & in_ebeam = context->input(7);
 
-        OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
-            tf::errors::InvalidArgument("lm should be of shape (nsrc, 2)"))
-
-        OP_REQUIRES(context, in_frequency.dims() == 1,
-            tf::errors::InvalidArgument("frequency should be of shape (nchan,)"))
-
-        OP_REQUIRES(context, in_point_errors.dims() == 4
-            && in_point_errors.dim_size(3) == 2,
-            tf::errors::InvalidArgument("point_errors should be of shape "
-                                        "(ntime, na, nchan, 2)"))
-
-        OP_REQUIRES(context, in_antenna_scaling.dims() == 3
-            && in_antenna_scaling.dim_size(2) == 2,
-            tf::errors::InvalidArgument("antenna_scaling should be of shape "
-                                        "(na, nchan, 2)"))
-
-        OP_REQUIRES(context, in_ebeam.dims() == 4
-            && in_ebeam.dim_size(3) == 4,
-            tf::errors::InvalidArgument("E_Beam should be of shape "
-                                        "(beam_lw, beam_mh, beam_nud, 4)"))
-
-        OP_REQUIRES(context, in_parallactic_angle.dims() == 2,
-            tf::errors::InvalidArgument("parallactic_angle should be of shape "
-                                        "(ntime, na)"))
-
-        OP_REQUIRES(context, in_beam_extents.dims() == 1
-            && in_beam_extents.dim_size(0) == 6,
-            tf::errors::InvalidArgument("beam_extents should be of shape "
-                                        "(6,)"))
-
         // Extract problem dimensions
         int nsrc = in_lm.dim_size(0);
         int ntime = in_point_errors.dim_size(0);

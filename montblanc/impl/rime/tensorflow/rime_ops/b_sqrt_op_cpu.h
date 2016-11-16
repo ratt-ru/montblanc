@@ -31,22 +31,6 @@ public:
         const tf::Tensor & in_frequency = context->input(2);
         const tf::Tensor & in_ref_freq = context->input(3);
 
-        OP_REQUIRES(context, in_stokes.dims() == 3 && in_stokes.dim_size(2) == 4,
-            tf::errors::InvalidArgument(
-                "stokes should be of shape (nsrc, ntime, 4)"))
-
-        OP_REQUIRES(context, in_alpha.dims() == 2,
-            tf::errors::InvalidArgument(
-                "alpha should be of shape (nsrc, ntime)"))
-
-        OP_REQUIRES(context, in_frequency.dims() == 1,
-            tf::errors::InvalidArgument(
-                "frequency should be of shape (nchan)"))
-
-        OP_REQUIRES(context, in_ref_freq.dims() == 1,
-            tf::errors::InvalidArgument(
-                "ref_frequency should be of shape (nchan)"))
-
         // Extract problem dimensions
         int nsrc = in_stokes.dim_size(0);
         int ntime = in_stokes.dim_size(1);

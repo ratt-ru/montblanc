@@ -35,14 +35,6 @@ public:
         const tf::Tensor & in_frequency = context->input(3);
         const tf::Tensor & in_sersic_params = context->input(4);
 
-        OP_REQUIRES(context, in_uvw.dims() == 3 && in_uvw.dim_size(2) == 3,
-            tf::errors::InvalidArgument(
-                "uvw should be of shape (ntime, na, 3)"))
-
-        OP_REQUIRES(context, in_sersic_params.dims() == 2 && in_sersic_params.dim_size(0) == 3,
-            tf::errors::InvalidArgument(
-                "sersic_params should be of shape (3, nssrc)"))
-
         int ntime = in_uvw.dim_size(0);
         int na = in_uvw.dim_size(1);
         int nbl = in_antenna1.dim_size(1);

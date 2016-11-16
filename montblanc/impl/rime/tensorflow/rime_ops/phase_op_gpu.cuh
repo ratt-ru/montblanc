@@ -132,18 +132,6 @@ public:
         const tf::Tensor & in_uvw = context->input(1);
         const tf::Tensor & in_frequency = context->input(2);
 
-        OP_REQUIRES(context, in_lm.dims() == 2 && in_lm.dim_size(1) == 2,
-            tf::errors::InvalidArgument(
-                "lm should be of shape (nsrc, 2)"))
-
-        OP_REQUIRES(context, in_uvw.dims() == 3 && in_uvw.dim_size(2) == 3,
-            tf::errors::InvalidArgument(
-                "uvw should be of shape (ntime, na, 3)"))
-
-        OP_REQUIRES(context, in_frequency.dims() == 1,
-            tf::errors::InvalidArgument(
-                "frequency should be of shape (nchan)"))
-
         // Extract problem dimensions
         int nsrc = in_lm.dim_size(0);
         int ntime = in_uvw.dim_size(0);
