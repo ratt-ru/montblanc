@@ -105,7 +105,7 @@ void find_freq_bounds(int & lower, int & upper,
     using FT = typename Traits::FT;
 
     lower = 0;
-    upper = cdata->beam_nud;
+    upper = cdata->beam_nud-1;
 
     // Warp divergence here, unlikely
     // to be a big deal though
