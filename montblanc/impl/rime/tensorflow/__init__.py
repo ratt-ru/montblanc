@@ -20,15 +20,23 @@
 
 import os
 
+__rime_lib = None
+
 def load_tf_lib():
     """ Load the tensorflow library """
+
+    global __rime_lib
+
+    if __rime_lib is not None:
+        return __rime_lib
+
     import tensorflow as tf
     from tensorflow.python.framework import common_shapes
     from tensorflow.python.framework import ops
 
     path = os.path.dirname(__file__)
     rime_lib_path = os.path.join(path, 'rime_ops', 'rime.so')
-    rime_lib = tf.load_op_library(rime_lib_path)
+    __rime_lib = tf.load_op_library(rime_lib_path)
 
     # Register shape operators
     # TODO(sperkins) Find some other more sensible place to do this
@@ -40,5 +48,5 @@ def load_tf_lib():
     ops.RegisterShape("SersicShape")(common_shapes.call_cpp_shape_fn)
     ops.RegisterShape("SumCoherencies")(common_shapes.call_cpp_shape_fn)
 
-    return rime_lib
+    return __rime_lib
 
