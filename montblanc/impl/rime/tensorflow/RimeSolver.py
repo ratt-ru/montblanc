@@ -246,22 +246,11 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Create all tensorflow constructs within the compute graph
         with tf.Graph().as_default() as compute_graph:
-
-            # Create placholder variables for source counts
-            self._src_ph_vars = AttrDict({
-                n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
-                for n in ['nsrc'] + mbu.source_nr_vars()})
-
-            # Create placeholder variables for properties
-            self._property_ph_vars = AttrDict({
-                n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
-                for n, p in cube.properties().iteritems() })
-
-            # Create queues and expression
-            self._tf_queues = _construct_tensorflow_queues(dfs, cube,
-                self._iter_dims)
+            # Create feed data and expression
+            self._tf_feed_data = _construct_tensorflow_feed_data(dfs,
+                cube, self._iter_dims)
             self._tf_expr = _construct_tensorflow_expression(
-                self._tf_queues, self._src_ph_vars)
+                self._tf_feed_data)
 
             # Initialisation operation
             init_op = tf.initialize_all_variables()
@@ -291,7 +280,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Copy dimensions of the main cube
         cube = self.hypercube.copy()
-        LQ = self._tf_queues.local
+        LQ = self._tf_feed_data.local
 
         # Get space of iteration
         iter_args = _iter_args(self._iter_dims, cube)
@@ -323,7 +312,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Maintain a hypercube based on the main cube
         cube = self.hypercube.copy()
-        LQ = self._tf_queues.local
+        LQ = self._tf_feed_data.local
 
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
@@ -501,16 +490,17 @@ class RimeSolver(MontblancTensorflowSolver):
         run_metadata = tf.RunMetadata()
 
         S = self._tf_session
+        FD = self._tf_feed_data
         chunks_computed = 0
         done = False
 
         cube = self.hypercube
 
         feed_dict = { ph: cube.dim_global_size(n) for
-            n, ph in self._src_ph_vars.iteritems() }
+            n, ph in FD.src_ph_vars.iteritems() }
 
         feed_dict.update({ ph: getattr(cube, n) for
-            n, ph in self._property_ph_vars.iteritems() })
+            n, ph in FD.property_ph_vars.iteritems() })
 
         # Wait for feed thread to signal that compute can start
         self._compute_start_event.wait()
@@ -559,7 +549,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Maintain a hypercube based on the main cube
         cube = self.hypercube.copy()
-        LQ = self._tf_queues.local
+        LQ = self._tf_feed_data.local
 
         # Get space of iteration
         global_iter_args = _iter_args(self._iter_dims, cube)
@@ -698,12 +688,22 @@ class RimeSolver(MontblancTensorflowSolver):
         self.close()
 
 
-def _construct_tensorflow_queues(dfs, cube, iter_dims):
+def _construct_tensorflow_feed_data(dfs, cube, iter_dims):
     QUEUE_SIZE = 10
 
-    Q = AttrDict()
+    FD = AttrDict()
     # Reference local queues
-    Q.local = local = AttrDict()
+    FD.local = local = AttrDict()
+
+    # Create placholder variables for source counts
+    FD.src_ph_vars = AttrDict({
+        n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
+        for n in ['nsrc'] + mbu.source_nr_vars()})
+
+    # Create placeholder variables for properties
+    FD.property_ph_vars = AttrDict({
+        n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
+        for n, p in cube.properties().iteritems() })
 
     #========================================================
     # Determine which arrays need feeding once/multiple times
@@ -804,14 +804,15 @@ def _construct_tensorflow_queues(dfs, cube, iter_dims):
 
     local.input_sources = input_sources
 
-    return Q
+    return FD
 
-def _construct_tensorflow_expression(queues, src_ph_vars):
+def _construct_tensorflow_expression(feed_data):
     """ Constructs a tensorflow expression for computing the RIME """
     zero = tf.constant(0)
     src_count = zero
+    src_ph_vars = feed_data.src_ph_vars
 
-    LQ = queues.local
+    LQ = feed_data.local
 
     # Pull RIME inputs out of the feed queues
     D = LQ.input.dequeue_to_attrdict()
