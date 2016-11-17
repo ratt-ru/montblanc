@@ -64,7 +64,6 @@ class TensorflowThread(threading.Thread):
         while not self._tf_coord.should_stop():
             self._tf_coord.request_stop()
 
-
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
 
@@ -195,14 +194,6 @@ class RimeSolver(MontblancTensorflowSolver):
         self._source_cache = {}
         self._source_cache_lock = threading.Lock()
 
-        #=========================
-        # Threading Infrastructure
-        #=========================
-
-        # Event used by the feed thread to signal
-        # the compute thread
-        self._compute_start_event = threading.Event()
-
         #==================
         # Data Sinks
         #==================
@@ -298,34 +289,18 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.info("Done feeding {n} parameters.".format(
             n=parameters_fed))
 
-    def _feed(self, source_providers):
+    def _feed(self, cube, data_sources, global_iter_args):
         """ Feed stub """
         try:
-            self._feed_impl(source_providers)
+            self._feed_impl(cube, data_sources, global_iter_args)
         except Exception as e:
             montblanc.log.exception("Feed Exception")
             raise
 
-    def _feed_impl(self, source_providers):
+    def _feed_impl(self, cube, data_sources, global_iter_args):
         """ Implementation of queue feeding """
         session = self._tf_session
-
-        # Maintain a hypercube based on the main cube
-        cube = self.hypercube.copy()
         LQ = self._tf_feed_data.local
-
-        # Get space of iteration
-        global_iter_args = _iter_args(self._iter_dims, cube)
-
-        # Construct data sources from those supplied by the
-        # source providers, if they're associated with
-        # input sources
-        input_sources = LQ.input_sources
-        data_sources = self._default_data_sources.copy()
-        data_sources.update({n: DataSource(f, cube.array(n).dtype, prov.name())
-                                for prov in source_providers
-                                for n, f in prov.sources().iteritems()
-                                if n in input_sources})
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
@@ -361,64 +336,6 @@ class RimeSolver(MontblancTensorflowSolver):
             # but they need to work within the feeding framework
             array_schemas['descriptor'] = descriptor
             data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32, 'Internal')
-
-            def _get_data(data_source, context):
-                try:
-                    # Try and get data from the data source
-                    data = data_source.source(context)
-
-                    # Complain about None values
-                    if data is None:
-                        raise ValueError("'None' returned from "
-                            "data source '{n}'".format(n=context.name))
-                    elif not isinstance(data, np.ndarray):
-                        raise TypeError("Data source '{n}' did not "
-                            "return a numpy array, returned a '{t}'".format(
-                                t=type(data)))
-
-                    # Check that the data matches the expected shape
-                    same = (data.shape == context.shape and
-                            data.dtype == context.dtype)
-
-                    if not same:
-                        raise ValueError("Expected data of shape '{esh}' and "
-                            "dtype '{edt}' for data source '{n}', but "
-                            "shape '{rsh}' and '{rdt}' was found instead".format(
-                                n=context.name,
-                                esh=context.shape, edt=context.dtype,
-                                rsh=data.shape, rdt=data.dtype))
-                except Exception as e:
-                    ex = ValueError("An exception occurred while "
-                        "obtaining data from data source '{ds}'\n\n"
-                        "{e}\n\n"
-                        "{help}".format(e=str(e), ds=context.name, help=context.help()))
-
-                    raise ex, None, sys.exc_info()[2]
-
-                return data
-
-            # Handle variables that should only be fed once
-            if chunks_fed == 0:
-                # Construct a feed dictionary from data sources
-                feed_dict = {  ph: _get_data(data_sources[k],
-                        SourceContext(k, cube,
-                            self.config(), global_iter_args,
-                            cube.array(k) if k in cube.arrays() else {},
-                            array_schemas[k].shape,
-                            array_schemas[k].dtype))
-                    for k, (ph, var, assign_op)
-                    in LQ.feed_once.iteritems() }
-
-                # Construct a list of assign operations
-                assign_ops = [fo.assign_op for fo
-                    in LQ.feed_once.itervalues()]
-
-                # Run the assign operations
-                session.run(assign_ops, feed_dict=feed_dict)
-
-                # Signal that compute can now start
-                self._compute_start_event.set()
-
 
             # Generate (name, placeholder, datasource, array schema)
             # for the arrays required by each queue
@@ -502,9 +419,6 @@ class RimeSolver(MontblancTensorflowSolver):
         feed_dict.update({ ph: getattr(cube, n) for
             n, ph in FD.property_ph_vars.iteritems() })
 
-        # Wait for feed thread to signal that compute can start
-        self._compute_start_event.wait()
-
         while not done:
             descriptor, enq = S.run(self._tf_expr,
                 feed_dict=feed_dict,
@@ -576,16 +490,6 @@ class RimeSolver(MontblancTensorflowSolver):
             dims = self._transcoder.decode(descriptor)
             cube.update_dimensions(dims)
 
-            def _supply_data(data_sink, context):
-                try:
-                    data_sink.sink(context)
-                except Exception as e:
-                    ex = ValueError("An exception occurred while "
-                        "supplying data to data sink '{ds}'\n\n"
-                        "{help}".format(ds=context.name, help=context.help()))
-
-                    raise ex, None, sys.exc_info()[2]
-
             # Obtain and remove input data from the source cache
             with self._source_cache_lock:
                 try:
@@ -630,10 +534,45 @@ class RimeSolver(MontblancTensorflowSolver):
         if bytes_required > self._previous_budget:
             self._previous_budget = _budget(self.hypercube, self.config())
 
+        #===================================
+        # Assign data to Feed Once variables
+        #===================================
+
+        # Copy the hypercube
+        cube = self.hypercube.copy()
+        global_iter_args = _iter_args(self._iter_dims, cube)
+        array_schemas = cube.arrays(reify=True)
+
+        # Construct data sources from those supplied by the
+        # source providers, if they're associated with
+        # input sources
+        LQ = self._tf_feed_data.local
+        input_sources = LQ.input_sources
+        data_sources = self._default_data_sources.copy()
+        data_sources.update({n: DataSource(f, cube.array(n).dtype, prov.name())
+                                for prov in source_providers
+                                for n, f in prov.sources().iteritems()
+                                if n in input_sources})
+
+
+        # Construct a feed dictionary from data sources
+        feed_dict = {  ph: _get_data(data_sources[k],
+                SourceContext(k, cube,
+                    self.config(), global_iter_args,
+                    cube.array(k) if k in cube.arrays() else {},
+                    array_schemas[k].shape,
+                    array_schemas[k].dtype))
+            for k, (ph, var, assign_op)
+            in LQ.feed_once.iteritems() }
+
+        # Run the assign operations for each feed_once variable
+        self._tf_session.run([fo.assign_op for fo in LQ.feed_once.itervalues()],
+            feed_dict=feed_dict)
+
         try:
-            self._compute_start_event.clear()
             params = self._parameter_executor.submit(self._parameter_feed)
-            feed = self._feed_executor.submit(self._feed, source_providers)
+            feed = self._feed_executor.submit(self._feed, cube, data_sources,
+                global_iter_args)
             compute = self._compute_executor.submit(self._compute)
             consume = self._consumer_executor.submit(self._consume, sink_providers)
 
@@ -921,6 +860,49 @@ def _construct_tensorflow_expression(feed_data):
     # Return descriptor and enqueue operation
     return D.descriptor, enqueue_op
 
+def _get_data(data_source, context):
+    """ Get data from the data source, checking the return values """
+    try:
+        # Get data from the data source
+        data = data_source.source(context)
+
+        # Complain about None values
+        if data is None:
+            raise ValueError("'None' returned from "
+                "data source '{n}'".format(n=context.name))
+        # We want numpy arrays
+        elif not isinstance(data, np.ndarray):
+            raise TypeError("Data source '{n}' did not "
+                "return a numpy array, returned a '{t}'".format(
+                    t=type(data)))
+        # And they should be the right shape and type
+        elif data.shape != context.shape or data.dtype != context.dtype:
+            raise ValueError("Expected data of shape '{esh}' and "
+                "dtype '{edt}' for data source '{n}', but "
+                "shape '{rsh}' and '{rdt}' was found instead".format(
+                    n=context.name, esh=context.shape, edt=context.dtype,
+                    rsh=data.shape, rdt=data.dtype))
+
+        return data
+
+    except Exception as e:
+        ex = ValueError("An exception occurred while "
+            "obtaining data from data source '{ds}'\n\n"
+            "{e}\n\n"
+            "{help}".format(e=str(e), ds=context.name, help=context.help()))
+
+        raise ex, None, sys.exc_info()[2]
+
+def _supply_data(data_sink, context):
+    """ Supply data to the data sink """
+    try:
+        data_sink.sink(context)
+    except Exception as e:
+        ex = ValueError("An exception occurred while "
+            "supplying data to data sink '{ds}'\n\n"
+            "{help}".format(ds=context.name, help=context.help()))
+
+        raise ex, None, sys.exc_info()[2]
 
 
 def _last_chunk(dims):
@@ -1088,3 +1070,4 @@ def _apply_source_provider_dim_updates(cube, source_providers):
 
     # Return our cube size
     return cube.bytes_required()
+
