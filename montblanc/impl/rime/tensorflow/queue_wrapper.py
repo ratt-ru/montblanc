@@ -101,6 +101,54 @@ class QueueWrapper(object):
             s=len(self._queue_types),
             t=self._queue_types)
 
+class SingleInputMultiQueueWrapper(QueueWrapper):
+    def __init__(self, name, queue_size, fed_arrays, data_sources,
+        shared_name=None, count=4):
+
+        super(SingleInputMultiQueueWrapper, self).__init__(name, queue_size,
+            fed_arrays, data_sources, shared_name)
+
+        R = range(1, count)
+
+        extra_names = ['%s_%s' % (name, i) for i in R]
+        extra_shared_names = ['%s_%s' % (shared_name, i) for i in R]
+
+        extra_queues = [tf.FIFOQueue(queue_size, self._queue_types,
+                name=n, shared_name=sn)
+            for n, sn in zip(extra_names, extra_shared_names)]
+
+        extra_enqueue_ops = [q.enqueue(self._placeholders) for q in extra_queues]
+        extra_dequeue_ops = [q.dequeue() for q in extra_queues]
+        extra_close_ops = [q.close() for q in extra_queues]
+        extra_size_ops = [q.size() for q in extra_queues]
+
+        self._names = [self._name] + extra_names
+        self._queues = [self._queue] + extra_queues
+        self._enqueue_ops = [self._enqueue_op] + extra_enqueue_ops
+        self._dequeue_ops = [self._dequeue_op] + extra_dequeue_ops
+        self._size_ops = [self._size_op] + extra_size_ops
+
+    @property
+    def name(self):
+        return self._names
+
+    @property
+    def queue(self):
+        return self._queues
+
+    @property
+    def enqueue_op(self):
+        return self._enqueue_ops
+
+    @property
+    def dequeue_op(self):
+        return self._dequeue_ops
+
+    @property
+    def close_op(self):
+        return self._close_ops
+
+
 def create_queue_wrapper(name, queue_size, fed_arrays, data_sources, *args, **kwargs):
     """
     Arguments
@@ -114,4 +162,7 @@ def create_queue_wrapper(name, queue_size, fed_arrays, data_sources, *args, **kw
             (lambda/method, dtype) tuples, keyed on array names
 
     """
-    return QueueWrapper(name, queue_size, fed_arrays, data_sources, *args, **kwargs)
+
+    qtype = SingleInputMultiQueueWrapper if 'count' in kwargs else QueueWrapper
+    return qtype(name, queue_size, fed_arrays, data_sources, *args, **kwargs)
+
