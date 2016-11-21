@@ -304,7 +304,8 @@ class RimeSolver(MontblancTensorflowSolver):
             # descriptor queue items. These aren't full on arrays per se
             # but they need to work within the feeding framework
             array_schemas['descriptor'] = descriptor
-            data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32, 'Internal')
+            data_sources['descriptor'] = DataSource(lambda c: descriptor,
+                np.int32, 'Internal')
 
             # Generate (name, placeholder, datasource, array schema)
             # for the arrays required by each queue
