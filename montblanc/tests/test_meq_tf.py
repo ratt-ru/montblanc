@@ -49,6 +49,12 @@ cfg_section = 'montblanc-compare'
 from montblanc.impl.rime.tensorflow.sources.fits_beam_source_provider import (
     _create_filenames, _open_fits_files)
 
+# Zero the visibility data
+with pt.table(msfile, ack=False, readonly=False) as T:
+    shape = [T.nrows()] + T.getcoldesc('DATA')['shape'].tolist()
+    T.putcol(mb_vis_column, np.zeros(shape, dtype=np.complex64))
+    T.putcol(meq_vis_column, np.zeros(shape, dtype=np.complex64))
+
 # Extract frequencies from the MS
 with pt.table(msfile + '::SPECTRAL_WINDOW', ack=False) as SW:
     frequency = SW.getcol('CHAN_FREQ')[0]
@@ -130,7 +136,7 @@ def get_gaussian_sources(nsrc):
     gauss_shape[:] = rf(size=gauss_shape.shape)
     return c, s, a, gauss_shape
 
-npsrc, ngsrc = 50, 50
+npsrc, ngsrc = 5, 5
 
 pt_lm, pt_stokes, pt_alpha = get_point_sources(npsrc)
 
