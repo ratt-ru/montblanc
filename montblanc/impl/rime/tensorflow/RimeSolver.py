@@ -258,6 +258,9 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.info("Done feeding {n} parameters.".format(
             n=parameters_fed))
 
+        feed_dict = {LQ.parameter.placeholders[0] : [-1] }
+        session.run(LQ.parameter.enqueue_op, feed_dict=feed_dict)
+
     def _feed(self, cube, data_sources, global_iter_args):
         """ Feed stub """
         try:
@@ -278,22 +281,23 @@ class RimeSolver(MontblancTensorflowSolver):
         src_queues = [LQ.src_queues[t] for t in src_types]
 
         chunks_fed = 0
-        done = False
 
-        while not done:
+        while True:
             try:
                 # Get the descriptor describing a portion of the RIME
                 descriptor = session.run(LQ.parameter.dequeue_op)
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
 
+            # Quit if EOF
+            if descriptor[0] == -1:
+                break
+
             # Make it read-only so we can hash the contents
             descriptor.flags.writeable = False
 
             # Decode the descriptor and update our cube dimensions
             dims = self._transcoder.decode(descriptor)
-            # Are we done?
-            done = _last_chunk(dims)
             cube.update_dimensions(dims)
 
             # Determine array shapes and data types for this
