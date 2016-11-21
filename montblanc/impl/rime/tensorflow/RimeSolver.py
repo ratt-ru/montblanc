@@ -163,29 +163,13 @@ class RimeSolver(MontblancTensorflowSolver):
         # Data Sources and Sinks
         #=======================
 
-        self._ms_manager = None
-
-        # Construct list of data sources internal to the solver
-        # Any data sources specified in the solve() method will
-        # override these
+        # Construct list of data sources and sinks
+        # internal to the solver.
+        # These will be overridden by source and sink
+        # providers supplied by the user in the solve()
+        # method
         self._source_providers = []
-
-        # Create and add the FITS Beam Data Source, if present
-        fits_filename_schema = slvr_cfg.get(Options.E_BEAM_FITS_FILENAMES, '')
-
-        if fits_filename_schema:
-            self._source_providers.append(FitsBeamSourceProvider(
-                fits_filename_schema))
-
-        # Create and add the MS Data Source
-        if data_source == Options.DATA_SOURCE_MS:
-            msfile = slvr_cfg.get(Options.MS_FILE)
-
-            self._ms_manager = mgr = MeasurementSetManager(msfile,
-                slvr_cfg)
-
-            self._source_providers.append(MSSourceProvider(mgr,
-                slvr_cfg[Options.MS_VIS_INPUT_COLUMN]))
+        self._sink_providers = [NullSinkProvider()]
 
         #==================
         # Data Source Cache
@@ -193,21 +177,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         self._source_cache = {}
         self._source_cache_lock = threading.Lock()
-
-        #==================
-        # Data Sinks
-        #==================
-
-        # Construct list of data sinks internal to the solver
-        # Any data sinks specified in the solve() method will
-        # override these.
-        self._sink_providers = [NullSinkProvider()]
-
-        # We have an MS so add a MS data sink
-        if self._ms_manager is not None:
-            self._sink_providers.append(MSSinkProvider(
-                self._ms_manager,
-                slvr_cfg[Options.MS_VIS_OUTPUT_COLUMN]))
 
         #==================
         # Memory Budgeting
@@ -614,11 +583,6 @@ class RimeSolver(MontblancTensorflowSolver):
         # Shutdown data sinks
         for sink in self._sink_providers:
             sink.close()
-
-        # Close the measurement set manager
-        if self._ms_manager is not None:
-            self._ms_manager.close()
-
 
     def __enter__(self):
         return self
