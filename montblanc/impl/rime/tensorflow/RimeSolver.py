@@ -55,15 +55,6 @@ DataSource = collections.namedtuple("DataSource", ['source', 'dtype', 'name'])
 DataSink = collections.namedtuple("DataSink", ['sink', 'name'])
 FeedOnce = collections.namedtuple("FeedOnce", ['ph', 'var', 'assign_op'])
 
-class TensorflowThread(threading.Thread):
-    def __init__(self, group=None, target=None, name=None, coordinator=None, *args, **kwargs):
-        super(TensorflowThread, self).__init__(group, target, name, *args, **kwargs)
-        self._tf_coord = coordinator
-
-    def run(self):
-        while not self._tf_coord.should_stop():
-            self._tf_coord.request_stop()
-
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
 
@@ -845,14 +836,6 @@ def _supply_data(data_sink, context):
                 e=str(e), help=context.help()))
 
         raise ex, None, sys.exc_info()[2]
-
-
-def _last_chunk(dims):
-    """
-    Does the list of dimension dictionaries indicate this is the last chunk?
-    i.e. does upper_extent == global_size for all dimensions?
-    """
-    return all(d['upper_extent'] == d['global_size'] for d in dims)
 
 def _iter_args(iter_dims, cube):
     iter_strides = cube.dim_local_size(*iter_dims)
