@@ -261,24 +261,30 @@ class RimeSolver(MontblancTensorflowSolver):
         feed_dict = {LQ.parameter.placeholders[0] : [-1] }
         session.run(LQ.parameter.enqueue_op, feed_dict=feed_dict)
 
-    def _feed(self, cube, data_sources, global_iter_args):
+    def _feed(self, cube, data_sources, data_sinks, global_iter_args):
         """ Feed stub """
         try:
-            self._feed_impl(cube, data_sources, global_iter_args)
+            self._feed_impl(cube, data_sources, data_sinks, global_iter_args)
         except Exception as e:
             montblanc.log.exception("Feed Exception")
             raise
 
-    def _feed_impl(self, cube, data_sources, global_iter_args):
+    def _feed_impl(self, cube, data_sources, data_sinks, global_iter_args):
         """ Implementation of queue feeding """
         session = self._tf_session
-        LQ = self._tf_feed_data.local
+        FD = self._tf_feed_data
+        LQ = FD.local
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
         src_types = LQ.src_queues.keys()
         src_strides = [int(i) for i in cube.dim_local_size(*src_types)]
         src_queues = [LQ.src_queues[t] for t in src_types]
+
+        compute_feed_dict = { ph: cube.dim_global_size(n) for
+            n, ph in FD.src_ph_vars.iteritems() }
+        compute_feed_dict.update({ ph: getattr(cube, n) for
+            n, ph in FD.property_ph_vars.iteritems() })
 
         chunks_fed = 0
 
@@ -299,6 +305,12 @@ class RimeSolver(MontblancTensorflowSolver):
             # Decode the descriptor and update our cube dimensions
             dims = self._transcoder.decode(descriptor)
             cube.update_dimensions(dims)
+
+            compute_f = self._compute_executor.submit(self._compute,
+                compute_feed_dict)
+
+            consume_f = self._consumer_executor.submit(self._consume,
+                data_sinks, cube.copy(), global_iter_args)
 
             # Determine array shapes and data types for this
             # portion of the hypercube
@@ -373,119 +385,72 @@ class RimeSolver(MontblancTensorflowSolver):
 
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
-    def _compute_impl(self):
-        """ Implementation of computation """
-        #run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE,
+    def _compute(self, feed_dict):
+        """ Call the tensorflow compute """
+
+        # run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE,
         #    timeout_in_ms=10000)
-        run_options =tf.RunOptions()
-        run_metadata = tf.RunMetadata()
+        # run_options =tf.RunOptions()
+        # run_metadata = tf.RunMetadata()
 
-        S = self._tf_session
-        FD = self._tf_feed_data
-        chunks_computed = 0
-        done = False
-
-        cube = self.hypercube
-
-        feed_dict = { ph: cube.dim_global_size(n) for
-            n, ph in FD.src_ph_vars.iteritems() }
-
-        feed_dict.update({ ph: getattr(cube, n) for
-            n, ph in FD.property_ph_vars.iteritems() })
-
-        while not done:
-            descriptor, enq = S.run(self._tf_expr,
-                feed_dict=feed_dict,
-                options=run_options,
-                run_metadata=run_metadata)
-
-            # Are we done?
-            dims = self._transcoder.decode(descriptor)
-            done = _last_chunk(dims)
-            chunks_computed += 1
-
-        montblanc.log.info("Done computing {n} chunks."
-            .format(n=chunks_computed))
-
-        tl = timeline.Timeline(run_metadata.step_stats)
-        ctf = tl.generate_chrome_trace_format()
-        with open('compute-timeline.json', 'w') as f:
-            f.write(ctf)
-
-    def _compute(self):
-        """ Compute stub """
         try:
-            return self._compute_impl()
+            descriptor, enq = self._tf_session.run(
+                self._tf_expr,
+                feed_dict=feed_dict)
+                #options=run_options,
+                #run_metadata=run_metadata)
+
         except Exception as e:
             montblanc.log.exception("Compute Exception")
             raise
 
-    def _consume(self, sink_providers):
+        # tl = timeline.Timeline(run_metadata.step_stats)
+        # ctf = tl.generate_chrome_trace_format()
+        # with open('compute-timeline.json', 'w') as f:
+        #     f.write(ctf)
+
+    def _consume(self, data_sinks, cube, global_iter_args):
         """ Consume stub """
         try:
-            return self._consume_impl(sink_providers)
+            return self._consume_impl(data_sinks, cube, global_iter_args)
         except Exception as e:
             montblanc.log.exception("Consumer Exception")
-            raise
+            raise e, None, sys.exc_info()[2]
 
-    def _consume_impl(self, sink_providers):
+    def _consume_impl(self, data_sinks, cube, global_iter_args):
         """ Consume """
 
-        S = self._tf_session
-        chunks_consumed = 0
-        done = False
-
-        # Maintain a hypercube based on the main cube
-        cube = self.hypercube.copy()
         LQ = self._tf_feed_data.local
+        output = self._tf_session.run(LQ.output.dequeue_op)
 
-        # Get space of iteration
-        global_iter_args = _iter_args(self._iter_dims, cube)
+        # Expect the descriptor in the first tuple position
+        assert len(output) > 0
+        assert LQ.output.fed_arrays[0] == 'descriptor'
 
-        # Get data sinks from supplied providers
-        data_sinks = { n: DataSink(f, prov.name())
-            for prov in sink_providers
-            for n, f in prov.sinks().iteritems()
-            if not n == 'descriptor' }
+        descriptor = output[0]
+        # Make it read-only so we can hash the contents
+        descriptor.flags.writeable = False
 
+        dims = self._transcoder.decode(descriptor)
+        cube.update_dimensions(dims)
 
-        while not done:
-            output = S.run(LQ.output.dequeue_op)
-            chunks_consumed += 1
+        # Obtain and remove input data from the source cache
+        with self._source_cache_lock:
+            try:
+                input_data = self._source_cache.pop(descriptor.data)
+            except KeyError:
+                raise ValueError("No input data cache available "
+                    "in source cache for descriptor {}!"
+                        .format(descriptor))
 
-            # Expect the descriptor in the first tuple position
-            assert len(output) > 0
-            assert LQ.output.fed_arrays[0] == 'descriptor'
+        # For each array in our output, call the associated data sink
+        for n, a in zip(LQ.output.fed_arrays[1:], output[1:]):
+            sink_context = SinkContext(n, cube,
+                self.config(), global_iter_args,
+                cube.array(n) if n in cube.arrays() else {},
+                a, input_data)
 
-            descriptor = output[0]
-            # Make it read-only so we can hash the contents
-            descriptor.flags.writeable = False
-
-            dims = self._transcoder.decode(descriptor)
-            cube.update_dimensions(dims)
-
-            # Obtain and remove input data from the source cache
-            with self._source_cache_lock:
-                try:
-                    input_data = self._source_cache.pop(descriptor.data)
-                except KeyError:
-                    raise ValueError("No input data cache available "
-                        "in source cache for descriptor {}!"
-                            .format(descriptor))
-
-            # For each array in our output, call the associated data sink
-            for n, a in zip(LQ.output.fed_arrays[1:], output[1:]):
-                sink_context = SinkContext(n, cube,
-                    self.config(), global_iter_args,
-                    cube.array(n) if n in cube.arrays() else {},
-                    a, input_data)
-
-                _supply_data(data_sinks[n], sink_context)
-
-            # Are we done?
-            done = _last_chunk(dims)
-
-        montblanc.log.info('Done consuming {n} chunks'.format(n=chunks_consumed))
+            _supply_data(data_sinks[n], sink_context)
 
     def solve(self, *args, **kwargs):
         #  Obtain source and sink providers, including internal providers
@@ -524,10 +489,15 @@ class RimeSolver(MontblancTensorflowSolver):
         input_sources = LQ.input_sources
         data_sources = self._default_data_sources.copy()
         data_sources.update({n: DataSource(f, cube.array(n).dtype, prov.name())
-                                for prov in source_providers
-                                for n, f in prov.sources().iteritems()
-                                if n in input_sources})
+            for prov in source_providers
+            for n, f in prov.sources().iteritems()
+            if n in input_sources})
 
+        # Get data sinks from supplied providers
+        data_sinks = { n: DataSink(f, prov.name())
+            for prov in sink_providers
+            for n, f in prov.sinks().iteritems()
+            if not n == 'descriptor' }
 
         # Construct a feed dictionary from data sources
         feed_dict = {  ph: _get_data(data_sources[k],
@@ -545,12 +515,12 @@ class RimeSolver(MontblancTensorflowSolver):
 
         try:
             params = self._parameter_executor.submit(self._parameter_feed)
-            feed = self._feed_executor.submit(self._feed, cube, data_sources,
-                global_iter_args)
-            compute = self._compute_executor.submit(self._compute)
-            consume = self._consumer_executor.submit(self._consume, sink_providers)
+            feed = self._feed_executor.submit(self._feed, cube,
+                data_sources, data_sinks, global_iter_args)
+            #compute = self._compute_executor.submit(self._compute)
+            #consume = self._consumer_executor.submit(self._consume, sink_providers)
 
-            not_done = [params, feed, compute, consume]
+            not_done = [params, feed]
 
             while True:
                 # TODO: timeout not strictly necessary
@@ -858,7 +828,8 @@ def _get_data(data_source, context):
         ex = ValueError("An exception occurred while "
             "obtaining data from data source '{ds}'\n\n"
             "{e}\n\n"
-            "{help}".format(e=str(e), ds=context.name, help=context.help()))
+            "{help}".format(ds=context.name,
+                e=str(e), help=context.help()))
 
         raise ex, None, sys.exc_info()[2]
 
@@ -869,7 +840,9 @@ def _supply_data(data_sink, context):
     except Exception as e:
         ex = ValueError("An exception occurred while "
             "supplying data to data sink '{ds}'\n\n"
-            "{help}".format(ds=context.name, help=context.help()))
+            "{e}\n\n"
+            "{help}".format(ds=context.name,
+                e=str(e), help=context.help()))
 
         raise ex, None, sys.exc_info()[2]
 

@@ -298,6 +298,9 @@ sink_providers = [MSSinkProvider(ms_mgr, mb_vis_column)]
 slvr.solve(source_providers=source_providers,
     sink_providers=sink_providers)
 
+import time
+time.sleep(1)
+
 for obj in source_providers + sink_providers + [ms_mgr]:
     obj.close()
 
