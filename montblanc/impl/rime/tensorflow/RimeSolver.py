@@ -192,6 +192,21 @@ class RimeSolver(MontblancTensorflowSolver):
         self._consumer_executor = cf.ThreadPoolExecutor(1)
 
         #=========================
+        # Tensorflow devices
+        #=========================
+
+        from tensorflow.python.client import device_lib
+        devices = device_lib.list_local_devices()
+
+        gpus = [d.name for d in devices if d.device_type == 'GPU']
+        cpus = [d.name for d in devices if d.device_type == 'CPU']
+
+        self._devices = cpus if len(gpus) == 0 else gpus
+        self._chunks_per_device = 2
+
+        assert len(self._devices) > 0
+
+        #=========================
         # Tensorflow Compute Graph
         #=========================
 
@@ -199,9 +214,11 @@ class RimeSolver(MontblancTensorflowSolver):
         with tf.Graph().as_default() as compute_graph:
             # Create feed data and expression
             self._tf_feed_data = _construct_tensorflow_feed_data(dfs,
-                cube, self._iter_dims)
-            self._tf_expr = _construct_tensorflow_expression(
-                self._tf_feed_data)
+                cube, self._iter_dims, self._devices,
+                self._chunks_per_device)
+            self._tf_expr = [_construct_tensorflow_expression(
+                    self._tf_feed_data, dev)
+                for dev in self._devices]
 
             # Initialisation operation
             init_op = tf.initialize_all_variables()
@@ -316,7 +333,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Generate (name, placeholder, datasource, array schema)
             # for the arrays required by each queue
-            iq = LQ.input
+            iq = LQ.input[0]
             gen = ((a, ph, data_sources[a], array_schemas[a])
                 for ph, a in zip(iq.placeholders, iq.fed_arrays))
 
@@ -341,7 +358,7 @@ class RimeSolver(MontblancTensorflowSolver):
             montblanc.log.debug("Enqueueing chunk {i} {d}".format(
                 i=chunks_fed, d=descriptor))
 
-            session.run(LQ.input.enqueue_op, feed_dict=feed_dict)
+            session.run(iq.enqueue_op, feed_dict=feed_dict)
 
             chunks_fed += 1
 
@@ -386,7 +403,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         try:
             descriptor, enq = self._tf_session.run(
-                self._tf_expr,
+                self._tf_expr[0],
                 feed_dict=feed_dict)
                 #options=run_options,
                 #run_metadata=run_metadata)
@@ -557,12 +574,20 @@ class RimeSolver(MontblancTensorflowSolver):
         self.close()
 
 
-def _construct_tensorflow_feed_data(dfs, cube, iter_dims):
+def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
+    devices, chunks_per_device):
+
     QUEUE_SIZE = 10
 
+    ninputs = len(devices)*chunks_per_device
+
     FD = AttrDict()
+    # https://github.com/bcj/AttrDict/issues/34
+    FD._setattr('_sequence_type', list)
     # Reference local queues
     FD.local = local = AttrDict()
+    # https://github.com/bcj/AttrDict/issues/34
+    local._setattr('_sequence_type', list)
 
     # Create placholder variables for source counts
     FD.src_ph_vars = AttrDict({
@@ -604,9 +629,9 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims):
         QUEUE_SIZE, ['descriptor'], dfs)
 
     # Create the queue for holding the input
-    local.input = create_queue_wrapper('input', QUEUE_SIZE,
-                ['descriptor'] + [a.name for a in feed_all],
-                dfs)
+    local.input = [create_queue_wrapper('input_%d' % i, QUEUE_SIZE,
+                ['descriptor'] + [a.name for a in feed_all], dfs)
+            for i in range(ninputs)]
 
     # Create source input queues
     local.point_source = create_queue_wrapper('point_source',
@@ -635,8 +660,8 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims):
         ['descriptor', 'model_vis'], dfs)
 
     #=================================================
-    # Create tensorflow queues which are fed only once
-    # via an assign operation
+    # Create tensorflow variables which are
+    # fed only once via an assign operation
     #=================================================
 
     def _make_feed_once_tuple(array):
@@ -665,7 +690,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims):
     #=======================================================
 
     # Data sources from input queues
-    input_sources = {a for q in [local.input] + src_queues.values()
+    input_sources = {a for q in local.input + src_queues.values()
         for a in q.fed_arrays}
 
     # Data sources from feed once variables
@@ -675,7 +700,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims):
 
     return FD
 
-def _construct_tensorflow_expression(feed_data):
+def _construct_tensorflow_expression(feed_data, device):
     """ Constructs a tensorflow expression for computing the RIME """
     zero = tf.constant(0)
     src_count = zero
@@ -684,7 +709,7 @@ def _construct_tensorflow_expression(feed_data):
     LQ = feed_data.local
 
     # Pull RIME inputs out of the feed queues
-    D = LQ.input.dequeue_to_attrdict()
+    D = LQ.input[0].dequeue_to_attrdict()
     D.update({k: fo.var for k, fo in LQ.feed_once.iteritems()})
 
     # Infer chunk dimensions
@@ -712,7 +737,8 @@ def _construct_tensorflow_expression(feed_data):
             D.parallactic_angles,
             D.beam_extents, D.beam_freq_map, D.ebeam)
 
-        return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT), sgn_brightness
+        return (rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT),
+            sgn_brightness)
 
     # While loop condition for each point source type
     def point_cond(model_vis, npsrc, src_count):
@@ -734,8 +760,8 @@ def _construct_tensorflow_expression(feed_data):
         ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
         shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
         model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-            shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
-            apply_dies(src_count))
+            shape, ant_jones, sgn_brightness, D.flag, D.gterm,
+            model_vis, apply_dies(src_count))
 
         return model_vis, npsrc, src_count
 
@@ -749,8 +775,8 @@ def _construct_tensorflow_expression(feed_data):
         gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, gauss_params)
         model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-            gauss_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
-            apply_dies(src_count))
+            gauss_shape, ant_jones, sgn_brightness, D.flag, D.gterm,
+            model_vis, apply_dies(src_count))
 
         return model_vis, ngsrc, src_count
 
@@ -764,8 +790,8 @@ def _construct_tensorflow_expression(feed_data):
         sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, sersic_params)
         model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-            sersic_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
-            apply_dies(src_count))
+            sersic_shape, ant_jones, sgn_brightness, D.flag, D.gterm,
+            model_vis, apply_dies(src_count))
 
         return model_vis, nssrc, src_count
 
