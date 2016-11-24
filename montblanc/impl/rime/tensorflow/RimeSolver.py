@@ -233,7 +233,10 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.debug("Attaching session to tensorflow server "
             "'{tfs}'".format(tfs=tf_server_target))
 
-        self._tf_session = tf.Session(tf_server_target, graph=compute_graph)
+        session_config = tf.ConfigProto(allow_soft_placement=True)
+
+        self._tf_session = tf.Session(tf_server_target,
+            graph=compute_graph, config=session_config)
         self._tf_session.run(init_op)
 
     def _parameter_feed(self):
@@ -713,9 +716,10 @@ def _construct_tensorflow_expression(feed_data, device):
     D.update({k: fo.var for k, fo in LQ.feed_once.iteritems()})
 
     # Infer chunk dimensions
-    model_vis_shape = tf.shape(D.model_vis)
-    ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
-    FT, CT = D.uvw.dtype, D.model_vis.dtype
+    with tf.device(device):
+        model_vis_shape = tf.shape(D.model_vis)
+        ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
+        FT, CT = D.uvw.dtype, D.model_vis.dtype
 
     def apply_dies(src_count):
         """ Have we reached the maximum source count """
@@ -795,20 +799,21 @@ def _construct_tensorflow_expression(feed_data, device):
 
         return model_vis, nssrc, src_count
 
-    # Evaluate point sources
-    model_vis, npsrc, src_count = tf.while_loop(
-        point_cond, point_body,
-        [D.model_vis, zero, src_count])
+    with tf.device(device):
+        # Evaluate point sources
+        model_vis, npsrc, src_count = tf.while_loop(
+            point_cond, point_body,
+            [D.model_vis, zero, src_count])
 
-    # Evaluate gaussians
-    model_vis, ngsrc, src_count = tf.while_loop(
-        gaussian_cond, gaussian_body,
-        [model_vis, zero, src_count])
+        # Evaluate gaussians
+        model_vis, ngsrc, src_count = tf.while_loop(
+            gaussian_cond, gaussian_body,
+            [model_vis, zero, src_count])
 
-    # Evaluate sersics
-    model_vis, nssrc, src_count = tf.while_loop(
-        sersic_cond, sersic_body,
-        [model_vis, zero, src_count])
+        # Evaluate sersics
+        model_vis, nssrc, src_count = tf.while_loop(
+            sersic_cond, sersic_body,
+            [model_vis, zero, src_count])
 
     # Create enqueue operation
     enqueue_op = LQ.output.queue.enqueue([D.descriptor, model_vis])
