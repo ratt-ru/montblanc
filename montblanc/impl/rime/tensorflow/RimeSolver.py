@@ -240,7 +240,7 @@ class RimeSolver(MontblancTensorflowSolver):
         #======================
 
         self._parameter_executor = cf.ThreadPoolExecutor(1)
-        self._feed_executor = cf.ThreadPoolExecutor(1)
+        self._feed_executor = cf.ThreadPoolExecutor(shards)
         self._compute_executor = cf.ThreadPoolExecutor(shards)
         self._consumer_executor = cf.ThreadPoolExecutor(1)
 
@@ -323,15 +323,16 @@ class RimeSolver(MontblancTensorflowSolver):
             # Make it read-only so we can hash the contents
             descriptor.flags.writeable = False
 
-            # Decode the descriptor and update our cube dimensions
-            dims = self._transcoder.decode(descriptor)
-            cube.update_dimensions(dims)
-
             # Find indices of the emptiest queues and, by implication
             # the shard with the least work assigned to it
             emptiest_queues = np.argsort(input_queue_sizes)
             shard = emptiest_queues[0]
-            iq = LQ.input[shard]
+
+            feed_f = self._feed_executor.submit(self._feed_actual,
+                data_sources.copy(), cube.copy(),
+                descriptor, shard,
+                src_types, src_strides, src_queues,
+                global_iter_args)
 
             compute_f = self._compute_executor.submit(self._compute,
                 compute_feed_dict, shard)
@@ -339,77 +340,96 @@ class RimeSolver(MontblancTensorflowSolver):
             consume_f = self._consumer_executor.submit(self._consume,
                 data_sinks, cube.copy(), global_iter_args)
 
-            # Determine array shapes and data types for this
-            # portion of the hypercube
-            array_schemas = cube.arrays(reify=True)
-
-            # Inject a data source and array schema for the
-            # descriptor queue items. These aren't full on arrays per se
-            # but they need to work within the feeding framework
-            array_schemas['descriptor'] = descriptor
-            data_sources['descriptor'] = DataSource(lambda c: descriptor,
-                np.int32, 'Internal')
-
-            # Generate (name, placeholder, datasource, array schema)
-            # for the arrays required by each queue
-            gen = ((a, ph, data_sources[a], array_schemas[a])
-                for ph, a in zip(iq.placeholders, iq.fed_arrays))
-
-            # Get input data by calling the data source functors
-            input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
-                    self.config(), global_iter_args,
-                    cube.array(a) if a in cube.arrays() else {},
-                    ad.shape, ad.dtype)))
-                for (a, ph, ds, ad) in gen]
-
-            # Create a feed dictionary from the input data
-            feed_dict = { ph: data for (a, ph, data) in input_data }
-
-            # Cache the inputs for this chunk of data,
-            # so that sinks can access them
-            input_cache = { a: data for (a, ph, data) in input_data }
-
-            # Guard access to the cache with a lock
-            with self._source_cache_lock:
-                self._source_cache[descriptor.data] = input_cache
-
-            montblanc.log.debug("Enqueueing chunk {i} {d}".format(
-                i=chunks_fed, d=descriptor))
-
-            session.run(iq.enqueue_op, feed_dict=feed_dict)
-
-            chunks_fed += 1
-
-            # For each source type, feed that source queue
-            for src_type, queue, stride in zip(src_types, src_queues, src_strides):
-                iter_args = [(src_type, stride)]
-
-                # Iterate over local_size chunks of the source
-                for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
-                    cube.update_dimensions(dim_desc)
-
-                    montblanc.log.debug("'{ci}: Enqueueing '{s}' '{t}' sources".format(
-                        ci=chunk_i, s=dim_desc[0]['local_size'], t=src_type))
-
-                    # Determine array shapes and data types for this
-                    # portion of the hypercube
-                    array_schemas = cube.arrays(reify=True)
-
-                    # Generate (name, placeholder, datasource, array descriptor)
-                    # for the arrays required by each queue
-                    gen = [(a, ph, data_sources[a], array_schemas[a])
-                        for ph, a in zip(queue.placeholders, queue.fed_arrays)]
-
-                    # Create a feed dictionary by calling the data source functors
-                    feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
-                            self.config(), global_iter_args + iter_args,
-                            cube.array(a) if a in cube.arrays() else {},
-                            ad.shape, ad.dtype))
-                        for (a, ph, ds, ad) in gen }
-
-                    session.run(queue.enqueue_op, feed_dict=feed_dict)
+            yield (feed_f, compute_f, consume_f)
 
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
+
+    def _feed_actual(self, *args):
+        try:
+            return self._feed_actual_impl(*args)
+        except Exception as e:
+            montblanc.log.error("Feed Exception")
+            raise
+
+    def _feed_actual_impl(self, data_sources, cube,
+            descriptor, shard,
+            src_types, src_strides, src_queues,
+            global_iter_args):
+
+        session = self._tf_session
+        iq = self._tf_feed_data.local.input[shard]
+
+        # Decode the descriptor and update our cube dimensions
+        dims = self._transcoder.decode(descriptor)
+        cube.update_dimensions(dims)
+
+        # Determine array shapes and data types for this
+        # portion of the hypercube
+        array_schemas = cube.arrays(reify=True)
+
+        # Inject a data source and array schema for the
+        # descriptor queue items. These aren't full on arrays per se
+        # but they need to work within the feeding framework
+        array_schemas['descriptor'] = descriptor
+        data_sources['descriptor'] = DataSource(
+            lambda c: descriptor, np.int32, 'Internal')
+
+        # Generate (name, placeholder, datasource, array schema)
+        # for the arrays required by each queue
+        gen = ((a, ph, data_sources[a], array_schemas[a])
+            for ph, a in zip(iq.placeholders, iq.fed_arrays))
+
+        # Get input data by calling the data source functors
+        input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
+                self.config(), global_iter_args,
+                cube.array(a) if a in cube.arrays() else {},
+                ad.shape, ad.dtype)))
+            for (a, ph, ds, ad) in gen]
+
+        # Create a feed dictionary from the input data
+        feed_dict = { ph: data for (a, ph, data) in input_data }
+
+        # Cache the inputs for this chunk of data,
+        # so that sinks can access them
+        input_cache = { a: data for (a, ph, data) in input_data }
+
+        # Guard access to the cache with a lock
+        with self._source_cache_lock:
+            self._source_cache[descriptor.data] = input_cache
+
+        montblanc.log.info("Enqueueing chunk {d}".format(
+            d=descriptor))
+
+        session.run(iq.enqueue_op, feed_dict=feed_dict)
+
+        # For each source type, feed that source queue
+        for src_type, queue, stride in zip(src_types, src_queues, src_strides):
+            iter_args = [(src_type, stride)]
+
+            # Iterate over local_size chunks of the source
+            for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
+                cube.update_dimensions(dim_desc)
+
+                montblanc.log.info("'{ci}: Enqueueing '{s}' '{t}' sources".format(
+                    ci=chunk_i, s=dim_desc[0]['local_size'], t=src_type))
+
+                # Determine array shapes and data types for this
+                # portion of the hypercube
+                array_schemas = cube.arrays(reify=True)
+
+                # Generate (name, placeholder, datasource, array descriptor)
+                # for the arrays required by each queue
+                gen = [(a, ph, data_sources[a], array_schemas[a])
+                    for ph, a in zip(queue.placeholders, queue.fed_arrays)]
+
+                # Create a feed dictionary by calling the data source functors
+                feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
+                        self.config(), global_iter_args + iter_args,
+                        cube.array(a) if a in cube.arrays() else {},
+                        ad.shape, ad.dtype))
+                    for (a, ph, ds, ad) in gen }
+
+                session.run(queue.enqueue_op, feed_dict=feed_dict)
 
     def _compute(self, feed_dict, shard):
         """ Call the tensorflow compute """
@@ -541,25 +561,21 @@ class RimeSolver(MontblancTensorflowSolver):
 
         try:
             params = self._parameter_executor.submit(self._parameter_feed)
-            feed = self._feed_executor.submit(self._feed, cube,
-                data_sources, data_sinks, global_iter_args)
-            #compute = self._compute_executor.submit(self._compute)
-            #consume = self._consumer_executor.submit(self._consume, sink_providers)
+            not_done = set([params])
 
-            not_done = [params, feed]
+            for futures in self._feed_impl(cube,
+                data_sources, data_sinks, global_iter_args):
 
-            while True:
-                # TODO: timeout not strictly necessary
-                done, not_done = cf.wait(not_done,
-                    timeout=1.0,
-                    return_when=cf.FIRST_COMPLETED)
+                not_done.update(futures)
 
-                for future in done:
-                    res = future.result()
+            # TODO: timeout not strictly necessary
+            done, not_done = cf.wait(not_done,
+                return_when=cf.ALL_COMPLETED)
 
-                # Nothing remains to be done, quit the loop
-                if len(not_done) == 0:
-                    break
+            for future in done:
+                res = future.result()
+
+            assert len(not_done) == 0
 
         except (KeyboardInterrupt, SystemExit) as e:
             montblanc.log.exception('Solving interrupted')
