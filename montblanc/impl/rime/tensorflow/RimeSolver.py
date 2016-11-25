@@ -295,7 +295,8 @@ class RimeSolver(MontblancTensorflowSolver):
         # the source loops below
         src_types = LQ.src_queues.keys()
         src_strides = [int(i) for i in cube.dim_local_size(*src_types)]
-        src_queues = [LQ.src_queues[t] for t in src_types]
+        src_queues = [[LQ.src_queues[t][s] for t in src_types]
+            for s in range(self._nr_of_shards)]
 
         compute_feed_dict = { ph: cube.dim_global_size(n) for
             n, ph in FD.src_ph_vars.iteritems() }
@@ -331,7 +332,7 @@ class RimeSolver(MontblancTensorflowSolver):
             feed_f = self._feed_executor.submit(self._feed_actual,
                 data_sources.copy(), cube.copy(),
                 descriptor, shard,
-                src_types, src_strides, src_queues,
+                src_types, src_strides, src_queues[shard],
                 global_iter_args)
 
             compute_f = self._compute_executor.submit(self._compute,
@@ -348,7 +349,7 @@ class RimeSolver(MontblancTensorflowSolver):
         try:
             return self._feed_actual_impl(*args)
         except Exception as e:
-            montblanc.log.error("Feed Exception")
+            montblanc.log.exception("Feed Exception")
             raise
 
     def _feed_actual_impl(self, data_sources, cube,
@@ -397,8 +398,8 @@ class RimeSolver(MontblancTensorflowSolver):
         with self._source_cache_lock:
             self._source_cache[descriptor.data] = input_cache
 
-        montblanc.log.info("Enqueueing chunk {d}".format(
-            d=descriptor))
+        montblanc.log.info("Enqueueing chunk {d} on shard {sh}".format(
+            d=descriptor, sh=shard))
 
         session.run(iq.enqueue_op, feed_dict=feed_dict)
 
@@ -410,8 +411,11 @@ class RimeSolver(MontblancTensorflowSolver):
             for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
                 cube.update_dimensions(dim_desc)
 
-                montblanc.log.info("'{ci}: Enqueueing '{s}' '{t}' sources".format(
-                    ci=chunk_i, s=dim_desc[0]['local_size'], t=src_type))
+                montblanc.log.info("'{ci}: Enqueueing '{s}' '{t}' sources "
+                    "on shard {sh}".format(
+                    ci=chunk_i,
+                    s=dim_desc[0]['local_size'], t=src_type,
+                    sh=shard))
 
                 # Determine array shapes and data types for this
                 # portion of the hypercube
@@ -666,16 +670,19 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
             for i in range(nr_of_input_queues)]
 
     # Create source input queues
-    local.point_source = create_queue_wrapper('point_source',
+    local.point_source = [create_queue_wrapper('point_source_%d' % i,
         QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
+        for i in range(nr_of_input_queues)]
 
-    local.gaussian_source = create_queue_wrapper('gaussian_source',
+    local.gaussian_source = [create_queue_wrapper('gaussian_source_%d' % i,
         QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
             'gaussian_shape'], dfs)
+        for i in range(nr_of_input_queues)]
 
-    local.sersic_source = create_queue_wrapper('sersic_source',
+    local.sersic_source = [create_queue_wrapper('sersic_source_%d' % i,
         QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
             'sersic_shape'], dfs)
+        for i in range(nr_of_input_queues)]
 
     # Source queues to feed
     local.src_queues = src_queues = {
@@ -722,7 +729,8 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     #=======================================================
 
     # Data sources from input queues
-    input_sources = {a for q in local.input + src_queues.values()
+    input_queues = local.input + [q for sq in src_queues.values() for q in sq]
+    input_sources = { a for q in input_queues
         for a in q.fed_arrays}
 
     # Data sources from feed once variables
@@ -787,7 +795,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
     # While loop bodies
     def point_body(model_vis, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
-        lm, stokes, alpha = LQ.point_source.dequeue()
+        lm, stokes, alpha = LQ.point_source[shard].dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         npsrc +=  nsrc
@@ -801,7 +809,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
     def gaussian_body(model_vis, ngsrc, src_count):
         """ Accumulate visiblities for gaussian source batch """
-        lm, stokes, alpha, gauss_params = LQ.gaussian_source.dequeue()
+        lm, stokes, alpha, gauss_params = LQ.gaussian_source[shard].dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         ngsrc += nsrc
@@ -816,7 +824,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
     def sersic_body(model_vis, nssrc, src_count):
         """ Accumulate visiblities for sersic source batch """
-        lm, stokes, alpha, sersic_params = LQ.sersic_source.dequeue()
+        lm, stokes, alpha, sersic_params = LQ.sersic_source[shard].dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         nssrc += nsrc
