@@ -95,7 +95,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         from montblanc.impl.rime.tensorflow.config import (A, P)
 
-
         def _massage_dtypes(A, T):
             def _massage_dtype_in_dict(D):
                 new_dict = D.copy()
@@ -182,15 +181,6 @@ class RimeSolver(MontblancTensorflowSolver):
         self._iter_dims = ['ntime', 'nbl']
         self._transcoder = CubeDimensionTranscoder(self._iter_dims)
 
-        #======================
-        # Thread pool executors
-        #======================
-
-        self._parameter_executor = cf.ThreadPoolExecutor(1)
-        self._feed_executor = cf.ThreadPoolExecutor(1)
-        self._compute_executor = cf.ThreadPoolExecutor(1)
-        self._consumer_executor = cf.ThreadPoolExecutor(1)
-
         #=========================
         # Tensorflow devices
         #=========================
@@ -202,7 +192,10 @@ class RimeSolver(MontblancTensorflowSolver):
         cpus = [d.name for d in devices if d.device_type == 'CPU']
 
         self._devices = cpus if len(gpus) == 0 else gpus
-        self._chunks_per_device = 2
+        self._shards_per_device = spd = 3
+        self._nr_of_shards = shards = len(self._devices)*spd
+        # shard_id == d*ndev + shard
+        shard = lambda d, s: d*len(self._devices)+s
 
         assert len(self._devices) > 0
 
@@ -212,13 +205,16 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Create all tensorflow constructs within the compute graph
         with tf.Graph().as_default() as compute_graph:
-            # Create feed data and expression
-            self._tf_feed_data = _construct_tensorflow_feed_data(dfs,
-                cube, self._iter_dims, self._devices,
-                self._chunks_per_device)
+            # Create our data feeding structure containing
+            # input/output queues and feed once variables
+            self._tf_feed_data = _construct_tensorflow_feed_data(
+                dfs, cube, self._iter_dims, shards)
+
+            # Construct tensorflow expressions for each shard
             self._tf_expr = [_construct_tensorflow_expression(
-                    self._tf_feed_data, dev)
-                for dev in self._devices]
+                    self._tf_feed_data, dev, shard(d,s))
+                for d, dev in enumerate(self._devices)
+                for s in range(self._shards_per_device)]
 
             # Initialisation operation
             init_op = tf.initialize_all_variables()
@@ -238,6 +234,15 @@ class RimeSolver(MontblancTensorflowSolver):
         self._tf_session = tf.Session(tf_server_target,
             graph=compute_graph, config=session_config)
         self._tf_session.run(init_op)
+
+        #======================
+        # Thread pool executors
+        #======================
+
+        self._parameter_executor = cf.ThreadPoolExecutor(1)
+        self._feed_executor = cf.ThreadPoolExecutor(1)
+        self._compute_executor = cf.ThreadPoolExecutor(shards)
+        self._consumer_executor = cf.ThreadPoolExecutor(1)
 
     def _parameter_feed(self):
         try:
@@ -302,7 +307,12 @@ class RimeSolver(MontblancTensorflowSolver):
         while True:
             try:
                 # Get the descriptor describing a portion of the RIME
-                descriptor = session.run(LQ.parameter.dequeue_op)
+                # and the current sizes of the the input queues
+                ops = [LQ.parameter.dequeue_op] + [iq.size_op
+                    for iq in LQ.input]
+                result = session.run(ops)
+                descriptor = result[0]
+                input_queue_sizes = np.asarray(result[1:])
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
 
@@ -317,8 +327,14 @@ class RimeSolver(MontblancTensorflowSolver):
             dims = self._transcoder.decode(descriptor)
             cube.update_dimensions(dims)
 
+            # Find indices of the emptiest queues and, by implication
+            # the shard with the least work assigned to it
+            emptiest_queues = np.argsort(input_queue_sizes)
+            shard = emptiest_queues[0]
+            iq = LQ.input[shard]
+
             compute_f = self._compute_executor.submit(self._compute,
-                compute_feed_dict)
+                compute_feed_dict, shard)
 
             consume_f = self._consumer_executor.submit(self._consume,
                 data_sinks, cube.copy(), global_iter_args)
@@ -336,7 +352,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Generate (name, placeholder, datasource, array schema)
             # for the arrays required by each queue
-            iq = LQ.input[0]
             gen = ((a, ph, data_sources[a], array_schemas[a])
                 for ph, a in zip(iq.placeholders, iq.fed_arrays))
 
@@ -396,7 +411,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
-    def _compute(self, feed_dict):
+    def _compute(self, feed_dict, shard):
         """ Call the tensorflow compute """
 
         # run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE,
@@ -406,7 +421,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         try:
             descriptor, enq = self._tf_session.run(
-                self._tf_expr[0],
+                self._tf_expr[shard],
                 feed_dict=feed_dict)
                 #options=run_options,
                 #run_metadata=run_metadata)
@@ -578,11 +593,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
 
 def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
-    devices, chunks_per_device):
+    nr_of_input_queues):
 
     QUEUE_SIZE = 10
-
-    ninputs = len(devices)*chunks_per_device
 
     FD = AttrDict()
     # https://github.com/bcj/AttrDict/issues/34
@@ -634,7 +647,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     # Create the queue for holding the input
     local.input = [create_queue_wrapper('input_%d' % i, QUEUE_SIZE,
                 ['descriptor'] + [a.name for a in feed_all], dfs)
-            for i in range(ninputs)]
+            for i in range(nr_of_input_queues)]
 
     # Create source input queues
     local.point_source = create_queue_wrapper('point_source',
@@ -703,7 +716,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
 
     return FD
 
-def _construct_tensorflow_expression(feed_data, device):
+def _construct_tensorflow_expression(feed_data, device, shard):
     """ Constructs a tensorflow expression for computing the RIME """
     zero = tf.constant(0)
     src_count = zero
@@ -711,8 +724,9 @@ def _construct_tensorflow_expression(feed_data, device):
 
     LQ = feed_data.local
 
-    # Pull RIME inputs out of the feed queues
-    D = LQ.input[0].dequeue_to_attrdict()
+    # Pull RIME inputs out of the feed queue
+    # of the relevant shard
+    D = LQ.input[shard].dequeue_to_attrdict()
     D.update({k: fo.var for k, fo in LQ.feed_once.iteritems()})
 
     # Infer chunk dimensions
