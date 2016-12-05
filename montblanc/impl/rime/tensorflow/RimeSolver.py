@@ -19,6 +19,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import collections
+import copy
 import itertools
 import threading
 import sys
@@ -239,10 +240,12 @@ class RimeSolver(MontblancTensorflowSolver):
         # Thread pool executors
         #======================
 
-        self._parameter_executor = cf.ThreadPoolExecutor(1)
-        self._feed_executor = cf.ThreadPoolExecutor(shards)
-        self._compute_executor = cf.ThreadPoolExecutor(shards)
-        self._consumer_executor = cf.ThreadPoolExecutor(1)
+        tpe = cf.ThreadPoolExecutor
+
+        self._parameter_executor = tpe(1)
+        self._feed_executors = [tpe(1) for i in range(shards)]
+        self._compute_executors = [tpe(1) for i in range(shards)]
+        self._consumer_executor = tpe(1)
 
     def _parameter_feed(self):
         try:
@@ -305,6 +308,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
         chunks_fed = 0
 
+        which_shard = itertools.cycle(range(self._nr_of_shards))
+
         while True:
             try:
                 # Get the descriptor describing a portion of the RIME
@@ -328,18 +333,19 @@ class RimeSolver(MontblancTensorflowSolver):
             # the shard with the least work assigned to it
             emptiest_queues = np.argsort(input_queue_sizes)
             shard = emptiest_queues[0]
+            shard = which_shard.next()
 
-            feed_f = self._feed_executor.submit(self._feed_actual,
+            feed_f = self._feed_executors[shard].submit(self._feed_actual,
                 data_sources.copy(), cube.copy(),
                 descriptor, shard,
                 src_types, src_strides, src_queues[shard],
                 global_iter_args)
 
-            compute_f = self._compute_executor.submit(self._compute,
+            compute_f = self._compute_executors[shard].submit(self._compute,
                 compute_feed_dict, shard)
 
             consume_f = self._consumer_executor.submit(self._consume,
-                data_sinks, cube.copy(), global_iter_args)
+                data_sinks.copy(), cube.copy(), global_iter_args)
 
             yield (feed_f, compute_f, consume_f)
 
@@ -411,11 +417,11 @@ class RimeSolver(MontblancTensorflowSolver):
             for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
                 cube.update_dimensions(dim_desc)
 
-                montblanc.log.info("'{ci}: Enqueueing '{s}' '{t}' sources "
-                    "on shard {sh}".format(
-                    ci=chunk_i,
-                    s=dim_desc[0]['local_size'], t=src_type,
-                    sh=shard))
+                montblanc.log.info("'{ci}: Enqueueing {d} '{s}' '{t}' sources "
+                    "on shard {sh}".format(d=descriptor,
+                        ci=chunk_i,
+                        s=dim_desc[0]['local_size'], t=src_type,
+                        sh=shard))
 
                 # Determine array shapes and data types for this
                 # portion of the hypercube
@@ -590,8 +596,8 @@ class RimeSolver(MontblancTensorflowSolver):
     def close(self):
         # Shutdown thread executors
         self._parameter_executor.shutdown()
-        self._feed_executor.shutdown()
-        self._compute_executor.shutdown()
+        [fe.shutdown() for fe in self._feed_executors]
+        [ce.shutdown() for ce in self._compute_executors]
         self._consumer_executor.shutdown()
 
         # Shutdown thte tensorflow session
