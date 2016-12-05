@@ -60,34 +60,6 @@ typedef Eigen::GpuDevice GPUDevice;
 // frequency mapping in shared memory
 constexpr std::size_t BEAM_NUD_LIMIT = 128;
 
-// Constant GPU memory. Note that declaring constant memory
-// with templates is a bit tricky, so we declare it as
-// double (the largest type it should take) and cast it using
-// the holder struct below
-__constant__ montblanc::ebeam::const_data<double> beam_constant;
-
-// Helper class for casting constant data to appropriate type
-template <typename T>
-struct holder
-{
-    using bc = typename montblanc::ebeam::const_data<T>;
-    using bc_ptr = typename montblanc::ebeam::const_data<T> *;
-
-    static __device__ __forceinline__ bc_ptr ptr () ;
-};
-
-// Specialise for float
-template <> __device__ __forceinline__ holder<float>::bc_ptr
-holder<float>::ptr()
-    { return reinterpret_cast<holder<float>::bc_ptr>(&beam_constant); }
-
-// Specialise for double
-template <> __device__ __forceinline__ holder<double>::bc_ptr
-holder<double>::ptr()
-    { return reinterpret_cast<holder<double>::bc_ptr>(&beam_constant); }
-
-#define cdata holder<FT>::ptr()
-
 // Get the current polarisation from the thread ID
 __device__ __forceinline__ int ebeam_pol()
     { return threadIdx.x & 0x3; }
@@ -100,12 +72,13 @@ template <typename Traits, typename Policies>
 __device__ __forceinline__
 void find_freq_bounds(int & lower, int & upper,
     const typename Traits::FT * beam_freq_map,
-    const typename Traits::FT frequency)
+    const typename Traits::FT frequency,
+    const int & beam_nud)
 {
     using FT = typename Traits::FT;
 
     lower = 0;
-    upper = cdata->beam_nud-1;
+    upper = beam_nud-1;
 
     // Warp divergence here, unlikely
     // to be a big deal though
@@ -132,13 +105,16 @@ void trilinear_interpolate(
     const typename Traits::FT gl,
     const typename Traits::FT gm,
     const typename Traits::FT gchan,
-    const typename Traits::FT & weight)
+    const typename Traits::FT & weight,
+    const int & beam_lw,
+    const int & beam_mh,
+    const int & beam_nud)
 {
     // Simpler float and complex types
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
 
-    int i = ((int(gl)*cdata->beam_mh + int(gm))*cdata->beam_nud +
+    int i = ((int(gl)*beam_mh + int(gm))*beam_nud +
         int(gchan))*EBEAM_NPOL + ebeam_pol();
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
@@ -157,7 +133,13 @@ __global__ void rime_e_beam(
     const typename Traits::FT * parallactic_angle,
     const typename Traits::FT * beam_freq_map,
     const typename Traits::CT * ebeam,
-    typename Traits::CT * jones)
+    typename Traits::CT * jones,
+    const typename Traits::FT lower_l,
+    const typename Traits::FT lower_m,
+    const typename Traits::FT upper_l,
+    const typename Traits::FT upper_m,
+    int nsrc, int ntime, int na, int nchan, int npolchan,
+    int beam_lw, int beam_mh, int beam_nud)
 {
     // Simpler float and complex types
     using FT = typename Traits::FT;
@@ -177,7 +159,7 @@ __global__ void rime_e_beam(
     constexpr FT zero = 0.0f;
     constexpr FT one = 1.0f;
 
-    if(TIME >= cdata->ntime || ANT >= cdata->na || POLCHAN >= cdata->npolchan)
+    if(TIME >= ntime || ANT >= na || POLCHAN >= npolchan)
         { return; }
 
     __shared__ struct {
@@ -204,7 +186,7 @@ __global__ void rime_e_beam(
         + threadIdx.x;
 
     // Load in the beam frequency mapping
-    if(i < cdata->beam_nud)
+    if(i < beam_nud)
     {
         shared.beam_freq_map[i] = beam_freq_map[i];
     }
@@ -212,21 +194,21 @@ __global__ void rime_e_beam(
     // Precompute l and m scaling factors in shared memory
     if(threadIdx.z == 0 && threadIdx.y == 0 && threadIdx.z == 0)
     {
-        shared.lscale = FT(cdata->beam_lw - 1) / (cdata->ul - cdata->ll);
-        shared.mscale = FT(cdata->beam_mh - 1) / (cdata->um - cdata->lm);
+        shared.lscale = FT(beam_lw - 1) / (upper_l - lower_l);
+        shared.mscale = FT(beam_mh - 1) / (upper_m - lower_m);
     }
 
     // Pointing errors vary by time, antenna and channel,
     if(ebeam_pol() == 0)
     {
-        i = (TIME*cdata->na + ANT)*cdata->nchan + (POLCHAN >> 2);
+        i = (TIME*na + ANT)*nchan + (POLCHAN >> 2);
         shared.pe[threadIdx.z][threadIdx.y][thread_chan()] = point_errors[i];
     }
 
     // Antenna scaling factors vary by antenna and channel, but not timestep
     if(threadIdx.z == 0 && ebeam_pol() == 0)
     {
-        i = ANT*cdata->nchan + (POLCHAN >> 2);
+        i = ANT*nchan + (POLCHAN >> 2);
         shared.as[threadIdx.y][thread_chan()] = antenna_scaling[i];
     }
 
@@ -241,7 +223,8 @@ __global__ void rime_e_beam(
         FT freq = frequency[POLCHAN >> 2];
         int lower, upper;
 
-        find_freq_bounds<Traits, Po>(lower, upper, beam_freq_map, freq);
+        find_freq_bounds<Traits, Po>(lower, upper, beam_freq_map,
+            freq, beam_nud);
 
         // Snap to grid coordinate
         shared.gchan0[thread_chan()] = FT(lower);
@@ -258,7 +241,7 @@ __global__ void rime_e_beam(
     // Parallactic angles vary by time and antenna, but not channel
     if(threadIdx.x == 0)
     {
-        i = TIME*cdata->na + ANT;
+        i = TIME*na + ANT;
         FT parangle = parallactic_angle[i];
         Po::sincos(parangle,
             &shared.pa_sin[threadIdx.z][threadIdx.y],
@@ -267,7 +250,7 @@ __global__ void rime_e_beam(
 
     __syncthreads();
 
-    for(int SRC=0; SRC < cdata->nsrc; ++SRC)
+    for(int SRC=0; SRC < nsrc; ++SRC)
     {
         lm_type rlm = lm[SRC];
 
@@ -280,12 +263,12 @@ __global__ void rime_e_beam(
         // Scale by antenna scaling factors
         l *= shared.as[threadIdx.y][thread_chan()].x;
         // l grid position
-        l = shared.lscale * (l - cdata->ll);
+        l = shared.lscale * (l - lower_l);
         // clamp to grid edges
-        l = Po::clamp(zero, l, cdata->beam_lw-1);
+        l = Po::clamp(zero, l, beam_lw-1);
         // Snap to grid coordinate
         FT gl0 = Po::floor(l);
-        FT gl1 = Po::min(gl0 + one, cdata->beam_lw-1);
+        FT gl1 = Po::min(gl0 + one, beam_lw-1);
         // Offset of snapped coordinate from grid position
         FT ld = l - gl0;
 
@@ -298,12 +281,12 @@ __global__ void rime_e_beam(
         // Scale by antenna scaling factors
         m *= shared.as[threadIdx.y][thread_chan()].y;
         // m grid position
-        m = shared.mscale * (m - cdata->lm);
+        m = shared.mscale * (m - lower_m);
         // clamp to grid edges
-        m = Po::clamp(zero, m, cdata->beam_mh-1);
+        m = Po::clamp(zero, m, beam_mh-1);
         // Snap to grid position
         FT gm0 = Po::floor(m);
-        FT gm1 = Po::min(gm0 + one, cdata->beam_mh-1);
+        FT gm1 = Po::min(gm0 + one, beam_mh-1);
         // Offset of snapped coordinate from grid position
         FT md = m - gm0;
 
@@ -340,29 +323,37 @@ __global__ void rime_e_beam(
         // at the supplied coordinate offsets.
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl0, gm0, shared.gchan0[thread_chan()],
-            (one-ld)*(one-md)*(one-shared.chd[thread_chan()]));
+            (one-ld)*(one-md)*(one-shared.chd[thread_chan()]),
+            beam_lw, beam_mh, beam_nud);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl1, gm0, shared.gchan0[thread_chan()],
-            ld*(one-md)*(one-shared.chd[thread_chan()]));
+            ld*(one-md)*(one-shared.chd[thread_chan()]),
+            beam_lw, beam_mh, beam_nud);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl0, gm1, shared.gchan0[thread_chan()],
-            (one-ld)*md*(one-shared.chd[thread_chan()]));
+            (one-ld)*md*(one-shared.chd[thread_chan()]),
+            beam_lw, beam_mh, beam_nud);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl1, gm1, shared.gchan0[thread_chan()],
-            ld*md*(one-shared.chd[thread_chan()]));
+            ld*md*(one-shared.chd[thread_chan()]),
+            beam_lw, beam_mh, beam_nud);
 
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl0, gm0, shared.gchan1[thread_chan()],
-            (one-ld)*(one-md)*shared.chd[thread_chan()]);
+            (one-ld)*(one-md)*shared.chd[thread_chan()],
+            beam_lw, beam_mh, beam_nud);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl1, gm0, shared.gchan1[thread_chan()],
-            ld*(one-md)*shared.chd[thread_chan()]);
+            ld*(one-md)*shared.chd[thread_chan()],
+            beam_lw, beam_mh, beam_nud);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl0, gm1, shared.gchan1[thread_chan()],
-            (one-ld)*md*shared.chd[thread_chan()]);
+            (one-ld)*md*shared.chd[thread_chan()],
+            beam_lw, beam_mh, beam_nud);
         trilinear_interpolate<Traits, Po>(pol_sum, abs_sum, ebeam,
             gl1, gm1, shared.gchan1[thread_chan()],
-            ld*md*shared.chd[thread_chan()]);
+            ld*md*shared.chd[thread_chan()],
+            beam_lw, beam_mh, beam_nud);
 
         // Normalise the angle and multiply in the absolute sum
         FT norm = Po::rsqrt(pol_sum.x*pol_sum.x + pol_sum.y*pol_sum.y);
@@ -371,7 +362,7 @@ __global__ void rime_e_beam(
 
         pol_sum.x *= norm * abs_sum;
         pol_sum.y *= norm * abs_sum;
-        i = ((SRC*cdata->ntime + TIME)*cdata->na + ANT)*cdata->npolchan + POLCHAN;
+        i = ((SRC*ntime + TIME)*na + ANT)*npolchan + POLCHAN;
         jones[i] = pol_sum;
     }
 }
@@ -379,21 +370,10 @@ __global__ void rime_e_beam(
 template <typename FT, typename CT>
 class EBeam<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
-private:
-    // Pointer to constant memory on the device
-    montblanc::ebeam::const_data<FT> * d_cdata;
-
 public:
     explicit EBeam(tensorflow::OpKernelConstruction * context) :
         tensorflow::OpKernel(context)
-    {
-        // Get device address of GPU constant data
-        cudaError_t error = cudaGetSymbolAddress((void **)&d_cdata, beam_constant);
-
-        if(error != cudaSuccess) {
-            printf("Cuda Error: %s\n", cudaGetErrorString(error));
-        }
-    }
+    {}
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
@@ -415,10 +395,13 @@ public:
         int na = in_point_errors.dim_size(1);
         int nchan = in_point_errors.dim_size(2);
         int npolchan = nchan*EBEAM_NPOL;
+        int beam_lw = in_ebeam.dim_size(0);
+        int beam_mh = in_ebeam.dim_size(1);
+        int beam_nud = in_ebeam.dim_size(2);
 
         // Reason about our output shape
         // Create a pointer for the jones result
-        tf::TensorShape jones_shape({nsrc, ntime, na, nchan, 4});
+        tf::TensorShape jones_shape({nsrc, ntime, na, nchan, EBEAM_NPOL});
         tf::Tensor * jones_ptr = nullptr;
 
         // Allocate memory for the jones
@@ -428,56 +411,19 @@ public:
         if (jones_ptr->NumElements() == 0)
             { return; }
 
-        int cdata_size = sizeof(montblanc::ebeam::const_data<FT>);
-
-        tf::TensorShape cdata_shape({cdata_size});
-        tf::Tensor cdata_tensor;
-
-        // TODO. Does this actually allocate pinned memory?
-        tf::AllocatorAttributes pinned_allocator;
-        pinned_allocator.set_on_host(true);
-        pinned_allocator.set_gpu_compatible(true);
-
-        // Allocate memory for the constant data
-        OP_REQUIRES_OK(context, context->allocate_temp(
-            tf::DT_UINT8, cdata_shape, &cdata_tensor,
-            pinned_allocator));
-
-        // Cast raw bytes to the constant data structure type
-        montblanc::ebeam::const_data<FT> * cdata_ptr =
-            reinterpret_cast<montblanc::ebeam::const_data<FT> *>(
-                cdata_tensor.flat<uint8_t>().data());
-
-        cdata_ptr->nsrc = nsrc;
-        cdata_ptr->ntime = ntime;
-        cdata_ptr->na = na;
-        cdata_ptr->nchan = nchan;
-        cdata_ptr->npol = EBEAM_NPOL;
-        cdata_ptr->npolchan = npolchan;
-
-        cdata_ptr->beam_lw = in_ebeam.dim_size(0);
-        cdata_ptr->beam_mh = in_ebeam.dim_size(1);
-        cdata_ptr->beam_nud = in_ebeam.dim_size(2);
-
-        OP_REQUIRES(context, cdata_ptr->beam_nud < BEAM_NUD_LIMIT,
+        OP_REQUIRES(context, beam_nud < BEAM_NUD_LIMIT,
             tf::errors::InvalidArgument("beam_nud must be less than '" +
                 std::to_string(BEAM_NUD_LIMIT) + "' for the GPU beam."));
 
         // Extract beam extents
         auto beam_extents = in_beam_extents.tensor<FT, 1>();
 
-        cdata_ptr->ll = beam_extents(0); // Lower l
-        cdata_ptr->lm = beam_extents(1); // Lower m
-        cdata_ptr->lf = beam_extents(2); // Lower frequency
-        cdata_ptr->ul = beam_extents(3); // Upper l
-        cdata_ptr->um = beam_extents(4); // Upper m
-        cdata_ptr->uf = beam_extents(5); // Upper frequency
+        FT lower_l = beam_extents(0); // Lower l
+        FT lower_m = beam_extents(1); // Lower m
+        FT upper_l = beam_extents(3); // Upper l
+        FT upper_m = beam_extents(4); // Upper m
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
-
-        // Enqueue a copy of constant data to the device
-        cudaMemcpyAsync(d_cdata, cdata_ptr, cdata_size,
-           cudaMemcpyHostToDevice, stream);
 
         typedef montblanc::kernel_traits<FT> Tr;
         typedef typename montblanc::ebeam::LaunchTraits<FT> LTr;
@@ -514,7 +460,10 @@ public:
 
         rime_e_beam<Tr><<<grid, blocks, 0, stream>>>(
             lm, frequency, point_errors, antenna_scaling,
-            parallactic_angle, beam_freq_map, ebeam, jones);
+            parallactic_angle, beam_freq_map, ebeam, jones,
+            lower_l, lower_m, upper_l, upper_m,
+            nsrc, ntime, na, nchan, npolchan,
+            beam_lw, beam_mh, beam_nud);
 
     }
 };
