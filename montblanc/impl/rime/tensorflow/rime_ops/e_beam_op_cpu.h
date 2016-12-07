@@ -68,11 +68,12 @@ public:
         // Extract beam extents
         auto beam_extents = in_beam_extents.tensor<FT, 1>();
 
-        int lower_l = beam_extents(0); // Lower l
-        int lower_m = beam_extents(1); // Lower m
-        int upper_l = beam_extents(3); // Upper l
-        int upper_m = beam_extents(4); // Upper m
-
+        FT lower_l = beam_extents(0); // Lower l
+        FT lower_m = beam_extents(1); // Lower m
+        // FT lower_f = beam_extents(2); // Lower freq (unused)
+        FT upper_l = beam_extents(3); // Upper l
+        FT upper_m = beam_extents(4); // Upper m
+        // FT upper_f = beam_extents(5); // Upper freq (unused)
 
         FT lscale = FT(beam_lw-1)/(upper_l - lower_l);
         FT mscale = FT(beam_mh-1)/(upper_m - lower_m);
