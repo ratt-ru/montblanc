@@ -29,6 +29,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
 from attrdict import AttrDict
+import attr
 
 import montblanc
 import montblanc.util as mbu
@@ -52,9 +53,12 @@ ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 
 rime = load_tf_lib()
 
-DataSource = collections.namedtuple("DataSource", ['source', 'dtype', 'name'])
-DataSink = collections.namedtuple("DataSink", ['sink', 'name'])
-FeedOnce = collections.namedtuple("FeedOnce", ['ph', 'var', 'assign_op'])
+DataSource = attr.make_class("DataSource", ['source', 'dtype', 'name'],
+    slots=True, frozen=True)
+DataSink = attr.make_class("DataSink", ['sink', 'name'],
+    slots=True, frozen=True)
+FeedOnce = attr.make_class("FeedOnce", ['ph', 'var', 'assign_op'],
+    slots=True, frozen=True)
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
@@ -556,13 +560,13 @@ class RimeSolver(MontblancTensorflowSolver):
             if not n == 'descriptor' }
 
         # Construct a feed dictionary from data sources
-        feed_dict = {  ph: _get_data(data_sources[k],
+        feed_dict = {  fo.ph: _get_data(data_sources[k],
                 SourceContext(k, cube,
                     self.config(), global_iter_args,
                     cube.array(k) if k in cube.arrays() else {},
                     array_schemas[k].shape,
                     array_schemas[k].dtype))
-            for k, (ph, var, assign_op)
+            for k, fo
             in LQ.feed_once.iteritems() }
 
         # Run the assign operations for each feed_once variable

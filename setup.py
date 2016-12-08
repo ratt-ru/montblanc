@@ -219,6 +219,7 @@ setup(name='montblanc',
     install_requires=[
         'astropy >= 1.2.1',
         'attrdict >= 2.0.0',
+        'attrs >= 16.3.0',
         'enum34 >= 1.1.2',
         'funcsigs >= 0.4',
         'futures >= 3.0.3',
