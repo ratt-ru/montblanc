@@ -250,6 +250,17 @@ class RimeSolver(MontblancTensorflowSolver):
         self._compute_executors = [tpe(1) for i in range(shards)]
         self._consumer_executor = tpe(1)
 
+        #======================
+        # Tracing
+        #======================
+
+        self._should_trace = should_trace = True
+        self._trace_level = tf.RunOptions.FULL_TRACE if should_trace else tf.RunOptions.NO_TRACE
+        self._run_options = tf.RunOptions(trace_level=self._trace_level)
+        self._run_metadata = []
+        self._run_metadata_lock = threading.Lock()
+        self._iterations = 0
+
     def _parameter_feed(self):
         try:
             self._parameter_feed_impl()
@@ -412,7 +423,11 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.info("Enqueueing chunk {d} on shard {sh}".format(
             d=descriptor, sh=shard))
 
-        session.run(iq.enqueue_op, feed_dict=feed_dict)
+        run_metadata = tf.RunMetadata()
+        session.run(iq.enqueue_op, feed_dict=feed_dict,
+            options=self._run_options,
+            run_metadata=run_metadata)
+        self._save_metadata(run_metadata)
 
         # For each source type, feed that source queue
         for src_type, queue, stride in zip(src_types, src_queues, src_strides):
@@ -444,31 +459,53 @@ class RimeSolver(MontblancTensorflowSolver):
                         ad.shape, ad.dtype))
                     for (a, ph, ds, ad) in gen }
 
-                session.run(queue.enqueue_op, feed_dict=feed_dict)
+                run_metadata = tf.RunMetadata()
+                session.run(queue.enqueue_op, feed_dict=feed_dict,
+                    options=self._run_options,
+                    run_metadata=run_metadata)
+                self._save_metadata(run_metadata)
+
+
+    def _clear_metadata(self):
+        with self._run_metadata_lock:
+            self._run_metadata = []
+
+    def _save_metadata(self, run_metadata):
+        with self._run_metadata_lock:
+            self._run_metadata.append(run_metadata)
+
+    def _write_metadata(self):
+        with self._run_metadata_lock:
+            if len(self._run_metadata) == 0:
+                return
+
+            metadata = tf.RunMetadata()
+            [metadata.MergeFrom(m) for m in self._run_metadata]
+
+            tl = timeline.Timeline(metadata.step_stats)
+            trace_filename = 'compute_timeline_%d.json' % self._iterations
+            with open(trace_filename, 'w') as f:
+                f.write(tl.generate_chrome_trace_format())
+                f.write('\n')
 
     def _compute(self, feed_dict, shard):
         """ Call the tensorflow compute """
 
-        # run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE,
-        #    timeout_in_ms=10000)
-        # run_options =tf.RunOptions()
-        # run_metadata = tf.RunMetadata()
-
         try:
+            run_metadata = tf.RunMetadata()
+
             descriptor, enq = self._tf_session.run(
                 self._tf_expr[shard],
-                feed_dict=feed_dict)
-                #options=run_options,
-                #run_metadata=run_metadata)
+                feed_dict=feed_dict,
+                options=self._run_options,
+                run_metadata=run_metadata)
+
+            self._save_metadata(run_metadata)
 
         except Exception as e:
             montblanc.log.exception("Compute Exception")
             raise
 
-        # tl = timeline.Timeline(run_metadata.step_stats)
-        # ctf = tl.generate_chrome_trace_format()
-        # with open('compute-timeline.json', 'w') as f:
-        #     f.write(ctf)
 
     def _consume(self, data_sinks, cube, global_iter_args):
         """ Consume stub """
@@ -482,7 +519,11 @@ class RimeSolver(MontblancTensorflowSolver):
         """ Consume """
 
         LQ = self._tf_feed_data.local
-        output = self._tf_session.run(LQ.output.dequeue_op)
+        run_metadata = tf.RunMetadata()
+        output = self._tf_session.run(LQ.output.dequeue_op,
+            options=self._run_options,
+            run_metadata=run_metadata)
+        self._save_metadata(run_metadata)
 
         # Expect the descriptor in the first tuple position
         assert len(output) > 0
@@ -570,9 +611,15 @@ class RimeSolver(MontblancTensorflowSolver):
             for k, fo
             in LQ.feed_once.iteritems() }
 
+        self._clear_metadata()
+
         # Run the assign operations for each feed_once variable
+        run_metadata = tf.RunMetadata()
         self._tf_session.run([fo.assign_op for fo in LQ.feed_once.itervalues()],
-            feed_dict=feed_dict)
+            feed_dict=feed_dict,
+            options=self._run_options,
+            run_metadata=run_metadata)
+        self._save_metadata(run_metadata)
 
         try:
             params = self._parameter_executor.submit(self._parameter_feed)
@@ -597,6 +644,11 @@ class RimeSolver(MontblancTensorflowSolver):
             raise
         except:
             montblanc.log.exception('Solving exception')
+        else:
+            if self._should_trace:
+                self._write_metadata()
+
+            self._iterations += 1
 
     def close(self):
         # Shutdown thread executors
