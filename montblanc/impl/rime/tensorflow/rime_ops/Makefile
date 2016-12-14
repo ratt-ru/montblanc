@@ -25,7 +25,7 @@ LIBRARY=rime.so
 INCLUDES= -I $(TF_INC) -I $(MB_INC)
 CPPFLAGS=-std=c++11 $(TF_FLAGS) $(INCLUDES) -fPIC -fopenmp -O2 -march=native -mtune=native
 NVCCFLAGS=-std=c++11 -D GOOGLE_CUDA=$(TF_CUDA) $(TF_FLAGS) $(INCLUDES) \
-	-x cu --compiler-options "-fPIC" --gpu-architecture=sm_35 -lineinfo
+	-x cu --compiler-options "-fPIC" --gpu-architecture=sm_30 -lineinfo
 
 LDFLAGS = -fPIC -fopenmp
 
