@@ -270,7 +270,7 @@ class RimeSolver(MontblancTensorflowSolver):
         parameters_fed = 0
 
         # Iterate through the hypercube space
-        for i, d in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
+        for i, d in enumerate(cube.dim_iter(*iter_args)):
             cube.update_dimensions(d)
             descriptor = self._transcoder.encode(cube.dimensions(copy=False))
             feed_dict = {LQ.parameter.placeholders[0] : descriptor }
@@ -301,7 +301,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Get source strides out before the local sizes are modified during
         # the source loops below
         src_types = LQ.src_queues.keys()
-        src_strides = [int(i) for i in cube.dim_local_size(*src_types)]
+        src_strides = [int(i) for i in cube.dim_extent_size(*src_types)]
         src_queues = [[LQ.src_queues[t][s] for t in src_types]
             for s in range(self._nr_of_shards)]
 
@@ -417,15 +417,15 @@ class RimeSolver(MontblancTensorflowSolver):
         for src_type, queue, stride in zip(src_types, src_queues, src_strides):
             iter_args = [(src_type, stride)]
 
-            # Iterate over local_size chunks of the source
-            for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
+            # Iterate over chunks of the source
+            for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args)):
                 cube.update_dimensions(dim_desc)
+                s = dim_desc[0]['upper_extent'] - dim_desc[0]['lower_extent']
+
 
                 montblanc.log.info("'{ci}: Enqueueing {d} '{s}' '{t}' sources "
                     "on shard {sh}".format(d=descriptor,
-                        ci=chunk_i,
-                        s=dim_desc[0]['local_size'], t=src_type,
-                        sh=shard))
+                        ci=chunk_i, s=s, t=src_type, sh=shard))
 
                 # Determine array shapes and data types for this
                 # portion of the hypercube
@@ -917,7 +917,7 @@ def _supply_data(data_sink, context):
         raise ex, None, sys.exc_info()[2]
 
 def _iter_args(iter_dims, cube):
-    iter_strides = cube.dim_local_size(*iter_dims)
+    iter_strides = cube.dim_extent_size(*iter_dims)
     return zip(iter_dims, iter_strides)
 
 def _uniq_log2_range(start, size, div):
@@ -971,8 +971,7 @@ def _budget(cube, slvr_cfg):
         if bytes_required > mem_budget:
             for dim, size in reduction:
                 applied_reductions[dim] = size
-                cube.update_dimension(dim, local_size=size,
-                    lower_extent=0, upper_extent=size)
+                cube.update_dimension(dim, lower_extent=0, upper_extent=size)
         else:
             break
 
@@ -1043,33 +1042,32 @@ def _apply_source_provider_dim_updates(cube, source_providers):
         montblanc.log.info("Updating dimensions {mk} from "
             "source providers.".format(mk=mapping.keys()))
 
-    # Get existing local dimension sizes
-    local_sizes = cube.dim_local_size(*mapping.keys())
+    # Get existing dimension extents
+    extent_sizes = cube.dim_extent_size(*mapping.keys())
 
     # Now update our dimensions
-    for (n, u), ls in zip(mapping.iteritems(), local_sizes):
+    for (n, u), es in zip(mapping.iteritems(), extent_sizes):
         # Reduce our local size to satisfy hypercube
         d = u[0][0]
         gs = d.global_size
-        # Defer to existing local size for budgeting dimensions
-        ls = ls if ls in BUDGETING_DIMS else d.local_size
-        # Clamp local size to global size
-        ls = gs if ls > gs else ls
-        cube.update_dimension(n, local_size=ls, global_size=gs,
-            lower_extent=0, upper_extent=ls)
+        # Defer to existing extent size for budgeting dimensions
+        es = es if es in BUDGETING_DIMS else d.extent_size
+        # Clamp extent size to global size
+        es = gs if es > gs else es
+        cube.update_dimension(n, global_size=gs,
+            lower_extent=0, upper_extent=es)
 
     # Handle global number of sources differently
     # It's equal to the number of
     # point's, gaussian's, sersic's combined
     nsrc = sum(cube.dim_global_size(*mbu.source_nr_vars()))
 
-    # Local number of sources will be the local size of whatever
+    # Local number of sources will be the extent size of whatever
     # source type we're currently iterating over. So just take
-    # the maximum local size given the sources
-    ls = max(cube.dim_local_size(*mbu.source_nr_vars()))
+    # the maximum extent size given the sources
+    ls = max(cube.dim_extent_size(*mbu.source_nr_vars()))
 
-    cube.update_dimension('nsrc',
-        local_size=ls, global_size=nsrc,
+    cube.update_dimension('nsrc', global_size=nsrc,
         lower_extent=0, upper_extent=ls)
 
     # Return our cube size

@@ -3,7 +3,7 @@ import itertools
 import numpy as np
 
 # These are hypercube dimension attributes
-DEFAULT_SCHEMA = ['lower_extent', 'upper_extent', 'local_size', 'global_size']
+DEFAULT_SCHEMA = ['lower_extent', 'upper_extent', 'global_size']
 
 class CubeDimensionTranscoder(object):
     """

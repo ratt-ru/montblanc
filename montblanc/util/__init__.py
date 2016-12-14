@@ -502,7 +502,7 @@ def register_default_dimensions(cube, slvr_cfg):
         description=Options.NPOL_DESCRIPTION)
 
     # Now get the size of the registered dimensions
-    ntime, na, nchan, npol = cube.dim_local_size(
+    ntime, na, nchan, npol = cube.dim_extent_size(
         'ntime', 'na', 'nchan', 'npol')
 
     # Infer number of baselines from number of antenna,
@@ -515,7 +515,7 @@ def register_default_dimensions(cube, slvr_cfg):
     cube.register_dimension('nbl', nbl,
         description=Options.NBL_DESCRIPTION)
 
-    nbl = cube.dim_local_size('nbl')
+    nbl = cube.dim_extent_size('nbl')
 
     # Register dependent dimensions
     cube.register_dimension('npolchan', nchan*npol,
@@ -535,9 +535,7 @@ def register_default_dimensions(cube, slvr_cfg):
     # Register the individual source types
     for nr_var, nr_of_src in src_nr_vars.iteritems():
         cube.register_dimension(nr_var, nr_of_src,
-            description='{t} sources'.format(t=mbs.SOURCE_DIM_TYPES[nr_var]),
-            zero_valid=True)
-
+            description='{} sources'.format(mbs.SOURCE_DIM_TYPES[nr_var]))
 
 
 class ContextWrapper(object):
