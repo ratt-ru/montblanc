@@ -222,8 +222,7 @@ class RimeSolver(MontblancTensorflowSolver):
                 for s in range(self._shards_per_device)]
 
             # Initialisation operation
-            init_op = tf.initialize_all_variables()
-
+            init_op = tf.global_variables_initializer()
             # Now forbid modification of the graph
             compute_graph.finalize()
 

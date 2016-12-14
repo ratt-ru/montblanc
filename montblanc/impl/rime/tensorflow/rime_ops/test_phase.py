@@ -109,9 +109,11 @@ with tf.device('/gpu:0'):
 with tf.device('/gpu:0'):
     cplx_phase_expr_gpu = complex_phase(lm, uvw, frequency)
 
+init_op = tf.global_variables_initializer()
+
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
-    S.run(tf.initialize_all_variables())
+    S.run(init_op)
 
     # Evaluate and time tensorflow GPU
     start = timeit.default_timer()

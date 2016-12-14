@@ -59,9 +59,11 @@ with tf.device('/cpu:0'):
 with tf.device('/gpu:0'):
     e_beam_op_gpu = e_beam_op(*args)
 
+init_op = tf.global_variables_initializer()
+
 # Now create a tensorflow Session to evaluate the above
 with tf.Session() as S:
-    S.run(tf.initialize_all_variables())
+    S.run(init_op)
 
     # Evaluate and time tensorflow CPU
     start = timeit.default_timer()
