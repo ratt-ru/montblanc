@@ -197,10 +197,10 @@ class RimeSolver(MontblancTensorflowSolver):
         cpus = [d.name for d in devices if d.device_type == 'CPU']
 
         self._devices = cpus if len(gpus) == 0 else gpus
-        self._shards_per_device = spd = 3
+        self._shards_per_device = spd = 1
         self._nr_of_shards = shards = len(self._devices)*spd
-        # shard_id == d*ndev + shard
-        shard = lambda d, s: d*len(self._devices)+s
+        # shard_id == d*spd + shard
+        shard = lambda d, s: d*spd + s
 
         assert len(self._devices) > 0
 
