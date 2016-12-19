@@ -200,7 +200,7 @@ class RimeSolver(MontblancTensorflowSolver):
         self._shards_per_device = spd = 2
         self._nr_of_shards = shards = len(self._devices)*spd
         # shard_id == d*spd + shard
-        shard = lambda d, s: d*spd + s
+        self._shard = lambda d, s: d*spd + s
 
         assert len(self._devices) > 0
 
@@ -217,7 +217,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Construct tensorflow expressions for each shard
             self._tf_expr = [_construct_tensorflow_expression(
-                    self._tf_feed_data, dev, shard(d,s))
+                    self._tf_feed_data, dev, self._shard(d,s))
                 for d, dev in enumerate(self._devices)
                 for s in range(self._shards_per_device)]
 
@@ -311,7 +311,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         chunks_fed = 0
 
-        which_shard = itertools.cycle(range(self._nr_of_shards))
+        which_shard = itertools.cycle([self._shard(d,s)
+            for s in range(self._shards_per_device)
+            for d, dev in enumerate(self._devices)])
 
         while True:
             try:
