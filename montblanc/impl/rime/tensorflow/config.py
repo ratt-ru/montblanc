@@ -76,13 +76,13 @@ def default_base_ant_pairs(ctx):
 def default_antenna1(ctx):
     ant0, ant1 = default_base_ant_pairs(ctx)
     nbl_l, nbl_u = ctx.dim_extents('nbl')
-    ntime = ctx.dim_local_size('ntime')
+    ntime = ctx.dim_extent_size('ntime')
     return np.tile(ant0[nbl_l:nbl_u], ntime).reshape(ntime, nbl_u-nbl_l)
 
 def default_antenna2(ctx):
     ant0, ant1 = default_base_ant_pairs(ctx)
     nbl_l, nbl_u = ctx.dim_extents('nbl')
-    ntime = ctx.dim_local_size('ntime')
+    ntime = ctx.dim_extent_size('ntime')
     return np.tile(ant1[nbl_l:nbl_u], ntime).reshape(ntime, nbl_u-nbl_l)
 
 def rand_uvw(ctx):
