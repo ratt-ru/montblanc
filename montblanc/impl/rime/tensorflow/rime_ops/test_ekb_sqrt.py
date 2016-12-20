@@ -36,8 +36,10 @@ with tf.device('/cpu:0'):
 with tf.device('/gpu:0'):
     expr_gpu = rime.ekb_sqrt(*args, FT=dtype)
 
+init_op = tf.global_variables_initializer()
+
 with tf.Session() as S:
-    S.run(tf.initialize_all_variables())
+    S.run(init_op)
 
     # Run our expressions on CPU and GPU
     result_cpu = S.run(expr_cpu)

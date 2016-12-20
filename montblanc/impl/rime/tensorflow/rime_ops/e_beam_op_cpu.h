@@ -52,40 +52,35 @@ public:
         const tf::Tensor & in_beam_freq_map = context->input(6);
         const tf::Tensor & in_ebeam = context->input(7);
 
-        // Constant data structure
-        montblanc::ebeam::const_data<FT> cdata;
-
         // Extract problem dimensions
-        cdata.nsrc = in_lm.dim_size(0);
-        cdata.ntime = in_point_errors.dim_size(0);
-        cdata.na = in_point_errors.dim_size(1);
+        int nsrc = in_lm.dim_size(0);
+        int ntime = in_point_errors.dim_size(0);
+        int na = in_point_errors.dim_size(1);
 
-        cdata.nchan = in_point_errors.dim_size(2);
-        cdata.npol = EBEAM_NPOL;
-        cdata.npolchan = cdata.npol * cdata.nchan;
+        int nchan = in_point_errors.dim_size(2);
+        int npol = EBEAM_NPOL;
+        int npolchan = npol * nchan;
 
-        cdata.beam_lw = in_ebeam.dim_size(0);
-        cdata.beam_mh = in_ebeam.dim_size(1);
-        cdata.beam_nud = in_ebeam.dim_size(2);
+        int beam_lw = in_ebeam.dim_size(0);
+        int beam_mh = in_ebeam.dim_size(1);
+        int beam_nud = in_ebeam.dim_size(2);
 
         // Extract beam extents
         auto beam_extents = in_beam_extents.tensor<FT, 1>();
 
-        cdata.ll = beam_extents(0); // Lower l
-        cdata.lm = beam_extents(1); // Lower m
-        cdata.lf = beam_extents(2); // Lower frequency
-        cdata.ul = beam_extents(3); // Upper l
-        cdata.um = beam_extents(4); // Upper m
-        cdata.uf = beam_extents(5); // Upper frequency
+        FT lower_l = beam_extents(0); // Lower l
+        FT lower_m = beam_extents(1); // Lower m
+        // FT lower_f = beam_extents(2); // Lower freq (unused)
+        FT upper_l = beam_extents(3); // Upper l
+        FT upper_m = beam_extents(4); // Upper m
+        // FT upper_f = beam_extents(5); // Upper freq (unused)
 
-        FT lscale = FT(cdata.beam_lw-1)/(cdata.ul - cdata.ll);
-        FT mscale = FT(cdata.beam_mh-1)/(cdata.um - cdata.lm);
-        FT fscale = FT(cdata.beam_nud-1)/(cdata.uf - cdata.lf);
+        FT lscale = FT(beam_lw-1)/(upper_l - lower_l);
+        FT mscale = FT(beam_mh-1)/(upper_m - lower_m);
 
         // Reason about our output shape
-        tf::TensorShape jones_shape({cdata.nsrc,
-            cdata.ntime, cdata.na,
-            cdata.nchan, EBEAM_NPOL});
+        tf::TensorShape jones_shape({nsrc,
+            ntime, na, nchan, EBEAM_NPOL});
 
         // Create a pointer for the jones result
         tf::Tensor * jones_ptr = nullptr;
@@ -111,18 +106,18 @@ public:
         constexpr FT zero = 0.0;
         constexpr FT one = 1.0;
 
-        FT lmax = FT(cdata.beam_lw - one);
-        FT mmax = FT(cdata.beam_mh - one);
-        std::size_t fmax = cdata.beam_nud - 1;
+        FT lmax = FT(beam_lw - one);
+        FT mmax = FT(beam_mh - one);
+        std::size_t fmax = beam_nud - 1;
 
         // Precompute channel dimension data
-        std::vector<FT> gchan0(cdata.nchan);
-        std::vector<FT> gchan1(cdata.nchan);
-        std::vector<FT> chd0(cdata.nchan);
-        std::vector<FT> chd1(cdata.nchan);
+        std::vector<FT> gchan0(nchan);
+        std::vector<FT> gchan1(nchan);
+        std::vector<FT> chd0(nchan);
+        std::vector<FT> chd1(nchan);
 
         #pragma omp parallel for
-        for(int chan=0; chan < cdata.nchan; chan++)
+        for(int chan=0; chan < nchan; chan++)
         {
             FT f = frequency(chan);
 
@@ -163,22 +158,22 @@ public:
         }
 
         #pragma omp parallel for collapse(2)
-        for(int time=0; time < cdata.ntime; ++time)
+        for(int time=0; time < ntime; ++time)
         {
-            for(int ant=0; ant < cdata.na; ++ant)
+            for(int ant=0; ant < na; ++ant)
             {
                 // Rotation angle
                 FT angle = parallactic_angle(time, ant);
                 FT sint = std::sin(angle);
                 FT cost = std::cos(angle);
 
-                for(int src=0; src < cdata.nsrc; ++src)
+                for(int src=0; src < nsrc; ++src)
                 {
                     // Rotate lm coordinate angle
                     FT l = lm(src,0)*cost - lm(src,1)*sint;
                     FT m = lm(src,0)*sint + lm(src,1)*cost;
 
-                    for(int chan=0; chan < cdata.nchan; chan++)
+                    for(int chan=0; chan < nchan; chan++)
                     {
                         // Offset lm coordinates by point errors
                         // and scale by antenna scaling
@@ -189,8 +184,8 @@ public:
                         vm *= antenna_scaling(ant, chan, 1);
 
                         // Shift into the cube coordinate system
-                        vl = lscale*(vl - cdata.ll);
-                        vm = mscale*(vm - cdata.lm);
+                        vl = lscale*(vl - lower_l);
+                        vm = mscale*(vm - lower_m);
 
                         vl = std::max(zero, std::min(vl, lmax));
                         vm = std::max(zero, std::min(vm, mmax));
@@ -217,36 +212,36 @@ public:
                             // and the sum of abs in abs_sum
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl0, gm0, gchan0[chan],
-                                cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
+                                beam_lw, beam_mh, beam_nud, pol,
                                 (one-ld)*(one-md)*(chd0[chan]));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl1, gm0, gchan0[chan],
-                                cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
+                                beam_lw, beam_mh, beam_nud, pol,
                                 ld*(one-md)*(chd0[chan]));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl0, gm1, gchan0[chan],
-                                cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
+                                beam_lw, beam_mh, beam_nud, pol,
                                 (one-ld)*md*(chd0[chan]));
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl1, gm1, gchan0[chan],
-                                cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
+                                beam_lw, beam_mh, beam_nud, pol,
                                 ld*md*(chd0[chan]));
 
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl0, gm0, gchan1[chan],
-                                cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
+                                beam_lw, beam_mh, beam_nud, pol,
                                 (one-ld)*(one-md)*chd1[chan]);
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl1, gm0, gchan1[chan],
-                                cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
+                                beam_lw, beam_mh, beam_nud, pol,
                                 ld*(one-md)*chd1[chan]);
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl0, gm1, gchan1[chan],
-                                cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
+                                beam_lw, beam_mh, beam_nud, pol,
                                 (one-ld)*md*chd1[chan]);
                             trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
                                 gl1, gm1, gchan1[chan],
-                                cdata.beam_lw, cdata.beam_mh, cdata.beam_nud, pol,
+                                beam_lw, beam_mh, beam_nud, pol,
                                 ld*md*chd1[chan]);
 
                             // Normalising factor for the polarised sum

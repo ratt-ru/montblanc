@@ -34,8 +34,10 @@ with tf.device('/cpu:0'):
 with tf.device('/gpu:0'):
     sersic_shape_gpu = rime.sersic_shape(*args)
 
+init_op = tf.global_variables_initializer()
+
 with tf.Session() as S:
-    S.run(tf.initialize_all_variables())
+    S.run(init_op)
     tf_sersic_shape_gpu = S.run(sersic_shape_gpu)
     tf_sersic_shape_cpu = S.run(sersic_shape_cpu)
     assert np.allclose(tf_sersic_shape_cpu, tf_sersic_shape_gpu)

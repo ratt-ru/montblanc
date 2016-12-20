@@ -19,12 +19,14 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import collections
+import copy
 import itertools
 import json
 import threading
 import time
 import sys
 
+import attr
 from attrdict import AttrDict
 import concurrent.futures as cf
 import numpy as np
@@ -54,9 +56,12 @@ ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 
 rime = load_tf_lib()
 
-DataSource = collections.namedtuple("DataSource", ['source', 'dtype', 'name'])
-DataSink = collections.namedtuple("DataSink", ['sink', 'name'])
-FeedOnce = collections.namedtuple("FeedOnce", ['ph', 'var', 'assign_op'])
+DataSource = attr.make_class("DataSource", ['source', 'dtype', 'name'],
+    slots=True, frozen=True)
+DataSink = attr.make_class("DataSink", ['sink', 'name'],
+    slots=True, frozen=True)
+FeedOnce = attr.make_class("FeedOnce", ['ph', 'var', 'assign_op'],
+    slots=True, frozen=True)
 
 class AConfigurationStrategy(object):
     def construct_shared_configuration(self, slvr_cfg):
@@ -263,7 +268,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         from montblanc.impl.rime.tensorflow.config import (A, P)
 
-
         def _massage_dtypes(A, T):
             def _massage_dtype_in_dict(D):
                 new_dict = D.copy()
@@ -313,9 +317,11 @@ class RimeSolver(MontblancTensorflowSolver):
         # Data Sources and Sinks
         #=======================
 
-        # Construct list of data sources/sinks internal to the solver
-        # Any data sources/sinks specified in the solve() method will
-        # override these
+        # Construct list of data sources and sinks
+        # internal to the solver.
+        # These will be overridden by source and sink
+        # providers supplied by the user in the solve()
+        # method
         self._source_providers = []
         self._sink_providers = [NullSinkProvider()]
 
@@ -339,14 +345,23 @@ class RimeSolver(MontblancTensorflowSolver):
         self._iter_dims = ['ntime', 'nbl']
         self._transcoder = CubeDimensionTranscoder(self._iter_dims)
 
-        #======================
-        # Thread pool executors
-        #======================
+        #=========================
+        # Tensorflow devices
+        #=========================
 
-        self._parameter_executor = cf.ThreadPoolExecutor(1)
-        self._feed_executor = cf.ThreadPoolExecutor(1)
-        self._compute_executor = cf.ThreadPoolExecutor(1)
-        self._consumer_executor = cf.ThreadPoolExecutor(1)
+        from tensorflow.python.client import device_lib
+        devices = device_lib.list_local_devices()
+
+        gpus = [d.name for d in devices if d.device_type == 'GPU']
+        cpus = [d.name for d in devices if d.device_type == 'CPU']
+
+        self._devices = cpus if len(gpus) == 0 else gpus
+        self._shards_per_device = spd = 2
+        self._nr_of_shards = shards = len(self._devices)*spd
+        # shard_id == d*spd + shard
+        self._shard = lambda d, s: d*spd + s
+
+        assert len(self._devices) > 0
 
         #=========================
         # Tensorflow Compute Graph
@@ -354,15 +369,20 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Create all tensorflow constructs within the compute graph
         with tf.Graph().as_default() as compute_graph:
-            # Create feed data and expression
-            self._tf_feed_data = _construct_tensorflow_feed_data(dfs,
-                cube, cluster, job, task, self._iter_dims)
-            self._tf_expr = _construct_tensorflow_expression(
-                self._tf_feed_data)
+            # Create our data feeding structure containing
+            # input/output queues and feed once variables
+            self._tf_feed_data = _construct_tensorflow_feed_data(
+                dfs, cube, cluster, job, task,
+                self._iter_dims, self._nr_of_shards)
+
+            # Construct tensorflow expressions for each shard
+            self._tf_expr = [_construct_tensorflow_expression(
+                    self._tf_feed_data, dev, self._shard(d,s))
+                for d, dev in enumerate(self._devices)
+                for s in range(self._shards_per_device)]
 
             # Initialisation operation
-            init_op = tf.initialize_local_variables()
-
+            init_op = tf.global_variables_initializer()
             # Now forbid modification of the graph
             compute_graph.finalize()
 
@@ -374,12 +394,35 @@ class RimeSolver(MontblancTensorflowSolver):
         self._tf_job = job
         self._tf_task = task
 
-        self._tf_coord = tf.train.Coordinator()
-
         montblanc.log.debug("Attaching session to tensorflow server "
             "'{tfs}'".format(tfs=server))
-        self._tf_session = tf.Session(server, graph=compute_graph)
+        session_config = tf.ConfigProto(allow_soft_placement=True)
+
+        self._tf_session = tf.Session(server,
+            graph=compute_graph, config=session_config)
         self._tf_session.run(init_op)
+
+        #======================
+        # Thread pool executors
+        #======================
+
+        tpe = cf.ThreadPoolExecutor
+
+        self._parameter_executor = tpe(1)
+        self._feed_executors = [tpe(1) for i in range(shards)]
+        self._compute_executors = [tpe(1) for i in range(shards)]
+        self._consumer_executor = tpe(1)
+
+        #======================
+        # Tracing
+        #======================
+
+        self._should_trace = should_trace = True
+        self._trace_level = tf.RunOptions.FULL_TRACE if should_trace else tf.RunOptions.NO_TRACE
+        self._run_options = tf.RunOptions(trace_level=self._trace_level)
+        self._run_metadata = []
+        self._run_metadata_lock = threading.Lock()
+        self._iterations = 0
 
     def is_master(self):
         return self._is_master
@@ -421,7 +464,7 @@ class RimeSolver(MontblancTensorflowSolver):
         parameters_fed = 0
 
         # Iterate through the hypercube space
-        for i, d in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
+        for i, d in enumerate(cube.dim_iter(*iter_args)):
             cube.update_dimensions(d)
 
             # Construct a descriptor describing a portion of the problem
@@ -446,12 +489,10 @@ class RimeSolver(MontblancTensorflowSolver):
         for job, task, queue in RPQ:
             session.run(queue.enqueue_op, feed_dict={ queue.placeholders[0]: [-1] })
 
-        self._tf_coord.request_stop()
-
         montblanc.log.info("Done feeding {n} parameters.".format(
             n=parameters_fed))
 
-    def _feed(self, cube, data_sources, global_iter_args):
+    def _feed(self, cube, data_sources, data_sinks, global_iter_args):
         """ Feed stub """
 
         # Only workers feed data
@@ -459,244 +500,276 @@ class RimeSolver(MontblancTensorflowSolver):
             return
 
         try:
-            self._feed_impl(cube, data_sources, global_iter_args)
+            self._feed_impl(cube, data_sources, data_sinks, global_iter_args)
         except Exception as e:
             montblanc.log.exception("Feed Exception")
             raise
 
-    def _feed_impl(self, cube, data_sources, global_iter_args):
+    def _feed_impl(self, cube, data_sources, data_sinks, global_iter_args):
         """ Implementation of queue feeding """
+
+        # Only workers feed data
+        if self.is_master():
+            return
+
         session = self._tf_session
-        LQ = self._tf_feed_data.local
+        FD = self._tf_feed_data
+        LQ = FD.local
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
         src_types = LQ.src_queues.keys()
-        src_strides = [int(i) for i in cube.dim_local_size(*src_types)]
-        src_queues = [LQ.src_queues[t] for t in src_types]
+        src_strides = [int(i) for i in cube.dim_extent_size(*src_types)]
+        src_queues = [[LQ.src_queues[t][s] for t in src_types]
+            for s in range(self._nr_of_shards)]
+
+        compute_feed_dict = { ph: cube.dim_global_size(n) for
+            n, ph in FD.src_ph_vars.iteritems() }
+        compute_feed_dict.update({ ph: getattr(cube, n) for
+            n, ph in FD.property_ph_vars.iteritems() })
 
         chunks_fed = 0
+
+        which_shard = itertools.cycle([self._shard(d,s)
+            for s in range(self._shards_per_device)
+            for d, dev in enumerate(self._devices)])
 
         while True:
             try:
                 # Get the descriptor describing a portion of the RIME
-                descriptor = session.run(LQ.parameter.dequeue_op)
+                # and the current sizes of the the input queues
+                ops = [LQ.parameter.dequeue_op] + [iq.size_op
+                    for iq in LQ.input]
+                result = session.run(ops)
+                descriptor = result[0]
+                input_queue_sizes = np.asarray(result[1:])
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
+
+            # Quit if EOF
+            if descriptor[0] == -1:
+                break
 
             # Make it read-only so we can hash the contents
             descriptor.flags.writeable = False
             montblanc.log.info("Received descriptor {}".format(descriptor))
 
-            if descriptor[0] == -1:
-                break
+            # Find indices of the emptiest queues and, by implication
+            # the shard with the least work assigned to it
+            emptiest_queues = np.argsort(input_queue_sizes)
+            shard = emptiest_queues[0]
+            shard = which_shard.next()
 
-            # Decode the descriptor and update our cube dimensions
-            dims = self._transcoder.decode(descriptor)
-            cube.update_dimensions(dims)
+            feed_f = self._feed_executors[shard].submit(self._feed_actual,
+                data_sources.copy(), cube.copy(),
+                descriptor, shard,
+                src_types, src_strides, src_queues[shard],
+                global_iter_args)
 
-            # Determine array shapes and data types for this
-            # portion of the hypercube
-            array_schemas = cube.arrays(reify=True)
+            compute_f = self._compute_executors[shard].submit(self._compute,
+                compute_feed_dict, shard)
 
-            # Inject a data source and array schema for the
-            # descriptor queue items. These aren't full on arrays per se
-            # but they need to work within the feeding framework
-            array_schemas['descriptor'] = descriptor
-            data_sources['descriptor'] = DataSource(lambda c: descriptor, np.int32, 'Internal')
+            consume_f = self._consumer_executor.submit(self._consume,
+                data_sinks.copy(), cube.copy(), global_iter_args)
 
-            # Generate (name, placeholder, datasource, array schema)
-            # for the arrays required by each queue
-            iq = LQ.input
-            gen = ((a, ph, data_sources[a], array_schemas[a])
-                for ph, a in zip(iq.placeholders, iq.fed_arrays))
-
-            # Get input data by calling the data source functors
-            input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
-                    self.config(), global_iter_args,
-                    cube.array(a) if a in cube.arrays() else {},
-                    ad.shape, ad.dtype)))
-                for (a, ph, ds, ad) in gen]
-
-            # Create a feed dictionary from the input data
-            feed_dict = { ph: data for (a, ph, data) in input_data }
-
-            # Cache the inputs for this chunk of data,
-            # so that sinks can access them
-            input_cache = { a: data for (a, ph, data) in input_data }
-
-            # Guard access to the cache with a lock
-            with self._source_cache_lock:
-                self._source_cache[descriptor.data] = input_cache
-
-            montblanc.log.debug("Enqueueing chunk {i} {d}".format(
-                i=chunks_fed, d=descriptor))
-
-            session.run(LQ.input.enqueue_op, feed_dict=feed_dict)
-
-            chunks_fed += 1
-
-            # For each source type, feed that source queue
-            for src_type, queue, stride in zip(src_types, src_queues, src_strides):
-                iter_args = [(src_type, stride)]
-
-                # Iterate over local_size chunks of the source
-                for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args, update_local_size=True)):
-                    cube.update_dimensions(dim_desc)
-
-                    montblanc.log.debug("'{ci}: Enqueueing '{s}' '{t}' sources".format(
-                        ci=chunk_i, s=dim_desc[0]['local_size'], t=src_type))
-
-                    # Determine array shapes and data types for this
-                    # portion of the hypercube
-                    array_schemas = cube.arrays(reify=True)
-
-                    # Generate (name, placeholder, datasource, array descriptor)
-                    # for the arrays required by each queue
-                    gen = [(a, ph, data_sources[a], array_schemas[a])
-                        for ph, a in zip(queue.placeholders, queue.fed_arrays)]
-
-                    # Create a feed dictionary by calling the data source functors
-                    feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
-                            self.config(), global_iter_args + iter_args,
-                            cube.array(a) if a in cube.arrays() else {},
-                            ad.shape, ad.dtype))
-                        for (a, ph, ds, ad) in gen }
-
-                    session.run(queue.enqueue_op, feed_dict=feed_dict)
-
-
-        # Close all local queues
-        # session.run([q.close_op for q in (
-        #     [LQ.input] + LQ.src_queues.values() + [LQ.output])])
+            yield (feed_f, compute_f, consume_f)
 
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
-    def _compute_impl(self):
-        """ Implementation of computation """
-
-        #run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE,
-        #    timeout_in_ms=10000)
-        run_options =tf.RunOptions()
-        run_metadata = tf.RunMetadata()
-
-        S = self._tf_session
-        FD = self._tf_feed_data
-        cube = self.hypercube
-
-        chunks_computed = 0
-
-        feed_dict = { ph: cube.dim_global_size(n) for
-            n, ph in FD.src_ph_vars.iteritems() }
-
-        feed_dict.update({ ph: getattr(cube, n) for
-            n, ph in FD.property_ph_vars.iteritems() })
-
-        while not self._tf_coord.should_stop():
-            try:
-                descriptor, enq = S.run(self._tf_expr,
-                    feed_dict=feed_dict,
-                    options=run_options,
-                    run_metadata=run_metadata)
-            except (tf.errors.OutOfRangeError, tf.errors.CancelledError) as e:
-                self._tf_coord.request_stop()
-                continue
-
-            # Are we done?
-            dims = self._transcoder.decode(descriptor)
-            chunks_computed += 1
-
-        montblanc.log.info("Done computing {n} chunks."
-            .format(n=chunks_computed))
-
-        tl = timeline.Timeline(run_metadata.step_stats)
-        ctf = tl.generate_chrome_trace_format()
-        with open('compute-timeline.json', 'w') as f:
-            f.write(ctf)
-
-    def _compute(self):
-        """ Compute stub """
-        # Only workers compute
+    def _feed_actual(self, *args):
+        # Only workers feed data
         if self.is_master():
             return
 
         try:
-            return self._compute_impl()
+            return self._feed_actual_impl(*args)
+        except Exception as e:
+            montblanc.log.exception("Feed Exception")
+            raise
+
+    def _feed_actual_impl(self, data_sources, cube,
+            descriptor, shard,
+            src_types, src_strides, src_queues,
+            global_iter_args):
+
+        session = self._tf_session
+        iq = self._tf_feed_data.local.input[shard]
+
+        # Decode the descriptor and update our cube dimensions
+        dims = self._transcoder.decode(descriptor)
+        cube.update_dimensions(dims)
+
+        # Determine array shapes and data types for this
+        # portion of the hypercube
+        array_schemas = cube.arrays(reify=True)
+
+        # Inject a data source and array schema for the
+        # descriptor queue items. These aren't full on arrays per se
+        # but they need to work within the feeding framework
+        array_schemas['descriptor'] = descriptor
+        data_sources['descriptor'] = DataSource(
+            lambda c: descriptor, np.int32, 'Internal')
+
+        # Generate (name, placeholder, datasource, array schema)
+        # for the arrays required by each queue
+        gen = ((a, ph, data_sources[a], array_schemas[a])
+            for ph, a in zip(iq.placeholders, iq.fed_arrays))
+
+        # Get input data by calling the data source functors
+        input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
+                self.config(), global_iter_args,
+                cube.array(a) if a in cube.arrays() else {},
+                ad.shape, ad.dtype)))
+            for (a, ph, ds, ad) in gen]
+
+        # Create a feed dictionary from the input data
+        feed_dict = { ph: data for (a, ph, data) in input_data }
+
+        # Cache the inputs for this chunk of data,
+        # so that sinks can access them
+        input_cache = { a: data for (a, ph, data) in input_data }
+
+        # Guard access to the cache with a lock
+        with self._source_cache_lock:
+            self._source_cache[descriptor.data] = input_cache
+
+        montblanc.log.info("Enqueueing chunk {d} on shard {sh}".format(
+            d=descriptor, sh=shard))
+
+        run_metadata = tf.RunMetadata()
+        session.run(iq.enqueue_op, feed_dict=feed_dict,
+            options=self._run_options,
+            run_metadata=run_metadata)
+        self._save_metadata(run_metadata)
+
+        # For each source type, feed that source queue
+        for src_type, queue, stride in zip(src_types, src_queues, src_strides):
+            iter_args = [(src_type, stride)]
+
+            # Iterate over chunks of the source
+            for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args)):
+                cube.update_dimensions(dim_desc)
+                s = dim_desc[0]['upper_extent'] - dim_desc[0]['lower_extent']
+
+
+                montblanc.log.info("'{ci}: Enqueueing {d} '{s}' '{t}' sources "
+                    "on shard {sh}".format(d=descriptor,
+                        ci=chunk_i, s=s, t=src_type, sh=shard))
+
+                # Determine array shapes and data types for this
+                # portion of the hypercube
+                array_schemas = cube.arrays(reify=True)
+
+                # Generate (name, placeholder, datasource, array descriptor)
+                # for the arrays required by each queue
+                gen = [(a, ph, data_sources[a], array_schemas[a])
+                    for ph, a in zip(queue.placeholders, queue.fed_arrays)]
+
+                # Create a feed dictionary by calling the data source functors
+                feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
+                        self.config(), global_iter_args + iter_args,
+                        cube.array(a) if a in cube.arrays() else {},
+                        ad.shape, ad.dtype))
+                    for (a, ph, ds, ad) in gen }
+
+                run_metadata = tf.RunMetadata()
+                session.run(queue.enqueue_op, feed_dict=feed_dict,
+                    options=self._run_options,
+                    run_metadata=run_metadata)
+                self._save_metadata(run_metadata)
+
+
+    def _clear_metadata(self):
+        with self._run_metadata_lock:
+            self._run_metadata = []
+
+    def _save_metadata(self, run_metadata):
+        with self._run_metadata_lock:
+            self._run_metadata.append(run_metadata)
+
+    def _write_metadata(self):
+        with self._run_metadata_lock:
+            if len(self._run_metadata) == 0:
+                return
+
+            metadata = tf.RunMetadata()
+            [metadata.MergeFrom(m) for m in self._run_metadata]
+
+            tl = timeline.Timeline(metadata.step_stats)
+            trace_filename = 'compute_timeline_%d.json' % self._iterations
+            with open(trace_filename, 'w') as f:
+                f.write(tl.generate_chrome_trace_format())
+                f.write('\n')
+
+    def _compute(self, feed_dict, shard):
+        """ Call the tensorflow compute """
+
+        try:
+            run_metadata = tf.RunMetadata()
+
+            descriptor, enq = self._tf_session.run(
+                self._tf_expr[shard],
+                feed_dict=feed_dict,
+                options=self._run_options,
+                run_metadata=run_metadata)
+
+            self._save_metadata(run_metadata)
+
         except Exception as e:
             montblanc.log.exception("Compute Exception")
             raise
 
-    def _consume(self, sink_providers):
+
+    def _consume(self, data_sinks, cube, global_iter_args):
         """ Consume stub """
         # Only workers consume data
         if self.is_master():
             return
 
         try:
-            return self._consume_impl(sink_providers)
+            return self._consume_impl(data_sinks, cube, global_iter_args)
         except Exception as e:
             montblanc.log.exception("Consumer Exception")
-            raise
+            raise e, None, sys.exc_info()[2]
 
-    def _consume_impl(self, sink_providers):
+    def _consume_impl(self, data_sinks, cube, global_iter_args):
         """ Consume """
 
-        S = self._tf_session
-        chunks_consumed = 0
-
-        # Maintain a hypercube based on the main cube
-        cube = self.hypercube.copy()
         LQ = self._tf_feed_data.local
+        run_metadata = tf.RunMetadata()
+        output = self._tf_session.run(LQ.output.dequeue_op,
+            options=self._run_options,
+            run_metadata=run_metadata)
+        self._save_metadata(run_metadata)
 
-        # Get space of iteration
-        global_iter_args = _iter_args(self._iter_dims, cube)
+        # Expect the descriptor in the first tuple position
+        assert len(output) > 0
+        assert LQ.output.fed_arrays[0] == 'descriptor'
 
-        # Get data sinks from supplied providers
-        data_sinks = { n: DataSink(f, prov.name())
-            for prov in sink_providers
-            for n, f in prov.sinks().iteritems()
-            if not n == 'descriptor' }
+        descriptor = output[0]
+        # Make it read-only so we can hash the contents
+        descriptor.flags.writeable = False
 
+        dims = self._transcoder.decode(descriptor)
+        cube.update_dimensions(dims)
 
-        while not self._tf_coord.should_stop():
+        # Obtain and remove input data from the source cache
+        with self._source_cache_lock:
             try:
-                output = S.run(LQ.output.dequeue_op)
-            except (tf.errors.OutOfRangeError, tf.errors.CancelledError) as e:
-                self._tf_coord.request_stop()
-                continue
+                input_data = self._source_cache.pop(descriptor.data)
+            except KeyError:
+                raise ValueError("No input data cache available "
+                    "in source cache for descriptor {}!"
+                        .format(descriptor))
 
-            chunks_consumed += 1
+        # For each array in our output, call the associated data sink
+        for n, a in zip(LQ.output.fed_arrays[1:], output[1:]):
+            sink_context = SinkContext(n, cube,
+                self.config(), global_iter_args,
+                cube.array(n) if n in cube.arrays() else {},
+                a, input_data)
 
-            # Expect the descriptor in the first tuple position
-            assert len(output) > 0
-            assert LQ.output.fed_arrays[0] == 'descriptor'
-
-            descriptor = output[0]
-            # Make it read-only so we can hash the contents
-            descriptor.flags.writeable = False
-
-            dims = self._transcoder.decode(descriptor)
-            cube.update_dimensions(dims)
-
-            # Obtain and remove input data from the source cache
-            with self._source_cache_lock:
-                try:
-                    input_data = self._source_cache.pop(descriptor.data)
-                except KeyError:
-                    raise ValueError("No input data cache available "
-                        "in source cache for descriptor {}!"
-                            .format(descriptor))
-
-            # For each array in our output, call the associated data sink
-            for n, a in zip(LQ.output.fed_arrays[1:], output[1:]):
-                sink_context = SinkContext(n, cube,
-                    self.config(), global_iter_args,
-                    cube.array(n) if n in cube.arrays() else {},
-                    a, input_data)
-
-                _supply_data(data_sinks[n], sink_context)
-
-        montblanc.log.info('Done consuming {n} chunks'.format(n=chunks_consumed))
+            _supply_data(data_sinks[n], sink_context)
 
     def solve(self, *args, **kwargs):
         #  Obtain source and sink providers, including internal providers
@@ -735,63 +808,70 @@ class RimeSolver(MontblancTensorflowSolver):
         input_sources = LQ.input_sources
         data_sources = self._default_data_sources.copy()
         data_sources.update({n: DataSource(f, cube.array(n).dtype, prov.name())
-                                for prov in source_providers
-                                for n, f in prov.sources().iteritems()
-                                if n in input_sources})
+            for prov in source_providers
+            for n, f in prov.sources().iteritems()
+            if n in input_sources})
 
+        # Get data sinks from supplied providers
+        data_sinks = { n: DataSink(f, prov.name())
+            for prov in sink_providers
+            for n, f in prov.sinks().iteritems()
+            if not n == 'descriptor' }
 
         # Construct a feed dictionary from data sources
-        feed_dict = {  ph: _get_data(data_sources[k],
+        feed_dict = {  fo.ph: _get_data(data_sources[k],
                 SourceContext(k, cube,
                     self.config(), global_iter_args,
                     cube.array(k) if k in cube.arrays() else {},
                     array_schemas[k].shape,
                     array_schemas[k].dtype))
-            for k, (ph, var, assign_op)
+            for k, fo
             in LQ.feed_once.iteritems() }
 
-        # Run the assign operations for each feed_once variable
-        self._tf_session.run([fo.assign_op for fo in LQ.feed_once.itervalues()],
-            feed_dict=feed_dict)
+        self._clear_metadata()
 
-        not_done = []
+        # Run the assign operations for each feed_once variable
+        run_metadata = tf.RunMetadata()
+        self._tf_session.run([fo.assign_op for fo in LQ.feed_once.itervalues()],
+            feed_dict=feed_dict,
+            options=self._run_options,
+            run_metadata=run_metadata)
+        self._save_metadata(run_metadata)
 
         try:
             params = self._parameter_executor.submit(self._parameter_feed)
-            feed = self._feed_executor.submit(self._feed, cube, data_sources,
-                global_iter_args)
-            compute = self._compute_executor.submit(self._compute)
-            consume = self._consumer_executor.submit(self._consume, sink_providers)
+            not_done = set([params])
 
-            not_done = [params, feed, compute, consume]
+            for futures in self._feed_impl(cube,
+                data_sources, data_sinks, global_iter_args):
 
-            while not self._tf_coord.should_stop():
-                # TODO: timeout not strictly necessary
-                done, not_done = cf.wait(not_done,
-                    timeout=1.0,
-                    return_when=cf.FIRST_COMPLETED)
+                not_done.update(futures)
 
-                for future in done:
-                    res = future.result()
+            # TODO: timeout not strictly necessary
+            done, not_done = cf.wait(not_done,
+                return_when=cf.ALL_COMPLETED)
 
-                # Nothing remains to be done, quit the loop
-                if len(not_done) == 0:
-                    break
+            for future in done:
+                res = future.result()
+
+            assert len(not_done) == 0
 
         except (KeyboardInterrupt, SystemExit) as e:
             montblanc.log.exception('Solving interrupted')
             raise
         except:
             montblanc.log.exception('Solving exception')
+        else:
+            if self._should_trace:
+                self._write_metadata()
 
-        # Cancel any running futures
-        [f.cancel() for f in not_done]
+            self._iterations += 1
 
     def close(self):
         # Shutdown thread executors
         self._parameter_executor.shutdown()
-        self._feed_executor.shutdown()
-        self._compute_executor.shutdown()
+        [fe.shutdown() for fe in self._feed_executors]
+        [ce.shutdown() for ce in self._compute_executors]
         self._consumer_executor.shutdown()
 
         # Shutdown thte tensorflow session
@@ -813,14 +893,25 @@ class RimeSolver(MontblancTensorflowSolver):
 
 
 def _construct_tensorflow_feed_data(dfs, cube, cluster,
-        job, task, iter_dims):
+        job, task, iter_dims, shards):
 
     QUEUE_SIZE = 10
 
     FD = AttrDict()
+    # https://github.com/bcj/AttrDict/issues/34
+    FD._setattr('_sequence_type', list)
     # Reference local and remote queues
     FD.local = local = AttrDict()
     FD.remote = remote = AttrDict()
+
+    # Reference local and remote queues
+    FD.local = local = AttrDict()
+    # https://github.com/bcj/AttrDict/issues/34
+    local._setattr('_sequence_type', list)
+    FD.remote = remote = AttrDict()
+    # https://github.com/bcj/AttrDict/issues/34
+    remote._setattr('_sequence_type', list)
+
 
     # Create placholder variables for source counts
     FD.src_ph_vars = AttrDict({
@@ -904,21 +995,24 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
 
     with tf.device(dev_spec):
         # Create the queue for holding the input
-        local.input = create_queue_wrapper('input', QUEUE_SIZE,
-                    ['descriptor'] + [a.name for a in feed_all],
-                    dfs)
+        local.input = [create_queue_wrapper('input_%d' % s, QUEUE_SIZE,
+                    ['descriptor'] + [a.name for a in feed_all], dfs)
+                for s in range(shards)]
 
         # Create source input queues
-        local.point_source = create_queue_wrapper('point_source',
+        local.point_source = [create_queue_wrapper('point_source_%d' % s,
             QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
+            for s in range(shards)]
 
-        local.gaussian_source = create_queue_wrapper('gaussian_source',
+        local.gaussian_source = [create_queue_wrapper('gaussian_source_%d' % s,
             QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
                 'gaussian_shape'], dfs)
+            for s in range(shards)]
 
-        local.sersic_source = create_queue_wrapper('sersic_source',
+        local.sersic_source = [create_queue_wrapper('sersic_source_%d' % s,
             QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
                 'sersic_shape'], dfs)
+            for s in range(shards)]
 
         # Source queues to feed
         local.src_queues = src_queues = {
@@ -936,8 +1030,8 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
             QUEUE_SIZE, ['descriptor', 'model_vis'], dfs)
 
     #=================================================
-    # Create tensorflow queues which are fed only once
-    # via an assign operation
+    # Create tensorflow variables which are
+    # fed only once via an assign operation
     #=================================================
 
     def _make_feed_once_tuple(array):
@@ -967,7 +1061,8 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
     #=======================================================
 
     # Data sources from input queues
-    input_sources = {a for q in [local.input] + src_queues.values()
+    input_queues = local.input + [q for sq in src_queues.values() for q in sq]
+    input_sources = { a for q in input_queues
         for a in q.fed_arrays}
 
     # Data sources from feed once variables
@@ -977,7 +1072,7 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
 
     return FD
 
-def _construct_tensorflow_expression(feed_data):
+def _construct_tensorflow_expression(feed_data, device, shard):
     """ Constructs a tensorflow expression for computing the RIME """
     zero = tf.constant(0)
     src_count = zero
@@ -985,14 +1080,16 @@ def _construct_tensorflow_expression(feed_data):
 
     LQ = feed_data.local
 
-    # Pull RIME inputs out of the feed queues
-    D = LQ.input.dequeue_to_attrdict()
+    # Pull RIME inputs out of the feed queue
+    # of the relevant shard
+    D = LQ.input[shard].dequeue_to_attrdict()
     D.update({k: fo.var for k, fo in LQ.feed_once.iteritems()})
 
     # Infer chunk dimensions
-    model_vis_shape = tf.shape(D.model_vis)
-    ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
-    FT, CT = D.uvw.dtype, D.model_vis.dtype
+    with tf.device(device):
+        model_vis_shape = tf.shape(D.model_vis)
+        ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
+        FT, CT = D.uvw.dtype, D.model_vis.dtype
 
     def apply_dies(src_count):
         """ Have we reached the maximum source count """
@@ -1014,7 +1111,8 @@ def _construct_tensorflow_expression(feed_data):
             D.parallactic_angles,
             D.beam_extents, D.beam_freq_map, D.ebeam)
 
-        return rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT), sgn_brightness
+        return (rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT),
+            sgn_brightness)
 
     # While loop condition for each point source type
     def point_cond(model_vis, npsrc, src_count):
@@ -1029,21 +1127,21 @@ def _construct_tensorflow_expression(feed_data):
     # While loop bodies
     def point_body(model_vis, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
-        lm, stokes, alpha = LQ.point_source.dequeue()
+        lm, stokes, alpha = LQ.point_source[shard].dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         npsrc +=  nsrc
         ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
         shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
         model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-            shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
-            apply_dies(src_count))
+            shape, ant_jones, sgn_brightness, D.flag, D.gterm,
+            model_vis, apply_dies(src_count))
 
         return model_vis, npsrc, src_count
 
     def gaussian_body(model_vis, ngsrc, src_count):
         """ Accumulate visiblities for gaussian source batch """
-        lm, stokes, alpha, gauss_params = LQ.gaussian_source.dequeue()
+        lm, stokes, alpha, gauss_params = LQ.gaussian_source[shard].dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         ngsrc += nsrc
@@ -1051,14 +1149,14 @@ def _construct_tensorflow_expression(feed_data):
         gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, gauss_params)
         model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-            gauss_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
-            apply_dies(src_count))
+            gauss_shape, ant_jones, sgn_brightness, D.flag, D.gterm,
+            model_vis, apply_dies(src_count))
 
         return model_vis, ngsrc, src_count
 
     def sersic_body(model_vis, nssrc, src_count):
         """ Accumulate visiblities for sersic source batch """
-        lm, stokes, alpha, sersic_params = LQ.sersic_source.dequeue()
+        lm, stokes, alpha, sersic_params = LQ.sersic_source[shard].dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         nssrc += nsrc
@@ -1066,25 +1164,26 @@ def _construct_tensorflow_expression(feed_data):
         sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, sersic_params)
         model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-            sersic_shape, ant_jones, sgn_brightness, D.flag, D.gterm, model_vis,
-            apply_dies(src_count))
+            sersic_shape, ant_jones, sgn_brightness, D.flag, D.gterm,
+            model_vis, apply_dies(src_count))
 
         return model_vis, nssrc, src_count
 
-    # Evaluate point sources
-    model_vis, npsrc, src_count = tf.while_loop(
-        point_cond, point_body,
-        [D.model_vis, zero, src_count])
+    with tf.device(device):
+        # Evaluate point sources
+        model_vis, npsrc, src_count = tf.while_loop(
+            point_cond, point_body,
+            [D.model_vis, zero, src_count])
 
-    # Evaluate gaussians
-    model_vis, ngsrc, src_count = tf.while_loop(
-        gaussian_cond, gaussian_body,
-        [model_vis, zero, src_count])
+        # Evaluate gaussians
+        model_vis, ngsrc, src_count = tf.while_loop(
+            gaussian_cond, gaussian_body,
+            [model_vis, zero, src_count])
 
-    # Evaluate sersics
-    model_vis, nssrc, src_count = tf.while_loop(
-        sersic_cond, sersic_body,
-        [model_vis, zero, src_count])
+        # Evaluate sersics
+        model_vis, nssrc, src_count = tf.while_loop(
+            sersic_cond, sersic_body,
+            [model_vis, zero, src_count])
 
     # Create enqueue operation
     enqueue_op = LQ.output.queue.enqueue([D.descriptor, model_vis])
@@ -1121,7 +1220,8 @@ def _get_data(data_source, context):
         ex = ValueError("An exception occurred while "
             "obtaining data from data source '{ds}'\n\n"
             "{e}\n\n"
-            "{help}".format(e=str(e), ds=context.name, help=context.help()))
+            "{help}".format(ds=context.name,
+                e=str(e), help=context.help()))
 
         raise ex, None, sys.exc_info()[2]
 
@@ -1132,20 +1232,14 @@ def _supply_data(data_sink, context):
     except Exception as e:
         ex = ValueError("An exception occurred while "
             "supplying data to data sink '{ds}'\n\n"
-            "{help}".format(ds=context.name, help=context.help()))
+            "{e}\n\n"
+            "{help}".format(ds=context.name,
+                e=str(e), help=context.help()))
 
         raise ex, None, sys.exc_info()[2]
 
-
-def _last_chunk(dims):
-    """
-    Does the list of dimension dictionaries indicate this is the last chunk?
-    i.e. does upper_extent == global_size for all dimensions?
-    """
-    return all(d['upper_extent'] == d['global_size'] for d in dims)
-
 def _iter_args(iter_dims, cube):
-    iter_strides = cube.dim_local_size(*iter_dims)
+    iter_strides = cube.dim_extent_size(*iter_dims)
     return zip(iter_dims, iter_strides)
 
 def _uniq_log2_range(start, size, div):
@@ -1199,8 +1293,7 @@ def _budget(cube, slvr_cfg):
         if bytes_required > mem_budget:
             for dim, size in reduction:
                 applied_reductions[dim] = size
-                cube.update_dimension(dim, local_size=size,
-                    lower_extent=0, upper_extent=size)
+                cube.update_dimension(dim, lower_extent=0, upper_extent=size)
         else:
             break
 
@@ -1271,33 +1364,32 @@ def _apply_source_provider_dim_updates(cube, source_providers):
         montblanc.log.info("Updating dimensions {mk} from "
             "source providers.".format(mk=mapping.keys()))
 
-    # Get existing local dimension sizes
-    local_sizes = cube.dim_local_size(*mapping.keys())
+    # Get existing dimension extents
+    extent_sizes = cube.dim_extent_size(*mapping.keys())
 
     # Now update our dimensions
-    for (n, u), ls in zip(mapping.iteritems(), local_sizes):
+    for (n, u), es in zip(mapping.iteritems(), extent_sizes):
         # Reduce our local size to satisfy hypercube
         d = u[0][0]
         gs = d.global_size
-        # Defer to existing local size for budgeting dimensions
-        ls = ls if ls in BUDGETING_DIMS else d.local_size
-        # Clamp local size to global size
-        ls = gs if ls > gs else ls
-        cube.update_dimension(n, local_size=ls, global_size=gs,
-            lower_extent=0, upper_extent=ls)
+        # Defer to existing extent size for budgeting dimensions
+        es = es if es in BUDGETING_DIMS else d.extent_size
+        # Clamp extent size to global size
+        es = gs if es > gs else es
+        cube.update_dimension(n, global_size=gs,
+            lower_extent=0, upper_extent=es)
 
     # Handle global number of sources differently
     # It's equal to the number of
     # point's, gaussian's, sersic's combined
     nsrc = sum(cube.dim_global_size(*mbu.source_nr_vars()))
 
-    # Local number of sources will be the local size of whatever
+    # Local number of sources will be the extent size of whatever
     # source type we're currently iterating over. So just take
-    # the maximum local size given the sources
-    ls = max(cube.dim_local_size(*mbu.source_nr_vars()))
+    # the maximum extent size given the sources
+    ls = max(cube.dim_extent_size(*mbu.source_nr_vars()))
 
-    cube.update_dimension('nsrc',
-        local_size=ls, global_size=nsrc,
+    cube.update_dimension('nsrc', global_size=nsrc,
         lower_extent=0, upper_extent=ls)
 
     # Return our cube size

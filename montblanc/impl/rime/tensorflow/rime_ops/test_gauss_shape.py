@@ -34,8 +34,10 @@ with tf.device('/cpu:0'):
 with tf.device('/gpu:0'):
     gauss_shape_gpu = rime.gauss_shape(*args)
 
+init_op = tf.global_variables_initializer()
+
 with tf.Session() as S:
-    S.run(tf.initialize_all_variables())
+    S.run(init_op)
     tf_gauss_shape_gpu = S.run(gauss_shape_gpu)
     tf_gauss_shape_cpu = S.run(gauss_shape_cpu)
     assert np.allclose(tf_gauss_shape_cpu, tf_gauss_shape_gpu)
