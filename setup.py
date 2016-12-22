@@ -26,6 +26,21 @@ from setuptools import setup, find_packages
 mb_path = 'montblanc'
 mb_inc_path = os.path.join(mb_path, 'include')
 
+install_requires=[
+    'astropy >= 1.2.1',
+    'attrdict >= 2.0.0',
+    'attrs >= 16.3.0',
+    'enum34 >= 1.1.2',
+    'funcsigs >= 0.4',
+    'futures >= 3.0.3',
+    'hypercube == 0.3.0a6',
+    'numpy >= 1.9.2',
+    'numexpr >= 2.4',
+    'python-casacore >= 2.1.2',
+]
+
+setup_requires=['numpy >= 1.9.2']
+
 def get_version():
     # Versioning code here, based on
     # http://blogs.nopcode.org/brainstorm/2013/05/20/pragmatic-python-versioning-via-setuptools-and-git-tags/
@@ -93,20 +108,9 @@ setup(name='montblanc',
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
     license='GPL2',
+    install_requires=install_requires,
+    setup_requires=setup_requires,
     packages=find_packages(),
-    install_requires=[
-        'astropy >= 1.2.1',
-        'attrdict >= 2.0.0',
-        'attrs >= 16.3.0',
-        'enum34 >= 1.1.2',
-        'funcsigs >= 0.4',
-        'futures >= 3.0.3',
-        'hypercube == 0.3.0a6',
-        'numpy >= 1.9.2',
-        'numexpr >= 2.4',
-        'python-casacore >= 2.1.2',
-    ],
-    setup_requires=['numpy >= 1.9.2'],
     package_data={'montblanc': include_pkg_dirs()},
     include_package_data=True,
     zip_safe=False)
