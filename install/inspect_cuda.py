@@ -23,12 +23,16 @@ from distutils import sysconfig
 from distutils.extension import Extension
 from distutils.command.build_ext import build_ext
 import glob
+import logging
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
-import warnings
+
+log_format = "%(name)s - %(levelname)s - %(message)s"
+logging.basicConfig(level=logging.INFO, format=log_format)
+log = logging.getLogger('CUDA inspection')
 
 minimum_cuda_version = 6050
 
@@ -40,7 +44,7 @@ def find_in_path(filename, paths):
 
     return os.path.join('usr', 'bin', filename)
 
-class NvccNotFoundException(Exception):
+class InspectCudaException(Exception):
     pass
 
 def nvcc_compiler_settings():
@@ -55,13 +59,12 @@ def nvcc_compiler_settings():
 
     # Can't find either NVCC or some CUDA_PATH
     if not nvcc_found and not cuda_path_found:
-        raise NvccNotFoundException("Both nvcc '{}' "
-            "and the CUDA path '{}' "
-            "do not exist!".format(nvcc_path, cuda_path))
+        raise InspectCudaException("Neither nvcc '{}' "
+            "or the CUDA path '{}' exist!".format(nvcc_path, cuda_path))
 
     # No NVCC, try find it in the cuda path
     if not nvcc_found:
-        warnings.warn("NVCC compiler not found at '{}'. "
+        log.warn("NVCC compiler not found at '{}'. "
             "Searching within the CUDA path '{}'"
                 .format(nvcc_path, cuda_path))
 
@@ -69,7 +72,7 @@ def nvcc_compiler_settings():
         nvcc_found = os.path.exists(nvcc_path)
 
         if not nvcc_found:
-            raise NvccNotFoundException("nvcc not found in '{}' "
+            raise InspectCudaException("nvcc not found in '{}' "
                 "or under the CUDA PATH at '{}' "
                 .format(search_paths, cuda_path))
 
@@ -78,7 +81,7 @@ def nvcc_compiler_settings():
         cuda_path = os.path.normpath(
             os.path.join(os.path.dirname(nvcc_path), ".."))
 
-        warnings.warn("CUDA path not found, inferring it as '{}' "
+        log.warn("CUDA path not found, inferring it as '{}' "
             "from the nvcc location '{}'".format(cuda_path, nvcc_path))
 
         cuda_path_found = True
@@ -238,6 +241,6 @@ try:
     import json
     print json.dumps(json.loads(output), indent=2)
 
-except NvccNotFoundException as e:
-    print 'NVCC not found'
+except InspectCudaException as e:
+    print 'No valid CUDA installation was found'
 
