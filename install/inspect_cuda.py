@@ -108,32 +108,6 @@ def nvcc_compiler_settings():
         'language': 'c++',
     }
 
-def get_cuda_version(compiler, settings):
-    try:
-        output = build_and_run(compiler, '''
-            #include <cuda.h>
-            #include <stdio.h>
-            int main(int argc, char* argv[]) {
-              printf("%d", CUDA_VERSION);
-              return 0;
-            }
-        ''',
-        filename='test.cpp',
-        include_dirs=settings['include_dirs'])
-
-    except Exception as e:
-        ve = ValueError("Running the CUDA "
-            "version check stub failed: {}".format(str(e)))
-        raise ve, None, sys.exc_info()[2]
-
-    try:
-        cuda_version = int(output)
-    except ValueError as e:
-        ve = ValueError("Invalid CUDA version string {}".format(out))
-        raise ve, None, sys.exc_info()[2]
-
-    return cuda_version
-
 def check_cuda_compiler(compiler, settings):
     try:
         output = build_and_run(compiler, '''
@@ -252,22 +226,11 @@ def customize_compiler_for_nvcc(compiler, settings):
     # inject our redefined _compile method into the class
     compiler._compile = _compile
 
-# run the customize_compiler
-class custom_build_ext(build_ext):
-    def build_extensions(self):
-        customize_compiler_for_nvcc(self.compiler)
-        build_ext.build_extensions(self)
-
 try:
     settings = nvcc_compiler_settings()
     sysconfig.get_config_vars()
-    c_compiler = ccompiler.new_compiler()
     nvcc_compiler = ccompiler.new_compiler()
-    sysconfig.customize_compiler(c_compiler)
     sysconfig.customize_compiler(nvcc_compiler)
-
-    cuda_version = get_cuda_version(c_compiler, settings)
-
     customize_compiler_for_nvcc(nvcc_compiler, settings)
 
     output = check_cuda_compiler(nvcc_compiler, settings)
