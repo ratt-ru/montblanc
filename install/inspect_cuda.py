@@ -97,7 +97,7 @@ def nvcc_compiler_settings():
             library_dirs.append(os.path.join(cuda_path, 'lib64'))
             library_dirs.append(os.path.join(cuda_path, 'lib'))
     if sys.platform == 'darwin':
-        library_dirs.append('/usr/local/cuda/lib')
+        library_dirs.append(os.path.join(default_cuda_path, 'lib'))
 
     return {
         'nvcc_path' : nvcc_path,
