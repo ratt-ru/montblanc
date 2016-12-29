@@ -18,32 +18,76 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import logging
 import os
 import subprocess
 import sys
+
+#==============
+# Setup logging
+#==============
+
+log_format = "%(name)s - %(levelname)s - %(message)s"
+logging.basicConfig(level=logging.INFO, format=log_format)
+log = logging.getLogger('Montblanc Install')
+
+mb_path = 'montblanc'
+mb_inc_path = os.path.join(mb_path, 'include')
+
+#=================
+# Setup setuptools
+#=================
 
 import ez_setup
 ez_setup.use_setuptools()
 
 from setuptools import setup, find_packages
+from setuptools.extension import Extension
+from setuptools.dist import Distribution
 
-mb_path = 'montblanc'
-mb_inc_path = os.path.join(mb_path, 'include')
+#=======================
+# Monkeypatch distutils
+#=======================
 
-install_requires=[
-    'astropy >= 1.2.1',
-    'attrdict >= 2.0.0',
-    'attrs >= 16.3.0',
-    'enum34 >= 1.1.2',
-    'funcsigs >= 0.4',
-    'futures >= 3.0.3',
-    'hypercube == 0.3.0a6',
-    'numpy >= 1.9.2',
-    'numexpr >= 2.4',
-    'python-casacore >= 2.1.2',
-]
+#
+_DISTUTILS_REINIT = Distribution.reinitialize_command
 
-setup_requires=['numpy >= 1.9.2']
+def reinitialize_command(self, command, reinit_subcommands):
+    """
+    Monkeypatch distutils.Distribution.reinitialize_command() to match behavior
+    of Distribution.get_command_obj()
+    This fixes a problem where 'pip install -e' does not reinitialise options
+    using the setup(options={...}) variable for the build_ext command.
+    This also effects other option sourcs such as setup.cfg.
+    """
+    cmd_obj = _DISTUTILS_REINIT(self, command, reinit_subcommands)
+
+    options = self.command_options.get(command)
+
+    if options:
+        self._set_command_options(cmd_obj, options)
+
+    return cmd_obj
+
+Distribution.reinitialize_command = reinitialize_command
+
+#============================
+# Detect CUDA and GPU Devices
+#============================
+
+# See if CUDA is installed and if any NVIDIA devices are available
+# Choose the tensorflow flavour to install (CPU or GPU)
+try:
+    from install import cuda
+    device_info, nvcc_settings = cuda.inspect_cuda()
+    tensorflow_flavour = 'tensorflow-gpu'
+
+    from install import cub
+    cub.install_cub(mb_inc_path)
+except Exception as e:
+    log.info("CUDA not found: {}".format(str(e)))
+    device_info, nvcc_settings = {}, { 'cuda_available' : False }
+    tensorflow_flavour = 'tensorflow'
 
 def get_version():
     # Versioning code here, based on
@@ -95,6 +139,27 @@ def include_pkg_dirs():
 
     return pkg_dirs
 
+tf_min_version = "0.12.1"
+tf_max_version = "0.13.0"
+tf_version_str = "{} >= {}, < {}".format(tensorflow_flavour,
+                                        tf_min_version,
+                                        tf_max_version)
+install_requires=[
+    'astropy >= 1.2.1',
+    'attrdict >= 2.0.0',
+    'attrs >= 16.3.0',
+    'enum34 >= 1.1.2',
+    'funcsigs >= 0.4',
+    'futures >= 3.0.3',
+    'hypercube == 0.3.0a6',
+    'numpy >= 1.9.2',
+    'numexpr >= 2.4',
+    'python-casacore >= 2.1.2',
+    tf_version_str,
+]
+
+from install.tensorflow_ops_ext import BuildCommand, tensorflow_extension_name
+
 setup(name='montblanc',
     version=get_version(),
     description='GPU-accelerated RIME implementations.',
@@ -111,9 +176,18 @@ setup(name='montblanc',
     ],
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
+    cmdclass={ 'build_ext' : BuildCommand },
+    # tensorflow_ops_ext.BuildCommand.finalize_options
+    # will fill the modules in
+    ext_modules=[Extension(tensorflow_extension_name, ['rime.cu'])],
+    options={
+        'build_ext' : {
+            'nvcc_settings' : nvcc_settings,
+            'cuda_devices' : device_info,
+        },
+    },
     license='GPL2',
     install_requires=install_requires,
-    setup_requires=setup_requires,
     packages=find_packages(),
     package_data={'montblanc': include_pkg_dirs()},
     include_package_data=True,

@@ -166,6 +166,3 @@ def install_cub(mb_inc_path):
         log.info('NVIDIA cub installation complete')
     except Exception as e:
         log.exception("NVIDIA cub installation failed")
-
-
-install_cub(os.path.join('testing', 'include'))
