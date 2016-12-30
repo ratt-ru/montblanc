@@ -18,7 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import logging
 import hashlib
 import os
 import shutil
@@ -26,9 +25,7 @@ import sys
 import urllib2
 import zipfile
 
-log_format = "%(name)s - %(levelname)s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=log_format)
-log = logging.getLogger('CUB installer')
+from install_log import log
 
 def dl_cub(cub_url, cub_archive_name):
     """ Download cub archive from cub_url and store it in cub_archive_name """
