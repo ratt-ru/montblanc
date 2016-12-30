@@ -75,24 +75,32 @@ Distribution.reinitialize_command = reinitialize_command
 
 # See if CUDA is installed and if any NVIDIA devices are available
 # Choose the tensorflow flavour to install (CPU or GPU)
-try:
-    from install import cuda
-    from install import cub
+from install.cuda import inspect_cuda, InspectCudaException
+from install.cub import install_cub, InstallCubException
 
+try:
     # Look for CUDA devices and NVCC/CUDA installation
-    device_info, nvcc_settings = cuda.inspect_cuda()
+    device_info, nvcc_settings = inspect_cuda()
     tensorflow_package = 'tensorflow-gpu'
+
     cuda_version = device_info['cuda_version']
     log.info("CUDA '{}' found. "
         "Installing tensorflow GPU".format(cuda_version))
 
     # Download and install cub
-    cub.install_cub(mb_inc_path)
-except Exception as e:
-    log.info("CUDA not found: {}. "
-        "Installing tensorflow CPU".format(str(e)))
+    install_cub(mb_inc_path)
+
+except InspectCudaException as e:
+    # Can't find a reasonable NVCC/CUDA install. Go with the CPU version
+    log.info("CUDA not found: {}. ".format(str(e)))
+    log.info("Installing tensorflow CPU")
+
     device_info, nvcc_settings = {}, { 'cuda_available' : False }
     tensorflow_package = 'tensorflow'
+except InstallCubException as e:
+    # This shouldn't happen and the user should fix it based on the exception
+    log.exception("NVIDIA cub install failed.")
+    raise
 
 def readme():
     """ Return README.rst contents """
@@ -137,6 +145,8 @@ install_requires=[
     'python-casacore >= 2.1.2',
     "{} >= 0.12.1, < 0.13.0".format(tensorflow_package),
 ]
+
+log.info('install_requires={}'.format(install_requires))
 
 from install.versioning import maintain_version
 from install.tensorflow_ops_ext import BuildCommand, tensorflow_extension_name

@@ -197,7 +197,7 @@ def build_and_run(compiler, source, filename, libraries=(),
         except Exception as e:
             msg = ('Cannot build a stub file.\n'
                 'Original error: {0}'.format(e))
-            raise Exception(msg)
+            raise InspectCudaException(msg)
 
         try:
             out = subprocess.check_output(os.path.join(temp_dir, 'a'))
@@ -206,7 +206,7 @@ def build_and_run(compiler, source, filename, libraries=(),
         except Exception as e:
             msg = ('Cannot execute a stub file.\n'
                 'Original error: {0}'.format(e))
-            raise Exception(msg)
+            raise InspectCudaException(msg)
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
