@@ -25,17 +25,19 @@ __rime_lib = None
 def load_tf_lib():
     """ Load the tensorflow library """
 
+    import montblanc
+    import tensorflow as tf
+
     global __rime_lib
 
     if __rime_lib is not None:
         return __rime_lib
 
-    import tensorflow as tf
     from tensorflow.python.framework import common_shapes
     from tensorflow.python.framework import ops
 
-    path = os.path.dirname(__file__)
-    rime_lib_path = os.path.join(path, 'rime_ops', 'rime.so')
+    mb_path = montblanc.get_montblanc_path()
+    rime_lib_path = os.path.join(mb_path, 'extensions', 'tensorflow', 'rime.so')
     __rime_lib = tf.load_op_library(rime_lib_path)
 
     # Register shape operators

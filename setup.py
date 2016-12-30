@@ -18,135 +18,76 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import hashlib
+import logging
 import os
-import urllib2
-import shutil
 import subprocess
 import sys
-import zipfile
-from setuptools import setup, find_packages
+
+#==============
+# Setup logging
+#==============
+
+log_format = "%(name)s - %(levelname)s - %(message)s"
+logging.basicConfig(level=logging.INFO, format=log_format)
+log = logging.getLogger('Montblanc Install')
 
 mb_path = 'montblanc'
 mb_inc_path = os.path.join(mb_path, 'include')
 
-def dl_cub(cub_url, cub_archive_name):
-    """ Download cub archive from cub_url and store it in cub_archive_name """
-    with open(cub_archive_name, 'wb') as f:
-        remote_file = urllib2.urlopen(cub_url)
-        meta = remote_file.info()
+#=================
+# Setup setuptools
+#=================
 
-        # The server may provide us with the size of the file.
-        cl_header = meta.getheaders("Content-Length")
-        remote_file_size = int(cl_header[0]) if len(cl_header) > 0 else '???'
+import ez_setup
+ez_setup.use_setuptools()
 
-        # Initialise variables
-        local_file_size = 0
-        block_size = 128*1024
+from setuptools import setup, find_packages
+from setuptools.extension import Extension
+from setuptools.dist import Distribution
 
-        # Do the download
-        while True:
-            data = remote_file.read(block_size)
+#=======================
+# Monkeypatch distutils
+#=======================
 
-            if not data:
-                break
+#
+_DISTUTILS_REINIT = Distribution.reinitialize_command
 
-            f.write(data)
-            local_file_size += len(data)
+def reinitialize_command(self, command, reinit_subcommands):
+    """
+    Monkeypatch distutils.Distribution.reinitialize_command() to match behavior
+    of Distribution.get_command_obj()
+    This fixes a problem where 'pip install -e' does not reinitialise options
+    using the setup(options={...}) variable for the build_ext command.
+    This also effects other option sourcs such as setup.cfg.
+    """
+    cmd_obj = _DISTUTILS_REINIT(self, command, reinit_subcommands)
 
-            status = r"Downloading %s %10d/%s" % (cub_url,
-                local_file_size, remote_file_size)
-            status = status + chr(8)*(len(status)+1)
-            print status,
+    options = self.command_options.get(command)
 
-        remote_file.close()
+    if options:
+        self._set_command_options(cmd_obj, options)
 
-def sha_hash_file(filename):
-    # Compute the SHA1 hash
-    hash_sha = hashlib.sha1()
+    return cmd_obj
 
-    with open(filename, 'rb') as f:
-        for chunk in iter(lambda: f.read(1024*1024), b""):
-            hash_sha.update(chunk)
+Distribution.reinitialize_command = reinitialize_command
 
-    return hash_sha.hexdigest()
+#============================
+# Detect CUDA and GPU Devices
+#============================
 
-def is_cub_installed(readme_filename, header_filename, cub_version_str):
-    # Check if the cub.h exists
-    if not os.path.exists(header_filename) or not os.path.isfile(header_filename):
-        return False
+# See if CUDA is installed and if any NVIDIA devices are available
+# Choose the tensorflow flavour to install (CPU or GPU)
+try:
+    from install import cuda
+    device_info, nvcc_settings = cuda.inspect_cuda()
+    tensorflow_flavour = 'tensorflow-gpu'
 
-    # Check if the README.md exists
-    if not os.path.exists(readme_filename) or not os.path.isfile(readme_filename):
-        return False
-
-    # Search for the version string, returning True if found
-    with open(readme_filename, 'r') as f:
-        for line in f:
-            if line.find(cub_version_str) != -1:
-                return True
-
-    # Nothing found!
-    return False
-
-def install_cub():
-    """ Downloads and installs cub """
-    cub_url = 'https://github.com/NVlabs/cub/archive/1.5.2.zip'
-    cub_sha_hash = 'b98dabe346c5e1ab24db250379d73afe14189055'
-    cub_version_str = 'Current release: v1.5.2 (03/21/2016)'
-    cub_zip_file = 'cub.zip'
-    cub_zip_dir = 'cub-1.5.2'
-    cub_unzipped_path = os.path.join(mb_inc_path, cub_zip_dir)
-    cub_new_unzipped_path = os.path.join(mb_inc_path, 'cub')
-    cub_header = os.path.join(cub_new_unzipped_path, 'cub', 'cub.cuh')
-    cub_readme = os.path.join(cub_new_unzipped_path, 'README.md' )
-
-    # Check for a reasonably valid install
-    cub_installed = is_cub_installed(cub_readme, cub_header, cub_version_str)
-    print 'NVIDIA cub installed: %s' % cub_installed
-    if cub_installed:
-        return
-
-    # Do we already have a valid cub zip file
-    have_valid_cub_file = (os.path.exists(cub_zip_file) and
-        os.path.isfile(cub_zip_file) and
-        sha_hash_file(cub_zip_file) == cub_sha_hash)
-
-    print 'NVIDIA cub archive downloaded: %s' % have_valid_cub_file
-
-    # Download if we don't have a valid file
-    if not have_valid_cub_file:
-        dl_cub(cub_url, cub_zip_file)
-        cub_file_sha_hash = sha_hash_file(cub_zip_file)
-
-        # Compare against our supplied hash
-        assert cub_sha_hash == cub_file_sha_hash, \
-             ('Hash of file %s downloaded from %s '
-            'is %s and does not match the expected '
-            'hash of %s. Please manually download '
-            'as per the README.md instructions.') % (cub_zip_file,
-                cub_url, cub_sha_hash, cub_file_sha_hash)
-
-    # Unzip into montblanc/include/cub
-    with zipfile.ZipFile(cub_zip_file, 'r') as zip_file:
-        # Remove any existing installs
-        shutil.rmtree(cub_unzipped_path, ignore_errors=True)
-        shutil.rmtree(cub_new_unzipped_path, ignore_errors=True)
-
-        # Unzip
-        zip_file.extractall(mb_inc_path)
-
-        # Rename
-        shutil.move(cub_unzipped_path, cub_new_unzipped_path)
-
-        print 'NVIDIA cub archive unzipped into %s' % cub_new_unzipped_path
-
-    assert is_cub_installed(cub_readme, cub_header, cub_version_str),  \
-        ('cub installed unexpectedly failed!')
-
-    print 'NVIDIA cub install successful'
-
-install_cub()
+    from install import cub
+    cub.install_cub(mb_inc_path)
+except Exception as e:
+    log.info("CUDA not found: {}".format(str(e)))
+    device_info, nvcc_settings = {}, { 'cuda_available' : False }
+    tensorflow_flavour = 'tensorflow'
 
 def get_version():
     # Versioning code here, based on
@@ -198,6 +139,27 @@ def include_pkg_dirs():
 
     return pkg_dirs
 
+tf_min_version = "0.12.1"
+tf_max_version = "0.13.0"
+tf_version_str = "{} >= {}, < {}".format(tensorflow_flavour,
+                                        tf_min_version,
+                                        tf_max_version)
+install_requires=[
+    'astropy >= 1.2.1',
+    'attrdict >= 2.0.0',
+    'attrs >= 16.3.0',
+    'enum34 >= 1.1.2',
+    'funcsigs >= 0.4',
+    'futures >= 3.0.3',
+    'hypercube == 0.3.0a6',
+    'numpy >= 1.9.2',
+    'numexpr >= 2.4',
+    'python-casacore >= 2.1.2',
+    tf_version_str,
+]
+
+from install.tensorflow_ops_ext import BuildCommand, tensorflow_extension_name
+
 setup(name='montblanc',
     version=get_version(),
     description='GPU-accelerated RIME implementations.',
@@ -214,22 +176,19 @@ setup(name='montblanc',
     ],
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
+    cmdclass={ 'build_ext' : BuildCommand },
+    # tensorflow_ops_ext.BuildCommand.finalize_options
+    # will fill the modules in
+    ext_modules=[Extension(tensorflow_extension_name, ['rime.cu'])],
+    options={
+        'build_ext' : {
+            'nvcc_settings' : nvcc_settings,
+            'cuda_devices' : device_info,
+        },
+    },
     license='GPL2',
+    install_requires=install_requires,
     packages=find_packages(),
-    install_requires=[
-        'astropy >= 1.2.1',
-        'attrdict >= 2.0.0',
-        'attrs >= 16.3.0',
-        'enum34 >= 1.1.2',
-        'funcsigs >= 0.4',
-        'futures >= 3.0.3',
-        'hypercube == 0.3.0a6',
-        'numpy >= 1.9.2',
-        'numexpr >= 2.4',
-        'python-casacore >= 2.1.2',
-        'uhashring >= 0.4',
-    ],
-    setup_requires=['numpy >= 1.9.2'],
     package_data={'montblanc': include_pkg_dirs()},
     include_package_data=True,
     zip_safe=False)
