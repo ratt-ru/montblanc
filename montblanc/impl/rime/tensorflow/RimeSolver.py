@@ -180,7 +180,7 @@ class MasterConfigurationStrategy(ConfigurationStrategy):
 
     def transmit_receive_config(self, session, tf_dict, slvr_cfg):
         montblanc.log.debug("Initialising shared configuration")
-        session.run(tf.initialize_variables([tf_dict.shared_cfg]))
+        session.run([tf_dict.shared_cfg.initializer])
         montblanc.log.debug("Done initialising shared configuration")
 
         #time.sleep(1)
