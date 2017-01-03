@@ -18,7 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import logging
 import hashlib
 import os
 import shutil
@@ -26,9 +25,10 @@ import sys
 import urllib2
 import zipfile
 
-log_format = "%(name)s - %(levelname)s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=log_format)
-log = logging.getLogger('CUB installer')
+from install_log import log
+
+class InstallCubException(Exception):
+    pass
 
 def dl_cub(cub_url, cub_archive_name):
     """ Download cub archive from cub_url and store it in cub_archive_name """
@@ -63,7 +63,7 @@ def dl_cub(cub_url, cub_archive_name):
         remote_file.close()
 
 def sha_hash_file(filename):
-    # Compute the SHA1 hash
+    """ Compute the SHA1 hash of filename """
     hash_sha = hashlib.sha1()
 
     with open(filename, 'rb') as f:
@@ -94,13 +94,13 @@ def is_cub_installed(readme_filename, header_filename, cub_version_str):
         cub_version_str, readme_filename)
     return (False, reason)
 
-def _install_cub(mb_inc_path):
-    """ Downloads and installs cub """
-    cub_url = 'https://github.com/NVlabs/cub/archive/1.5.2.zip'
-    cub_sha_hash = 'b98dabe346c5e1ab24db250379d73afe14189055'
-    cub_version_str = 'Current release: v1.5.2 (03/21/2016)'
+def install_cub(mb_inc_path):
+    """ Downloads and installs cub into mb_inc_path """
+    cub_url = 'https://github.com/NVlabs/cub/archive/1.6.4.zip'
+    cub_sha_hash = '7b669a049f05db811086d7774847cade6c88d1ec'
+    cub_version_str = 'Current release: v1.6.4 (12/06/2016)'
     cub_zip_file = 'cub.zip'
-    cub_zip_dir = 'cub-1.5.2'
+    cub_zip_dir = 'cub-1.6.4'
     cub_unzipped_path = os.path.join(mb_inc_path, cub_zip_dir)
     cub_new_unzipped_path = os.path.join(mb_inc_path, 'cub')
     cub_header = os.path.join(cub_new_unzipped_path, 'cub', 'cub.cuh')
@@ -135,9 +135,9 @@ def _install_cub(mb_inc_path):
                 'hash of %s. Please manually download '
                 'as per the README.md instructions.') % (
                     cub_zip_file, cub_url,
-                    cub_sha_hash, cub_file_sha_hash)
+                    cub_file_sha_hash, cub_sha_hash)
 
-            raise ValueError(msg)
+            raise InstallCubException(msg)
 
     # Unzip into montblanc/include/cub
     with zipfile.ZipFile(cub_zip_file, 'r') as zip_file:
@@ -148,7 +148,7 @@ def _install_cub(mb_inc_path):
         # Unzip
         zip_file.extractall(mb_inc_path)
 
-        # Rename
+        # Rename. cub_unzipped_path is mb_inc_path/cub_zip_dir
         shutil.move(cub_unzipped_path, cub_new_unzipped_path)
 
         log.info("NVIDIA cub archive unzipped into '{}'".format(
@@ -158,11 +158,4 @@ def _install_cub(mb_inc_path):
     there, reason = is_cub_installed(cub_readme, cub_header, cub_version_str)
 
     if not there:
-        raise ValueError(reason)
-
-def install_cub(mb_inc_path):
-    try:
-        _install_cub(mb_inc_path)
-        log.info('NVIDIA cub installation complete')
-    except Exception as e:
-        log.exception("NVIDIA cub installation failed")
+        raise InstallCubException(reason)

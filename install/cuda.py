@@ -24,16 +24,13 @@ from setuptools.extension import Extension
 from setuptools.command.build_ext import build_ext
 import json
 import glob
-import logging
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 
-log_format = "%(name)s - %(levelname)s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=log_format)
-log = logging.getLogger('CUDA inspection')
+from install_log import log
 
 minimum_cuda_version = 6050
 
@@ -49,7 +46,8 @@ class InspectCudaException(Exception):
     pass
 
 def nvcc_compiler_settings():
-    # Try and find nvcc
+    """ Find nvcc and the CUDA installation """
+
     search_paths = os.environ.get('PATH', '').split(os.pathsep)
     nvcc_path = find_in_path('nvcc', search_paths)
     default_cuda_path = os.path.join('usr', 'local', 'cuda')
@@ -61,13 +59,13 @@ def nvcc_compiler_settings():
     # Can't find either NVCC or some CUDA_PATH
     if not nvcc_found and not cuda_path_found:
         raise InspectCudaException("Neither nvcc '{}' "
-            "or the CUDA path '{}' exist!".format(
+            "or the CUDA_PATH '{}' were found!".format(
                 nvcc_path, cuda_path))
 
-    # No NVCC, try find it in the cuda path
+    # No NVCC, try find it in the CUDA_PATH
     if not nvcc_found:
-        log.warn("NVCC compiler not found at '{}'. "
-            "Searching within the CUDA path '{}'"
+        log.warn("nvcc compiler not found at '{}'. "
+            "Searching within the CUDA_PATH '{}'"
                 .format(nvcc_path, cuda_path))
 
         bin_dir = os.path.join(cuda_path, 'bin')
@@ -76,15 +74,15 @@ def nvcc_compiler_settings():
 
         if not nvcc_found:
             raise InspectCudaException("nvcc not found in '{}' "
-                "or under the CUDA PATH at '{}' "
+                "or under the CUDA_PATH at '{}' "
                 .format(search_paths, cuda_path))
 
-    # No CUDA path found, infer it from NVCC
+    # No CUDA_PATH found, infer it from NVCC
     if not cuda_path_found:
         cuda_path = os.path.normpath(
             os.path.join(os.path.dirname(nvcc_path), ".."))
 
-        log.warn("CUDA path not found, inferring it as '{}' "
+        log.warn("CUDA_PATH not found, inferring it as '{}' "
             "from the nvcc location '{}'".format(
                 cuda_path, nvcc_path))
 
@@ -117,6 +115,10 @@ def nvcc_compiler_settings():
     }
 
 def inspect_cuda_version_and_devices(compiler, settings):
+    """
+    Poor mans deviceQuery. Returns CUDA_VERSION information and
+    CUDA device information in JSON format
+    """
     try:
         output = build_and_run(compiler, '''
             #include <cuda.h>
@@ -158,13 +160,12 @@ def inspect_cuda_version_and_devices(compiler, settings):
               printf("  ]\\n");
               printf("}\\n");
 
-
-
               return 0;
             }
         ''',
         filename='test.cu',
         include_dirs=settings['include_dirs'],
+        library_dirs=settings['library_dirs'],
         libraries=settings['libraries'])
 
     except Exception as e:
@@ -195,16 +196,18 @@ def build_and_run(compiler, source, filename, libraries=(),
                                      extra_postargs=postargs,
                                      target_lang='c++')
         except Exception as e:
-            msg = 'Cannot build a stub file.\nOriginal error: {0}'.format(e)
-            raise Exception(msg)
+            msg = ('Cannot build a stub file.\n'
+                'Original error: {0}'.format(e))
+            raise InspectCudaException(msg)
 
         try:
             out = subprocess.check_output(os.path.join(temp_dir, 'a'))
             return out
 
         except Exception as e:
-            msg = 'Cannot execute a stub file.\nOriginal error: {0}'.format(e)
-            raise Exception(msg)
+            msg = ('Cannot execute a stub file.\n'
+                'Original error: {0}'.format(e))
+            raise InspectCudaException(msg)
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -236,6 +239,7 @@ def customize_compiler_for_nvcc(compiler, nvcc_settings):
 
 
 def inspect_cuda():
+    """ Return cuda device information and nvcc/cuda setup """
     nvcc_settings = nvcc_compiler_settings()
     sysconfig.get_config_vars()
     nvcc_compiler = ccompiler.new_compiler()

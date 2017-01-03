@@ -18,7 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import logging
 import inspect
 import itertools
 import os
@@ -26,9 +25,7 @@ import os
 from setuptools.extension import Extension
 from setuptools.command.build_ext import build_ext
 
-log_format = "%(name)s - %(levelname)s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=log_format)
-log = logging.getLogger('Tensorflow op extension')
+from install_log import log
 
 tensorflow_extension_name = 'montblanc.extensions.tensorflow.rime'
 
@@ -71,7 +68,7 @@ def cuda_architecture_flags(device_info):
     # Figure out the necessary device architectures
     if len(device_info['devices']) == 0:
         archs = ['--gpu-architecture=sm_30']
-        log.info("No CUDA devices found, defaulting to '{}'".format(archs[0]))
+        log.info("No CUDA devices found, defaulting to architecture '{}'".format(archs[0]))
     else:
         archs = set()
 
@@ -128,6 +125,7 @@ def create_tensorflow_extension(nvcc_settings, device_info):
         # CUDA header dependencies
         depends += glob.glob(os.path.join(source_path, '*.cuh'))
         # CUDA libraries
+        library_dirs += nvcc_settings['library_dirs']
         libraries += nvcc_settings['libraries']
         # Flags
         nvcc_flags += ['-x', 'cu']
