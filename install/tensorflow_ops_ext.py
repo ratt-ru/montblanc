@@ -125,6 +125,7 @@ def create_tensorflow_extension(nvcc_settings, device_info):
         # CUDA header dependencies
         depends += glob.glob(os.path.join(source_path, '*.cuh'))
         # CUDA libraries
+        library_dirs += nvcc_settings['library_dirs']
         libraries += nvcc_settings['libraries']
         # Flags
         nvcc_flags += ['-x', 'cu']

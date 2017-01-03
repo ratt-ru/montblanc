@@ -165,6 +165,7 @@ def inspect_cuda_version_and_devices(compiler, settings):
         ''',
         filename='test.cu',
         include_dirs=settings['include_dirs'],
+        library_dirs=settings['library_dirs'],
         libraries=settings['libraries'])
 
     except Exception as e:
