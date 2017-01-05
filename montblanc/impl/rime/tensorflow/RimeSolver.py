@@ -23,6 +23,7 @@ import copy
 import itertools
 import threading
 import sys
+import types
 
 import concurrent.futures as cf
 import numpy as np
@@ -35,14 +36,13 @@ import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow import load_tf_lib
 from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
-from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
-                                                    MSSourceProvider, FitsBeamSourceProvider)
+                                                    DefaultsSourceProvider)
 from montblanc.impl.rime.tensorflow.queue_wrapper import (
     create_queue_wrapper)
 
 from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
-                                                  NullSinkProvider, MSSinkProvider)
+                                                  NullSinkProvider)
 
 from hypercube.dims import Dimension as HyperCubeDim
 
@@ -122,28 +122,17 @@ class RimeSolver(MontblancTensorflowSolver):
         tf_server_target = slvr_cfg.get('tf_server_target', '')
         self._tf_session = tf.Session(tf_server_target)
 
+        # Get the defaults data source (default or test data)
+        data_source = slvr_cfg.get(Options.DATA_SOURCE)
+        montblanc.log.info("Defaults Data Source '{}'".format(data_source))
+
         #================================
         # Queue Data Source Configuration
         #================================
 
-        # Get the data source (defaults or test data)
-        data_source = slvr_cfg.get(Options.DATA_SOURCE)
-
-        # Set up the queue data sources. Just take from
-        # defaults if test data isn't specified
-        queue_data_source = (Options.DATA_SOURCE_DEFAULT
-            if not data_source == Options.DATA_SOURCE_TEST
-            else data_source)
-
-        # Obtain default data sources for each array,
-        # then update with any data sources supplied by the user
-
-        self._default_data_sources = dfs = {
-            n: DataSource(a.get(queue_data_source), a.dtype, queue_data_source)
+        dfs = { n: DataSource(None, a.dtype, n)
             for n, a in cube.arrays().iteritems()
             if not a.temporary }
-
-        montblanc.log.info("Data source '{dfs}'".format(dfs=data_source))
 
         # The descriptor queue items are not user-defined arrays
         # but a variable passed through describing a chunk of the
@@ -163,7 +152,8 @@ class RimeSolver(MontblancTensorflowSolver):
         # These will be overridden by source and sink
         # providers supplied by the user in the solve()
         # method
-        self._source_providers = []
+        default_prov = _create_defaults_source_provider(cube, data_source)
+        self._source_providers = [default_prov]
         self._sink_providers = [NullSinkProvider()]
 
         #==================
@@ -589,11 +579,10 @@ class RimeSolver(MontblancTensorflowSolver):
         # input sources
         LQ = self._tf_feed_data.local
         input_sources = LQ.input_sources
-        data_sources = self._default_data_sources.copy()
-        data_sources.update({n: DataSource(f, cube.array(n).dtype, prov.name())
+        data_sources = {n: DataSource(f, cube.array(n).dtype, prov.name())
             for prov in source_providers
             for n, f in prov.sources().iteritems()
-            if n in input_sources})
+            if n in input_sources}
 
         # Get data sinks from supplied providers
         data_sinks = { n: DataSink(f, prov.name())
@@ -674,6 +663,52 @@ class RimeSolver(MontblancTensorflowSolver):
     def __exit__(self, etype, evalue, etrace):
         self.close()
 
+
+def _create_defaults_source_provider(cube, data_source):
+    """
+    Create a DefaultsSourceProvider object. This provides default
+    data sources for each array defined on the hypercube. The data sources
+    may either by obtained from the arrays 'default' data source
+    or the 'test' data source.
+    """
+
+    # Obtain default data sources for each array,
+    # Just take from defaults if test data isn't specified
+    queue_data_source = (Options.DATA_SOURCE_DEFAULT
+        if not data_source == Options.DATA_SOURCE_TEST
+        else data_source)
+
+    default_prov = DefaultsSourceProvider()
+
+    # Create data sources on the source provider from
+    # the cube array data sources
+    for n, a in cube.arrays().iteritems():
+        # Unnecessary for temporary arrays
+        if a.temporary:
+            continue
+
+        method = types.MethodType(a.get(queue_data_source), default_prov)
+        setattr(default_prov, n, method)
+
+    def _sources(self):
+        """
+        Override the sources method to also handle lambdas that look like
+        lambda s, c: ..., as defined in the config module
+        """
+        from montblanc.impl.rime.tensorflow.sources.source_provider import (
+            find_sources, DEFAULT_ARGSPEC)
+
+        try:
+            return self._sources
+        except AttributeError:
+            self._sources = find_sources(self, [DEFAULT_ARGSPEC] + [['s', 'c']])
+
+        return self._sources
+
+    # Monkey patch the sources method
+    default_prov.sources = types.MethodType(_sources, default_prov)
+
+    return default_prov
 
 def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     nr_of_input_queues):
