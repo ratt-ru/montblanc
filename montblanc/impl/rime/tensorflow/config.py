@@ -30,11 +30,18 @@ from montblanc.util import (
     random_complex as rc)
 
 def array_dict(name, shape, dtype, **kwargs):
+    tags = kwargs.pop('tags', ())
+
+    if isinstance(tags, str):
+        tags = set(s.strip() for s in tags.split(","))
+    else:
+        tags = set(str(s).strip() for s in tags)
+
     D = {
         'name' : name,
         'shape' : shape,
         'dtype' : dtype,
-        'temporary' : False,
+        'tags' : tags,
     }
 
     D.update(kwargs)
@@ -196,7 +203,7 @@ A = [
     array_dict('uvw', ('ntime', 'na', 3), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = rand_uvw,
-        input   = True,
+        tags    = "input",
         description = "UVW antenna coordinates, normalised "
             "relative to a reference antenna.",
         units   = METERS),
@@ -204,14 +211,14 @@ A = [
     array_dict('antenna1', ('ntime', 'nbl'), np.int32,
         default = default_antenna1,
         test    = default_antenna1,
-        input   = True,
+        tags    = "input",
         description = "Index of the first antenna "
             "of the baseline pair."),
 
     array_dict('antenna2', ('ntime', 'nbl'), np.int32,
         default = default_antenna2,
         test    = default_antenna2,
-        input   = True,
+        tags    = "input",
         description = "Index of the second antenna "
             "of the baseline pair."),
 
@@ -220,7 +227,7 @@ A = [
     array_dict('frequency', ('nchan',), 'ft',
         default = lambda s, c: np.linspace(_freq_low, _freq_high, c.shape[0]),
         test    = lambda s, c: np.linspace(_freq_low, _freq_high, c.shape[0]),
-        input   = True,
+        tags    = "input",
         description = "Frequency. Frequencies from multiple bands "
             "are stacked on top of each other. ",
         units   = HERTZ),
@@ -228,7 +235,7 @@ A = [
     array_dict('ref_frequency', ('nchan',), 'ft',
         default = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
         test    = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
-        input   = True,
+        tags    = "input",
         description = "The reference frequency associated with the "
             " channel's band.",
         units   = HERTZ),
@@ -239,7 +246,7 @@ A = [
     array_dict('point_errors', ('ntime','na','nchan', 2), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-2,
-        input   = True,
+        tags    = "input",
         description = "Pointing errors for each antenna. "
             "The components express an offset in the (l,m) plane.",
         units   = RADIANS),
@@ -248,7 +255,7 @@ A = [
     array_dict('antenna_scaling', ('na','nchan',2), 'ft',
         default = lambda s, c: np.ones(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype),
-        input   = True,
+        tags    = "input",
         description = "Antenna scaling factors for each antenna. "
             "The components express a scale in the (l,m) plane.",
         units   = DIMENSIONLESS),
@@ -257,7 +264,7 @@ A = [
     array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype)*np.pi,
-        input   = True,
+        tags    = "input",
         description = "Parallactic angles for each antenna.",
         units   = RADIANS),
 
@@ -267,7 +274,7 @@ A = [
     array_dict('beam_extents', (6,), 'ft',
         default = lambda s, c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
         test    = lambda s, c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
-        input   = True,
+        tags    = "input",
         description = "Extents of the holographic beam cube. "
             "[l_low, m_low, freq_low, l_high, m_high, freq_high].",
         units   = "[{r}, {r}, {h}, {r}, {r}, {h}]".format(r=RADIANS, h=HERTZ)),
@@ -277,7 +284,7 @@ A = [
                                 c.shape[0], endpoint=True),
         test     = lambda s, c: np.linspace(_freq_low, _freq_high,
                                 c.shape[0], endpoint=True),
-        input   = True,
+        tags    = "input",
         description = "A map describing the frequency associated with each "
             "slice of the frequency dimension of the holographic beam cube.",
         units   = HERTZ),
@@ -286,7 +293,7 @@ A = [
     array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
         test    = lambda s, c: rc(c.shape, c.dtype),
-        input   = True,
+        tags    = "input",
         description = "Holographic beam cube providing "
             "a discretised representation of the antenna beam pattern. "
             "Used to simulate the Direction Dependent Effects (DDE) "
@@ -298,7 +305,7 @@ A = [
     array_dict('gterm', ('ntime', 'na', 'nchan', 4), 'ct',
         default = identity_on_pols,
         test    = lambda s, c: rc(c.shape, c.dtype),
-        input   = True,
+        tags    = "input",
         description = "Array providing the Direction Independent Effects (DIE) "
             "or G term of the RIME, term for each antenna.",
         units   = DIMENSIONLESS),
@@ -375,7 +382,7 @@ A = [
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: np.random.random_integers(0, 1,
             size=c.shape).astype(np.uint8),
-        input   = True,
+        tags    = "input",
         description = "Indicates whether a visibility should be flagged when "
             "computing a Residual or Chi-Squared value.",
         unut    = DIMENSIONLESS),
@@ -383,7 +390,7 @@ A = [
     array_dict('weight', ('ntime','nbl','nchan',4), 'ft',
         default = lambda s, c: np.ones(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype),
-        input   = True,
+        tags    = "input",
         description = "Weight applied to the difference of observed and model "
             "visibilities when computing a Chi-Squared value.",
         units   = DIMENSIONLESS),
@@ -391,7 +398,7 @@ A = [
     array_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rc(c.shape, c.dtype),
-        input   = True,
+        tags    = "input",
         description = "Observed visibilities, used to compute residuals and "
             "Chi-Squared values."),
 
@@ -399,8 +406,7 @@ A = [
     array_dict('model_vis', ('ntime','nbl','nchan',4), 'ct',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rc(c.shape, c.dtype),
-        input   = True,
-        output  = True,
+        tags    = ("input", "output"),
         description = "Model visibilities. In the context of input, these values "
             "will be added to the model visibilities computed by the RIME. "
             "This mechanism allows visibilities to be accumulated over different "
@@ -408,11 +414,18 @@ A = [
             "In the context of output, these are the RIME model visibilities "),
 
     # Result arrays
-    array_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct', temporary=True),
-    array_dict('cplx_phase', ('nsrc','ntime','na','nchan'), 'ct', temporary=True),
-    array_dict('ejones', ('nsrc','ntime','na','nchan',4), 'ct', temporary=True),
-    array_dict('ant_jones', ('nsrc','ntime','na','nchan',4), 'ct', temporary=True),
-    array_dict('sgn_brightness', ('nsrc', 'ntime'), np.int8, temporary=True),
-    array_dict('source_shape', ('nsrc', 'ntime', 'nbl', 'nchan'), 'ft', temporary=True),
-    array_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft', temporary=True),
+    array_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct',
+        tags="temporary"),
+    array_dict('cplx_phase', ('nsrc','ntime','na','nchan'), 'ct',
+        tags="temporary"),
+    array_dict('ejones', ('nsrc','ntime','na','nchan',4), 'ct',
+        tags="temporary"),
+    array_dict('ant_jones', ('nsrc','ntime','na','nchan',4), 'ct',
+        tags="temporary"),
+    array_dict('sgn_brightness', ('nsrc', 'ntime'), np.int8,
+        tags="temporary"),
+    array_dict('source_shape', ('nsrc', 'ntime', 'nbl', 'nchan'), 'ft',
+        tags="temporary"),
+    array_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft',
+        tags="temporary"),
 ]

@@ -132,7 +132,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         dfs = { n: DataSource(None, a.dtype, n)
             for n, a in cube.arrays().iteritems()
-            if not a.temporary }
+            if not 'temporary' in a.tags }
 
         # The descriptor queue items are not user-defined arrays
         # but a variable passed through describing a chunk of the
@@ -687,7 +687,7 @@ def _create_defaults_source_provider(cube, data_source):
     # the cube array data sources
     for n, a in cube.arrays().iteritems():
         # Unnecessary for temporary arrays
-        if a.temporary:
+        if 'temporary' in a.tags:
             continue
 
         method = types.MethodType(a.get(queue_data_source), default_prov)
@@ -742,7 +742,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
 
     # Take all arrays flagged as input
     input_arrays = [a for a in cube.arrays().itervalues()
-                    if a.get('input', False) == True]
+                    if 'input' in a.tags]
 
     def _partition(pred, iterable):
         t1, t2 = itertools.tee(iterable)
