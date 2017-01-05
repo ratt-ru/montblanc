@@ -84,18 +84,18 @@ def default_antenna2(self, context):
 
 def rand_uvw(self, context):
     distance = 10
-    (ntime_l, ntime_u), (na_l, na_u) = context.dim_extents('ntime', 'na')
-    ntime, na = ntime_u - ntime_l, na_u - na_l
+    (tl, tu), (al, au) = context.dim_extents('ntime', 'na')
+    ntime, na = tu - tl, au - al
 
     # Distribute the antenna in a circle configuration
-    ant_angles = 2*np.pi*np.arange(na_l, na_u)
+    ant_angles = 2*np.pi*np.arange(al, au)
 
     # Angular difference between each antenna
     ant_angle_diff = 2*np.pi/context.dim_global_size('na')
 
     # Space the time offsets for each antenna
     time_angle = (ant_angle_diff *
-        np.arange(ntime_l, ntime_u)/context.dim_global_size('ntime'))
+        np.arange(tl, tu)/context.dim_global_size('ntime'))
 
     # Compute offsets per antenna and timestep
     time_ant_angles = ant_angles[np.newaxis,:]+time_angle[:,np.newaxis]
@@ -106,7 +106,7 @@ def rand_uvw(self, context):
     V[:] = distance*np.sin(time_ant_angles)
     W[:] = np.random.random(size=(ntime,na))*0.1
 
-    # All antenna zero coordinate are set to (0,0,0)
+    # All antenna zero coordinates are set to (0,0,0)
     A[:,0,:] = 0
 
     return A
@@ -150,10 +150,8 @@ def default_gaussian_shape(self, context):
 
 def rand_gaussian_shape(self, context):
     # Should be (3, ngsrc)
-    A = np.empty(context.shape, context.dtype)
-
-    if A.size == 0:
-        return A
+    if np.product(context.shape) == 0:
+        return np.empty(context.shape, context.dtype)
 
     return np.random.random(size=(context.shape)) # el, em, eR
 
