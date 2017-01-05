@@ -59,51 +59,41 @@ P = [
     prop_dict('X2', 'ft', 0.0),
 ]
 
-def default_base_ant_pairs(ctx):
+def default_base_ant_pairs(self, context):
     """ Compute base antenna pairs """
-    auto_correlations = ctx.cfg[Options.AUTO_CORRELATIONS]
+    k = 0 if context.cfg[Options.AUTO_CORRELATIONS] == True else 1
+    na = context.dim_global_size('na')
+    return (i.astype(context.dtype) for i in np.triu_indices(na, k))
 
-    if auto_correlations == True:
-        k = 0
-    elif auto_correlations == False:
-        k = 1
-    else:
-        raise ValueError("Invalid value {ac}".format(ac=auto_correlations))
+def default_antenna1(self, context):
+    ant0, ant1 = default_base_ant_pairs(self, context)
+    (tl, tu), (bl, bu) = context.dim_extents('ntime', 'nbl')
+    return np.tile(ant0[bl:bu], tu-tl).reshape(tu-tl, bu-bl)
 
-    na = ctx.dim_global_size('na')
-    return (i.astype(ctx.dtype) for i in np.triu_indices(na, k))
+def default_antenna2(self, context):
+    ant0, ant1 = default_base_ant_pairs(self, context)
+    (tl, tu), (bl, bu) = context.dim_extents('ntime', 'nbl')
+    return np.tile(ant1[bl:bu], tu-tl).reshape(tu-tl, bu-bl)
 
-def default_antenna1(ctx):
-    ant0, ant1 = default_base_ant_pairs(ctx)
-    nbl_l, nbl_u = ctx.dim_extents('nbl')
-    ntime = ctx.dim_extent_size('ntime')
-    return np.tile(ant0[nbl_l:nbl_u], ntime).reshape(ntime, nbl_u-nbl_l)
-
-def default_antenna2(ctx):
-    ant0, ant1 = default_base_ant_pairs(ctx)
-    nbl_l, nbl_u = ctx.dim_extents('nbl')
-    ntime = ctx.dim_extent_size('ntime')
-    return np.tile(ant1[nbl_l:nbl_u], ntime).reshape(ntime, nbl_u-nbl_l)
-
-def rand_uvw(ctx):
+def rand_uvw(self, context):
     distance = 10
-    (ntime_l, ntime_u), (na_l, na_u) = ctx.dim_extents('ntime', 'na')
+    (ntime_l, ntime_u), (na_l, na_u) = context.dim_extents('ntime', 'na')
     ntime, na = ntime_u - ntime_l, na_u - na_l
 
     # Distribute the antenna in a circle configuration
     ant_angles = 2*np.pi*np.arange(na_l, na_u)
 
     # Angular difference between each antenna
-    ant_angle_diff = 2*np.pi/ctx.dim_global_size('na')
+    ant_angle_diff = 2*np.pi/context.dim_global_size('na')
 
     # Space the time offsets for each antenna
     time_angle = (ant_angle_diff *
-        np.arange(ntime_l, ntime_u)/ctx.dim_global_size('ntime'))
+        np.arange(ntime_l, ntime_u)/context.dim_global_size('ntime'))
 
     # Compute offsets per antenna and timestep
     time_ant_angles = ant_angles[np.newaxis,:]+time_angle[:,np.newaxis]
 
-    A = np.empty(ctx.shape, ctx.dtype)
+    A = np.empty(context.shape, context.dtype)
     U, V, W = A[:,:,0], A[:,:,1], A[:,:,2]
     U[:] = distance*np.cos(time_ant_angles)
     V[:] = distance*np.sin(time_ant_angles)
@@ -114,108 +104,72 @@ def rand_uvw(ctx):
 
     return A
 
-def identity_on_pols(ctx):
+def identity_on_pols(self, context):
     """
     Returns [1, 0, 0, 1] tiled up to other dimensions
     """
-    assert ctx.shape[-1] == 4
+    A = np.empty(context.shape, context.dtype)
+    A[:,:,:] = [[[1,0,0,1]]]
+    return A
 
-    reshape_shape = tuple(1 for a in ctx.shape[:-1]) + (ctx.shape[-1], )
-    tile_shape = tuple(a for a in ctx.shape[:-1]) + (1, )
-    R = np.array([1,0,0,1], dtype=ctx.dtype).reshape(reshape_shape)
-
-    return np.tile(R, tile_shape)
-
-def default_stokes(ctx):
+def default_stokes(self, context):
     """
     Returns [1, 0, 0, 0] tiled up to other dimensions
     """
-    assert ctx.shape[-1] == 4
+    A = np.empty(context.shape, context.dtype)
+    A[:,:,:] = [[[1,0,0,0]]]
+    return A
 
-    reshape_shape = tuple(1 for a in ctx.shape[:-1]) + (ctx.shape[-1], )
-    tile_shape = tuple(a for a in ctx.shape[:-1]) + (1, )
-    R = np.array([1,0,0,0], dtype=ctx.dtype).reshape(reshape_shape)
-
-    return np.tile(R, tile_shape)
-
-def rand_stokes(ctx):
+def rand_stokes(self, context):
     # Should be (nsrc, ntime, 4)
-    assert len(ctx.shape) == 3 and ctx.shape[2] == 4
-
-    A = np.empty(ctx.shape, ctx.dtype)
+    A = np.empty(context.shape, context.dtype)
     I, Q, U, V = A[:,:,0], A[:,:,1], A[:,:,2], A[:,:,3]
-    noise = rf(I.shape, ctx.dtype)*0.1
-    Q[:] = rf(Q.shape, ctx.dtype) - 0.5
-    U[:] = rf(U.shape, ctx.dtype) - 0.5
-    V[:] = rf(V.shape, ctx.dtype) - 0.5
+    noise = rf(I.shape, context.dtype)*0.1
+    Q[:] = rf(Q.shape, context.dtype) - 0.5
+    U[:] = rf(U.shape, context.dtype) - 0.5
+    V[:] = rf(V.shape, context.dtype) - 0.5
     I[:] = np.sqrt(Q**2 + U**2 + V**2 + noise)
 
     return A
 
-def default_gaussian_shape(ctx):
+def default_gaussian_shape(self, context):
     # Should be (3, ngsrc)
-    assert len(ctx.shape) == 2 and ctx.shape[0] == 3
+    A = np.empty(context.shape, context.dtype)
 
-    A = np.empty(ctx.shape, ctx.dtype)
-
-    if A.size == 0:
-        return A
-
-    el, em, eR = A[0,:], A[1,:], A[2,:]
-    el[:] = np.zeros(el.shape, ctx.dtype)
-    em[:] = np.zeros(em.shape, ctx.dtype)
-    eR[:] = np.ones(eR.shape, ctx.dtype)
+    if A.size != 0:
+        A[:,:] = [[0],[0],[1]] # el, em, eR
 
     return A
 
-def rand_gaussian_shape(ctx):
+def rand_gaussian_shape(self, context):
     # Should be (3, ngsrc)
-    assert len(ctx.shape) == 2 and ctx.shape[0] == 3
-
-    A = np.empty(ctx.shape, ctx.dtype)
+    A = np.empty(context.shape, context.dtype)
 
     if A.size == 0:
         return A
 
-    el, em, eR = A[0,:], A[1,:], A[2,:]
-    el[:] = np.random.random(size=el.shape)
-    em[:] = np.random.random(size=em.shape)
-    eR[:] = np.random.random(size=eR.shape)
+    return np.random.random(size=(context.shape)) # el, em, eR
+
+def default_sersic_shape(self, context):
+    # Should be (3, nssrc)
+    A = np.empty(context.shape, context.dtype)
+
+    if A.size != 0:
+        A[:,:] = [[0],[0],[1]] # e1, e2, eS
 
     return A
 
-def default_sersic_shape(ctx):
+def test_sersic_shape(self, context):
     # Should be (3, nssrc)
-    assert len(ctx.shape) == 2 and ctx.shape[0] == 3
+    assert len(context.shape) == 2 and context.shape[0] == 3
 
-    A = np.empty(ctx.shape, ctx.dtype)
+    A = np.empty(context.shape, context.dtype)
 
-    if A.size == 0:
-        return A
-
-    e1, e2, eS = A[0,:], A[1,:], A[2,:]
-    e1[:] = 0
-    e2[:] = 0
-    eS[:] = 1
-
-    return A
-
-def test_sersic_shape(ctx):
-    # Should be (3, nssrc)
-    assert len(ctx.shape) == 2 and ctx.shape[0] == 3
-
-    A = np.empty(ctx.shape, ctx.dtype)
-
-    if A.size == 0:
-        return A
-
-    e1, e2, eS = A[0,:], A[1,:], A[2,:]
-    # Random values seem to create v. large discrepancies
-    # between the CPU and GPU versions. Go with
-    # non-random data here, as per Marzia's original code
-    e1[:] = 0
-    e2[:] = 0
-    eS[:] = np.pi/648000   # 1 arcsec
+    if A.size != 0:
+        # Random values seem to create v. large discrepancies
+        # between the CPU and GPU versions. Go with
+        # non-random data here, as per Marzia's original code
+        A[:,:] = [[0],[0],[np.pi/648000]] # e1, e2, eS
 
     return A
 
@@ -240,7 +194,7 @@ ALPHA_DESCRIPTION = ("Power term describing the distribution of a source's flux 
 A = [
     # UVW Coordinates
     array_dict('uvw', ('ntime', 'na', 3), 'ft',
-        default = lambda c: np.zeros(c.shape, c.dtype),
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = rand_uvw,
         input   = True,
         description = "UVW antenna coordinates, normalised "
@@ -264,16 +218,16 @@ A = [
     # Frequency and Reference Frequency arrays
     # TODO: This is incorrect when channel local is not the same as channel global
     array_dict('frequency', ('nchan',), 'ft',
-        default = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0]),
-        test    = lambda c: np.linspace(_freq_low, _freq_high, c.shape[0]),
+        default = lambda s, c: np.linspace(_freq_low, _freq_high, c.shape[0]),
+        test    = lambda s, c: np.linspace(_freq_low, _freq_high, c.shape[0]),
         input   = True,
         description = "Frequency. Frequencies from multiple bands "
             "are stacked on top of each other. ",
         units   = HERTZ),
 
     array_dict('ref_frequency', ('nchan',), 'ft',
-        default = lambda c: np.full(c.shape, _ref_freq, c.dtype),
-        test    = lambda c: np.full(c.shape, _ref_freq, c.dtype),
+        default = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
+        test    = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
         input   = True,
         description = "The reference frequency associated with the "
             " channel's band.",
@@ -283,8 +237,8 @@ A = [
 
     # Pointing errors
     array_dict('point_errors', ('ntime','na','nchan', 2), 'ft',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-2,
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-2,
         input   = True,
         description = "Pointing errors for each antenna. "
             "The components express an offset in the (l,m) plane.",
@@ -292,8 +246,8 @@ A = [
 
     # Antenna scaling factors
     array_dict('antenna_scaling', ('na','nchan',2), 'ft',
-        default = lambda c: np.ones(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype),
+        default = lambda s, c: np.ones(c.shape, c.dtype),
+        test    = lambda s, c: rf(c.shape, c.dtype),
         input   = True,
         description = "Antenna scaling factors for each antenna. "
             "The components express a scale in the (l,m) plane.",
@@ -301,8 +255,8 @@ A = [
 
     # Parallactic angles at each timestep for each antenna
     array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype)*np.pi,
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: rf(c.shape, c.dtype)*np.pi,
         input   = True,
         description = "Parallactic angles for each antenna.",
         units   = RADIANS),
@@ -311,17 +265,17 @@ A = [
     # First 3 values are lower coordinate for (l, m, frequency)
     # while the last 3 are the upper coordinates
     array_dict('beam_extents', (6,), 'ft',
-        default = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
-        test    = lambda c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
+        default = lambda s, c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
+        test    = lambda s, c: c.dtype([-1, -1, _freq_low, 1, 1, _freq_high]),
         input   = True,
         description = "Extents of the holographic beam cube. "
             "[l_low, m_low, freq_low, l_high, m_high, freq_high].",
         units   = "[{r}, {r}, {h}, {r}, {r}, {h}]".format(r=RADIANS, h=HERTZ)),
 
     array_dict('beam_freq_map', ('beam_nud',), 'ft',
-        default  = lambda c: np.linspace(_freq_low, _freq_high,
+        default  = lambda s, c: np.linspace(_freq_low, _freq_high,
                                 c.shape[0], endpoint=True),
-        test     = lambda c: np.linspace(_freq_low, _freq_high,
+        test     = lambda s, c: np.linspace(_freq_low, _freq_high,
                                 c.shape[0], endpoint=True),
         input   = True,
         description = "A map describing the frequency associated with each "
@@ -331,7 +285,7 @@ A = [
     # Beam cube
     array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
-        test    = lambda c: rc(c.shape, c.dtype),
+        test    = lambda s, c: rc(c.shape, c.dtype),
         input   = True,
         description = "Holographic beam cube providing "
             "a discretised representation of the antenna beam pattern. "
@@ -343,7 +297,7 @@ A = [
     # Direction-Independent Effects
     array_dict('gterm', ('ntime', 'na', 'nchan', 4), 'ct',
         default = identity_on_pols,
-        test    = lambda c: rc(c.shape, c.dtype),
+        test    = lambda s, c: rc(c.shape, c.dtype),
         input   = True,
         description = "Array providing the Direction Independent Effects (DIE) "
             "or G term of the RIME, term for each antenna.",
@@ -351,8 +305,8 @@ A = [
 
     # Point Source Definitions
     array_dict('point_lm', ('npsrc',2), 'ft',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1,
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-1,
         description = LM_DESCRIPTION.format(st="point"),
         units   = RADIANS),
     array_dict('point_stokes', ('npsrc','ntime', 4), 'ft',
@@ -361,15 +315,15 @@ A = [
         description = STOKES_DESCRIPTION,
         units   = JANSKYS),
     array_dict('point_alpha', ('npsrc','ntime'), 'ft',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype)*0.1,
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: rf(c.shape, c.dtype)*0.1,
         description = ALPHA_DESCRIPTION,
         units   = DIMENSIONLESS),
 
     # Gaussian Source Definitions
     array_dict('gaussian_lm', ('ngsrc',2), 'ft',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1,
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-1,
         description = LM_DESCRIPTION.format(st="gaussian"),
         units   = RADIANS),
     array_dict('gaussian_stokes', ('ngsrc','ntime', 4), 'ft',
@@ -378,8 +332,8 @@ A = [
         description = STOKES_DESCRIPTION,
         units   = JANSKYS),
     array_dict('gaussian_alpha', ('ngsrc','ntime'), 'ft',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype)*0.1,
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: rf(c.shape, c.dtype)*0.1,
         description = ALPHA_DESCRIPTION,
         units   = DIMENSIONLESS),
     array_dict('gaussian_shape', (3, 'ngsrc'), 'ft',
@@ -393,8 +347,8 @@ A = [
 
     # Sersic Source Definitions
     array_dict('sersic_lm', ('nssrc',2), 'ft',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: (rf(c.shape, c.dtype)-0.5)*1e-1,
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-1,
         description = LM_DESCRIPTION.format(st="sersic"),
         units   = "Radians"),
     array_dict('sersic_stokes', ('nssrc','ntime', 4), 'ft',
@@ -403,8 +357,8 @@ A = [
         description = STOKES_DESCRIPTION,
         units   = JANSKYS),
     array_dict('sersic_alpha', ('nssrc','ntime'), 'ft',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype)*0.1,
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: rf(c.shape, c.dtype)*0.1,
         description = ALPHA_DESCRIPTION,
         units   = DIMENSIONLESS),
     array_dict('sersic_shape', (3, 'nssrc'), 'ft',
@@ -418,8 +372,8 @@ A = [
 
     # Visibility flagging array
     array_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: np.random.random_integers(0, 1,
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: np.random.random_integers(0, 1,
             size=c.shape).astype(np.uint8),
         input   = True,
         description = "Indicates whether a visibility should be flagged when "
@@ -427,24 +381,24 @@ A = [
         unut    = DIMENSIONLESS),
     # Weight array
     array_dict('weight', ('ntime','nbl','nchan',4), 'ft',
-        default = lambda c: np.ones(c.shape, c.dtype),
-        test    = lambda c: rf(c.shape, c.dtype),
+        default = lambda s, c: np.ones(c.shape, c.dtype),
+        test    = lambda s, c: rf(c.shape, c.dtype),
         input   = True,
         description = "Weight applied to the difference of observed and model "
             "visibilities when computing a Chi-Squared value.",
         units   = DIMENSIONLESS),
     # Observed Visibilities
     array_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rc(c.shape, c.dtype),
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: rc(c.shape, c.dtype),
         input   = True,
         description = "Observed visibilities, used to compute residuals and "
             "Chi-Squared values."),
 
     # Model Visibilities
     array_dict('model_vis', ('ntime','nbl','nchan',4), 'ct',
-        default = lambda c: np.zeros(c.shape, c.dtype),
-        test    = lambda c: rc(c.shape, c.dtype),
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: rc(c.shape, c.dtype),
         input   = True,
         output  = True,
         description = "Model visibilities. In the context of input, these values "
