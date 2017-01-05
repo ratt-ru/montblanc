@@ -46,27 +46,36 @@ class AbstractSourceProvider(object):
         """ Return an iterable/mapping of hypercube arrays to update """
         raise NotImplementedError()
 
-def find_sources(obj):
+DEFAULT_ARGSPEC = ['self', 'context']
+
+def find_sources(obj, argspec=None):
     """
     Returns a dictionary of source methods found on this object,
-    keyed on method name. Source methods are identified by
-    (self, context) arguments on this object. For example:
+    keyed on method name. Source methods are identified.by argspec,
+    a list of argument specifiers. So for e.g. an argpsec of
+    [['self', 'context'], ['s', 'c']] would match methods looking
+    like:
 
     def f(self, context):
         ...
 
-    is a source method, but
+    def f(s, c):
+        ...
+
+    is but not
 
     def f(self, ctx):
         ...
 
-    is not.
 
     """
-    SOURCE_ARGSPEC = ['self', 'context']
 
-    return { n: m for n, m in inspect.getmembers(obj, inspect.ismethod)
-        if inspect.getargspec(m)[0] == SOURCE_ARGSPEC }
+    if argspec is None:
+        argspec = [DEFAULT_ARGSPEC]
+
+    return { n: m for n, m in inspect.getmembers(obj, callable)
+        if not n.startswith('_') and
+        inspect.getargspec(m).args in argspec }
 
 
 class SourceProvider(AbstractSourceProvider):
