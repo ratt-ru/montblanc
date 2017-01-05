@@ -34,8 +34,9 @@ class NumpySourceProvider(SourceProvider):
 
 
     >>> source = NumpySourceProvider({
-        "uvw" : np.zeros(shape=(100,14,3),dtype=np.float64),
-        "antenna1" : np.zeros(shape=(100,351), dtype=np.int32)})
+            "uvw" : np.zeros(shape=(100,14,3),dtype=np.float64),
+            "antenna1" : np.zeros(shape=(100,351), dtype=np.int32)
+        }, cube)
 
     >>> context = SourceContext(...)
     >>> source.uvw(context)
@@ -48,8 +49,7 @@ class NumpySourceProvider(SourceProvider):
         def _create_source_function(name, array):
             def _source(self, context):
                 """ Generic source function """
-                idx = context.slice_index(*context.array(name).shape)
-                return array[idx]
+                return array[context.array_slice_index(name)]
 
             return _source
 
@@ -64,14 +64,13 @@ class NumpySourceProvider(SourceProvider):
 
             # Except the shape of the supplied array to be equal to
             # the size of the global dimensions
-            shape = tuple(cube.dim_global_size(d) if isinstance(d, str)
-                else d for d in array_schema.shape)
+            shape = tuple(cube.dim_global_size(*array_schema.shape))
 
             if shape != a.shape:
-                raise ValueError("Shape of supplied array '{n}' "
-                    "does not match the global shape '{g}' "
+                raise ValueError("Shape '{ash}' of supplied array '{n}' "
+                    "does not match the global shape '{gs}' "
                     "of the array schema '{s}'.".format(
-                        n=n, g=shape, s=array_schema.shape))
+                        ash=a.shape, n=n, gs=shape, s=array_schema.shape))
 
             # Create the source function, update the wrapper,
             # bind it to a method and set the attribute on the object
@@ -90,3 +89,17 @@ class NumpySourceProvider(SourceProvider):
 
     def __str__(self):
         return self.__class__.__name__
+
+if __name__ == "__main__":
+    import hypercube
+    import numpy as np
+
+    cube = hypercube.HyperCube()
+    cube.register_dimension('ntime', 100)
+    cube.register_dimension('na', 64)
+
+    cube.register_array('uvw', ('ntime', 'na', 3), np.float64)
+
+    source_prov = NumpySourceProvider({"uvw" : np.zeros((100,64,3))}, cube)
+    source_prov = NumpySourceProvider({"uvw" : np.zeros((99,64,3))}, cube)
+
