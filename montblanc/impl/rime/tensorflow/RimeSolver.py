@@ -126,23 +126,6 @@ class RimeSolver(MontblancTensorflowSolver):
         data_source = slvr_cfg.get(Options.DATA_SOURCE)
         montblanc.log.info("Defaults Data Source '{}'".format(data_source))
 
-        #================================
-        # Queue Data Source Configuration
-        #================================
-
-        dfs = { n: DataSource(None, a.dtype, n)
-            for n, a in cube.arrays().iteritems()
-            if not 'temporary' in a.tags }
-
-        # The descriptor queue items are not user-defined arrays
-        # but a variable passed through describing a chunk of the
-        # problem. Make it look as if it's an array
-        if 'descriptor' in dfs:
-            raise KeyError("'descriptor' is reserved, "
-                "please use another array name.")
-
-        dfs['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32, 'Internal')
-
         #=======================
         # Data Sources and Sinks
         #=======================
@@ -176,6 +159,24 @@ class RimeSolver(MontblancTensorflowSolver):
         #================
         self._iter_dims = ['ntime', 'nbl']
         self._transcoder = CubeDimensionTranscoder(self._iter_dims)
+
+        #================================
+        # Queue Data Source Configuration
+        #================================
+
+        dfs = { n: DataSource(None, a.dtype, n)
+            for n, a in cube.arrays().iteritems()
+            if not 'temporary' in a.tags }
+
+        # The descriptor queue items are not user-defined arrays
+        # but a variable passed through describing a chunk of the
+        # problem. Make it look as if it's an array
+        if 'descriptor' in dfs:
+            raise KeyError("'descriptor' is reserved, "
+                "please use another array name.")
+
+        dfs['descriptor'] = DataSource(lambda c: np.int32([0]),
+                                        np.int32, 'Internal')
 
         #=========================
         # Tensorflow devices
