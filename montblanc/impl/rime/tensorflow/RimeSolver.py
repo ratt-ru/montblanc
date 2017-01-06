@@ -25,6 +25,7 @@ import json
 import threading
 import time
 import sys
+import types
 
 import attr
 from attrdict import AttrDict
@@ -36,15 +37,15 @@ from tensorflow.python.client import timeline
 import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow import load_tf_lib
-from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
-from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
+from montblanc.impl.rime.tensorflow.cube_dim_transcoder import (
+                                    CubeDimensionTranscoder)
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
-                                                    MSSourceProvider, FitsBeamSourceProvider)
+                                                    DefaultsSourceProvider)
 from montblanc.impl.rime.tensorflow.queue_wrapper import (
-    create_queue_wrapper)
+                                    create_queue_wrapper)
 
 from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
-                                                  NullSinkProvider, MSSinkProvider)
+                                                  NullSinkProvider)
 
 from hypercube.dims import Dimension as HyperCubeDim
 import hypercube.util as hcu
@@ -53,6 +54,8 @@ from montblanc.solvers import MontblancTensorflowSolver
 from montblanc.config import RimeSolverConfig as Options
 
 ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
+
+QUEUE_SIZE = 10
 
 rime = load_tf_lib()
 
@@ -281,37 +284,18 @@ class RimeSolver(MontblancTensorflowSolver):
         cube.register_properties(_massage_dtypes(P, T))
         cube.register_arrays(_massage_dtypes(A, T))
 
-        #================================
-        # Queue Data Source Configuration
-        #================================
+        #==========================================
+        # Tensorflow Session and Thread Coordinator
+        #==========================================
 
-        # Get the data source (defaults or test data)
+        # Create the tensorflow session object
+        # Use supplied target, if present
+        tf_server_target = slvr_cfg.get('tf_server_target', '')
+        self._tf_session = tf.Session(tf_server_target)
+
+        # Get the defaults data source (default or test data)
         data_source = slvr_cfg.get(Options.DATA_SOURCE)
-
-        # Set up the queue data sources. Just take from
-        # defaults if test data isn't specified
-        queue_data_source = (Options.DATA_SOURCE_DEFAULT
-            if not data_source == Options.DATA_SOURCE_TEST
-            else data_source)
-
-        # Obtain default data sources for each array,
-        # then update with any data sources supplied by the user
-
-        self._default_data_sources = dfs = {
-            n: DataSource(a.get(queue_data_source), a.dtype, queue_data_source)
-            for n, a in cube.arrays().iteritems()
-            if not a.temporary }
-
-        montblanc.log.info("Data source '{dfs}'".format(dfs=data_source))
-
-        # The descriptor queue items are not user-defined arrays
-        # but a variable passed through describing a chunk of the
-        # problem. Make it look as if it's an array
-        if 'descriptor' in dfs:
-            raise KeyError("'descriptor' is reserved, "
-                "please use another array name.")
-
-        dfs['descriptor'] = DataSource(lambda c: np.int32([0]), np.int32, 'Internal')
+        montblanc.log.info("Defaults Data Source '{}'".format(data_source))
 
         #=======================
         # Data Sources and Sinks
@@ -322,7 +306,8 @@ class RimeSolver(MontblancTensorflowSolver):
         # These will be overridden by source and sink
         # providers supplied by the user in the solve()
         # method
-        self._source_providers = []
+        default_prov = _create_defaults_source_provider(cube, data_source)
+        self._source_providers = [default_prov]
         self._sink_providers = [NullSinkProvider()]
 
         #==================
@@ -338,12 +323,31 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # For deciding whether to rebudget
         self._previous_budget = 0
+        self._previous_budget_dims = {}
 
         #================
         # Cube Transcoder
         #================
         self._iter_dims = ['ntime', 'nbl']
         self._transcoder = CubeDimensionTranscoder(self._iter_dims)
+
+        #================================
+        # Queue Data Source Configuration
+        #================================
+
+        dfs = { n: DataSource(None, a.dtype, n)
+            for n, a in cube.arrays().iteritems()
+            if not 'temporary' in a.tags }
+
+        # The descriptor queue items are not user-defined arrays
+        # but a variable passed through describing a chunk of the
+        # problem. Make it look as if it's an array
+        if 'descriptor' in dfs:
+            raise KeyError("'descriptor' is reserved, "
+                "please use another array name.")
+
+        dfs['descriptor'] = DataSource(lambda c: np.int32([0]),
+                                        np.int32, 'Internal')
 
         #=========================
         # Tensorflow devices
@@ -408,7 +412,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         tpe = cf.ThreadPoolExecutor
 
-        self._parameter_executor = tpe(1)
+        self._descriptor_executor = tpe(1)
         self._feed_executors = [tpe(1) for i in range(shards)]
         self._compute_executors = [tpe(1) for i in range(shards)]
         self._consumer_executor = tpe(1)
@@ -417,7 +421,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Tracing
         #======================
 
-        self._should_trace = should_trace = True
+        self._should_trace = should_trace = False
         self._trace_level = tf.RunOptions.FULL_TRACE if should_trace else tf.RunOptions.NO_TRACE
         self._run_options = tf.RunOptions(trace_level=self._trace_level)
         self._run_metadata = []
@@ -427,19 +431,19 @@ class RimeSolver(MontblancTensorflowSolver):
     def is_master(self):
         return self._is_master
 
-    def _parameter_feed(self):
+    def _descriptor_feed(self):
         # Only the master feeds descriptors
         if not self.is_master():
             return
 
         try:
-            self._parameter_feed_impl()
+            self._descriptor_feed_impl()
         except Exception as e:
-            montblanc.log.exception("Parameter Exception")
+            montblanc.log.exception("Descriptor Exception")
             raise
 
-    def _parameter_feed_impl(self):
-        def _make_hashring(remote_parameter_queues):
+    def _descriptor_feed_impl(self):
+        def _make_hashring(remote_descriptor_queues):
             from uhashring import HashRing
 
             node_config = { '%s_%s' % (j,t) : {
@@ -447,7 +451,7 @@ class RimeSolver(MontblancTensorflowSolver):
                 'vnodes': 40,
                 'hostname': j,
                 'port': t }
-                for j, t, q in remote_parameter_queues }
+                for j, t, q in remote_descriptor_queues }
 
             return HashRing(node_config, replicas=4, compat=False)
 
@@ -455,13 +459,13 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Copy dimensions of the main cube
         cube = self.hypercube.copy()
-        RPQ = self._tf_feed_data.remote.parameter
+        RPQ = self._tf_feed_data.remote.descriptor
 
         hashring = _make_hashring(RPQ)
 
         # Get space of iteration
         iter_args = _iter_args(self._iter_dims, cube)
-        parameters_fed = 0
+        descriptors_fed = 0
 
         # Iterate through the hypercube space
         for i, d in enumerate(cube.dim_iter(*iter_args)):
@@ -483,14 +487,14 @@ class RimeSolver(MontblancTensorflowSolver):
 
             feed_dict = { queue.placeholders[0] : descriptor }
             session.run(queue.enqueue_op, feed_dict=feed_dict)
-            parameters_fed += 1
+            descriptors_fed += 1
 
         # Indicate EOF to workers
         for job, task, queue in RPQ:
             session.run(queue.enqueue_op, feed_dict={ queue.placeholders[0]: [-1] })
 
-        montblanc.log.info("Done feeding {n} parameters.".format(
-            n=parameters_fed))
+        montblanc.log.info("Done feeding {n} descriptors.".format(
+            n=descriptors_fed))
 
     def _feed(self, cube, data_sources, data_sinks, global_iter_args):
         """ Feed stub """
@@ -538,7 +542,7 @@ class RimeSolver(MontblancTensorflowSolver):
             try:
                 # Get the descriptor describing a portion of the RIME
                 # and the current sizes of the the input queues
-                ops = [LQ.parameter.dequeue_op] + [iq.size_op
+                ops = [LQ.descriptor.dequeue_op] + [iq.size_op
                     for iq in LQ.input]
                 result = session.run(ops)
                 descriptor = result[0]
@@ -782,15 +786,17 @@ class RimeSolver(MontblancTensorflowSolver):
         print 'Sink Providers', sink_providers
 
         # Apply any dimension updates from the source provider
-        # to the hypercube
-        bytes_required = _apply_source_provider_dim_updates(self.hypercube,
-            source_providers)
+        # to the hypercube, taking previous reductions into account
+        bytes_required = _apply_source_provider_dim_updates(
+            self.hypercube, source_providers,
+            self._previous_budget_dims)
 
         # If we use more memory than previously,
         # perform another budgeting operation
         # to make sure everything fits
         if bytes_required > self._previous_budget:
-            self._previous_budget = _budget(self.hypercube, self.config())
+            self._previous_budget_dims, self._previous_budget = (
+                _budget(self.hypercube, self.config()))
 
         #===================================
         # Assign data to Feed Once variables
@@ -806,11 +812,10 @@ class RimeSolver(MontblancTensorflowSolver):
         # input sources
         LQ = self._tf_feed_data.local
         input_sources = LQ.input_sources
-        data_sources = self._default_data_sources.copy()
-        data_sources.update({n: DataSource(f, cube.array(n).dtype, prov.name())
+        data_sources = {n: DataSource(f, cube.array(n).dtype, prov.name())
             for prov in source_providers
             for n, f in prov.sources().iteritems()
-            if n in input_sources})
+            if n in input_sources}
 
         # Get data sinks from supplied providers
         data_sinks = { n: DataSink(f, prov.name())
@@ -839,22 +844,59 @@ class RimeSolver(MontblancTensorflowSolver):
         self._save_metadata(run_metadata)
 
         try:
-            params = self._parameter_executor.submit(self._parameter_feed)
-            not_done = set([params])
+            # Run the descriptor executor immediately
+            params = self._descriptor_executor.submit(self._descriptor_feed)
 
-            for futures in self._feed_impl(cube,
+            # Sets to track futures not yet completed
+            feed_not_done = set()
+            compute_not_done = set([params])
+            consume_not_done = set()
+            throttle_factor = self._nr_of_shards*QUEUE_SIZE
+
+            # _feed_impl generates 3 futures
+            # one for feeding data, one for computing with this data
+            # and another for consuming it.
+            # Iterate over these futures
+            for feed, compute, consume in self._feed_impl(cube,
                 data_sources, data_sinks, global_iter_args):
 
-                not_done.update(futures)
+                feed_not_done.add(feed)
+                compute_not_done.add(compute)
+                consume_not_done.add(consume)
 
-            # TODO: timeout not strictly necessary
-            done, not_done = cf.wait(not_done,
-                return_when=cf.ALL_COMPLETED)
+                # If there are many feed futures in flight,
+                # perform throttling
+                if len(feed_not_done) > throttle_factor*2:
+                    # Wait for throttle_factor futures to complete
+                    fit = cf.as_completed(feed_not_done)
+                    feed_done = set(itertools.islice(fit, throttle_factor))
+                    feed_not_done.difference_update(feed_done)
 
-            for future in done:
-                res = future.result()
+                    # Take an completed compute and consume
+                    # futures immediately
+                    compute_done, compute_not_done = cf.wait(
+                        compute_not_done, timeout=0,
+                        return_when=cf.FIRST_COMPLETED)
+                    consume_done, consume_not_done = cf.wait(
+                        consume_not_done, timeout=0,
+                        return_when=cf.FIRST_COMPLETED)
 
-            assert len(not_done) == 0
+                    # Get future results, mainly to fire exceptions
+                    for i, f in enumerate(itertools.chain(feed_done,
+                                        compute_done, consume_done)):
+                        f.result()
+
+                    not_done = sum(len(s) for s in (feed_not_done,
+                        compute_not_done, consume_not_done))
+
+                    montblanc.log.debug("Consumed {} futures. "
+                        "{} remaining".format(i, not_done))
+
+            # Request future results, mainly for exceptions
+            for f in cf.as_completed(itertools.chain(feed_not_done,
+                    compute_not_done, consume_not_done)):
+
+                f.result()
 
         except (KeyboardInterrupt, SystemExit) as e:
             montblanc.log.exception('Solving interrupted')
@@ -869,7 +911,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def close(self):
         # Shutdown thread executors
-        self._parameter_executor.shutdown()
+        self._descriptor_executor.shutdown()
         [fe.shutdown() for fe in self._feed_executors]
         [ce.shutdown() for ce in self._compute_executors]
         self._consumer_executor.shutdown()
@@ -892,10 +934,65 @@ class RimeSolver(MontblancTensorflowSolver):
         self.close()
 
 
+def _create_defaults_source_provider(cube, data_source):
+    """
+    Create a DefaultsSourceProvider object. This provides default
+    data sources for each array defined on the hypercube. The data sources
+    may either by obtained from the arrays 'default' data source
+    or the 'test' data source.
+    """
+    from montblanc.impl.rime.tensorflow.sources import (
+        find_sources, DEFAULT_ARGSPEC)
+    from montblanc.impl.rime.tensorflow.sources import constant_cache
+
+    # Obtain default data sources for each array,
+    # Just take from defaults if test data isn't specified
+    queue_data_source = (Options.DATA_SOURCE_DEFAULT
+        if not data_source == Options.DATA_SOURCE_TEST
+        else data_source)
+
+    cache = True
+
+    default_prov = DefaultsSourceProvider(cache=cache)
+
+    # Create data sources on the source provider from
+    # the cube array data sources
+    for n, a in cube.arrays().iteritems():
+        # Unnecessary for temporary arrays
+        if 'temporary' in a.tags:
+            continue
+
+        # Obtain the data source
+        data_source = a.get(queue_data_source)
+
+        # Array marked as constant, decorate the data source
+        # with a constant caching decorator
+        if cache is True and 'constant' in a.tags:
+            data_source = constant_cache(data_source)
+
+        method = types.MethodType(data_source, default_prov)
+        setattr(default_prov, n, method)
+
+    def _sources(self):
+        """
+        Override the sources method to also handle lambdas that look like
+        lambda s, c: ..., as defined in the config module
+        """
+
+        try:
+            return self._sources
+        except AttributeError:
+            self._sources = find_sources(self, [DEFAULT_ARGSPEC] + [['s', 'c']])
+
+        return self._sources
+
+    # Monkey patch the sources method
+    default_prov.sources = types.MethodType(_sources, default_prov)
+
+    return default_prov
+
 def _construct_tensorflow_feed_data(dfs, cube, cluster,
         job, task, iter_dims, shards):
-
-    QUEUE_SIZE = 10
 
     FD = AttrDict()
     # https://github.com/bcj/AttrDict/issues/34
@@ -923,31 +1020,31 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
         n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
         for n, p in cube.properties().iteritems() })
 
-    local.parameter = None
-    remote.parameter = parameter = []
+    local.descriptor = None
+    remote.descriptor = descriptor = []
 
     is_worker = job == 'worker'
     is_master = job == 'master' and task == 0
 
-    pqn = lambda j, t: '_'.join([j, str(t), 'parameter_queue'])
+    pqn = lambda j, t: '_'.join([j, str(t), 'descriptor_queue'])
     mkq = lambda sn: create_queue_wrapper('descriptors',
         QUEUE_SIZE, ['descriptor'], dfs, shared_name=sn)
     dev_spec = tf.DeviceSpec(job=job, task=task)
 
     if is_worker:
 
-        # If this a worker, create the queue receiving parameters
-        montblanc.log.info("Creating parameter queue on {ds}".format(
+        # If this a worker, create the queue receiving descriptors
+        montblanc.log.info("Creating descriptor queue on {ds}".format(
             ds=dev_spec.to_string()))
 
         with tf.device(dev_spec), tf.container('shared'):
             shared_name = pqn(job, task)
-            local.parameter = mkq(shared_name)
+            local.descriptor = mkq(shared_name)
 
     elif is_master:
 
-        montblanc.log.info("Accessing remote parameter queue")
-        montblanc.log.info("Remote parameters {}".format(remote.parameter))
+        montblanc.log.info("Accessing remote descriptor queue")
+        montblanc.log.info("Remote descriptors {}".format(remote.descriptor))
 
         wjob = 'worker'
         nworkers = len(cluster[wjob])
@@ -959,11 +1056,11 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
                 montblanc.log.info("Accessing queue {}".format(shared_name))
 
                 with tf.device(wdev_spec):
-                    parameter.append((wjob, t, mkq(shared_name)))
+                    descriptor.append((wjob, t, mkq(shared_name)))
 
-        montblanc.log.info("Remote parameters {}".format(remote.parameter))
+        montblanc.log.info("Remote descriptors {}".format(remote.descriptor))
 
-        for j ,t, q in remote.parameter:
+        for j ,t, q in remote.descriptor:
             montblanc.log.info((j, t, q.queue.name))
     else:
         raise ValueError("Unhandled job/task pair ({},{})".format(job, task))
@@ -974,7 +1071,7 @@ def _construct_tensorflow_feed_data(dfs, cube, cluster,
 
     # Take all arrays flagged as input
     input_arrays = [a for a in cube.arrays().itervalues()
-                    if a.get('input', False) == True]
+                    if 'input' in a.tags]
 
     def _partition(pred, iterable):
         t1, t2 = itertools.tee(iterable)
@@ -1249,8 +1346,6 @@ def _uniq_log2_range(start, size, div):
 
     return np.flipud(np.unique(int_values))
 
-BUDGETING_DIMS = ['ntime', 'nbl', 'nsrc'] + mbu.source_nr_vars()
-
 def _budget(cube, slvr_cfg):
     # Figure out a viable dimension configuration
     # given the total problem size
@@ -1316,81 +1411,88 @@ def _budget(cube, slvr_cfg):
     else:
         montblanc.log.info("No dimension reductions were applied.")
 
-    return bytes_required
+    return applied_reductions, bytes_required
 
-def _apply_source_provider_dim_updates(cube, source_providers):
+DimensionUpdate = attr.make_class("DimensionUpdate",
+    ['size', 'prov'], slots=True, frozen=True)
+
+def _apply_source_provider_dim_updates(cube, source_providers, budget_dims):
     """
     Given a list of source_providers, apply the list of
     suggested dimension updates given in provider.updated_dimensions()
     to the supplied hypercube.
 
-    Dimension global sizes are always updated. Local sizes will be applied
-    UNLESS the dimension is reduced during the budgeting process.
-    Assumption here is that the budgeter is smarter than the user.
+    Dimension global_sizes are always updated with the supplied sizes and
+    lower_extent is always set to 0. upper_extent is set to any reductions
+    (current upper_extents) existing in budget_dims, otherwise it is set
+    to global_size.
 
     """
     # Create a mapping between a dimension and a
     # list of (global_size, provider_name) tuples
-    mapping = collections.defaultdict(list)
+    update_map = collections.defaultdict(list)
 
-    def _transform_update(d):
-        if isinstance(d, tuple):
-            return HyperCubeDim(d[0], d[1])
-        elif isinstance(d, HyperCubeDim):
-            return d
-        else:
-            raise TypeError("Expected a hypercube dimension or "
-                "('dim_name', dim_size) tuple "
-                "for dimension update. Instead received "
-                "'{d}'".format(d=d))
+    for prov in source_providers:
+        for dim_tuple in prov.updated_dimensions():
+            name, size = dim_tuple
 
+            # Don't accept any updates on the nsrc dimension
+            # This is managed internally
+            if name == 'nsrc':
+                continue
 
+            dim_update = DimensionUpdate(size, prov.name())
+            update_map[name].append(dim_update)
 
-    # Update the mapping, except for the nsrc dimension
-    [mapping[d.name].append((d, prov.name()))
-        for prov in source_providers
-        for d in (_transform_update(d) for d in prov.updated_dimensions())
-        if not d.name == 'nsrc' ]
+    # No dimensions were updated, quit early
+    if len(update_map) == 0:
+        return cube.bytes_required()
 
     # Ensure that the global sizes we receive
     # for each dimension are unique. Tell the user
-    # about which sources conflict
-    for n, u in mapping.iteritems():
-        if not all(u[0][0] == tup[0] for tup in u[1:]):
-            raise ValueError("Received conflicting global size updates '{u}'"
-                " for dimension '{n}'.".format(n=n, u=u))
+    # when conflicts occur
+    update_list = []
 
-    if len(mapping) > 0:
-        montblanc.log.info("Updating dimensions {mk} from "
-            "source providers.".format(mk=mapping.keys()))
+    for name, updates in update_map.iteritems():
+        if not all(updates[0].size == du.size for du in updates[1:]):
+            raise ValueError("Received conflicting "
+                "global size updates '{u}'"
+                " for dimension '{n}'.".format(n=name, u=updates))
 
-    # Get existing dimension extents
-    extent_sizes = cube.dim_extent_size(*mapping.keys())
+        update_list.append((name, updates[0].size))
+
+    montblanc.log.info("Updating dimensions {} from "
+                        "source providers.".format(str(update_list)))
 
     # Now update our dimensions
-    for (n, u), es in zip(mapping.iteritems(), extent_sizes):
-        # Reduce our local size to satisfy hypercube
-        d = u[0][0]
-        gs = d.global_size
-        # Defer to existing extent size for budgeting dimensions
-        es = es if es in BUDGETING_DIMS else d.extent_size
+    for name, global_size in update_list:
+        # Defer to existing any existing budgeted extent sizes
+        # Otherwise take the global_size
+        extent_size = budget_dims.get(name, global_size)
         # Clamp extent size to global size
-        es = gs if es > gs else es
-        cube.update_dimension(n, global_size=gs,
-            lower_extent=0, upper_extent=es)
+        if extent_size > global_size:
+            extent_size = global_size
+
+        # Update the dimension
+        cube.update_dimension(name,
+            global_size=global_size,
+            lower_extent=0,
+            upper_extent=extent_size)
 
     # Handle global number of sources differently
     # It's equal to the number of
     # point's, gaussian's, sersic's combined
     nsrc = sum(cube.dim_global_size(*mbu.source_nr_vars()))
 
-    # Local number of sources will be the extent size of whatever
-    # source type we're currently iterating over. So just take
+    # Extent size will be equal to whatever source type
+    # we're currently iterating over. So just take
     # the maximum extent size given the sources
-    ls = max(cube.dim_extent_size(*mbu.source_nr_vars()))
+    es = max(cube.dim_extent_size(*mbu.source_nr_vars()))
 
-    cube.update_dimension('nsrc', global_size=nsrc,
-        lower_extent=0, upper_extent=ls)
+    cube.update_dimension('nsrc',
+        global_size=nsrc,
+        lower_extent=0,
+        upper_extent=es)
 
     # Return our cube size
     return cube.bytes_required()

@@ -307,7 +307,8 @@ class FitsBeamSourceProvider(SourceProvider):
         l_axis, l_sign = _axis_and_sign('L' if l_axis is None else l_axis)
         m_axis, m_sign = _axis_and_sign('M' if m_axis is None else m_axis)
 
-        beam_dims = (l_axis, m_axis, 'FREQ')
+        fits_dims = (l_axis, m_axis, 'FREQ')
+        beam_dims = ('beam_lw', 'beam_mh', 'beam_nud')
 
         self._filename_schema = filename_schema
         self._name = "FITS Beams '{s}'".format(s=filename_schema)
@@ -315,10 +316,10 @@ class FitsBeamSourceProvider(SourceProvider):
         self._files = files = _open_fits_files(filenames)
         self._axes = axes = _create_axes(filenames, files)
         self._dim_indices = dim_indices = l_ax, m_ax, f_ax = tuple(
-            axes.iaxis(d) for d in beam_dims)
+            axes.iaxis(d) for d in fits_dims)
 
         # Complain if we can't find required axes
-        for i, ax in zip(dim_indices, beam_dims):
+        for i, ax in zip(dim_indices, fits_dims):
             if i == -1:
                 raise ValueError("'%s' axis not found!" % ax)
 
@@ -327,12 +328,16 @@ class FitsBeamSourceProvider(SourceProvider):
         self._shape = tuple(axes.naxis[d] for d in dim_indices) + (4,)
         self._beam_freq_map = axes.grid[f_ax]
 
+        # Caching functionality
         self._is_cached = cache
         self._cache = collections.defaultdict(dict)
 
         # Now describe our dimension sizes
         self._dim_updates = [(n, axes.naxis[i]) for n, i
-            in zip(('beam_lw', 'beam_mh', 'beam_nud'), (l_ax, m_ax, f_ax))]
+            in zip(beam_dims, dim_indices)]
+
+        # Have we already reported our dimensions?
+        self._dim_updates_indicated = False
 
     def name(self):
         return self._name
@@ -366,6 +371,11 @@ class FitsBeamSourceProvider(SourceProvider):
         return self._beam_freq_map
 
     def updated_dimensions(self):
+        # Dimension updates bave been indicated, don't send them again
+        if self._dim_updates_indicated is True:
+            return ()
+
+        self._dim_updates_indicated = True
         return self._dim_updates
 
     @property
