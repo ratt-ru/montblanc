@@ -20,13 +20,14 @@
 
 import collections
 import functools
+import unittest
 
 from montblanc.impl.rime.tensorflow.sources.source_provider import (
     SourceProvider,
     find_sources,
     DEFAULT_ARGSPEC)
 
-def cache_constant(method):
+def constant_cache(method):
     """
     Caches constant arrays associated with an array name.
 
@@ -48,30 +49,30 @@ def cache_constant(method):
             return method(self, context)
 
         name = context.name
-        cached = self._cache_constant.get(name, None)
+        cached = self._constant_cache.get(name, None)
 
         # No cached value, call method and return
         if cached is None:
-            data = self._cache_constant[n] = method(self, context)
+            data = self._constant_cache[name] = method(self, context)
             return data
 
-        # Are all context.shape's entries less than or equal
-        # to the shape of the cached data?
-        # Do they have the same dtype?
+        # Can we just slice the existing cache entry?
+        # 1. Are all context.shape's entries less than or equal
+        #    to the shape of the cached data?
+        # 2. Do they have the same dtype?
         cached_ok = (cached.dtype == context.dtype and
             all(l <= r for l,r in zip(context.shape, cached.shape)))
 
         # Need to return something bigger or a different type
         if not cached_ok:
-            data = self._cache_constant[name] = method(self, context)
+            data = self._constant_cache[name] = method(self, context)
             return data
 
         # Otherwise slice the cached data
-        idx = tuple(slice(0, s) for s in context.shape)
-        return cached[idx]
+        return cached[tuple(slice(0, s) for s in context.shape)]
 
     f = wrapper
-    f.__decorator__ = cache_constant.__name__
+    f.__decorator__ = constant_cache.__name__
 
     return f
 
@@ -110,45 +111,64 @@ def chunk_cache(method):
 class DefaultsSourceProvider(SourceProvider):
     def __init__(self, cache=False):
         self._is_cached = cache
-        self._cache_constant = collections.defaultdict(dict)
+        self._constant_cache = {}
         self._chunk_cache = collections.defaultdict(dict)
 
     def name(self):
         return self.__class__.__name__
 
     def clear_cache(self):
-        self._cache_constant.clear()
+        self._constant_cache.clear()
         self._chunk_cache.clear()
 
+class TestDefaultsSourceProvider(unittest.TestCase):
+
+    def test_defaults_source_provider(self):
+        import numpy as np
+        import types
+
+        # Create source provider and graft a model_vis method onto it
+        defprov = DefaultsSourceProvider(cache=True)
+
+        model_vis = lambda self, context: np.zeros(context.shape,
+            context.dtype)
+
+        defprov.model_vis = types.MethodType(constant_cache(model_vis),
+            defprov)
+
+        # Mock a context context object
+        class Context(object):
+            pass
+
+        context = Context()
+        context.name = 'model_vis'
+        context.shape = (10, 16)
+        context.dtype = np.float64
+
+        A = defprov.model_vis(context)
+        self.assertTrue(A.flags['OWNDATA'])
+        self.assertEqual(A.shape, context.shape)
+
+        context.name = 'model_vis'
+        context.shape = supplied_shape = (100, 32)
+        context.dtype = np.float64
+
+        B = defprov.model_vis(context)
+        self.assertTrue(B.flags['OWNDATA'])
+        self.assertEqual(B.shape, context.shape)
+
+        context.name = 'model_vis'
+        context.shape = (8, 2)
+        context.dtype = np.float64
+
+        C = defprov.model_vis(context)
+        self.assertFalse(C.flags['OWNDATA'])
+        self.assertEqual(C.shape, context.shape)
+        self.assertIs(C.base, B)
+
+        cached_shape = defprov._constant_cache['model_vis'].shape
+        self.assertEqual(cached_shape, supplied_shape)
+
 if __name__ == "__main__":
-    import numpy as np
-    defprov = DefaultsSourceProvider()
-
-    class Context(object):
-        pass
-
-    context = Context()
-    context.name = 'model_vis'
-    context.shape = (10, 16)
-    context.dtype = np.float64
-
-    data = defprov.model_vis(context)
-    print data
-    print data.shape
-
-    context.name = 'model_vis'
-    context.shape = (100, 32)
-    context.dtype = np.float64
-
-    data = defprov.model_vis(context)
-    print data
-    print data.shape
-
-    context.name = 'model_vis'
-    context.shape = (8, 2)
-    context.dtype = np.float64
-
-    data = defprov.model_vis(context)
-    print data
-    print data.shape
+    unittest.main()
 
