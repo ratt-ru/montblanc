@@ -52,6 +52,8 @@ from montblanc.config import RimeSolverConfig as Options
 
 ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 
+QUEUE_SIZE = 10
+
 rime = load_tf_lib()
 
 DataSource = attr.make_class("DataSource", ['source', 'dtype', 'name'],
@@ -238,7 +240,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         tpe = cf.ThreadPoolExecutor
 
-        self._parameter_executor = tpe(1)
+        self._descriptor_executor = tpe(1)
         self._feed_executors = [tpe(1) for i in range(shards)]
         self._compute_executors = [tpe(1) for i in range(shards)]
         self._consumer_executor = tpe(1)
@@ -254,14 +256,14 @@ class RimeSolver(MontblancTensorflowSolver):
         self._run_metadata_lock = threading.Lock()
         self._iterations = 0
 
-    def _parameter_feed(self):
+    def _descriptor_feed(self):
         try:
-            self._parameter_feed_impl()
+            self._descriptor_feed_impl()
         except Exception as e:
-            montblanc.log.exception("Parameter Exception")
+            montblanc.log.exception("Descriptor Exception")
             raise
 
-    def _parameter_feed_impl(self):
+    def _descriptor_feed_impl(self):
         session = self._tf_session
 
         # Copy dimensions of the main cube
@@ -270,22 +272,22 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Get space of iteration
         iter_args = _iter_args(self._iter_dims, cube)
-        parameters_fed = 0
+        descriptors_fed = 0
 
         # Iterate through the hypercube space
         for i, d in enumerate(cube.dim_iter(*iter_args)):
             cube.update_dimensions(d)
             descriptor = self._transcoder.encode(cube.dimensions(copy=False))
-            feed_dict = {LQ.parameter.placeholders[0] : descriptor }
+            feed_dict = {LQ.descriptor.placeholders[0] : descriptor }
             montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
-            session.run(LQ.parameter.enqueue_op, feed_dict=feed_dict)
-            parameters_fed += 1
+            session.run(LQ.descriptor.enqueue_op, feed_dict=feed_dict)
+            descriptors_fed += 1
 
-        montblanc.log.info("Done feeding {n} parameters.".format(
-            n=parameters_fed))
+        montblanc.log.info("Done feeding {n} descriptors.".format(
+            n=descriptors_fed))
 
-        feed_dict = {LQ.parameter.placeholders[0] : [-1] }
-        session.run(LQ.parameter.enqueue_op, feed_dict=feed_dict)
+        feed_dict = {LQ.descriptor.placeholders[0] : [-1] }
+        session.run(LQ.descriptor.enqueue_op, feed_dict=feed_dict)
 
     def _feed(self, cube, data_sources, data_sinks, global_iter_args):
         """ Feed stub """
@@ -323,7 +325,7 @@ class RimeSolver(MontblancTensorflowSolver):
             try:
                 # Get the descriptor describing a portion of the RIME
                 # and the current sizes of the the input queues
-                ops = [LQ.parameter.dequeue_op] + [iq.size_op
+                ops = [LQ.descriptor.dequeue_op] + [iq.size_op
                     for iq in LQ.input]
                 result = session.run(ops)
                 descriptor = result[0]
@@ -616,22 +618,59 @@ class RimeSolver(MontblancTensorflowSolver):
         self._save_metadata(run_metadata)
 
         try:
-            params = self._parameter_executor.submit(self._parameter_feed)
-            not_done = set([params])
+            # Run the descriptor executor immediately
+            params = self._descriptor_executor.submit(self._descriptor_feed)
 
-            for futures in self._feed_impl(cube,
+            # Sets to track futures not yet completed
+            feed_not_done = set()
+            compute_not_done = set([params])
+            consume_not_done = set()
+            throttle_factor = self._nr_of_shards*QUEUE_SIZE
+
+            # _feed_impl generates 3 futures
+            # one for feeding data, one for computing with this data
+            # and another for consuming it.
+            # Iterate over these futures
+            for feed, compute, consume in self._feed_impl(cube,
                 data_sources, data_sinks, global_iter_args):
 
-                not_done.update(futures)
+                feed_not_done.add(feed)
+                compute_not_done.add(compute)
+                consume_not_done.add(consume)
 
-            # TODO: timeout not strictly necessary
-            done, not_done = cf.wait(not_done,
-                return_when=cf.ALL_COMPLETED)
+                # If there are many feed futures in flight,
+                # perform throttling
+                if len(feed_not_done) > throttle_factor*2:
+                    # Wait for throttle_factor futures to complete
+                    fit = cf.as_completed(feed_not_done)
+                    feed_done = set(itertools.islice(fit, throttle_factor))
+                    feed_not_done.difference_update(feed_done)
 
-            for future in done:
-                res = future.result()
+                    # Take an completed compute and consume
+                    # futures immediately
+                    compute_done, compute_not_done = cf.wait(
+                        compute_not_done, timeout=0,
+                        return_when=cf.FIRST_COMPLETED)
+                    consume_done, consume_not_done = cf.wait(
+                        consume_not_done, timeout=0,
+                        return_when=cf.FIRST_COMPLETED)
 
-            assert len(not_done) == 0
+                    # Get future results, mainly to fire exceptions
+                    for i, f in enumerate(itertools.chain(feed_done,
+                                        compute_done, consume_done)):
+                        f.result()
+
+                    not_done = sum(len(s) for s in (feed_not_done,
+                        compute_not_done, consume_not_done))
+
+                    montblanc.log.debug("Consumed {} futures. "
+                        "{} remaining".format(i, not_done))
+
+            # Request future results, mainly for exceptions
+            for f in cf.as_completed(itertools.chain(feed_not_done,
+                    compute_not_done, consume_not_done)):
+
+                f.result()
 
         except (KeyboardInterrupt, SystemExit) as e:
             montblanc.log.exception('Solving interrupted')
@@ -646,7 +685,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def close(self):
         # Shutdown thread executors
-        self._parameter_executor.shutdown()
+        self._descriptor_executor.shutdown()
         [fe.shutdown() for fe in self._feed_executors]
         [ce.shutdown() for ce in self._compute_executors]
         self._consumer_executor.shutdown()
@@ -729,8 +768,6 @@ def _create_defaults_source_provider(cube, data_source):
 def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     nr_of_input_queues):
 
-    QUEUE_SIZE = 10
-
     FD = AttrDict()
     # https://github.com/bcj/AttrDict/issues/34
     FD._setattr('_sequence_type', list)
@@ -774,8 +811,8 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     # require feeding multiple times
     #======================================
 
-    # Create the queue feeding parameters into the system
-    local.parameter = create_queue_wrapper('descriptors',
+    # Create the queue feeding descriptors into the system
+    local.descriptor = create_queue_wrapper('descriptors',
         QUEUE_SIZE, ['descriptor'], dfs)
 
     # Create the queue for holding the input
