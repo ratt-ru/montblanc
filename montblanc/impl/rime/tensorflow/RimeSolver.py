@@ -246,7 +246,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Tracing
         #======================
 
-        self._should_trace = should_trace = True
+        self._should_trace = should_trace = False
         self._trace_level = tf.RunOptions.FULL_TRACE if should_trace else tf.RunOptions.NO_TRACE
         self._run_options = tf.RunOptions(trace_level=self._trace_level)
         self._run_metadata = []
