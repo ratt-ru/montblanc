@@ -35,11 +35,12 @@ import attr
 import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow import load_tf_lib
-from montblanc.impl.rime.tensorflow.cube_dim_transcoder import CubeDimensionTranscoder
+from montblanc.impl.rime.tensorflow.cube_dim_transcoder import (
+                                    CubeDimensionTranscoder)
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
                                                     DefaultsSourceProvider)
 from montblanc.impl.rime.tensorflow.queue_wrapper import (
-    create_queue_wrapper)
+                                    create_queue_wrapper)
 
 from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
                                                   NullSinkProvider)
@@ -675,6 +676,9 @@ def _create_defaults_source_provider(cube, data_source):
     may either by obtained from the arrays 'default' data source
     or the 'test' data source.
     """
+    from montblanc.impl.rime.tensorflow.sources import (
+        find_sources, DEFAULT_ARGSPEC)
+    from montblanc.impl.rime.tensorflow.sources import constant_cache
 
     # Obtain default data sources for each array,
     # Just take from defaults if test data isn't specified
@@ -682,7 +686,9 @@ def _create_defaults_source_provider(cube, data_source):
         if not data_source == Options.DATA_SOURCE_TEST
         else data_source)
 
-    default_prov = DefaultsSourceProvider()
+    cache = True
+
+    default_prov = DefaultsSourceProvider(cache=cache)
 
     # Create data sources on the source provider from
     # the cube array data sources
@@ -691,7 +697,15 @@ def _create_defaults_source_provider(cube, data_source):
         if 'temporary' in a.tags:
             continue
 
-        method = types.MethodType(a.get(queue_data_source), default_prov)
+        # Obtain the data source
+        data_source = a.get(queue_data_source)
+
+        # Array marked as constant, decorate the data source
+        # with a constant caching decorator
+        if cache is True and 'constant' in a.tags:
+            data_source = constant_cache(data_source)
+
+        method = types.MethodType(data_source, default_prov)
         setattr(default_prov, n, method)
 
     def _sources(self):
@@ -699,8 +713,6 @@ def _create_defaults_source_provider(cube, data_source):
         Override the sources method to also handle lambdas that look like
         lambda s, c: ..., as defined in the config module
         """
-        from montblanc.impl.rime.tensorflow.sources.source_provider import (
-            find_sources, DEFAULT_ARGSPEC)
 
         try:
             return self._sources

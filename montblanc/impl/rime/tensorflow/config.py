@@ -135,7 +135,8 @@ def rand_uvw(self, context):
 
 def identity_on_pols(self, context):
     """
-    Returns [1, 0, 0, 1] tiled up to other dimensions
+    Returns [[1, 0], tiled up to other dimensions
+             [0, 1]]
     """
     A = np.empty(context.shape, context.dtype)
     A[:,:,:] = [[[1,0,0,1]]]
@@ -143,7 +144,8 @@ def identity_on_pols(self, context):
 
 def default_stokes(self, context):
     """
-    Returns [1, 0, 0, 0] tiled up to other dimensions
+    Returns [[1, 0], tiled up to other dimensions
+             [0, 0]]
     """
     A = np.empty(context.shape, context.dtype)
     A[:,:,:] = [[[1,0,0,0]]]
@@ -217,13 +219,20 @@ ALPHA_DESCRIPTION = ("Power term describing the distribution of a source's flux 
             "over frequency. Distribution is calculated as (nu/nu_ref)^alpha "
             "where nu is frequency.")
 
+# Tag Description
+#
+# input: arrays that must be input
+# output: arrays that must be output
+# temporary: arrays used to hold temporary results
+# constant:
+
 # List of arrays
 A = [
     # UVW Coordinates
     array_dict('uvw', ('ntime', 'na', 3), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = rand_uvw,
-        tags    = "input",
+        tags    = "input, constant",
         description = "UVW antenna coordinates, normalised "
             "relative to a reference antenna.",
         units   = METERS),
@@ -255,7 +264,7 @@ A = [
     array_dict('ref_frequency', ('nchan',), 'ft',
         default = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
         test    = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
-        tags    = "input",
+        tags    = "input, constant",
         description = "The reference frequency associated with the "
             " channel's band.",
         units   = HERTZ),
@@ -266,7 +275,7 @@ A = [
     array_dict('point_errors', ('ntime','na','nchan', 2), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-2,
-        tags    = "input",
+        tags    = "input, constant",
         description = "Pointing errors for each antenna. "
             "The components express an offset in the (l,m) plane.",
         units   = RADIANS),
@@ -275,7 +284,7 @@ A = [
     array_dict('antenna_scaling', ('na','nchan',2), 'ft',
         default = lambda s, c: np.ones(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype),
-        tags    = "input",
+        tags    = "input, constant",
         description = "Antenna scaling factors for each antenna. "
             "The components express a scale in the (l,m) plane.",
         units   = DIMENSIONLESS),
@@ -284,7 +293,7 @@ A = [
     array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype)*np.pi,
-        tags    = "input",
+        tags    = "input, constant",
         description = "Parallactic angles for each antenna.",
         units   = RADIANS),
 
@@ -313,7 +322,7 @@ A = [
     array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
         test    = lambda s, c: rc(c.shape, c.dtype),
-        tags    = "input",
+        tags    = "input, constant",
         description = "Holographic beam cube providing "
             "a discretised representation of the antenna beam pattern. "
             "Used to simulate the Direction Dependent Effects (DDE) "
@@ -325,7 +334,7 @@ A = [
     array_dict('gterm', ('ntime', 'na', 'nchan', 4), 'ct',
         default = identity_on_pols,
         test    = lambda s, c: rc(c.shape, c.dtype),
-        tags    = "input",
+        tags    = "input, constant",
         description = "Array providing the Direction Independent Effects (DIE) "
             "or G term of the RIME, term for each antenna.",
         units   = DIMENSIONLESS),
@@ -334,16 +343,19 @@ A = [
     array_dict('point_lm', ('npsrc',2), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-1,
+        tags    = "constant",
         description = LM_DESCRIPTION.format(st="point"),
         units   = RADIANS),
     array_dict('point_stokes', ('npsrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes,
+        tags    = "constant",
         description = STOKES_DESCRIPTION,
         units   = JANSKYS),
     array_dict('point_alpha', ('npsrc','ntime'), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype)*0.1,
+        tags    = "constant",
         description = ALPHA_DESCRIPTION,
         units   = DIMENSIONLESS),
 
@@ -351,16 +363,19 @@ A = [
     array_dict('gaussian_lm', ('ngsrc',2), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-1,
+        tags    = "constant",
         description = LM_DESCRIPTION.format(st="gaussian"),
         units   = RADIANS),
     array_dict('gaussian_stokes', ('ngsrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes,
+        tags    = "constant",
         description = STOKES_DESCRIPTION,
         units   = JANSKYS),
     array_dict('gaussian_alpha', ('ngsrc','ntime'), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype)*0.1,
+        tags    = "constant",
         description = ALPHA_DESCRIPTION,
         units   = DIMENSIONLESS),
     array_dict('gaussian_shape', (3, 'ngsrc'), 'ft',
@@ -376,21 +391,25 @@ A = [
     array_dict('sersic_lm', ('nssrc',2), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-1,
+        tags    = "constant",
         description = LM_DESCRIPTION.format(st="sersic"),
         units   = "Radians"),
     array_dict('sersic_stokes', ('nssrc','ntime', 4), 'ft',
         default = default_stokes,
         test    = rand_stokes,
+        tags    = "constant",
         description = STOKES_DESCRIPTION,
         units   = JANSKYS),
     array_dict('sersic_alpha', ('nssrc','ntime'), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype)*0.1,
+        tags    = "constant",
         description = ALPHA_DESCRIPTION,
         units   = DIMENSIONLESS),
     array_dict('sersic_shape', (3, 'nssrc'), 'ft',
         default = default_sersic_shape,
         test    = test_sersic_shape,
+        tags    = "constant",
         description = "Parameters describing the shape of a sersic source. "
             "(e1, e2, eR). Further information is required here.",
         units   = "({r}, {r}, {d})".format(r=RADIANS, d=DIMENSIONLESS)),
@@ -402,7 +421,7 @@ A = [
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: np.random.random_integers(0, 1,
             size=c.shape).astype(np.uint8),
-        tags    = "input",
+        tags    = "input, constant",
         description = "Indicates whether a visibility should be flagged when "
             "computing a Residual or Chi-Squared value.",
         unut    = DIMENSIONLESS),
@@ -410,7 +429,7 @@ A = [
     array_dict('weight', ('ntime','nbl','nchan',4), 'ft',
         default = lambda s, c: np.ones(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype),
-        tags    = "input",
+        tags    = "input, constant",
         description = "Weight applied to the difference of observed and model "
             "visibilities when computing a Chi-Squared value.",
         units   = DIMENSIONLESS),
@@ -418,7 +437,7 @@ A = [
     array_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rc(c.shape, c.dtype),
-        tags    = "input",
+        tags    = "input, constant",
         description = "Observed visibilities, used to compute residuals and "
             "Chi-Squared values."),
 
@@ -426,7 +445,7 @@ A = [
     array_dict('model_vis', ('ntime','nbl','nchan',4), 'ct',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rc(c.shape, c.dtype),
-        tags    = ("input", "output"),
+        tags    = ("input, output, constant"),
         description = "Model visibilities. In the context of input, these values "
             "will be added to the model visibilities computed by the RIME. "
             "This mechanism allows visibilities to be accumulated over different "
