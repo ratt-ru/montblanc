@@ -21,9 +21,9 @@
 from montblanc.impl.rime.tensorflow.sources.source_context import (
     SourceContext)
 from montblanc.impl.rime.tensorflow.sources.source_provider import (
-    SourceProvider, find_sources)
+    SourceProvider, find_sources, DEFAULT_ARGSPEC)
 from montblanc.impl.rime.tensorflow.sources.defaults_source_provider import (
-    DefaultsSourceProvider)
+    DefaultsSourceProvider, constant_cache, chunk_cache)
 from montblanc.impl.rime.tensorflow.sources.ms_source_provider import (
     MSSourceProvider)
 from montblanc.impl.rime.tensorflow.sources.np_source_provider import (
