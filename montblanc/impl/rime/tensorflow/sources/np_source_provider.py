@@ -87,12 +87,22 @@ class TestNumpySourceProvider(unittest.TestCase):
 
         cube.register_array('uvw', ('ntime', 'na', 3), np.float64)
 
+        # Set time and antenna extents
+        lt, ut = 10, 50
+        la, ua = 10, 20
+
         # Update dimension extents
-        cube.update_dimension('ntime', lower_extent=10, upper_extent=50)
-        cube.update_dimension('na', lower_extent=10, upper_extent=20)
+        cube.update_dimension('ntime', lower_extent=lt, upper_extent=ut)
+        cube.update_dimension('na', lower_extent=la, upper_extent=ua)
+
+        uvw_schema = cube.array('uvw')
+        global_uvw_shape = cube.dim_global_size(*uvw_schema.shape)
+        uvw = (np.arange(np.product(global_uvw_shape))
+                    .reshape(global_uvw_shape)
+                    .astype(np.float64))
 
         # Create a Numpy Source Provider
-        source_prov = NumpySourceProvider({"uvw" : np.zeros((100,64,3))})
+        source_prov = NumpySourceProvider({"uvw" : uvw})
 
         class Context(object):
             """ Mock up a context object """
@@ -107,11 +117,13 @@ class TestNumpySourceProvider(unittest.TestCase):
 
 
         data = source_prov.uvw(Context('uvw', cube))
+        uvw_slice = uvw[lt:ut, la:ua, :]
 
         # Check that we've got the shape defined by
         # cube extents and the given dtype
-        self.assertTrue(data.shape == (40, 10, 3))
-        self.assertTrue(data.dtype == np.float64)
+        self.assertTrue(np.all(data == uvw_slice))
+        self.assertTrue(data.shape == uvw_slice.shape)
+        self.assertTrue(data.dtype == uvw_slice.dtype)
 
 if __name__ == "__main__":
     unittest.main()
