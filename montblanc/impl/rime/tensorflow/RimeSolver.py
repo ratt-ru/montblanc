@@ -837,10 +837,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Run the assign operations for each feed_once variable
         run_metadata = tf.RunMetadata()
-        self._tf_session.run([fo.assign_op for fo in LQ.feed_once.itervalues()],
-            feed_dict=feed_dict,
-            options=self._run_options,
-            run_metadata=run_metadata)
+        assign_ops = [fo.assign_op.op for fo in LQ.feed_once.itervalues()]
+        self._tf_session.run(assign_ops, feed_dict=feed_dict,
+            options=self._run_options, run_metadata=run_metadata)
         self._save_metadata(run_metadata)
 
         try:

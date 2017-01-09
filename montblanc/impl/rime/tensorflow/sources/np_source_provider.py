@@ -21,6 +21,7 @@
 import functools
 import sys
 import types
+import unittest
 
 import montblanc
 import montblanc.util as mbu
@@ -43,7 +44,7 @@ class NumpySourceProvider(SourceProvider):
     >>> source.antenna1(context)
 
     """
-    def __init__(self, arrays, cube):
+    def __init__(self, arrays):
         self._arrays = arrays
 
         def _create_source_function(name, array):
@@ -55,23 +56,6 @@ class NumpySourceProvider(SourceProvider):
 
         # Create source methods for each supplied array
         for n, a in arrays.iteritems():
-            try:
-                array_schema = cube.array(n)
-            except KeyError as e:
-                # Ignore the array if it isn't defined on the cube
-                raise ValueError("Feed array '{n}' is not defined "
-                    "on the hypercube.".format(n=n)), None, sys.exc_info()[2]
-
-            # Except the shape of the supplied array to be equal to
-            # the size of the global dimensions
-            shape = tuple(cube.dim_global_size(*array_schema.shape))
-
-            if shape != a.shape:
-                raise ValueError("Shape '{ash}' of supplied array '{n}' "
-                    "does not match the global shape '{gs}' "
-                    "of the array schema '{s}'.".format(
-                        ash=a.shape, n=n, gs=shape, s=array_schema.shape))
-
             # Create the source function, update the wrapper,
             # bind it to a method and set the attribute on the object
             f = functools.update_wrapper(
@@ -90,16 +74,56 @@ class NumpySourceProvider(SourceProvider):
     def __str__(self):
         return self.__class__.__name__
 
+class TestNumpySourceProvider(unittest.TestCase):
+    def test_numpy_source_provider(self):
+        import hypercube
+        import numpy as np
+
+        # Hypercube with ntime, na dimensions
+        # and a uvw array
+        cube = hypercube.HyperCube()
+        cube.register_dimension('ntime', 100)
+        cube.register_dimension('na', 64)
+
+        cube.register_array('uvw', ('ntime', 'na', 3), np.float64)
+
+        # Set time and antenna extents
+        lt, ut = 10, 50
+        la, ua = 10, 20
+
+        # Update dimension extents
+        cube.update_dimension('ntime', lower_extent=lt, upper_extent=ut)
+        cube.update_dimension('na', lower_extent=la, upper_extent=ua)
+
+        uvw_schema = cube.array('uvw')
+        global_uvw_shape = cube.dim_global_size(*uvw_schema.shape)
+        uvw = (np.arange(np.product(global_uvw_shape))
+                    .reshape(global_uvw_shape)
+                    .astype(np.float64))
+
+        # Create a Numpy Source Provider
+        source_prov = NumpySourceProvider({"uvw" : uvw})
+
+        class Context(object):
+            """ Mock up a context object """
+            def __init__(self, array, cube):
+                self._cube = cube
+                self.array_slice_index = cube.array_slice_index
+
+                array_schema = cube.array(array)
+
+                self.shape = cube.dim_extent_size(*array_schema.shape)
+                self.dtype = array_schema.dtype
+
+
+        data = source_prov.uvw(Context('uvw', cube))
+        uvw_slice = uvw[lt:ut, la:ua, :]
+
+        # Check that we've got the shape defined by
+        # cube extents and the given dtype
+        self.assertTrue(np.all(data == uvw_slice))
+        self.assertTrue(data.shape == uvw_slice.shape)
+        self.assertTrue(data.dtype == uvw_slice.dtype)
+
 if __name__ == "__main__":
-    import hypercube
-    import numpy as np
-
-    cube = hypercube.HyperCube()
-    cube.register_dimension('ntime', 100)
-    cube.register_dimension('na', 64)
-
-    cube.register_array('uvw', ('ntime', 'na', 3), np.float64)
-
-    source_prov = NumpySourceProvider({"uvw" : np.zeros((100,64,3))}, cube)
-    source_prov = NumpySourceProvider({"uvw" : np.zeros((99,64,3))}, cube)
-
+    unittest.main()
