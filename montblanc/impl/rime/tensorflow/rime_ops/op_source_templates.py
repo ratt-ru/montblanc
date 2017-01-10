@@ -308,8 +308,9 @@ PYTHON_SOURCE_TEMPLATE = string.Template(
 import numpy as np
 import tensorflow as tf
 
-# Load the shared library with the operation
-${module} = tf.load_op_library(os.path.join(os.getcwd(),'${library}'))
+# Load the library containing the custom operation
+from montblanc.impl.rime.tensorflow import load_tf_lib
+rime = load_tf_lib()
 
 # Register the shape function for the operation
 from tensorflow.python.framework import common_shapes
