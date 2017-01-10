@@ -363,12 +363,12 @@ class FitsBeamSourceProvider(SourceProvider):
     @cache_fits_read
     def beam_extents(self, context):
         """ Return the beam extents """
-        return self._cube_extents.flatten()
+        return self._cube_extents.flatten().astype(context.dtype)
 
     @cache_fits_read
     def beam_freq_map(self, context):
         """ Return the frequency map associated with the beam """
-        return self._beam_freq_map
+        return self._beam_freq_map.astype(context.dtype)
 
     def updated_dimensions(self):
         # Dimension updates bave been indicated, don't send them again
