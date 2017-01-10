@@ -254,8 +254,10 @@ A = [
     # Frequency and Reference Frequency arrays
     # TODO: This is incorrect when channel local is not the same as channel global
     array_dict('frequency', ('nchan',), 'ft',
-        default = lambda s, c: np.linspace(_freq_low, _freq_high, c.shape[0]),
-        test    = lambda s, c: np.linspace(_freq_low, _freq_high, c.shape[0]),
+        default = lambda s, c: np.linspace(_freq_low, _freq_high,
+                                c.shape[0], dtype=c.dtype),
+        test    = lambda s, c: np.linspace(_freq_low, _freq_high,
+                                c.shape[0], dtype=c.dtype),
         tags    = "input",
         description = "Frequency. Frequencies from multiple bands "
             "are stacked on top of each other. ",
@@ -310,9 +312,9 @@ A = [
 
     array_dict('beam_freq_map', ('beam_nud',), 'ft',
         default  = lambda s, c: np.linspace(_freq_low, _freq_high,
-                                c.shape[0], endpoint=True),
+                                c.shape[0], endpoint=True, dtype=c.dtype),
         test     = lambda s, c: np.linspace(_freq_low, _freq_high,
-                                c.shape[0], endpoint=True),
+                                c.shape[0], endpoint=True, dtype=c.dtype),
         tags    = "input",
         description = "A map describing the frequency associated with each "
             "slice of the frequency dimension of the holographic beam cube.",
