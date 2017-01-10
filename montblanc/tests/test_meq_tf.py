@@ -103,6 +103,7 @@ for file in fgen:
 
 np.random.seed(0)
 dtype = np.float64
+ctype = np.complex128 if dtype == np.float64 else np.complex64
 
 def get_point_sources(nsrc):
     source_coords = np.empty(shape=(nsrc, 2), dtype=dtype)
@@ -276,7 +277,7 @@ class RadioSourceProvider(SourceProvider):
 slvr_cfg = montblanc.rime_solver_cfg(
     mem_budget=1024*1024*1024,
     data_source=Options.DATA_SOURCE_DEFAULT,
-    dtype='double',
+    dtype='double' if dtype == np.float64 else 'float',
     auto_correlations=False,
     version='tf')
 
