@@ -128,7 +128,7 @@ auto shape_function = [](InferenceContext* c) {
     // Set the shape of the first output
     c->set_output(0, out);
 
-    // printf("output shape %s\n", c->DebugString(out).c_str());;
+    // printf("output shape %s\\n", c->DebugString(out).c_str());;
 
     return Status::OK();
 };
