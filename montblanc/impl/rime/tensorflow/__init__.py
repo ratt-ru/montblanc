@@ -33,22 +33,9 @@ def load_tf_lib():
     if __rime_lib is not None:
         return __rime_lib
 
-    from tensorflow.python.framework import common_shapes
-    from tensorflow.python.framework import ops
-
     mb_path = montblanc.get_montblanc_path()
     rime_lib_path = os.path.join(mb_path, 'extensions', 'tensorflow', 'rime.so')
     __rime_lib = tf.load_op_library(rime_lib_path)
-
-    # Register shape operators
-    # TODO(sperkins) Find some other more sensible place to do this
-    ops.RegisterShape("Phase")(common_shapes.call_cpp_shape_fn)
-    ops.RegisterShape("BSqrt")(common_shapes.call_cpp_shape_fn)
-    ops.RegisterShape("EBeam")(common_shapes.call_cpp_shape_fn)
-    ops.RegisterShape("EKBSqrt")(common_shapes.call_cpp_shape_fn)
-    ops.RegisterShape("GaussShape")(common_shapes.call_cpp_shape_fn)
-    ops.RegisterShape("SersicShape")(common_shapes.call_cpp_shape_fn)
-    ops.RegisterShape("SumCoherencies")(common_shapes.call_cpp_shape_fn)
 
     return __rime_lib
 
