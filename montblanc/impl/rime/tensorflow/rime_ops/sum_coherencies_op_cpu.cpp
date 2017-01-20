@@ -21,10 +21,7 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
     ShapeHandle shape = c->input(2);
     ShapeHandle ant_jones = c->input(3);
     ShapeHandle sgn_brightness = c->input(4);
-    ShapeHandle flag = c->input(5);
-    ShapeHandle gterm = c->input(6);
-    ShapeHandle model_vis_in = c->input(7);
-    ShapeHandle apply_dies = c->input(8);
+    ShapeHandle base_coherencies = c->input(5);
 
     // antenna1
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna1, 2, &input),
@@ -49,35 +46,20 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
         "sgn_brightness shape must be [nsrc, ntime] but is " +
         c->DebugString(sgn_brightness));
 
+    // base_coherencies
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(base_coherencies, 4, &input),
+        "base_coherencies shape must be [ntime, nbl, nchan, npol] but is " +
+        c->DebugString(base_coherencies));
 
-    // flag
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(flag, 4, &input),
-        "flag shape must be [ntime, nbl, nchan, 4] but is " +
-        c->DebugString(flag));
-
-    // gterm
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(gterm, 4, &input),
-        "gterm shape must be [ntime, na, nchan, 4] but is " +
-        c->DebugString(gterm));
-
-    // model_vis_in
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(model_vis_in, 4, &input),
-        "model_vis_in shape must be [ntime, nbl, nchan, 4] but is " +
-        c->DebugString(model_vis_in));
-
-    // apply_dies
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(apply_dies, 0, &input),
-        "apply_dies must be scalar " + c->DebugString(apply_dies));
-
-    // Model visibility output is (ntime, nbl, nchan, 4)
-    ShapeHandle model_vis_out = c->MakeShape({
-        c->Dim(model_vis_in, 0),
-        c->Dim(model_vis_in, 1),
-        c->Dim(model_vis_in, 2),
-        c->Dim(model_vis_in, 3)});
+    // Coherency output is (ntime, nbl, nchan, 4)
+    ShapeHandle coherencies = c->MakeShape({
+        c->Dim(base_coherencies, 0),
+        c->Dim(base_coherencies, 1),
+        c->Dim(base_coherencies, 2),
+        c->Dim(base_coherencies, 3)});
 
     // Set the output shape
-    c->set_output(0, model_vis_out);
+    c->set_output(0, coherencies);
 
     return Status::OK();
 };
@@ -90,11 +72,8 @@ REGISTER_OP("SumCoherencies")
     .Input("shape: FT")
     .Input("ant_jones: CT")
     .Input("sgn_brightness: int8")
-    .Input("flag: uint8")
-    .Input("gterm: CT")
-    .Input("model_vis_in: CT")
-    .Input("apply_dies: bool")
-    .Output("model_vis_out: CT")
+    .Input("base_coherencies: CT")
+    .Output("coherencies: CT")
     .Attr("FT: {double, float} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
     .SetShapeFn(sum_coherencies_shape_function);

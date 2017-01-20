@@ -8,7 +8,6 @@ MONTBLANC_SUM_COHERENCIES_NAMESPACE_BEGIN
 // Register a GPU kernel for SumCoherencies that handles floats
 REGISTER_KERNEL_BUILDER(
     Name("SumCoherencies")
-    .HostMemory("apply_dies")
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT")
     .Device(tensorflow::DEVICE_GPU),
@@ -17,7 +16,6 @@ REGISTER_KERNEL_BUILDER(
 // Register a GPU kernel for SumCoherencies that handles doubles
 REGISTER_KERNEL_BUILDER(
     Name("SumCoherencies")
-    .HostMemory("apply_dies")
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT")
     .Device(tensorflow::DEVICE_GPU),

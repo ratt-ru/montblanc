@@ -906,12 +906,8 @@ def _construct_tensorflow_expression(feed_data, device, shard):
     # Infer chunk dimensions
     with tf.device(device):
         model_vis_shape = tf.shape(D.model_vis)
-        ntime, nbl, nchan = [model_vis_shape[i] for i in range(3)]
+        ntime, nbl, nchan, npol = [model_vis_shape[i] for i in range(4)]
         FT, CT = D.uvw.dtype, D.model_vis.dtype
-
-    def apply_dies(src_count):
-        """ Have we reached the maximum source count """
-        return tf.greater_equal(src_count, src_ph_vars.nsrc)
 
     def antenna_jones(lm, stokes, alpha):
         """
@@ -933,17 +929,17 @@ def _construct_tensorflow_expression(feed_data, device, shard):
             sgn_brightness)
 
     # While loop condition for each point source type
-    def point_cond(model_vis, npsrc, src_count):
+    def point_cond(coherencies, npsrc, src_count):
         return tf.less(npsrc, src_ph_vars.npsrc)
 
-    def gaussian_cond(model_vis, ngsrc, src_count):
+    def gaussian_cond(coherencies, ngsrc, src_count):
         return tf.less(ngsrc, src_ph_vars.ngsrc)
 
-    def sersic_cond(model_vis, nssrc, src_count):
+    def sersic_cond(coherencies, nssrc, src_count):
         return tf.less(nssrc, src_ph_vars.nssrc)
 
     # While loop bodies
-    def point_body(model_vis, npsrc, src_count):
+    def point_body(coherencies, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
         lm, stokes, alpha = LQ.point_source[shard].dequeue()
         nsrc = tf.shape(lm)[0]
@@ -951,14 +947,13 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         npsrc +=  nsrc
         ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
         shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
-        model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-            shape, ant_jones, sgn_brightness, D.flag, D.gterm,
-            model_vis, apply_dies(src_count))
+        coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
+            shape, ant_jones, sgn_brightness, coherencies)
 
-        return model_vis, npsrc, src_count
+        return coherencies, npsrc, src_count
 
-    def gaussian_body(model_vis, ngsrc, src_count):
-        """ Accumulate visiblities for gaussian source batch """
+    def gaussian_body(coherencies, ngsrc, src_count):
+        """ Accumulate coherencies for gaussian source batch """
         lm, stokes, alpha, gauss_params = LQ.gaussian_source[shard].dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
@@ -966,14 +961,13 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
         gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, gauss_params)
-        model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-            gauss_shape, ant_jones, sgn_brightness, D.flag, D.gterm,
-            model_vis, apply_dies(src_count))
+        coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
+            gauss_shape, ant_jones, sgn_brightness, coherencies)
 
-        return model_vis, ngsrc, src_count
+        return coherencies, ngsrc, src_count
 
-    def sersic_body(model_vis, nssrc, src_count):
-        """ Accumulate visiblities for sersic source batch """
+    def sersic_body(coherencies, nssrc, src_count):
+        """ Accumulate coherencies for sersic source batch """
         lm, stokes, alpha, sersic_params = LQ.sersic_source[shard].dequeue()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
@@ -981,27 +975,33 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
         sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, sersic_params)
-        model_vis = rime.sum_coherencies(D.antenna1, D.antenna2,
-            sersic_shape, ant_jones, sgn_brightness, D.flag, D.gterm,
-            model_vis, apply_dies(src_count))
+        coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
+            sersic_shape, ant_jones, sgn_brightness, coherencies)
 
-        return model_vis, nssrc, src_count
+        return coherencies, nssrc, src_count
 
     with tf.device(device):
+        base_coherencies = tf.zeros(shape=[ntime,nbl,nchan,npol], dtype=CT)
+
         # Evaluate point sources
-        model_vis, npsrc, src_count = tf.while_loop(
+        summed_coherencies, npsrc, src_count = tf.while_loop(
             point_cond, point_body,
-            [D.model_vis, zero, src_count])
+            [base_coherencies, zero, src_count])
 
         # Evaluate gaussians
-        model_vis, ngsrc, src_count = tf.while_loop(
+        summed_coherencies, ngsrc, src_count = tf.while_loop(
             gaussian_cond, gaussian_body,
-            [model_vis, zero, src_count])
+            [summed_coherencies, zero, src_count])
 
         # Evaluate sersics
-        model_vis, nssrc, src_count = tf.while_loop(
+        summed_coherencies, nssrc, src_count = tf.while_loop(
             sersic_cond, sersic_body,
-            [model_vis, zero, src_count])
+            [summed_coherencies, zero, src_count])
+
+        # Post process visibilities to produce model visibilites and chi squared
+        model_vis, chi_squared = rime.post_process_visibilities(
+            D.antenna1, D.antenna2, D.gterm, D.flag,
+            D.weight, D.model_vis, summed_coherencies, D.observed_vis)
 
     # Create enqueue operation
     enqueue_op = LQ.output.queue.enqueue([D.descriptor, model_vis])
