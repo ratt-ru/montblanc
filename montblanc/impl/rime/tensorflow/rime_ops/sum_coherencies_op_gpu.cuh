@@ -45,11 +45,8 @@ __global__ void rime_sum_coherencies(
     const typename Traits::FT * shape,
     const typename Traits::ant_jones_type * ant_jones,
     const typename Traits::sgn_brightness_type * sgn_brightness,
-    const typename Traits::flag_type * flag,
-    const typename Traits::gterm_type * gterm,
-    const typename Traits::vis_type * model_vis_in,
-    bool apply_dies,
-    typename Traits::vis_type * model_vis_out,
+    const typename Traits::vis_type * base_coherencies,
+    typename Traits::vis_type * coherencies,
     int nsrc, int ntime, int nbl, int na, int nchan, int npolchan)
 {
     // Shared memory usage unnecesssary, but demonstrates use of
@@ -74,7 +71,7 @@ __global__ void rime_sum_coherencies(
 
     // Load in model visibilities
     i = (time*nbl + bl)*npolchan + polchan;
-    CT model_vis = model_vis_in[i];
+    CT coherency = base_coherencies[i];
 
     // Sum over visibilities
     for(int src=0; src < nsrc; ++src)
@@ -105,41 +102,13 @@ __global__ void rime_sum_coherencies(
         J1.y *= sign;
 
         // Sum source coherency into model visibility
-        model_vis.x += J1.x;
-        model_vis.y += J1.y;
-    }
-
-    // Apply Direction Independent Effects if required
-    if(apply_dies)
-    {
-        // Multiply the visibility by antenna 1's g term
-        i = (time*na + ant1)*npolchan + polchan;
-        CT ant1_gterm = gterm[i];
-        montblanc::jones_multiply_4x4_in_place<FT>(
-            ant1_gterm, model_vis);
-
-        // Shift
-        model_vis.x = ant1_gterm.x;
-        model_vis.y = ant1_gterm.y;
-
-        // Multiply the visibility by antenna 2's g term
-        i = (time*na + ant2)*npolchan + polchan;
-        CT ant2_gterm = gterm[i];
-        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<FT>(
-            model_vis, ant2_gterm);
+        coherency.x += J1.x;
+        coherency.y += J1.y;
     }
 
     i = (time*nbl + bl)*npolchan + polchan;
-
-    // If flags apply, zero out the polarisation
-    if(flag[i])
-    {
-        model_vis.x = 0.0;
-        model_vis.y = 0.0;
-    }
-
     // Write out the polarisation
-    model_vis_out[i] = model_vis;
+    coherencies[i] = coherency;
 }
 
 // Specialise the SumCoherencies op for GPUs
@@ -159,10 +128,7 @@ public:
         const tf::Tensor & in_shape = context->input(2);
         const tf::Tensor & in_ant_jones = context->input(3);
         const tf::Tensor & in_sgn_brightness = context->input(4);
-        const tf::Tensor & in_flag = context->input(5);
-        const tf::Tensor & in_gterm = context->input(6);
-        const tf::Tensor & in_model_vis_in = context->input(7);
-        const tf::Tensor & in_apply_dies = context->input(8);
+        const tf::Tensor & in_base_coherencies = context->input(5);
 
         int nsrc = in_shape.dim_size(0);
         int ntime = in_shape.dim_size(1);
@@ -173,9 +139,11 @@ public:
         int npolchan = nchan*npol;
 
         // Allocate an output tensor
-        tf::Tensor * model_vis_out_ptr = nullptr;
+        tf::Tensor * coherencies_ptr = nullptr;
+        tf::TensorShape coherencies_shape = tf::TensorShape({
+            ntime, nbl, nchan, npol });
         OP_REQUIRES_OK(context, context->allocate_output(
-            0, in_model_vis_in.shape(), &model_vis_out_ptr));
+            0, coherencies_shape, &coherencies_ptr));
 
         // Cast input into CUDA types defined within the Traits class
         using Tr = montblanc::kernel_traits<FT>;
@@ -191,15 +159,10 @@ public:
             in_ant_jones.flat<CT>().data());
         auto sgn_brightness = reinterpret_cast<const typename Tr::sgn_brightness_type *>(
             in_sgn_brightness.flat<tf::int8>().data());
-        auto flag = reinterpret_cast<const typename Tr::flag_type *>(
-            in_flag.flat<tf::uint8>().data());
-        auto gterm = reinterpret_cast<const typename Tr::gterm_type *>(
-            in_gterm.flat<CT>().data());
-        auto model_vis_in = reinterpret_cast<const typename Tr::vis_type *>(
-            in_model_vis_in.flat<CT>().data());
-        auto model_vis_out = reinterpret_cast<typename Tr::vis_type *>(
-            model_vis_out_ptr->flat<CT>().data());
-        auto apply_dies = in_apply_dies.tensor<bool, 0>()(0);
+        auto base_coherencies = reinterpret_cast<const typename Tr::vis_type *>(
+            in_base_coherencies.flat<CT>().data());
+        auto coherencies = reinterpret_cast<typename Tr::vis_type *>(
+            coherencies_ptr->flat<CT>().data());
 
         // Set up our CUDA thread block and grid
         dim3 block = montblanc::shrink_small_dims(
@@ -214,7 +177,7 @@ public:
         // Call the rime_sum_coherencies CUDA kernel
         rime_sum_coherencies<Tr><<<grid, block, 0, device.stream()>>>(
             antenna1, antenna2, shape, ant_jones, sgn_brightness,
-            flag, gterm, model_vis_in, apply_dies, model_vis_out,
+            base_coherencies, coherencies,
             nsrc, ntime, nbl, na, nchan, npolchan);
     }
 };

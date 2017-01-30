@@ -56,11 +56,7 @@ def context_help(context, display_cube=False):
     u_extents = tuple([cube.dim_upper_extent(d) if d in cube_dims
         else d for d in schema])
 
-    pad = " "*12
-    dim_descs = '\n'.join(["{p}where '{s}' is '{d}'".format(
-            p=pad,s=d, d=cube_dims[d].description)
-        for d in schema if d in cube_dims])
-
+    dim_pad = " "*12
     wrap = _desc_wrapper.wrap
 
     lines = []
@@ -70,7 +66,9 @@ def context_help(context, display_cube=False):
         description=description))
     lines += wrap("Units: {units}".format(units=units))
     lines += wrap("Schema or abstract shape: {schema}\n".format(schema=schema))
-    lines += wrap("{dim_descs}\n".format(dim_descs=dim_descs))
+    lines += ["{p}where '{s}' is '{d}'".format(
+            p=dim_pad, s=d, d=cube_dims[d].description)
+        for d in schema if d in cube_dims]
     lines += wrap("Global shape on this iteration: "
         "{global_shape}\n".format(global_shape=global_shape))
     lines += wrap("Local shape for this context: "

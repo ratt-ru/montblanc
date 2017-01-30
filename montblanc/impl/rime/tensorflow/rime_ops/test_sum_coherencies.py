@@ -1,55 +1,85 @@
-import os
+import unittest
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.client import device_lib
 
-# Load the library containing the custom operation
-from montblanc.impl.rime.tensorflow import load_tf_lib
-rime = load_tf_lib()
+class TestSumCoherencies(unittest.TestCase):
+    """ Tests the SumCoherencies operator """
 
-dtype = np.float64
-np_apply_dies = np.bool(True)
+    def setUp(self):
+        # Load the rime operation library
+        from montblanc.impl.rime.tensorflow import load_tf_lib
+        self.rime = load_tf_lib()
 
-ctype = np.complex64 if dtype == np.float32 else np.complex128
-rf = lambda *s: np.random.random(size=s).astype(dtype)
+        # Load the custom operation library
+        #self.rime = tf.load_op_library('rime.so')
+        # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
+        self.gpu_devs = [d.name for d in device_lib.list_local_devices()
+                                if d.device_type == 'GPU']
 
-nsrc, ntime, na, nchan = 10, 15, 7, 16
-nbl = na*(na-1)//2
+    def test_sum_coherencies(self):
+        """ Test the SumCoherencies operator """
 
-np_ant1, np_ant2 = map(lambda x: np.int32(x), np.triu_indices(na, 1))
-np_ant1, np_ant2 = (np.tile(np_ant1, ntime).reshape(ntime, nbl),
-    np.tile(np_ant2, ntime).reshape(ntime,nbl))
-np_shape = rf(nsrc, ntime, nbl, nchan)
-np_ant_jones = rf(nsrc, ntime, na, nchan, 4) + rf(nsrc, ntime, na, nchan, 4)*1j
-np_sgn_brightness = np.random.randint(0, 3, size=(nsrc, ntime), dtype=np.int8) - 1
-np_flag = np.random.randint(0, 2, size=(ntime, nbl, nchan, 4), dtype=np.uint8)
-np_gterm = rf(ntime, na, nchan, 4) + rf(ntime, na, nchan, 4)*1j
-np_model_vis = rf(ntime, nbl, nchan, 4) + rf(ntime, nbl, nchan, 4)*1j
+        # List of type constraints for testing this operator
+        type_permutations = [
+            [np.float32, np.complex64],
+            [np.float64, np.complex128]]
 
+        # Run test with the type combinations above
+        for FT, CT in type_permutations:
+            self._impl_test_sum_coherencies(FT, CT)
 
-args = map(lambda v, n: tf.Variable(v, name=n),
-    [np_ant1, np_ant2, np_shape, np_ant_jones, np_sgn_brightness,
-    np_flag, np_gterm, np_model_vis, np_apply_dies],
-    ["ant1", "ant2", "shape", "ant_jones", "sgn_brightness",
-    "flag", "gterm", "model_vis", "apply_dies"])
+    def _impl_test_sum_coherencies(self, FT, CT):
+        """ Implementation of the SumCoherencies operator test """
 
-# Pin the compute to the CPU
-with tf.device('/cpu:0'):
-    expr_cpu = rime.sum_coherencies(*args)
+        rf = lambda *a, **kw: np.random.random(*a, **kw).astype(FT)
+        rc = lambda *a, **kw: rf(*a, **kw) + 1j*rf(*a, **kw).astype(CT)
 
-# Pin the compute to the GPU
-with tf.device('/gpu:0'):
-    expr_gpu = rime.sum_coherencies(*args)
+        nsrc, ntime, na, nchan = 10, 15, 7, 16
+        nbl = na*(na-1)//2
 
-init_op = tf.global_variables_initializer()
+        np_ant1, np_ant2 = map(lambda x: np.int32(x), np.triu_indices(na, 1))
+        np_ant1, np_ant2 = (np.tile(np_ant1, ntime).reshape(ntime, nbl),
+            np.tile(np_ant2, ntime).reshape(ntime,nbl))
+        np_shape = rf(size=(nsrc, ntime, nbl, nchan))
+        np_ant_jones = rc(size=(nsrc, ntime, na, nchan, 4))
+        np_sgn_brightness = np.random.randint(0, 3, size=(nsrc, ntime), dtype=np.int8) - 1
+        np_base_coherencies =  rc(size=(ntime, nbl, nchan, 4))
 
-with tf.Session() as S:
-    S.run(init_op)
+        # Argument list
+        np_args = [np_ant1, np_ant2, np_shape, np_ant_jones,
+            np_sgn_brightness, np_base_coherencies]
+        # Argument string name list
+        arg_names = ['antenna1', 'antenna2', 'shape', 'ant_jones',
+            'sgn_brightness', 'base_coherencies']
+        # Constructor tensorflow variables
+        tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
-    # Run our expressions on CPU and GPU
-    result_cpu = S.run(expr_cpu)
-    result_gpu = S.run(expr_gpu)
+        def _pin_op(device, *tf_args):
+            """ Pin operation to device """
+            with tf.device(device):
+                return self.rime.sum_coherencies(*tf_args)
 
-    assert result_cpu.shape == result_gpu.shape
-    assert np.allclose(result_cpu, result_gpu)
+        # Pin operation to CPU
+        cpu_op = _pin_op('/cpu:0', *tf_args)
+
+        # Run the op on all GPUs
+        gpu_ops = [_pin_op(d, *tf_args) for d in self.gpu_devs]
+
+        # Initialise variables
+        init_op = tf.global_variables_initializer()
+
+        with tf.Session() as S:
+            S.run(init_op)
+
+            # Get the CPU coherencies
+            cpu_coherencies = S.run(cpu_op)
+
+            # Compare against the GPU coherencies
+            for gpu_coherencies in S.run(gpu_ops):
+                self.assertTrue(np.allclose(cpu_coherencies, gpu_coherencies))
+
+if __name__ == "__main__":
+    unittest.main()
 
