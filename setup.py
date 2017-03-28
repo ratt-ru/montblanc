@@ -143,7 +143,7 @@ install_requires=[
     'numpy >= 1.11.3',
     'numexpr >= 2.6.1',
     'python-casacore >= 2.1.2',
-    "{} >= 0.12.1, < 0.13.0".format(tensorflow_package),
+    "{} >= 1.0.1".format(tensorflow_package),
 ]
 
 log.info('install_requires={}'.format(install_requires))
