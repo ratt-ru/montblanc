@@ -21,6 +21,7 @@
 import collections
 import copy
 import itertools
+from Queue import Queue
 import threading
 import sys
 import types
@@ -322,16 +323,15 @@ class RimeSolver(MontblancTensorflowSolver):
         # Iterate through the hypercube space
         for i, iter_cube in enumerate(cube.cube_iter(*iter_args)):
             descriptor = self._transcoder.encode(iter_cube.dimensions(copy=False))
-            feed_dict = {LSA.descriptor.placeholders[0] : descriptor }
             montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
-            session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
+            LSA.descriptor.put(descriptor)
             descriptors_fed += 1
 
         montblanc.log.info("Done feeding {n} descriptors.".format(
             n=descriptors_fed))
 
-        feed_dict = {LSA.descriptor.placeholders[0] : [-1] }
-        session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
+
+        LSA.descriptor.put(np.array([-1]))
 
     def _feed(self, cube, data_sources, data_sinks, global_iter_args):
         """ Feed stub """
@@ -368,8 +368,9 @@ class RimeSolver(MontblancTensorflowSolver):
         while True:
             try:
                 # Get the descriptor describing a portion of the RIME
-                result = session.run(LSA.descriptor.get_op)
-                descriptor = result['descriptor']
+                # and the current sizes of the the input queues
+                descriptor = LSA.descriptor.get(block=True)
+                LSA.descriptor.task_done()
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
 
@@ -855,9 +856,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     # require feeding multiple times
     #======================================
 
-    # Create the staging_area feeding descriptors into the system
-    local.descriptor = create_staging_area_wrapper('descriptors',
-        ['descriptor'], dfs)
+    local.descriptor = Queue(QUEUE_SIZE)
 
     # Create the staging_area for holding the input
     local.input = [create_staging_area_wrapper('input_%d' % i,
