@@ -141,6 +141,7 @@ def include_pkg_dirs():
 install_requires = [
     'attrdict >= 2.0.0',
     'attrs >= 16.3.0',
+    'distributed >= 1.16.1',
     'enum34 >= 1.1.6',
     'funcsigs >= 0.4',
     'futures >= 3.0.5',
