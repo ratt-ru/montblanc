@@ -39,8 +39,9 @@ from montblanc.impl.rime.tensorflow.cube_dim_transcoder import (
                                     CubeDimensionTranscoder)
 from montblanc.impl.rime.tensorflow.sources import (SourceContext,
                                                     DefaultsSourceProvider)
-from montblanc.impl.rime.tensorflow.queue_wrapper import (
-                                    create_queue_wrapper)
+
+from montblanc.impl.rime.tensorflow.staging_area_wrapper import (
+                                    create_staging_area_wrapper)
 
 from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
                                                   NullSinkProvider)
@@ -164,14 +165,14 @@ class RimeSolver(MontblancTensorflowSolver):
         self._transcoder = CubeDimensionTranscoder(self._iter_dims)
 
         #================================
-        # Queue Data Source Configuration
+        # Staging Area Data Source Configuration
         #================================
 
         dfs = { n: DataSource(None, a.dtype, n)
             for n, a in cube.arrays().iteritems()
             if not 'temporary' in a.tags }
 
-        # The descriptor queue items are not user-defined arrays
+        # Descriptors are not user-defined arrays
         # but a variable passed through describing a chunk of the
         # problem. Make it look as if it's an array
         if 'descriptor' in dfs:
@@ -206,7 +207,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Create all tensorflow constructs within the compute graph
         with tf.Graph().as_default() as compute_graph:
             # Create our data feeding structure containing
-            # input/output queues and feed once variables
+            # input/output staging_areas and feed once variables
             self._tf_feed_data = _construct_tensorflow_feed_data(
                 dfs, cube, self._iter_dims, shards)
 
@@ -245,6 +246,29 @@ class RimeSolver(MontblancTensorflowSolver):
         self._compute_executors = [tpe(1) for i in range(shards)]
         self._consumer_executor = tpe(1)
 
+        class InputsWaiting(object):
+            """
+            Keep track of the number of inputs waiting
+            to be consumed on each shard
+            """
+            def __init__(self, shards):
+                self._lock = threading.Lock()
+                self._inputs_waiting = np.zeros(shape=(shards,), dtype=np.int32)
+
+            def get(self):
+                with self._lock:
+                    return self._inputs_waiting
+
+            def increment(self, shard):
+                with self._lock:
+                    self._inputs_waiting[shard] += 1
+
+            def decrement(self, shard):
+                with self._lock:
+                    self._inputs_waiting[shard] -= 1
+
+        self._inputs_waiting = InputsWaiting(shards)
+
         #======================
         # Tracing
         #======================
@@ -268,7 +292,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Copy dimensions of the main cube
         cube = self.hypercube.copy()
-        LQ = self._tf_feed_data.local
+        LSA = self._tf_feed_data.local
 
         # Get space of iteration
         iter_args = _iter_args(self._iter_dims, cube)
@@ -278,16 +302,16 @@ class RimeSolver(MontblancTensorflowSolver):
         for i, d in enumerate(cube.dim_iter(*iter_args)):
             cube.update_dimensions(d)
             descriptor = self._transcoder.encode(cube.dimensions(copy=False))
-            feed_dict = {LQ.descriptor.placeholders[0] : descriptor }
+            feed_dict = {LSA.descriptor.placeholders[0] : descriptor }
             montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
-            session.run(LQ.descriptor.enqueue_op, feed_dict=feed_dict)
+            session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
             descriptors_fed += 1
 
         montblanc.log.info("Done feeding {n} descriptors.".format(
             n=descriptors_fed))
 
-        feed_dict = {LQ.descriptor.placeholders[0] : [-1] }
-        session.run(LQ.descriptor.enqueue_op, feed_dict=feed_dict)
+        feed_dict = {LSA.descriptor.placeholders[0] : [-1] }
+        session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
 
     def _feed(self, cube, data_sources, data_sinks, global_iter_args):
         """ Feed stub """
@@ -298,16 +322,16 @@ class RimeSolver(MontblancTensorflowSolver):
             raise
 
     def _feed_impl(self, cube, data_sources, data_sinks, global_iter_args):
-        """ Implementation of queue feeding """
+        """ Implementation of staging_area feeding """
         session = self._tf_session
         FD = self._tf_feed_data
-        LQ = FD.local
+        LSA = FD.local
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
-        src_types = LQ.src_queues.keys()
+        src_types = LSA.src_staging_areas.keys()
         src_strides = [int(i) for i in cube.dim_extent_size(*src_types)]
-        src_queues = [[LQ.src_queues[t][s] for t in src_types]
+        src_staging_areas = [[LSA.src_staging_areas[t][s] for t in src_types]
             for s in range(self._nr_of_shards)]
 
         compute_feed_dict = { ph: cube.dim_global_size(n) for
@@ -324,12 +348,8 @@ class RimeSolver(MontblancTensorflowSolver):
         while True:
             try:
                 # Get the descriptor describing a portion of the RIME
-                # and the current sizes of the the input queues
-                ops = [LQ.descriptor.dequeue_op] + [iq.size_op
-                    for iq in LQ.input]
-                result = session.run(ops)
-                descriptor = result[0]
-                input_queue_sizes = np.asarray(result[1:])
+                result = session.run(LSA.descriptor.get_op)
+                descriptor = result['descriptor']
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
 
@@ -340,16 +360,16 @@ class RimeSolver(MontblancTensorflowSolver):
             # Make it read-only so we can hash the contents
             descriptor.flags.writeable = False
 
-            # Find indices of the emptiest queues and, by implication
+            # Find indices of the emptiest staging_areas and, by implication
             # the shard with the least work assigned to it
-            emptiest_queues = np.argsort(input_queue_sizes)
-            shard = emptiest_queues[0]
+            emptiest_staging_areas = np.argsort(self._inputs_waiting.get())
+            shard = emptiest_staging_areas[0]
             shard = which_shard.next()
 
             feed_f = self._feed_executors[shard].submit(self._feed_actual,
                 data_sources.copy(), cube.copy(),
                 descriptor, shard,
-                src_types, src_strides, src_queues[shard],
+                src_types, src_strides, src_staging_areas[shard],
                 global_iter_args)
 
             compute_f = self._compute_executors[shard].submit(self._compute,
@@ -357,6 +377,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
             consume_f = self._consumer_executor.submit(self._consume,
                 data_sinks.copy(), cube.copy(), global_iter_args)
+
+            self._inputs_waiting.increment(shard)
 
             yield (feed_f, compute_f, consume_f)
 
@@ -371,7 +393,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
     def _feed_actual_impl(self, data_sources, cube,
             descriptor, shard,
-            src_types, src_strides, src_queues,
+            src_types, src_strides, src_staging_areas,
             global_iter_args):
 
         session = self._tf_session
@@ -386,14 +408,15 @@ class RimeSolver(MontblancTensorflowSolver):
         array_schemas = cube.arrays(reify=True)
 
         # Inject a data source and array schema for the
-        # descriptor queue items. These aren't full on arrays per se
+        # descriptor staging_area items.
+        # These aren't full on arrays per se
         # but they need to work within the feeding framework
         array_schemas['descriptor'] = descriptor
         data_sources['descriptor'] = DataSource(
             lambda c: descriptor, np.int32, 'Internal')
 
         # Generate (name, placeholder, datasource, array schema)
-        # for the arrays required by each queue
+        # for the arrays required by each staging_area
         gen = ((a, ph, data_sources[a], array_schemas[a])
             for ph, a in zip(iq.placeholders, iq.fed_arrays))
 
@@ -419,13 +442,13 @@ class RimeSolver(MontblancTensorflowSolver):
             d=descriptor, sh=shard))
 
         run_metadata = tf.RunMetadata()
-        session.run(iq.enqueue_op, feed_dict=feed_dict,
+        session.run(iq.put_op, feed_dict=feed_dict,
             options=self._run_options,
             run_metadata=run_metadata)
         self._save_metadata(run_metadata)
 
-        # For each source type, feed that source queue
-        for src_type, queue, stride in zip(src_types, src_queues, src_strides):
+        # For each source type, feed that source staging_area
+        for src_type, staging_area, stride in zip(src_types, src_staging_areas, src_strides):
             iter_args = [(src_type, stride)]
 
             # Iterate over chunks of the source
@@ -443,9 +466,9 @@ class RimeSolver(MontblancTensorflowSolver):
                 array_schemas = cube.arrays(reify=True)
 
                 # Generate (name, placeholder, datasource, array descriptor)
-                # for the arrays required by each queue
+                # for the arrays required by each staging_area
                 gen = [(a, ph, data_sources[a], array_schemas[a])
-                    for ph, a in zip(queue.placeholders, queue.fed_arrays)]
+                    for ph, a in zip(staging_area.placeholders, staging_area.fed_arrays)]
 
                 # Create a feed dictionary by calling the data source functors
                 feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
@@ -455,7 +478,7 @@ class RimeSolver(MontblancTensorflowSolver):
                     for (a, ph, ds, ad) in gen }
 
                 run_metadata = tf.RunMetadata()
-                session.run(queue.enqueue_op, feed_dict=feed_dict,
+                session.run(staging_area.put_op, feed_dict=feed_dict,
                     options=self._run_options,
                     run_metadata=run_metadata)
                 self._save_metadata(run_metadata)
@@ -495,6 +518,8 @@ class RimeSolver(MontblancTensorflowSolver):
                 options=self._run_options,
                 run_metadata=run_metadata)
 
+            self._inputs_waiting.decrement(shard)
+
             self._save_metadata(run_metadata)
 
         except Exception as e:
@@ -513,18 +538,18 @@ class RimeSolver(MontblancTensorflowSolver):
     def _consume_impl(self, data_sinks, cube, global_iter_args):
         """ Consume """
 
-        LQ = self._tf_feed_data.local
+        LSA = self._tf_feed_data.local
         run_metadata = tf.RunMetadata()
-        output = self._tf_session.run(LQ.output.dequeue_op,
+        output = self._tf_session.run(LSA.output.get_op,
             options=self._run_options,
             run_metadata=run_metadata)
         self._save_metadata(run_metadata)
 
         # Expect the descriptor in the first tuple position
         assert len(output) > 0
-        assert LQ.output.fed_arrays[0] == 'descriptor'
+        assert LSA.output.fed_arrays[0] == 'descriptor'
 
-        descriptor = output[0]
+        descriptor = output['descriptor']
         # Make it read-only so we can hash the contents
         descriptor.flags.writeable = False
 
@@ -541,7 +566,9 @@ class RimeSolver(MontblancTensorflowSolver):
                         .format(descriptor))
 
         # For each array in our output, call the associated data sink
-        for n, a in zip(LQ.output.fed_arrays[1:], output[1:]):
+        gen = ((n, a) for n, a in output.iteritems() if not n == 'descriptor')
+
+        for n, a in gen:
             sink_context = SinkContext(n, cube,
                 self.config(), global_iter_args,
                 cube.array(n) if n in cube.arrays() else {},
@@ -584,8 +611,8 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct data sources from those supplied by the
         # source providers, if they're associated with
         # input sources
-        LQ = self._tf_feed_data.local
-        input_sources = LQ.input_sources
+        LSA = self._tf_feed_data.local
+        input_sources = LSA.input_sources
         data_sources = {n: DataSource(f, cube.array(n).dtype, prov.name())
             for prov in source_providers
             for n, f in prov.sources().iteritems()
@@ -605,13 +632,13 @@ class RimeSolver(MontblancTensorflowSolver):
                     array_schemas[k].shape,
                     array_schemas[k].dtype))
             for k, fo
-            in LQ.feed_once.iteritems() }
+            in LSA.feed_once.iteritems() }
 
         self._clear_metadata()
 
         # Run the assign operations for each feed_once variable
         run_metadata = tf.RunMetadata()
-        assign_ops = [fo.assign_op.op for fo in LQ.feed_once.itervalues()]
+        assign_ops = [fo.assign_op.op for fo in LSA.feed_once.itervalues()]
         self._tf_session.run(assign_ops, feed_dict=feed_dict,
             options=self._run_options, run_metadata=run_metadata)
         self._save_metadata(run_metadata)
@@ -720,7 +747,7 @@ def _create_defaults_source_provider(cube, data_source):
 
     # Obtain default data sources for each array,
     # Just take from defaults if test data isn't specified
-    queue_data_source = (Options.DATA_SOURCE_DEFAULT
+    staging_area_data_source = (Options.DATA_SOURCE_DEFAULT
         if not data_source == Options.DATA_SOURCE_TEST
         else data_source)
 
@@ -736,7 +763,7 @@ def _create_defaults_source_provider(cube, data_source):
             continue
 
         # Obtain the data source
-        data_source = a.get(queue_data_source)
+        data_source = a.get(staging_area_data_source)
 
         # Array marked as constant, decorate the data source
         # with a constant caching decorator
@@ -765,12 +792,12 @@ def _create_defaults_source_provider(cube, data_source):
     return default_prov
 
 def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
-    nr_of_input_queues):
+    nr_of_input_staging_areas):
 
     FD = AttrDict()
     # https://github.com/bcj/AttrDict/issues/34
     FD._setattr('_sequence_type', list)
-    # Reference local queues
+    # Reference local staging_areas
     FD.local = local = AttrDict()
     # https://github.com/bcj/AttrDict/issues/34
     local._setattr('_sequence_type', list)
@@ -806,46 +833,46 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     feed_once, feed_all = list(feed_once), list(feed_all)
 
     #======================================
-    # Create tensorflow queues which
+    # Create tensorflow staging_areas which
     # require feeding multiple times
     #======================================
 
-    # Create the queue feeding descriptors into the system
-    local.descriptor = create_queue_wrapper('descriptors',
-        QUEUE_SIZE, ['descriptor'], dfs)
+    # Create the staging_area feeding descriptors into the system
+    local.descriptor = create_staging_area_wrapper('descriptors',
+        ['descriptor'], dfs)
 
-    # Create the queue for holding the input
-    local.input = [create_queue_wrapper('input_%d' % i, QUEUE_SIZE,
+    # Create the staging_area for holding the input
+    local.input = [create_staging_area_wrapper('input_%d' % i,
                 ['descriptor'] + [a.name for a in feed_all], dfs)
-            for i in range(nr_of_input_queues)]
+            for i in range(nr_of_input_staging_areas)]
 
-    # Create source input queues
-    local.point_source = [create_queue_wrapper('point_source_%d' % i,
-        QUEUE_SIZE, ['point_lm', 'point_stokes', 'point_alpha'], dfs)
-        for i in range(nr_of_input_queues)]
+    # Create source input staging_areas
+    local.point_source = [create_staging_area_wrapper('point_source_%d' % i,
+        ['point_lm', 'point_stokes', 'point_alpha'], dfs)
+        for i in range(nr_of_input_staging_areas)]
 
-    local.gaussian_source = [create_queue_wrapper('gaussian_source_%d' % i,
-        QUEUE_SIZE, ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
+    local.gaussian_source = [create_staging_area_wrapper('gaussian_source_%d' % i,
+        ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
             'gaussian_shape'], dfs)
-        for i in range(nr_of_input_queues)]
+        for i in range(nr_of_input_staging_areas)]
 
-    local.sersic_source = [create_queue_wrapper('sersic_source_%d' % i,
-        QUEUE_SIZE, ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
+    local.sersic_source = [create_staging_area_wrapper('sersic_source_%d' % i,
+        ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
             'sersic_shape'], dfs)
-        for i in range(nr_of_input_queues)]
+        for i in range(nr_of_input_staging_areas)]
 
-    # Source queues to feed
-    local.src_queues = src_queues = {
+    # Source staging_areas to feed
+    local.src_staging_areas = src_staging_areas = {
         'npsrc' : local.point_source,
         'ngsrc' : local.gaussian_source,
         'nssrc' : local.sersic_source,
     }
 
     #======================================
-    # The single output queue
+    # The single output staging_area
     #======================================
 
-    local.output = create_queue_wrapper('output', QUEUE_SIZE,
+    local.output = create_staging_area_wrapper('output',
         ['descriptor', 'model_vis'], dfs)
 
     #=================================================
@@ -878,9 +905,9 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     # Construct the list of data sources that need feeding
     #=======================================================
 
-    # Data sources from input queues
-    input_queues = local.input + [q for sq in src_queues.values() for q in sq]
-    input_sources = { a for q in input_queues
+    # Data sources from input staging_areas
+    input_staging_areas = local.input + [q for sq in src_staging_areas.values() for q in sq]
+    input_sources = { a for q in input_staging_areas
         for a in q.fed_arrays}
 
     # Data sources from feed once variables
@@ -896,12 +923,12 @@ def _construct_tensorflow_expression(feed_data, device, shard):
     src_count = zero
     src_ph_vars = feed_data.src_ph_vars
 
-    LQ = feed_data.local
+    LSA = feed_data.local
 
-    # Pull RIME inputs out of the feed queue
+    # Pull RIME inputs out of the feed staging_area
     # of the relevant shard
-    D = LQ.input[shard].dequeue_to_attrdict()
-    D.update({k: fo.var for k, fo in LQ.feed_once.iteritems()})
+    D = LSA.input[shard].get_to_attrdict()
+    D.update({k: fo.var for k, fo in LSA.feed_once.iteritems()})
 
     # Infer chunk dimensions
     with tf.device(device):
@@ -941,7 +968,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
     # While loop bodies
     def point_body(coherencies, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
-        lm, stokes, alpha = LQ.point_source[shard].dequeue()
+        lm, stokes, alpha = LSA.point_source[shard].get_to_list()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         npsrc +=  nsrc
@@ -954,7 +981,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
     def gaussian_body(coherencies, ngsrc, src_count):
         """ Accumulate coherencies for gaussian source batch """
-        lm, stokes, alpha, gauss_params = LQ.gaussian_source[shard].dequeue()
+        lm, stokes, alpha, gauss_params = LSA.gaussian_source[shard].get_to_list()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         ngsrc += nsrc
@@ -968,7 +995,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
     def sersic_body(coherencies, nssrc, src_count):
         """ Accumulate coherencies for sersic source batch """
-        lm, stokes, alpha, sersic_params = LQ.sersic_source[shard].dequeue()
+        lm, stokes, alpha, sersic_params = LSA.sersic_source[shard].get_to_list()
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         nssrc += nsrc
@@ -1003,11 +1030,11 @@ def _construct_tensorflow_expression(feed_data, device, shard):
             D.antenna1, D.antenna2, D.gterm, D.flag,
             D.weight, D.model_vis, summed_coherencies, D.observed_vis)
 
-    # Create enqueue operation
-    enqueue_op = LQ.output.queue.enqueue([D.descriptor, model_vis])
+    # Create enstaging_area operation
+    put_op = LSA.output.put_from_list([D.descriptor, model_vis])
 
-    # Return descriptor and enqueue operation
-    return D.descriptor, enqueue_op
+    # Return descriptor and enstaging_area operation
+    return D.descriptor, put_op
 
 def _get_data(data_source, context):
     """ Get data from the data source, checking the return values """
