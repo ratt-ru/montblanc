@@ -147,8 +147,29 @@ class RimeSolver(MontblancTensorflowSolver):
         # Data Source Cache
         #==================
 
-        self._source_cache = {}
-        self._source_cache_lock = threading.Lock()
+        class SourceCache(object):
+            def __init__(self):
+                self._cache = {}
+                self._lock = threading.Lock()
+
+            def __getitem__(self, key):
+                with self._lock:
+                    return self._cache[key]
+
+            def __setitem__(self, key, value):
+                with self._lock:
+                    self._cache[key]=value
+
+            def __delitem__(self, key):
+                with self._lock:
+                    del self._cache[key]
+
+            def pop(self, key, default=None):
+                with self._lock:
+                    return self._cache.pop(key, default)
+
+
+        self._source_cache = SourceCache()
 
         #==================
         # Memory Budgeting
@@ -433,10 +454,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Cache the inputs for this chunk of data,
         # so that sinks can access them
         input_cache = { a: data for (a, ph, data) in input_data }
-
-        # Guard access to the cache with a lock
-        with self._source_cache_lock:
-            self._source_cache[descriptor.data] = input_cache
+        self._source_cache[descriptor.data] = input_cache
 
         montblanc.log.info("Enqueueing chunk {d} on shard {sh}".format(
             d=descriptor, sh=shard))
@@ -557,13 +575,12 @@ class RimeSolver(MontblancTensorflowSolver):
         cube.update_dimensions(dims)
 
         # Obtain and remove input data from the source cache
-        with self._source_cache_lock:
-            try:
-                input_data = self._source_cache.pop(descriptor.data)
-            except KeyError:
-                raise ValueError("No input data cache available "
-                    "in source cache for descriptor {}!"
-                        .format(descriptor))
+        try:
+            input_data = self._source_cache.pop(descriptor.data)
+        except KeyError:
+            raise ValueError("No input data cache available "
+                "in source cache for descriptor {}!"
+                    .format(descriptor))
 
         # For each array in our output, call the associated data sink
         gen = ((n, a) for n, a in output.iteritems() if not n == 'descriptor')
