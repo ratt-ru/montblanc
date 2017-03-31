@@ -215,8 +215,8 @@ class RimeSolver(MontblancTensorflowSolver):
         from tensorflow.python.client import device_lib
         devices = device_lib.list_local_devices()
 
-        gpus = [d.name for d in devices if d.device_type == 'GPU']
-        cpus = [d.name for d in devices if d.device_type == 'CPU']
+        gpus = [d for d in devices if d.device_type == 'GPU']
+        cpus = [d for d in devices if d.device_type == 'CPU']
 
         self._devices = cpus if len(gpus) == 0 else gpus
         self._shards_per_device = spd = 2
@@ -226,6 +226,14 @@ class RimeSolver(MontblancTensorflowSolver):
 
         assert len(self._devices) > 0
 
+        device_type = 'CPU' if len(gpus) == 0 else 'GPU'
+        device_specs = [tf.DeviceSpec(device_type=d.device_type,
+                                      device_index=i)
+                        for i, d in enumerate(self._devices)]
+
+        local_device_spec = tf.DeviceSpec(job=tf_server_job,
+                                          task=tf_server_task)
+
         #=========================
         # Tensorflow Compute Graph
         #=========================
@@ -234,14 +242,18 @@ class RimeSolver(MontblancTensorflowSolver):
         with tf.Graph().as_default() as compute_graph:
             # Create our data feeding structure containing
             # input/output staging_areas and feed once variables
-            self._tf_feed_data = _construct_tensorflow_feed_data(
-                dfs, cube, self._iter_dims, shards)
 
-            # Construct tensorflow expressions for each shard
-            self._tf_expr = [_construct_tensorflow_expression(
-                    self._tf_feed_data, dev, self._shard(d,s))
-                for d, dev in enumerate(self._devices)
-                for s in range(self._shards_per_device)]
+            # Generally, pin everything to the local device
+            with tf.device(local_device_spec):
+                self._tf_feed_data = _construct_tensorflow_feed_data(
+                    dfs, cube, self._iter_dims, shards)
+
+                # Construct tensorflow expressions for each shard
+                # These have specific devices associated with them
+                self._tf_expr = [_construct_tensorflow_expression(
+                        self._tf_feed_data, dev, self._shard(d,s))
+                    for d, dev in enumerate(device_specs)
+                    for s in range(self._shards_per_device)]
 
             # Initialisation operation
             init_op = tf.global_variables_initializer()
@@ -367,7 +379,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         which_shard = itertools.cycle([self._shard(d,s)
             for s in range(self._shards_per_device)
-            for d, dev in enumerate(self._devices)])
+            for d in range(len(self._devices))])
 
         while True:
             try:
@@ -938,7 +950,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
 
     return FD
 
-def _construct_tensorflow_expression(feed_data, device, shard):
+def _construct_tensorflow_expression(feed_data, devspec, shard):
     """ Constructs a tensorflow expression for computing the RIME """
     zero = tf.constant(0)
     src_count = zero
@@ -952,7 +964,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
     D.update({k: fo.var for k, fo in LSA.feed_once.iteritems()})
 
     # Infer chunk dimensions
-    with tf.device(device):
+    with tf.device(devspec):
         model_vis_shape = tf.shape(D.model_vis)
         ntime, nbl, nchan, npol = [model_vis_shape[i] for i in range(4)]
         FT, CT = D.uvw.dtype, D.model_vis.dtype
@@ -1028,7 +1040,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
         return coherencies, nssrc, src_count
 
-    with tf.device(device):
+    with tf.device(devspec):
         base_coherencies = tf.zeros(shape=[ntime,nbl,nchan,npol], dtype=CT)
 
         # Evaluate point sources
