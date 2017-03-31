@@ -125,6 +125,10 @@ class RimeSolver(MontblancTensorflowSolver):
         # Create the tensorflow session object
         # Use supplied target, if present
         tf_server_target = slvr_cfg.get('tf_server_target', '')
+        tf_server_job = slvr_cfg.get('tf_server_job', 'localhost')
+        tf_server_task = (0 if tf_server_job == 'localhost'
+                            else slvr_cfg.get('tf_server_task', 0))
+
         self._tf_session = tf.Session(tf_server_target)
 
         # Get the defaults data source (default or test data)
