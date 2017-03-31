@@ -320,9 +320,8 @@ class RimeSolver(MontblancTensorflowSolver):
         descriptors_fed = 0
 
         # Iterate through the hypercube space
-        for i, d in enumerate(cube.dim_iter(*iter_args)):
-            cube.update_dimensions(d)
-            descriptor = self._transcoder.encode(cube.dimensions(copy=False))
+        for i, iter_cube in enumerate(cube.cube_iter(*iter_args)):
+            descriptor = self._transcoder.encode(iter_cube.dimensions(copy=False))
             feed_dict = {LSA.descriptor.placeholders[0] : descriptor }
             montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
             session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
