@@ -159,6 +159,8 @@ def rime_solver(slvr_cfg):
 
     data_source = slvr_cfg.get(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
 
+    tf_versions = [Options.VERSION_TENSORFLOW, Options.VERSION_DISTRIBUTED_TENSORFLOW]
+
     # Figure out which version of RIME solver we're dealing with.
     if version == Options.VERSION_FOUR:
         from montblanc.impl.rime.v4.RimeSolver import RimeSolver
@@ -168,11 +170,14 @@ def rime_solver(slvr_cfg):
         slvr_cfg[Options.CONTEXT] = __contexts
     elif version == Options.VERSION_TENSORFLOW:
         from montblanc.impl.rime.tensorflow.RimeSolver import RimeSolver
+    elif version == Options.VERSION_DISTRIBUTED_TENSORFLOW:
+        from montblanc.impl.rime.tensorflow.DistRimeSolver \
+        import DistRimeSolver as RimeSolver
     else:
         raise ValueError('Invalid version %s' % version)
 
     if data_source == Options.DATA_SOURCE_MS:
-        if version == Options.VERSION_TENSORFLOW:
+        if version in tf_versions:
             return RimeSolver(slvr_cfg)
         else:
             return create_rime_solver_from_ms(RimeSolver, slvr_cfg)

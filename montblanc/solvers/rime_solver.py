@@ -44,15 +44,17 @@ class RIMESolver(object):
         """
         self._slvr_cfg = slvr_cfg
 
+        dtype = slvr_cfg.get(Options.DTYPE, Options.DTYPE_FLOAT)
+
         # Configure our floating point and complex types
-        if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
+        if dtype == Options.DTYPE_FLOAT:
             self.ft = np.float32
             self.ct = np.complex64
-        elif slvr_cfg[Options.DTYPE] == Options.DTYPE_DOUBLE:
+        elif dtype == Options.DTYPE_DOUBLE:
             self.ft = np.float64
             self.ct = np.complex128
         else:
-            raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
+            raise TypeError('Invalid dtype %s ' % dtype)
 
         # Maintain a hypercube
         self._cube = HyperCube()
