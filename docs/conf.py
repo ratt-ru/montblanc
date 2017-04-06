@@ -304,5 +304,7 @@ class Mock(MagicMock):
     def __getattr__(cls, name):
             return MagicMock()
 
-MOCK_MODULES = ['astropy', 'numpy', 'numexpr', 'python-casacore', 'tensorflow']
+MOCK_MODULES = ['astropy', 'astropy.io',
+    'numpy', 'numexpr', 'pyrap',
+    'pyrap.tables', 'tensorflow']
 sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
