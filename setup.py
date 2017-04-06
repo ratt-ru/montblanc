@@ -31,6 +31,12 @@ from install.install_log import log
 mb_path = 'montblanc'
 mb_inc_path = os.path.join(mb_path, 'include')
 
+#===================
+# Detect readthedocs
+#====================
+
+on_rtd = os.environ.get('READTHEDOCS') == 'True'
+
 #=================
 # Setup setuptools
 #=================
@@ -132,24 +138,52 @@ def include_pkg_dirs():
 
     return pkg_dirs
 
-install_requires=[
-    'astropy >= 1.3.0',
+install_requires = [
     'attrdict >= 2.0.0',
     'attrs >= 16.3.0',
     'enum34 >= 1.1.6',
     'funcsigs >= 0.4',
     'futures >= 3.0.5',
     'hypercube == 0.3.2',
-    'numpy >= 1.11.3',
-    'numexpr >= 2.6.1',
-    'python-casacore >= 2.1.2',
-    "{} >= 1.0.1".format(tensorflow_package),
 ]
+
+#===================================
+# Avoid binary packages and compiles
+# on readthedocs
+#===================================
+
+if on_rtd:
+    cmdclass = {}
+    ext_modules = []
+    ext_options = {}
+else:
+    # Add binary/C extension type packages
+    install_requires += [
+        'astropy >= 1.3.0',
+        'numpy >= 1.11.3',
+        'numexpr >= 2.6.1',
+        'python-casacore >= 2.1.2',
+        "{} >= 1.0.1".format(tensorflow_package),
+    ]
+
+    from install.tensorflow_ops_ext import (BuildCommand,
+        tensorflow_extension_name)
+
+    cmdclass = { 'build_ext' : BuildCommand }
+    # tensorflow_ops_ext.BuildCommand.run will
+    # expand this dummy extension to its full portential
+    ext_modules = [Extension(tensorflow_extension_name, ['rime.cu'])]
+    # Pass NVCC and CUDA settings through to the build extension
+    ext_options = {
+        'build_ext' : {
+            'nvcc_settings' : nvcc_settings,
+            'cuda_devices' : device_info,
+        },
+    }
 
 log.info('install_requires={}'.format(install_requires))
 
 from install.versioning import maintain_version
-from install.tensorflow_ops_ext import BuildCommand, tensorflow_extension_name
 
 setup(name='montblanc',
     version=maintain_version(os.path.join('montblanc', 'version.py')),
@@ -167,17 +201,9 @@ setup(name='montblanc',
     ],
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
-    cmdclass={ 'build_ext' : BuildCommand },
-    # tensorflow_ops_ext.BuildCommand.run will
-    # expand this dummy extension to its full portential
-    ext_modules=[Extension(tensorflow_extension_name, ['rime.cu'])],
-    # Pass NVCC and CUDA settings through to the build extension
-    options={
-        'build_ext' : {
-            'nvcc_settings' : nvcc_settings,
-            'cuda_devices' : device_info,
-        },
-    },
+    cmdclass=cmdclass,
+    ext_modules=ext_modules,
+    options=ext_options,
     license='GPL2',
     install_requires=install_requires,
     packages=find_packages(),
