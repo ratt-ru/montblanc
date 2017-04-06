@@ -53,18 +53,24 @@ def find_sources(obj, argspec=None):
     Returns a dictionary of source methods found on this object,
     keyed on method name. Source methods are identified.by argspec,
     a list of argument specifiers. So for e.g. an argpsec of
-    [['self', 'context'], ['s', 'c']] would match methods looking
-    like:
+    :code:`[['self', 'context'], ['s', 'c']]` would match
+    methods looking like:
 
-    def f(self, context):
+    .. code-block:: python
+
+        def f(self, context):
         ...
 
-    def f(s, c):
+    .. code-block:: python
+
+        def f(s, c):
         ...
 
     is but not
 
-    def f(self, ctx):
+    .. code-block:: python
+
+        def f(self, ctx):
         ...
 
 
@@ -95,15 +101,19 @@ class SourceProvider(AbstractSourceProvider):
         keyed on method name. Source methods are identified by
         (self, context) arguments on this object. For example:
 
-        def f(self, context):
-            ...
+        .. code-block:: python
+
+            def f(self, context):
+                    ...
 
         is a source method, but
 
-        def f(self, ctx):
-            ...
+        .. code-block:: python
 
-        is not.
+            def f(self, ctx):
+                ...
+
+            is not.
 
         """
 

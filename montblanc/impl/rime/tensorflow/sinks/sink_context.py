@@ -62,10 +62,10 @@ class SinkContextMetaClass(type):
             fmt_args = inspect.formatargspec(formatvalue=lambda v: '=_default', *spec)
             call_args = inspect.formatargspec(formatvalue=lambda v: '', *spec)
 
-            wrap.__doc__ = (
-                'def {}{}:\n'
-                '\t""" {} """\n'
-                '\treturn _proxy{}').format(name, fmt_args, method.__doc__, call_args)
+            # wrap.__doc__ = (
+            #     'def {}{}:\n'
+            #     '\t""" {} """\n'
+            #     '\treturn _proxy{}').format(name, fmt_args, method.__doc__, call_args)
 
             return wrap
 
@@ -76,10 +76,28 @@ class SinkContextMetaClass(type):
 
 class SinkContext(object):
     """
-    Context for queue arrays.
+    Context object passed to data sinks.
 
-    Proxies attributes of a hypercube and provides access to configuration
+    Primarily, it exists to provide a tile of output data to the user.
+
+    .. code-block:: python
+
+        class MySinkProvider(SinkProvider):
+            vis_queue = Queue(10)
+
+            ...
+            def model_vis(self, context):
+                print context.help(display_cube=True)
+                # Consume data
+                vis_queue.put(context.data)
+
+
+    Public methods of a :py:class:`~hypercube.base_cube.HyperCube`
+    are proxied on this object. Other useful information, such
+    as the configuration, iteration space arguments and the
+    abstract array schema are also present on this object.
     """
+
     __slots__ = ('_cube', '_cfg', '_name', '_data', '_input_cache',
         '_cube_attributes', '_iter_args', '_array_schema')
 
@@ -103,6 +121,7 @@ class SinkContext(object):
 
     @property
     def cfg(self):
+        """ Configuration """
         return self._cfg
 
     @cfg.setter
@@ -111,22 +130,71 @@ class SinkContext(object):
 
     @property
     def iter_args(self):
+        """
+        Iteration arguments that describe the tile sizes
+        over which iteration is performed. In the following example,
+        iteration is occuring in tiles of 100 Timesteps, 64 Channels
+        and 50 Point Sources.
+
+        .. code-block:: python
+
+            context.iter_args == [("ntime", 100),
+                    ("nchan", 64), ("npsrc", 50)]
+        """
         return self._iter_args
 
     @property
     def array_schema(self):
+        """
+        The array schema of the array associated
+        with this data source. For instance if `model_vis` is
+        registered on a hypercube as follows:
+
+        .. code-block:: python
+
+            # Register model_vis array_schema on hypercube
+            cube.register_array("model_vis",
+                ("ntime", "nbl", "nchan", "ncorr"),
+                np.complex128)
+
+            ...
+            # Create a source context for model_vis data source
+            context = SourceContext("model_vis", ...)
+            ...
+            # Obtain the array schema
+            context.array_schema == ("ntime", "nbl", "nchan", "ncorr")
+
+        """
         return self._array_schema
 
     @property
     def data(self):
+        """
+        The data tile available for consumption by the associated sink
+        """
         return self._data
 
     @property
     def input(self):
+        """
+        The dictionary of inputs used to produce
+        :py:obj:`~SinkContext.data`. For example, if one
+        wished to find the antenna pair used to produce a
+        particular model visibility, one could do the following:
+
+        .. code-block:: python
+
+            def model_vis(self, context):
+                ant1 = context.input["antenna1"]
+                ant2 = context.input["antenna2"]
+                model_vis = context.data
+
+        """
         return self._input_cache
 
     @property
     def name(self):
+        """ The name of the data sink of this context. """
         return self._name
 
     @name.setter
@@ -134,4 +202,16 @@ class SinkContext(object):
         self._name = value
 
     def help(self, display_cube=False):
+        """
+        Get help associated with this context
+
+        Parameters
+        ----------
+        display_cube: bool
+            Add hypercube description to the output
+        Returns
+        -------
+            str
+                A help string associated with this context
+        """
         return context_help(self, display_cube)

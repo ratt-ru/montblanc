@@ -27,7 +27,24 @@ from montblanc.impl.rime.tensorflow.sinks.sink_provider import SinkProvider
 import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 
 class MSSinkProvider(SinkProvider):
+    """
+    Sink Provider that receives model visibilities produced by
+    montblanc
+    """
+
     def __init__(self, manager, vis_column=None):
+        """
+        Constructs an MSSinkProvider object
+
+        Parameters
+        ----------
+        manager: :py:class:`.MeasurementSetManager`
+            The :py:class:`.MeasurementSetManager` used to access
+            the Measurement Set.
+        vis_column: str
+            Column to which model visibilities will be read
+        """
+
         self._manager = manager
         self._name = "Measurement Set '{ms}'".format(ms=manager.msname)
         self._vis_column = ('CORRECTED_DATA' if vis_column is None else vis_column)
@@ -36,6 +53,7 @@ class MSSinkProvider(SinkProvider):
         return self._name
 
     def model_vis(self, context):
+        """ model visibility data sink """
         column = self._vis_column
         msshape = None
 

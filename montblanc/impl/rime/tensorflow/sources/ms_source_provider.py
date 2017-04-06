@@ -63,7 +63,26 @@ def cache_ms_read(method):
     return memoizer
 
 class MSSourceProvider(SourceProvider):
+    """
+    Source Provider that retrieves input data from a
+    MeasurementSet
+    """
+
     def __init__(self, manager, vis_column=None, cache=False):
+        """
+        Constructs an MSSourceProvider object
+
+        Parameters
+        ----------
+        manager: :py:class:`.MeasurementSetManager`
+            The :py:class:`.MeasurementSetManager` used to access
+            the Measurement Set.
+        vis_column: str
+            Column from which observed visibilities will be read
+        cache: bool
+            Indicates whether data will be cached on this
+            Source Provider.
+        """
         self._manager = manager
         self._name = "Measurement Set '{ms}'".format(ms=manager.msname)
 
@@ -97,11 +116,13 @@ class MSSourceProvider(SourceProvider):
 
     @cache_ms_read
     def frequency(self, context):
+        """ Frequency data source """
         channels = self._manager.spectral_window_table.getcol(MS.CHAN_FREQ)
         return channels.reshape(context.shape).astype(context.dtype)
 
     @cache_ms_read
     def ref_frequency(self, context):
+        """ Reference frequency data source """
         num_chans = self._manager.spectral_window_table.getcol(MS.NUM_CHAN)
         ref_freqs = self._manager.spectral_window_table.getcol(MS.REF_FREQUENCY)
 
@@ -110,7 +131,8 @@ class MSSourceProvider(SourceProvider):
 
     @cache_ms_read
     def uvw(self, context):
-        """ Special case for handling antenna uvw code """
+        """ Per-antenna UVW coordinate data source """
+        # Special case for handling antenna uvw code
 
         # Antenna reading code expects (ntime, nbl) ordering
         if MS.UVW_DIM_ORDER != ('ntime', 'nbl'):
@@ -160,6 +182,7 @@ class MSSourceProvider(SourceProvider):
 
     @cache_ms_read
     def antenna1(self, context):
+        """ antenna1 data source """
         lrow, urow = MS.uvw_row_extents(context)
         antenna1 = self._manager.ordered_uvw_table.getcol(
             MS.ANTENNA1, startrow=lrow, nrow=urow-lrow)
@@ -168,6 +191,7 @@ class MSSourceProvider(SourceProvider):
 
     @cache_ms_read
     def antenna2(self, context):
+        """ antenna2 data source """
         lrow, urow = MS.uvw_row_extents(context)
         antenna2 = self._manager.ordered_uvw_table.getcol(
             MS.ANTENNA2, startrow=lrow, nrow=urow-lrow)
@@ -176,6 +200,7 @@ class MSSourceProvider(SourceProvider):
 
     @cache_ms_read
     def parallactic_angles(self, context):
+        """ parallactic angle data source """
         # Time and antenna extents
         (lt, ut), (la, ua) = context.dim_extents('ntime', 'na')
 
@@ -185,6 +210,7 @@ class MSSourceProvider(SourceProvider):
 
     @cache_ms_read
     def observed_vis(self, context):
+        """ Observed visibility data source """
         lrow, urow = MS.row_extents(context)
 
         data = self._manager.ordered_main_table.getcol(
@@ -194,6 +220,7 @@ class MSSourceProvider(SourceProvider):
 
     @cache_ms_read
     def flag(self, context):
+        """ Flag data source """
         lrow, urow = MS.row_extents(context)
 
         flag = self._manager.ordered_main_table.getcol(
@@ -203,6 +230,7 @@ class MSSourceProvider(SourceProvider):
 
     @cache_ms_read
     def weight(self, context):
+        """ Weight data source """
         lrow, urow = MS.row_extents(context)
 
         weight = self._manager.ordered_main_table.getcol(
@@ -213,9 +241,11 @@ class MSSourceProvider(SourceProvider):
         return weight.reshape(context.shape).astype(context.dtype)
 
     def clear_cache(self):
+        """ Clears cached data on this Source Provider """
         self._cache.clear()
 
     def close(self):
+        """ Releases resources associated with this Source Provider """
         self.clear_cache()
 
     def __enter__(self):

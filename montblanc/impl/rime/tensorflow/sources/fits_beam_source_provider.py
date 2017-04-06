@@ -280,29 +280,51 @@ def cache_fits_read(method):
 class FitsBeamSourceProvider(SourceProvider):
     """
     Feeds holography cubes from a series of eight FITS files matching a
-    filename_schema. A schema of 'beam_$(corr)_$(reim).fits' produces:
+    filename_schema. A schema of :code:`'beam_$(corr)_$(reim).fits'`
+    matches:
 
-    ['beam_xx_re.fits', 'beam_xx_im.fits',
-     'beam_xy_re.fits', 'beam_xy_im.fits',
-      ...
-      'beam_yy_re.fits', 'beam_yy_im.fits']
+    .. code-block:: python
 
-    while 'beam_$(CORR)_$(REIM).fits'
+        ['beam_xx_re.fits', 'beam_xx_im.fits',
+         'beam_xy_re.fits', 'beam_xy_im.fits',
+          ...
+          'beam_yy_re.fits', 'beam_yy_im.fits']
 
-    ['beam_XX_RE.fits', 'beam_XX_IM.fits',
-      'beam_XY_RE.fits', 'beam_XY_IM.fits',
-      ...
-      'beam_YY_RE.fits', 'beam_YY_IM.fits'\
+    while :code:`'beam_$(CORR)_$(REIM).fits'` matches
+
+    .. code-block:: python
+
+        ['beam_XX_RE.fits', 'beam_XX_IM.fits',
+          'beam_XY_RE.fits', 'beam_XY_IM.fits',
+          ...
+          'beam_YY_RE.fits', 'beam_YY_IM.fits']
 
 
     Missing files will result in zero values for that correlation
     and real/imaginary component. The shape of the FITS data will be
-    inferrred from the first file found and subsequent files should match
+    inferred from the first file found and subsequent files should match
     that shape.
     """
     def __init__(self, filename_schema, l_axis=None, m_axis=None,
         cache=False):
         """
+        Constructs a FitsBeamSourceProvider object
+
+        Parameters
+        ----------
+            filename_schema : str
+                See :py:class:`.FitsBeamSourceProvider` for valid schemas
+            l_axis : str
+                FITS axis interpreted as the L axis. `L` and `X` are
+                sensible values here. `-L` will invert the coordinate
+                system on that axis.
+            m_axis : str
+                FITS axis interpreted as the M axis. `M` and `Y` are
+                sensible values here. `-M` will invert the coordinate
+                system on that axis.
+            cache : bool
+                if True, the data will be read from FITS file once
+                and cached on this object.
         """
         l_axis, l_sign = _axis_and_sign('L' if l_axis is None else l_axis)
         m_axis, m_sign = _axis_and_sign('M' if m_axis is None else m_axis)
@@ -344,7 +366,7 @@ class FitsBeamSourceProvider(SourceProvider):
 
     @cache_fits_read
     def ebeam(self, context):
-        """ Feeds the ebeam cube """
+        """ ebeam cube data source """
         if context.shape != self.shape:
             raise ValueError("Partial feeding of the "
                 "beam cube is not yet supported %s %s." % (context.shape, self.shape))
@@ -362,12 +384,12 @@ class FitsBeamSourceProvider(SourceProvider):
 
     @cache_fits_read
     def beam_extents(self, context):
-        """ Return the beam extents """
+        """ Beam extent data source """
         return self._cube_extents.flatten().astype(context.dtype)
 
     @cache_fits_read
     def beam_freq_map(self, context):
-        """ Return the frequency map associated with the beam """
+        """ Beam frequency map data source """
         return self._beam_freq_map.astype(context.dtype)
 
     def updated_dimensions(self):
@@ -380,6 +402,7 @@ class FitsBeamSourceProvider(SourceProvider):
 
     @property
     def filename_schema(self):
+        """ Filename schema """
         return self._filename_schema
 
     @property
