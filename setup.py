@@ -144,7 +144,7 @@ install_requires = [
     'enum34 >= 1.1.6',
     'funcsigs >= 0.4',
     'futures >= 3.0.5',
-    'hypercube == 0.3.2',
+    'hypercube == 0.3.3',
 ]
 
 #===================================
