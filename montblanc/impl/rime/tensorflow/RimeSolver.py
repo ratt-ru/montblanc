@@ -402,6 +402,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
             yield (feed_f, compute_f, consume_f)
 
+            chunks_fed += 1
+
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
     def _feed_actual(self, *args):
