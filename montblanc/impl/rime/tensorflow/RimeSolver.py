@@ -601,8 +601,8 @@ class RimeSolver(MontblancTensorflowSolver):
         sink_providers = (self._sink_providers +
             kwargs.get('sink_providers', []))
 
-        print 'Source Providers', source_providers
-        print 'Sink Providers', sink_providers
+        print 'Source Providers', [sp.name() for sp in source_providers]
+        print 'Sink Providers', [sp.name() for sp in sink_providers]
 
         # Apply any dimension updates from the source provider
         # to the hypercube, taking previous reductions into account
