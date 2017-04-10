@@ -18,15 +18,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from montblanc.impl.rime.tensorflow.sources.source_context import (
-    SourceContext)
-from montblanc.impl.rime.tensorflow.sources.source_provider import (
-    SourceProvider, find_sources, DEFAULT_ARGSPEC)
-from montblanc.impl.rime.tensorflow.sources.defaults_source_provider import (
-    DefaultsSourceProvider, constant_cache, chunk_cache)
-from montblanc.impl.rime.tensorflow.sources.ms_source_provider import (
-    MSSourceProvider)
-from montblanc.impl.rime.tensorflow.sources.np_source_provider import (
-    NumpySourceProvider)
-from montblanc.impl.rime.tensorflow.sources.fits_beam_source_provider import (
-    FitsBeamSourceProvider)
+from .source_context import SourceContext
+from .source_provider import (SourceProvider, find_sources,
+                                DEFAULT_ARGSPEC)
+from .defaults_source_provider import (DefaultsSourceProvider,
+                                constant_cache, chunk_cache)
+from .ms_source_provider import MSSourceProvider
+from .np_source_provider import NumpySourceProvider
+from .fits_beam_source_provider import FitsBeamSourceProvider
