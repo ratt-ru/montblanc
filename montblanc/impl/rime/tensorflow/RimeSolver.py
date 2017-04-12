@@ -124,11 +124,37 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Create the tensorflow session object
         # Use supplied target, if present
-        tf_server_target = slvr_cfg.get('tf_server_target', '')
-        tf_server_job = slvr_cfg.get('tf_server_job', 'localhost')
-        tf_server_task = (0 if tf_server_job == 'localhost'
-                            else slvr_cfg.get('tf_server_task', 0))
+        tf_server_target = slvr_cfg.get('tf_server_target', None)
+        tf_server_job = slvr_cfg.get('tf_server_job', None)
+        tf_server_task = slvr_cfg.get('tf_server_task', None)
+        tf_cluster = slvr_cfg.get('tf_cluster', None)
 
+        # Default local session
+        if tf_server_target is None and tf_cluster is None:
+            montblanc.log.info("Starting a local tensorflow session")
+            tf_server_target = ''
+            tf_server_job = 'localhost'
+            tf_server_task = 0
+        # Start a cluster
+        elif tf_server_target is None and not tf_cluster is None:
+            montblanc.log.info("Starting a tensorflow server and attaching")
+            server = tf.train.Server(tf_cluster,
+                tf_server_job, tf_server_task)
+            server.start()
+            tf_server_target = server.target
+        # Some sort of remote session with no cluster
+        # Make sure the job and task are set
+        elif tf_server_target is not None and not tf_server_target == '':
+            if tf_server_job is None:
+                raise ValueError("tf_server_job is None")
+
+            if tf_server_task is None:
+                raise ValueError("tf_server_task is None")
+        else:
+            raise ValueError("Invalid combination of "
+                "'tf_server_target' and 'tf_cluster'")
+
+        self._tf_server_target = tf_server_target
         self._tf_session = tf.Session(tf_server_target)
 
         # Get the defaults data source (default or test data)
@@ -317,6 +343,10 @@ class RimeSolver(MontblancTensorflowSolver):
         self._run_metadata = []
         self._run_metadata_lock = threading.Lock()
         self._iterations = 0
+
+    @property
+    def tf_server_target(self):
+        return self._tf_server_target
 
     def _descriptor_feed(self):
         try:
