@@ -48,9 +48,9 @@ class DataSinkBarrier(object):
         print barrier.pop('bar')
     """
     def __init__(self, data_keys):
-        self._data_keys = frozenset(data_keys)
+        self._data_keys = data_keys
         self._data_store = {}
-        self._lock = threading.Lock()
+        self._cond = threading.Condition(threading.Lock())
 
     def store(self, key, data_key, data=None):
         """
@@ -59,16 +59,24 @@ class DataSinkBarrier(object):
 
         if isinstance(data_key, dict) and data is None:
             data_dict = data_key
+        elif isinstance(data_key, list) and data is None:
+            data_dict = {n: d for n, d in zip(self._data_keys, data_key)}
         else:
             data_dict = {data_key: data}
 
         # Guard access with a lock
-        with self._lock:
+        with self._cond:
             # Obtain a possibly empty entry for this key
             entry = self._data_store.setdefault(key, {})
             entry.update(data_dict)
+            # Notify any getters that a new entry is available
+            self._cond.notifyAll()
 
-    def pop(self, key, data_key=None):
+    def keys(self):
+        with self._cond:
+            return list(self._data_store.keys())
+
+    def pop(self, key, data_key=None, timeout=None):
         """
         Pops the data mapped to data_key in the entry
         mapped to key. If data_key is None, the
@@ -81,6 +89,10 @@ class DataSinkBarrier(object):
         data_key : str
             Key associated with data inside entry
             associated with key.
+        timeout : None or float
+            if a floating point value is provided
+            this will be used as the time to wait
+
 
 
         Returns
@@ -90,7 +102,8 @@ class DataSinkBarrier(object):
             mapped to key. If data_key is None, the
             entire entry is returned.
         """
-        with self._lock:
+
+        def _pop(self):
             try:
                 entry = self._data_store[key]
             except KeyError as e:
@@ -113,6 +126,18 @@ class DataSinkBarrier(object):
                 return data_entry
             except KeyError as e:
                 raise KeyError("Couldn't pop {}".format(data_key))
+
+        while True:
+            with self._cond:
+                try:
+                    return _pop(self)
+                except KeyError:
+                    if timeout is None:
+                        raise
+
+                    self._cond.wait(timeout)
+
+
 
 import unittest
 
