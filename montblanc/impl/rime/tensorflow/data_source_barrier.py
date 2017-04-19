@@ -58,6 +58,11 @@ class DataSourceBarrier(object):
         self._callback = callback
         self._lock = threading.Lock()
 
+    def __len__(self):
+        """ Returns the number of entries in the barrier """
+        with self._lock:
+            return len(self._data_store)
+
     def store(self, key, data_key, data=None):
         """
         Store data in the barrier in the entry for key

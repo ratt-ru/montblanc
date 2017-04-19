@@ -73,8 +73,14 @@ class DataSinkBarrier(object):
             self._cond.notifyAll()
 
     def keys(self):
+        """ Returns barrier entry keys """
         with self._cond:
             return list(self._data_store.keys())
+
+    def __len__(self):
+        """ Returns the number of entries in the barrier """
+        with self._cond:
+            return len(self._data_store)
 
     def pop(self, key, data_key=None, timeout=None):
         """
