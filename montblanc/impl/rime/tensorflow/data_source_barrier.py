@@ -81,8 +81,8 @@ class DataSourceBarrier(object):
 
             # If our entry has all the required keys,
             # we can invoke the callback
-            inter = set(entry.keys()).intersection(self._data_keys)
-            entry_full = inter == self._data_keys
+            intersection = set(entry.keys()).intersection(self._data_keys)
+            entry_full = intersection == self._data_keys
 
             # First remove it from the data source
             if entry_full:

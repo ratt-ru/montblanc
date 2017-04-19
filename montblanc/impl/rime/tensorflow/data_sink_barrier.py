@@ -60,9 +60,9 @@ class DataSinkBarrier(object):
         if isinstance(data_key, dict) and data is None:
             data_dict = data_key
         elif isinstance(data_key, list) and data is None:
-            data_dict = {n: d for n, d in zip(self._data_keys, data_key)}
+            data_dict = { n: d for n, d in zip(self._data_keys, data_key) }
         else:
-            data_dict = {data_key: data}
+            data_dict = { data_key: data }
 
         # Guard access with a lock
         with self._cond:
@@ -109,15 +109,18 @@ class DataSinkBarrier(object):
             entire entry is returned.
         """
 
-        def _pop(self):
+
+        def _pop(data_store, key, data_key=None):
             try:
                 entry = self._data_store[key]
             except KeyError as e:
-                raise KeyError("'{}' not in barrier".format(key))
+                raise KeyError("'{}' not in barrier. "
+                    "Available keys '{}'".format(key, data_store.keys()))
 
-            # Return entire entry if data_key is None
+            # Remove and return entire entry from data store
+            # if no specific data_key is provided
             if data_key is None:
-                del self._data_store[key]
+                del data_store[key]
                 return entry
 
             # Otherwise return the data entry associated
@@ -127,16 +130,17 @@ class DataSinkBarrier(object):
                 data_entry = entry.pop(data_key)
 
                 if len(entry) == 0:
-                    del self._data_store[key]
+                    del data_store[key]
 
                 return data_entry
             except KeyError as e:
-                raise KeyError("Couldn't pop {}".format(data_key))
+                raise KeyError("Couldn't pop data key '{}' "
+                                "in '{}' entry ".format(data_key, key))
 
         while True:
             with self._cond:
                 try:
-                    return _pop(self)
+                    return _pop(self._data_store, key, data_key)
                 except KeyError:
                     if timeout is None:
                         raise
