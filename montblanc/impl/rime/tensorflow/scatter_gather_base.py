@@ -23,6 +23,10 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import data_flow_ops
 
+
+BARRIER_KEY = '__barrier_key'
+BARRIER_DTYPE = np.int32
+
 class BaseScatterGatherProvider(object):
     def __init__(self, target, job, task, links):
 
@@ -59,7 +63,11 @@ def create_tensorflow_links(job, task, links):
             for link in links:
                 source_job, source_task = link["source"]
                 target_job, target_task = link["target"]
-                names, dtypes = zip(*link["sources"])
+                names, dtypes = (list(t) for t in zip(*link["sources"]))
+
+                # Also add names and a dtype for the barrier key
+                names.append(BARRIER_KEY)
+                dtypes.append(BARRIER_DTYPE)
 
                 return_dict.update(names=names, dtypes=dtypes)
 
@@ -89,8 +97,8 @@ def create_tensorflow_links(job, task, links):
                     token_ph = tf.placeholder(tf.int8)
                     token_put_op = token_staging_area.put([token_ph])
 
-                    put_phs = [tf.placeholder(dt, name=n) for n, dt
-                                in zip(names, dtypes)]
+                    put_phs = [tf.placeholder(dt, name=n.lstrip('_')) for
+                                            n, dt in zip(names, dtypes)]
 
                     data_put_op = data_staging_area.put(put_phs)
 

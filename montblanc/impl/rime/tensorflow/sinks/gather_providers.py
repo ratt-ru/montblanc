@@ -22,7 +22,8 @@ import threading
 import types
 
 from ..scatter_gather_base import (BaseScatterGatherProvider,
-    _validate_master_worker,  _dtype_name)
+    _validate_master_worker,  _dtype_name,
+    BARRIER_KEY, BARRIER_DTYPE)
 from ..data_source_barrier import DataSourceBarrier
 from ..data_sink_barrier import DataSinkBarrier
 from ..cube_dim_transcoder import CubeDimensionTranscoder
@@ -66,7 +67,7 @@ def sink_send_data_barrier(data_sink_name):
         self._barrier.store(tuple(descriptor),
             {
                 data_sink_name : context.data,
-                'descriptor': descriptor,
+                BARRIER_KEY: descriptor,
             },
         )
 
@@ -92,7 +93,7 @@ class GatherSendSinkProvider(BaseScatterGatherProvider, SinkProvider):
             # Feed queue token
             feed_dict.update({TLS["token_ph"]: 1})
 
-            assert descriptor == tuple(entry["descriptor"])
+            assert descriptor == tuple(entry[BARRIER_KEY])
 
             # Feed token and data
             self._session.run([TLS["token_put_op"], TLS["data_put_op"]],
@@ -117,10 +118,10 @@ class GatherSendSinkProvider(BaseScatterGatherProvider, SinkProvider):
             feed_dict={ TLS["token_ph"] : -1})
 
 
-def sink_receive_data_barrier(data_sink_name):
+def sink_receive_data_barrier(data_sink):
     """ Retrieves data from the data barrier for the given data sink """
     def memoizer(self, context):
-        if self._done_event.is_set() and len(self._barrier) == 0:
+        if self._barrier_closed():
             raise ValueError("GatherSendSinkProvider is done "
                             "transmitting and the data barrier "
                             "is empty.")
@@ -128,8 +129,8 @@ def sink_receive_data_barrier(data_sink_name):
         transcoder = CubeDimensionTranscoder(a[0] for a in context.iter_args)
         descriptor = transcoder.encode(context.cube.dimensions(copy=False))
         context.data = self._barrier.pop(tuple(descriptor),
-                    data_sink_name,
-                    timeout=10)
+                    data_sink.__name__,
+                    timeout=None)
 
         # Invoke the data sink
         data_sink(context)
@@ -157,7 +158,8 @@ class GatherReceiveSinkProvider(BaseScatterGatherProvider, SinkProvider):
                     self._done_event.set()
                     break
 
-                self._barrier.store(tuple(data["descriptor"]), data)
+                descriptor = tuple(data.pop(BARRIER_KEY))
+                self._barrier.store(descriptor, data)
 
         # Spawn a thread to feed the barrier
         t = threading.Thread(target=feed_barrier)
@@ -166,11 +168,14 @@ class GatherReceiveSinkProvider(BaseScatterGatherProvider, SinkProvider):
 
         # Create data sources from list of providers,
         # wrapping them in the sink_send_data_barrier decorator
-        data_sinks = { n: sink_send_data_barrier(ds)
+        data_sinks = { n: sink_receive_data_barrier(ds)
                             for prov in self._providers
                             for n, ds in prov.sinks().iteritems() }
 
         # Create the data sources on this object
         for n, f in data_sinks.iteritems():
             setattr(self, n, types.MethodType(f, self))
+
+    def _barrier_closed(self):
+        return self._done_event.is_set() and len(self._barrier) == 0
 

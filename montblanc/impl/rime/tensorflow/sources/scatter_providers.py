@@ -22,7 +22,8 @@ import threading
 import types
 
 from ..scatter_gather_base import (BaseScatterGatherProvider,
-    _validate_master_worker,  _dtype_name)
+    _validate_master_worker,  _dtype_name,
+    BARRIER_KEY, BARRIER_DTYPE)
 from ..data_source_barrier import DataSourceBarrier
 from ..data_sink_barrier import DataSinkBarrier
 from ..cube_dim_transcoder import CubeDimensionTranscoder
@@ -69,7 +70,7 @@ def source_send_data_barrier(data_source):
         self._barrier.store(tuple(descriptor),
             {
                 data_source.__name__ : data_source(context),
-                'descriptor': descriptor,
+                BARRIER_KEY: descriptor,
             },
         )
 
@@ -98,7 +99,7 @@ class ScatterSendSourceProvider(BaseScatterGatherProvider, SourceProvider):
             # Feed queue token
             feed_dict.update({TLS["token_ph"]: 1})
 
-            assert descriptor == tuple(entry["descriptor"])
+            assert descriptor == tuple(entry[BARRIER_KEY])
 
             # Feed token and data
             self._session.run([TLS["token_put_op"], TLS["data_put_op"]],
@@ -126,7 +127,7 @@ class ScatterSendSourceProvider(BaseScatterGatherProvider, SourceProvider):
 def source_receive_data_barrier(data_source_name):
     """ Retrieves data from the data barrier for the given data source """
     def memoizer(self, context):
-        if self._done_event.is_set() and len(self._barrier) == 0:
+        if self._barrier_closed():
             raise ValueError("ScatterSendSourceProvider is done "
                             "transmitting and the data barrier "
                             "is empty.")
@@ -135,7 +136,7 @@ def source_receive_data_barrier(data_source_name):
         descriptor = transcoder.encode(context.cube.dimensions(copy=False))
         return self._barrier.pop(tuple(descriptor),
                     data_source_name,
-                    timeout=0)
+                    timeout=None)
 
     return memoizer
 
@@ -160,7 +161,8 @@ class ScatterReceiveSourceProvider(BaseScatterGatherProvider, SourceProvider):
                     self._done_event.set()
                     break
 
-                self._barrier.store(tuple(data["descriptor"]), data)
+                barrier_key = tuple(data.pop(BARRIER_KEY))
+                self._barrier.store(barrier_key, data)
 
         # Spawn a thread to feed the barrier
         t = threading.Thread(target=feed_barrier)
@@ -176,3 +178,5 @@ class ScatterReceiveSourceProvider(BaseScatterGatherProvider, SourceProvider):
         for n, f in data_sources.iteritems():
             setattr(self, n, types.MethodType(f, self))
 
+    def _barrier_closed(self):
+        return self._done_event.is_set() and len(self._barrier) == 0
