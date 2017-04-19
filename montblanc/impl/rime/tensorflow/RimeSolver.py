@@ -155,6 +155,9 @@ class RimeSolver(MontblancTensorflowSolver):
                 "'tf_server_target' and 'tf_cluster'")
 
         self._tf_server_target = tf_server_target
+        self._tf_server_job = tf_server_job
+        self._tf_server_task = tf_server_task
+        self._tf_cluster = tf_cluster
         self._tf_session = tf.Session(tf_server_target)
 
         # Get the defaults data source (default or test data)
@@ -347,6 +350,18 @@ class RimeSolver(MontblancTensorflowSolver):
     @property
     def tf_server_target(self):
         return self._tf_server_target
+
+    @property
+    def tf_server_job(self):
+        return self._tf_server_job
+
+    @property
+    def tf_server_task(self):
+        return self._tf_server_task
+
+    @property
+    def tf_server_cluster(self):
+        return self._tf_cluster.as_dict()
 
     def _descriptor_feed(self):
         try:
