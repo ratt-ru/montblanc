@@ -62,7 +62,7 @@ def sink_send_data_barrier(data_sink_name):
     """ Stores data from the data sink in a data barrier """
     def memoizer(self, context):
         transcoder = CubeDimensionTranscoder(a[0] for a in context.iter_args)
-        descriptor = transcoder.encode(context.cube.dimensions(copy=False))
+        descriptor = transcoder.encode(context.dimensions(copy=False))
 
         self._barrier.store(tuple(descriptor),
             {
@@ -127,7 +127,7 @@ def sink_receive_data_barrier(data_sink):
                             "is empty.")
 
         transcoder = CubeDimensionTranscoder(a[0] for a in context.iter_args)
-        descriptor = transcoder.encode(context.cube.dimensions(copy=False))
+        descriptor = transcoder.encode(context.dimensions(copy=False))
         context.data = self._barrier.pop(tuple(descriptor),
                     data_sink.__name__,
                     timeout=None)
