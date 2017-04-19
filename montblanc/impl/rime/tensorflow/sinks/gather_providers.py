@@ -50,7 +50,7 @@ def gather_provider_factory(slvr, sink_provs, data_sinks):
 
     if job == 'worker':
         return GatherSendSinkProvider(target,
-            job, task, sink_provs, sink_links)
+            job, task, data_sinks, sink_links)
     elif job == 'master' and task == 0:
         return GatherReceiveSinkProvider(target,
             job, task, sink_provs, sink_links)

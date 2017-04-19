@@ -55,7 +55,7 @@ def scatter_provider_factory(slvr, source_provs, data_sources):
             job, task, source_provs, source_links)
     elif job == 'worker':
         return ScatterReceiveSourceProvider(target,
-            job, task, source_provs, source_links)
+            job, task, data_sources, source_links)
     else:
         raise ValueError("Invalid job '{}' "
                         "and task '{}'".format(job, task))
