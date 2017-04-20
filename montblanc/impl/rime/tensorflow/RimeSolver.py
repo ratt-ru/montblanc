@@ -1027,25 +1027,34 @@ def _construct_tensorflow_expression(feed_data, devspec, shard):
         cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
 
         # Check for nans/infs in the complex phase
-        message = ("Check that your lm coordinates are "
-                    "not too far from the phase centre. "
-                    "'1 - l**2  - m**2 >= 0' must hold "
-                    "in order for "
-                    "'n = sqrt(1 - l**2 - m**2) - 1' "
+        phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
+                    "for all your lm coordinates. This is required "
+                    "for 'n = sqrt(1 - l**2 - m**2) - 1' "
                     "to be finite.")
 
-        real_check = tf.check_numerics(tf.real(cplx_phase), message)
-        imag_check = tf.check_numerics(tf.imag(cplx_phase), message)
-        deps = [real_check, imag_check]
-        deps = [] # Do nothing for now
+        phase_real = tf.check_numerics(tf.real(cplx_phase), phase_msg)
+        phase_imag = tf.check_numerics(tf.imag(cplx_phase), phase_msg)
 
         bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
             D.frequency, D.ref_frequency, CT=CT)
+
+        # Check for nans/infs in the bsqrt
+        bsqrt_msg = ("Check that your stokes parameters "
+                    "satisfy I**2 >= Q**2 + U**2 + V**2. "
+                    "Montblanc performs a cholesky decomposition "
+                    "of the brightness matrix and the above must "
+                    "hold for this to produce valid values.")
+
+        bsqrt_real = tf.check_numerics(tf.real(bsqrt), bsqrt_msg)
+        bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
         ejones = rime.e_beam(lm, D.frequency,
             D.point_errors, D.antenna_scaling,
             parallactic_angles,
             D.beam_extents, D.beam_freq_map, D.ebeam)
+
+        deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag]
+        deps = [] # Do nothing for now
 
 
         with tf.control_dependencies(deps):
