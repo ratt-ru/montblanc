@@ -213,8 +213,9 @@ JANSKYS = "Janskys"
 SECONDS = "Seconds"
 DIMENSIONLESS = "Dimensionless"
 
-LM_DESCRIPTION = ("(l,m) coordinates for {st} sources. "
-            "Offset relative to the phase centre.")
+LM_DESCRIPTION = ("Absolute (l,m) coordinates for {st} sources. "
+            "These will be converted to a frame relative "
+            "to the phase centre.")
 STOKES_DESCRIPTION = ("(I,Q,U,V) Stokes parameters.")
 ALPHA_DESCRIPTION = ("Power term describing the distribution of a source's flux "
             "over frequency. Distribution is calculated as (nu/nu_ref)^alpha "
