@@ -210,6 +210,7 @@ RADIANS = "Radians"
 HERTZ = "Hertz"
 METERS = "Meters"
 JANSKYS = "Janskys"
+SECONDS = "Seconds"
 DIMENSIONLESS = "Dimensionless"
 
 LM_DESCRIPTION = ("(l,m) coordinates for {st} sources. "
@@ -228,6 +229,33 @@ ALPHA_DESCRIPTION = ("Power term describing the distribution of a source's flux 
 
 # List of arrays
 A = [
+
+    # Antenna Positions
+    array_dict('antenna_position', ('na', 3), 'ft',
+        default     = lambda s, c: np.zeros(c.shape, c.dtype),
+        test        = lambda s, c: np.ones(c.shape, c.dtype),
+        tags        = "input",
+        description = "Antenna coordinates",
+        units       = METERS),
+
+    # Timesteps
+    array_dict('time', ('ntime',), 'ft',
+        default     = lambda s, c: np.linspace(0, 100,
+                                    c.shape[0], dtype=c.dtype),
+        test        = lambda s, c: np.linspace(0, 100,
+                                    c.shape[0], dtype=c.dtype),
+        tags        = "input",
+        description = "Timesteps",
+        units       = SECONDS),
+
+    # Phase Centre
+    array_dict('phase_centre', (2,), 'ft',
+        default     = lambda s, c: np.array([0,0], dtype=c.dtype),
+        test        = lambda s, c: np.array([0,0], dtype=c.dtype),
+        tags        = "input",
+        description = "Phase Centre",
+        units       = RADIANS),
+
     # UVW Coordinates
     array_dict('uvw', ('ntime', 'na', 3), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
@@ -290,14 +318,6 @@ A = [
         description = "Antenna scaling factors for each antenna. "
             "The components express a scale in the (l,m) plane.",
         units   = DIMENSIONLESS),
-
-    # Parallactic angles at each timestep for each antenna
-    array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
-        default = lambda s, c: np.zeros(c.shape, c.dtype),
-        test    = lambda s, c: rf(c.shape, c.dtype)*np.pi,
-        tags    = "input, constant",
-        description = "Parallactic angles for each antenna.",
-        units   = RADIANS),
 
     # Extents of the beam.
     # First 3 values are lower coordinate for (l, m, frequency)
