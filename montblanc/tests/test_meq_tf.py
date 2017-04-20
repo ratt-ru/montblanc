@@ -343,18 +343,21 @@ with pt.table(msfile, ack=False, readonly=True) as MS:
         matplotlib.use('pdf')
         import matplotlib.pyplot as plt
     except:
-        print "Exception importing matplotlib %s" % sys.exc_info[2]
+        print "Exception importing matplotlib %s" % sys.exc_info()[2]
     else:
-        nr_of_bins = 100
-        n, bins, patches = plt.hist(abs_diff.flatten(),
-            bins=np.logspace(np.log10(1e-10), np.log10(1.0), nr_of_bins))
+        try:
+            nr_of_bins = 100
+            n, bins, patches = plt.hist(abs_diff.flatten(),
+                bins=np.logspace(np.log10(1e-10), np.log10(1.0), nr_of_bins))
 
-        plt.gca().set_xscale("log")
-        plt.xlabel('Magnitude Difference')
-        plt.ylabel('Counts')
-        plt.grid(True)
+            plt.gca().set_xscale("log")
+            plt.xlabel('Magnitude Difference')
+            plt.ylabel('Counts')
+            plt.grid(True)
 
-        plt.savefig('histogram.pdf')
+            plt.savefig('histogram.pdf')
+        except:
+            print "Error plotting histogram %s" % sys.exc_info()[2]
 
     mb_problems = mb_vis[problems]
     meq_problems = meq_vis[problems]
