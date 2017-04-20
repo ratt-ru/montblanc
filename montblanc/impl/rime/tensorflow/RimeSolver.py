@@ -1026,6 +1026,19 @@ def _construct_tensorflow_expression(feed_data, devspec, shard):
         """
         cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
 
+        # Check for nans/infs in the complex phase
+        message = ("Check that your lm coordinates are "
+                    "not too far from the phase centre. "
+                    "'1 - l**2  - m**2 >= 0' must hold "
+                    "in order for "
+                    "'n = sqrt(1 - l**2 - m**2) - 1' "
+                    "to be finite.")
+
+        real_check = tf.check_numerics(tf.real(cplx_phase), message)
+        imag_check = tf.check_numerics(tf.imag(cplx_phase), message)
+        deps = [real_check, imag_check]
+        deps = [] # Do nothing for now
+
         bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
             D.frequency, D.ref_frequency, CT=CT)
 
@@ -1034,8 +1047,10 @@ def _construct_tensorflow_expression(feed_data, devspec, shard):
             parallactic_angles,
             D.beam_extents, D.beam_freq_map, D.ebeam)
 
-        return (rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT),
-            sgn_brightness)
+
+        with tf.control_dependencies(deps):
+            return (rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT),
+                sgn_brightness)
 
     # While loop condition for each point source type
     def point_cond(coherencies, npsrc, src_count):
@@ -1051,9 +1066,12 @@ def _construct_tensorflow_expression(feed_data, devspec, shard):
     def point_body(coherencies, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
         lm, stokes, alpha = LSA.point_source[shard].get_to_list()
+
+        # Maintain source counts
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         npsrc +=  nsrc
+
         ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
         shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
@@ -1064,9 +1082,12 @@ def _construct_tensorflow_expression(feed_data, devspec, shard):
     def gaussian_body(coherencies, ngsrc, src_count):
         """ Accumulate coherencies for gaussian source batch """
         lm, stokes, alpha, gauss_params = LSA.gaussian_source[shard].get_to_list()
+
+        # Maintain source counts
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         ngsrc += nsrc
+
         ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
         gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, gauss_params)
@@ -1078,9 +1099,12 @@ def _construct_tensorflow_expression(feed_data, devspec, shard):
     def sersic_body(coherencies, nssrc, src_count):
         """ Accumulate coherencies for sersic source batch """
         lm, stokes, alpha, sersic_params = LSA.sersic_source[shard].get_to_list()
+
+        # Maintain source counts
         nsrc = tf.shape(lm)[0]
         src_count += nsrc
         nssrc += nsrc
+
         ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
         sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, sersic_params)
