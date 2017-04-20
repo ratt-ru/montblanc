@@ -27,6 +27,8 @@ import montblanc
 
 from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 from sky_model_parser import parse_sky_model
+from parallactic_angles import parallactic_angles
+
 
 from const_data import (
     create_rime_const_data)
@@ -425,55 +427,6 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
 
     return blockdimx, blockdimy, blockdimz
 
-def parallactic_angles(field_centre, antenna_positions, times):
-    """
-    Computes parallactic angles per timestep for the given
-    reference antenna position and field centre.
-
-    Arguments:
-        field_centre : ndarray of shape (2,)
-            Field centre, should be obtained from MS PHASE_DIR
-        antenna_positions: ndarray of shape (na, 3)
-            Antenna positions, obtained from POSITION
-            column of MS ANTENNA sub-table
-        times: ndarray
-            Array of unique times with shape (ntime,),
-            obtained from TIME column of MS table
-
-    Returns:
-        An array of parallactic angles per time-step
-
-    """
-    import pyrap.measures
-    import pyrap.quanta as pq
-
-    pm = pyrap.measures.measures()
-
-    ntime = times.shape[0]
-    na = antenna_positions.shape[0]
-
-    # Create direction measure for the zenith
-    zenith = pm.direction('AZEL','0deg','90deg')
-
-    # Create position measures for each antenna
-    reference_positions = [pm.position('itrf',
-        *(pq.quantity(x,'m') for x in pos))
-        for pos in antenna_positions]
-
-    # Compute field centre in radians
-    fc_rad = pm.direction('J2000',
-        *(pq.quantity(f,'rad') for f in field_centre))
-
-    parallactic_angles = np.asarray([
-        # Set antenna position as the reference frame
-        pm.do_frame(rp) and
-        # Set current time as the reference frame
-        pm.do_frame(pm.epoch("UTC",pq.quantity(t,"s"))) and
-        # Now compute the parallactic angle
-        pm.posangle(fc_rad, zenith).get_value("rad")
-        for t in times for rp in reference_positions])
-
-    return parallactic_angles.reshape(ntime, na)
 
 def register_default_dimensions(cube, slvr_cfg):
     """ Register the default dimensions for a RIME solver """
