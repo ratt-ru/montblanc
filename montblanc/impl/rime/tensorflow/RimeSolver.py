@@ -1024,6 +1024,10 @@ def _construct_tensorflow_expression(feed_data, devspec, shard):
 
         lm, stokes and alpha are the source variables.
         """
+
+        # Shift absolute lm coordinates relative to phase centre
+        lm = lm - D.phase_centre
+
         cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
 
         # Check for nans/infs in the complex phase

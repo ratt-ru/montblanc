@@ -101,6 +101,10 @@ for file in fgen:
 # Source Configuration
 #=========================================
 
+# Need the phase centre to offset lm coordinates
+with pt.table(msfile + '::FIELD', ack=False, readonly=True) as F:
+    ra0, dec0 = F.getcol('PHASE_DIR')[0][0]
+
 np.random.seed(0)
 dtype = np.float64
 ctype = np.complex128 if dtype == np.float64 else np.complex64
@@ -112,7 +116,8 @@ def get_point_sources(nsrc):
     alphas = np.empty(shape=(nsrc,), dtype=dtype)
 
     # Source coordinates between -0.5 and 0.5 degrees
-    source_coords[:] = (rf(size=source_coords.shape) - 0.5)
+    source_coords[:] = np.deg2rad(rf(size=source_coords.shape) - 0.5)
+
     Q[:] = rf(size=Q.shape)*0.1
     U[:] = rf(size=U.shape)*0.1
     V[:] = rf(size=V.shape)*0.1
@@ -129,7 +134,10 @@ def get_point_sources(nsrc):
 
     alphas[:] = 2*(np.random.random(size=alphas.size) - 0.5)
 
-    return np.deg2rad(source_coords), np.asarray(stokes), np.asarray(alphas)
+    # Offset coordinates from the phase centre
+    source_coords += (ra0, dec0)
+
+    return source_coords, np.asarray(stokes), np.asarray(alphas)
 
 def get_gaussian_sources(nsrc):
     c, s, a = get_point_sources(nsrc)
@@ -153,16 +161,12 @@ g_lm, g_stokes, g_alpha, g_shape = get_gaussian_sources(ngsrc)
 
 from Tigger.Models.Formats.AIPSCCFITS import lm_to_radec
 
-# Need the phase centre for lm_to_radec
-with pt.table(msfile + '::FIELD', ack=False, readonly=True) as F:
-    ra0, dec0 = F.getcol('PHASE_DIR')[0][0]
-
 # Create the tigger sky model
 with open(tigger_sky_file, 'w') as f:
     f.write('#format: ra_d dec_d i q u v spi freq0 emaj_s emin_s pa_d\n')
     it = enumerate(itertools.izip(pt_lm, pt_stokes, pt_alpha))
     for i, ((l, m), (I, Q, U, V), alpha) in it:
-        ra, dec = lm_to_radec(l, m, ra0, dec0)
+        ra, dec = lm_to_radec(l - ra0, m - dec0, ra0, dec0)
         l, m = np.rad2deg([ra,dec])
 
         f.write('{l:.20f} {m:.20f} {i} {q} {u} {v} {spi} {rf:.20f}\n'.format(
@@ -170,7 +174,7 @@ with open(tigger_sky_file, 'w') as f:
 
     it = enumerate(itertools.izip(g_lm, g_stokes, g_alpha, g_shape.T))
     for i, ((l, m), (I, Q, U, V), alpha, (emaj, emin, pa)) in it:
-        ra, dec = lm_to_radec(l, m, ra0, dec0)
+        ra, dec = lm_to_radec(l - ra0, m - dec0, ra0, dec0)
         l, m = np.rad2deg([ra,dec])
         # Convert to seconds
         emaj, emin = np.asarray([emaj, emin])*648000./np.pi
