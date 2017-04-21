@@ -49,7 +49,6 @@ def scatter_provider_factory(slvr, source_provs, data_sources):
             "sources" : sources,
         } for ti in range(len(cluster['worker']))]
 
-
     if job == 'master' and task == 0:
         return ScatterSendSourceProvider(target,
             job, task, source_provs, source_links)
@@ -67,12 +66,18 @@ def source_send_data_barrier(data_source):
         transcoder = CubeDimensionTranscoder(a[0] for a in context.iter_args)
         descriptor = transcoder.encode(context.dimensions(copy=False))
 
+        data = data_source(context)
+
         self._barrier.store(tuple(descriptor),
             {
-                data_source.__name__ : data_source(context),
+                data_source.__name__ : data,
                 BARRIER_KEY: descriptor,
             },
         )
+
+        # TODO: Find a way to remove this, its not strictly necessary
+        # On the other hand, a return doesn't really hurt
+        return data
 
     return memoizer
 
@@ -83,10 +88,14 @@ class ScatterSendSourceProvider(BaseScatterGatherProvider, SourceProvider):
             job, task, links)
 
         TL = self._tf_links
+        TLS = TL["src_cfg"]
 
-        print TL.keys(), target, job, task
-        TLS = TL["source"]
-        ph_map = { n: ph for n, ph in zip(TL["names"], TLS["put_phs"]) }
+        # Construct a list of put ops for each target's token and data
+        ops = [cfg["token_put_op"] for cfg in TLS]
+        ops.extend(cfg["data_put_op"] for cfg in TLS)
+        # Construct a name: placeholder map for each target
+        ph_maps = [{n: ph for n, ph in zip(cfg["names"], cfg["put_phs"])}
+                            for cfg in TLS]
 
         def barrier_callback(descriptor, entry):
             """
@@ -94,20 +103,21 @@ class ScatterSendSourceProvider(BaseScatterGatherProvider, SourceProvider):
             entries are available
             """
 
-            # Feed data placeholders with data
-            feed_dict = { ph_map[n]: d for n, d in entry.iteritems() }
+            # Construct feed dictionary mapping data to each target's
+            # placeholders
+            feed_dict = {ph_map[n]: d for n, d in entry.iteritems()
+                                        for ph_map in ph_maps}
+
             # Feed queue token
-            feed_dict.update({TLS["token_ph"]: 1})
+            feed_dict.update({cfg["token_ph"]: 1 for cfg in TLS})
 
             assert descriptor == tuple(entry[BARRIER_KEY])
 
             # Feed token and data
-            self._session.run([TLS["token_put_op"], TLS["data_put_op"]],
-                feed_dict)
+            self._session.run(ops, feed_dict)
 
         self._providers = providers
-        self._barrier = DataSourceBarrier(self._tf_links['names'],
-                barrier_callback)
+        self._barrier = DataSourceBarrier(TL['names'], barrier_callback)
 
         # Create data sources from list of providers,
         # wrapping them in the source_send_data_barrier decorator
@@ -115,14 +125,15 @@ class ScatterSendSourceProvider(BaseScatterGatherProvider, SourceProvider):
                             for prov in self._providers
                             for n, ds in prov.sources().iteritems() }
 
-        # Create the data sources on this object
+        # Create data sources on this object
         for n, f in data_sources.iteritems():
             setattr(self, n, types.MethodType(f, self))
 
     def signal_done(self):
-        TLS = self._tf_links["source"]
-        self._session.run(TLS["token_put_op"],
-            feed_dict={ TLS["token_ph"] : -1})
+        """ Indicate EOF to each target """
+        TLS = self._tf_links["src_cfg"]
+        self._session.run([cfg["token_put_op"] for cfg in TLS],
+            feed_dict={cfg["token_ph"]: -1 for cfg in TLS})
 
 def source_receive_data_barrier(data_source_name):
     """ Retrieves data from the data barrier for the given data source """
@@ -136,7 +147,7 @@ def source_receive_data_barrier(data_source_name):
         descriptor = transcoder.encode(context.dimensions(copy=False))
         return self._barrier.pop(tuple(descriptor),
                     data_source_name,
-                    timeout=None)
+                    timeout=1)
 
     return memoizer
 
@@ -149,20 +160,22 @@ class ScatterReceiveSourceProvider(BaseScatterGatherProvider, SourceProvider):
         self._data_source_names = data_source_names
         self._done_event = threading.Event()
 
-        data_get_op = self._tf_links["target"]["data_get_op"]
+        ops = [cfg["data_get_op"] for cfg in self._tf_links["tgt_cfg"]]
 
         def feed_barrier():
             """ Pull data out of staging areas and store in barrier """
 
-            while True:
-                token, data = self._session.run(data_get_op)
+            done = False
 
-                if token == -1:
-                    self._done_event.set()
-                    break
+            while not done:
+                for token, data in self._session.run(ops):
+                    if token == -1: # Received EOF
+                        done = True # last iteration
+                    else:
+                        barrier_key = tuple(data.pop(BARRIER_KEY))
+                        self._barrier.store(barrier_key, data)
 
-                barrier_key = tuple(data.pop(BARRIER_KEY))
-                self._barrier.store(barrier_key, data)
+            self._done_event.set()
 
         # Spawn a thread to feed the barrier
         t = threading.Thread(target=feed_barrier)

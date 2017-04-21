@@ -79,8 +79,14 @@ class GatherSendSinkProvider(BaseScatterGatherProvider, SinkProvider):
             job, task, links)
 
         TL = self._tf_links
-        TLS = TL["source"]
-        ph_map = { n: ph for n, ph in zip(TL["names"], TLS["put_phs"]) }
+        TLS = TL["src_cfg"]
+
+        # Construct a list of put ops for each target's token and data
+        ops = [cfg["token_put_op"] for cfg in TLS]
+        ops.extend(cfg["data_put_op"] for cfg in TLS)
+        # Construct a name: placeholder map for each target
+        ph_maps = [{n: ph for n, ph in zip(cfg["names"], cfg["put_phs"])}
+                            for cfg in TLS]
 
         def barrier_callback(descriptor, entry):
             """
@@ -88,20 +94,21 @@ class GatherSendSinkProvider(BaseScatterGatherProvider, SinkProvider):
             entries are available
             """
 
-            # Feed data placeholders with data
-            feed_dict = { ph_map[n]: d for n, d in entry.iteritems() }
+            # Construct feed dictionary mapping data to each target's
+            # placeholders
+            feed_dict = {ph_map[n]: d for n, d in entry.iteritems()
+                                        for ph_map in ph_maps}
+
             # Feed queue token
-            feed_dict.update({TLS["token_ph"]: 1})
+            feed_dict.update({cfg["token_ph"]: 1 for cfg in TLS})
 
             assert descriptor == tuple(entry[BARRIER_KEY])
 
             # Feed token and data
-            self._session.run([TLS["token_put_op"], TLS["data_put_op"]],
-                feed_dict)
+            self._session.run(ops, feed_dict)
 
         self._data_sink_names = data_sink_names
-        self._barrier = DataSourceBarrier(self._tf_links['names'],
-                barrier_callback)
+        self._barrier = DataSourceBarrier(TL['names'], barrier_callback)
 
         # Create data sinks from list of providers,
         # wrapping them in the sink_send_data_barrier decorator
@@ -113,9 +120,10 @@ class GatherSendSinkProvider(BaseScatterGatherProvider, SinkProvider):
             setattr(self, n, types.MethodType(f, self))
 
     def signal_done(self):
-        TLS = self._tf_links["source"]
-        self._session.run(TLS["token_put_op"],
-            feed_dict={ TLS["token_ph"] : -1})
+        """ Indicate EOF to each target """
+        TLS = self._tf_links["src_cfg"]
+        self._session.run([cfg["token_put_op"] for cfg in TLS],
+            feed_dict={cfg["token_ph"]: -1 for cfg in TLS})
 
 
 def sink_receive_data_barrier(data_sink):
@@ -128,9 +136,9 @@ def sink_receive_data_barrier(data_sink):
 
         transcoder = CubeDimensionTranscoder(a[0] for a in context.iter_args)
         descriptor = transcoder.encode(context.dimensions(copy=False))
-        context.data = self._barrier.pop(tuple(descriptor),
+        context._data = self._barrier.pop(tuple(descriptor),
                     data_sink.__name__,
-                    timeout=None)
+                    timeout=1)
 
         # Invoke the data sink
         data_sink(context)
@@ -146,20 +154,22 @@ class GatherReceiveSinkProvider(BaseScatterGatherProvider, SinkProvider):
         self._providers = providers
         self._done_event = threading.Event()
 
-        data_get_op = self._tf_links["target"]["data_get_op"]
+        ops = [cfg["data_get_op"] for cfg in self._tf_links["tgt_cfg"]]
 
         def feed_barrier():
             """ Pull data out of staging areas and store in barrier """
 
-            while True:
-                token, data = self._session.run(data_get_op)
+            done = False
 
-                if token == -1:
-                    self._done_event.set()
-                    break
+            while not done:
+                for token, data in self._session.run(ops):
+                    if token == -1: # Received EOF
+                        done = True # last iteration
+                    else:
+                        barrier_key = tuple(data.pop(BARRIER_KEY))
+                        self._barrier.store(barrier_key, data)
 
-                descriptor = tuple(data.pop(BARRIER_KEY))
-                self._barrier.store(descriptor, data)
+            self._done_event.set()
 
         # Spawn a thread to feed the barrier
         t = threading.Thread(target=feed_barrier)

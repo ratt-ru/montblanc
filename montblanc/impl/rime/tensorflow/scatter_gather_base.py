@@ -69,8 +69,6 @@ def create_tensorflow_links(job, task, links):
                 names.append(BARRIER_KEY)
                 dtypes.append(BARRIER_DTYPE)
 
-                return_dict.update(names=names, dtypes=dtypes)
-
                 tgt_devspec = tf.DeviceSpec(job=target_job,
                                             task=target_task)
 
@@ -101,11 +99,13 @@ def create_tensorflow_links(job, task, links):
                                             n, dt in zip(names, dtypes)]
 
                     data_put_op = data_staging_area.put(put_phs)
-
-                    return_dict.update(source=dict(token_ph=token_ph,
-                                        token_put_op=token_put_op,
-                                        put_phs=put_phs,
-                                        data_put_op=data_put_op))
+                    return_dict.setdefault('src_cfg', []).append({
+                        'token_ph': token_ph,
+                        'token_put_op': token_put_op,
+                        'put_phs': put_phs,
+                        'data_put_op': data_put_op,
+                        'names' : names,
+                        'dtypes' : dtypes })
 
                 # Create get/dequeue ops on the target node
                 if job == target_job and task == target_task:
@@ -129,8 +129,25 @@ def create_tensorflow_links(job, task, links):
                     data_get_op = [ data_get_op[0],
                                 { n: d for n, d in zip(names, data_get_op[1:]) } ]
 
-                    return_dict.update(target=dict(token_get_op=token_get_op,
-                                                    data_get_op=data_get_op))
+                    return_dict.setdefault('tgt_cfg', []).append({
+                        'token_get_op': token_get_op,
+                        'data_get_op': data_get_op,
+                        'names' : names,
+                        'dtypes' : dtypes })
+
+    # Sanity check that names and dtypes are the same
+    merged_cfgs = (return_dict.get("src_cfg", []) +
+                    return_dict.get("tgt_cfg", []))
+    names = [cfg['names'] for cfg in merged_cfgs]
+    dtypes = [cfg['dtypes'] for cfg in merged_cfgs]
+
+    if not all(names[0] == n for n in names):
+        raise ValueError("Not all names are the same")
+
+    if not all(dtypes[0] == dt for dt in dtypes):
+        raise ValueError("Not all dtypes are the same")
+
+    return_dict.update(names=names[0], dtypes=dtypes[0])
 
     return return_dict
 
