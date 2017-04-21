@@ -25,7 +25,7 @@ from tensorflow.python.ops import data_flow_ops
 
 
 BARRIER_KEY = '__barrier_key'
-BARRIER_DTYPE = np.int32
+BARRIER_DTYPE = "int32"
 
 class BaseScatterGatherProvider(object):
     def __init__(self, target, job, task, links):
