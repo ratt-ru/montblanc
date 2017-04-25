@@ -76,7 +76,8 @@ def source_send_data_barrier(data_source):
         )
 
         # TODO: Find a way to remove this, its not strictly necessary
-        # On the other hand, a return doesn't really hurt
+        # On the other hand, a return doesn't really hurt and fits
+        # the Data Source paradigm
         return data
 
     return memoizer
@@ -138,16 +139,11 @@ class ScatterSendSourceProvider(BaseScatterGatherProvider, SourceProvider):
 def source_receive_data_barrier(data_source_name):
     """ Retrieves data from the data barrier for the given data source """
     def memoizer(self, context):
-        if self._barrier_closed():
-            raise ValueError("ScatterSendSourceProvider is done "
-                            "transmitting and the data barrier "
-                            "is empty.")
-
         transcoder = CubeDimensionTranscoder(a[0] for a in context.iter_args)
         descriptor = transcoder.encode(context.dimensions(copy=False))
         return self._barrier.pop(tuple(descriptor),
                     data_source_name,
-                    timeout=1)
+                    timeout=0.1)
 
     return memoizer
 
@@ -158,27 +154,28 @@ class ScatterReceiveSourceProvider(BaseScatterGatherProvider, SourceProvider):
 
         self._barrier = DataSinkBarrier(self._tf_links['names'])
         self._data_source_names = data_source_names
-        self._done_event = threading.Event()
 
-        ops = [cfg["data_get_op"] for cfg in self._tf_links["tgt_cfg"]]
-
-        def feed_barrier():
+        def feed_barrier(session, ops, barrier):
             """ Pull data out of staging areas and store in barrier """
 
             done = False
 
             while not done:
-                for token, data in self._session.run(ops):
+                for token, data in session.run(ops):
                     if token == -1: # Received EOF
                         done = True # last iteration
                     else:
                         barrier_key = tuple(data.pop(BARRIER_KEY))
-                        self._barrier.store(barrier_key, data)
+                        barrier.store(barrier_key, data)
 
-            self._done_event.set()
+            barrier.close()
+
+        ops = [cfg["data_get_op"] for cfg in self._tf_links["tgt_cfg"]]
 
         # Spawn a thread to feed the barrier
-        t = threading.Thread(target=feed_barrier)
+        t = threading.Thread(target=feed_barrier,
+            args=(self._session, ops, self._barrier),
+            name="ScatterReceiveSourceProvider")
         t.setDaemon(True)
         t.start()
 
@@ -190,6 +187,3 @@ class ScatterReceiveSourceProvider(BaseScatterGatherProvider, SourceProvider):
         # Create the data sources on this object
         for n, f in data_sources.iteritems():
             setattr(self, n, types.MethodType(f, self))
-
-    def _barrier_closed(self):
-        return self._done_event.is_set() and len(self._barrier) == 0

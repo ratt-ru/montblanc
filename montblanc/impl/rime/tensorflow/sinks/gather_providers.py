@@ -129,16 +129,11 @@ class GatherSendSinkProvider(BaseScatterGatherProvider, SinkProvider):
 def sink_receive_data_barrier(data_sink):
     """ Retrieves data from the data barrier for the given data sink """
     def memoizer(self, context):
-        if self._barrier_closed():
-            raise ValueError("GatherSendSinkProvider is done "
-                            "transmitting and the data barrier "
-                            "is empty.")
-
         transcoder = CubeDimensionTranscoder(a[0] for a in context.iter_args)
         descriptor = transcoder.encode(context.dimensions(copy=False))
         context._data = self._barrier.pop(tuple(descriptor),
                     data_sink.__name__,
-                    timeout=1)
+                    timeout=0.1)
 
         # Invoke the data sink
         data_sink(context)
@@ -152,27 +147,28 @@ class GatherReceiveSinkProvider(BaseScatterGatherProvider, SinkProvider):
 
         self._barrier = DataSinkBarrier(self._tf_links['names'])
         self._providers = providers
-        self._done_event = threading.Event()
 
-        ops = [cfg["data_get_op"] for cfg in self._tf_links["tgt_cfg"]]
-
-        def feed_barrier():
+        def feed_barrier(session, ops, barrier):
             """ Pull data out of staging areas and store in barrier """
 
             done = False
 
             while not done:
-                for token, data in self._session.run(ops):
+                for token, data in session.run(ops):
                     if token == -1: # Received EOF
                         done = True # last iteration
                     else:
                         barrier_key = tuple(data.pop(BARRIER_KEY))
-                        self._barrier.store(barrier_key, data)
+                        barrier.store(barrier_key, data)
 
-            self._done_event.set()
+            barrier.close()
+
+        ops = [cfg["data_get_op"] for cfg in self._tf_links["tgt_cfg"]]
 
         # Spawn a thread to feed the barrier
-        t = threading.Thread(target=feed_barrier)
+        t = threading.Thread(target=feed_barrier,
+            args=(self._session, ops, self._barrier),
+            name="GatherReceiveSinkProvider")
         t.setDaemon(True)
         t.start()
 
@@ -185,7 +181,3 @@ class GatherReceiveSinkProvider(BaseScatterGatherProvider, SinkProvider):
         # Create the data sources on this object
         for n, f in data_sinks.iteritems():
             setattr(self, n, types.MethodType(f, self))
-
-    def _barrier_closed(self):
-        return self._done_event.is_set() and len(self._barrier) == 0
-
