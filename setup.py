@@ -164,6 +164,7 @@ else:
         'numpy >= 1.11.3',
         'numexpr >= 2.6.1',
         'python-casacore >= 2.1.2',
+        'threading2 >= 0.3.1',
         "{} >= 1.0.1".format(tensorflow_package),
     ]
 
