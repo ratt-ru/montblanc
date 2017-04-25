@@ -18,7 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import threading
+try:
+    import threading2 as threading # python 2
+except ImportError:
+    import threading               # python 3
 
 class DataSinkBarrier(object):
     """
@@ -51,11 +54,15 @@ class DataSinkBarrier(object):
         self._data_keys = data_keys
         self._data_store = {}
         self._cond = threading.Condition(threading.Lock())
+        self._closed = threading.Event()
 
     def store(self, key, data_key, data=None):
         """
         Store data in the barrier in the entry for key
         """
+
+        if self.closed():
+            raise ValueError("Data Barrier is closed")
 
         if isinstance(data_key, dict) and data is None:
             data_dict = data_key
@@ -82,6 +89,14 @@ class DataSinkBarrier(object):
         with self._cond:
             return len(self._data_store)
 
+    def close(self):
+        """ Closes the data barrier to stores and gets """
+        self._closed.set()
+
+    def closed(self):
+        """ Return True if the barrier is closed """
+        return self._closed.is_set()
+
     def pop(self, key, data_key=None, timeout=None):
         """
         Pops the data mapped to data_key in the entry
@@ -95,11 +110,10 @@ class DataSinkBarrier(object):
         data_key : str
             Key associated with data inside entry
             associated with key.
-        timeout : None or float
-            if a floating point value is provided
-            this will be used as the time to wait
-
-
+        timeout : False or None or float
+            if False, this method will not block,
+            if float, this method will block for the specified time
+            if None, this method will block until data is available
 
         Returns
         -------
@@ -111,8 +125,9 @@ class DataSinkBarrier(object):
 
 
         def _pop(data_store, key, data_key=None):
+            """ Helper function """
             try:
-                entry = self._data_store[key]
+                entry = data_store[key]
             except KeyError as e:
                 raise KeyError("'{}' not in barrier. "
                     "Available keys '{}'".format(key, data_store.keys()))
@@ -137,16 +152,21 @@ class DataSinkBarrier(object):
                 raise KeyError("Couldn't pop data key '{}' "
                                 "in '{}' entry ".format(data_key, key))
 
-        while True:
-            with self._cond:
-                try:
-                    return _pop(self._data_store, key, data_key)
-                except KeyError:
-                    if timeout is None:
-                        raise
+        should_wait = not isinstance(timeout, bool)
 
-                    self._cond.wait(timeout)
+        # Guard access with lock
+        with self._cond:
+            while (should_wait and len(self._data_store) == 0
+                               and not self.closed()):
+                # Break if the timer expires
+                if self._cond.wait(timeout) == False:
+                    break
 
+            if len(self._data_store) == 0 and self.closed():
+                raise ValueError("Data Barrier is closed '{}' '{}'".format(
+                                                    key, data_key))
+
+            return _pop(self._data_store, key, data_key)
 
 
 import unittest
