@@ -26,6 +26,7 @@ from tensorflow.python.ops import data_flow_ops
 
 BARRIER_KEY = '__barrier_key'
 BARRIER_DTYPE = "int32"
+CONTAINER_NAME = 'scatter-gather'
 
 class BaseScatterGatherProvider(object):
     def __init__(self, target, job, task, links):
@@ -47,6 +48,8 @@ class BaseScatterGatherProvider(object):
         return self._task
 
     def close(self):
+        # Reset closes all sessions on the target unfortunately
+        #self._session.reset(self._target, CONTAINER_NAME)
         self._session.close()
 
     def name(self):
@@ -59,7 +62,7 @@ def create_tensorflow_links(job, task, links):
 
         devspec = tf.DeviceSpec(job=job, task=task)
 
-        with tf.device(devspec), graph.container('scatter-gather'):
+        with tf.device(devspec), graph.container(CONTAINER_NAME):
             for link in links:
                 source_job, source_task = link["source"]
                 target_job, target_task = link["target"]
