@@ -666,6 +666,10 @@ class RimeSolver(MontblancTensorflowSolver):
         print 'Source Providers', [sp.name() for sp in source_providers]
         print 'Sink Providers', [sp.name() for sp in sink_providers]
 
+        # Indicate solution started in providers
+        for p in itertools.chain(source_providers, sink_providers):
+            p.start()
+
         # Apply any dimension updates from the source provider
         # to the hypercube, taking previous reductions into account
         bytes_required = _apply_source_provider_dim_updates(
@@ -788,6 +792,10 @@ class RimeSolver(MontblancTensorflowSolver):
                 self._write_metadata()
 
             self._iterations += 1
+        finally:
+            # Indicate solution stopped in providers
+            for p in itertools.chain(source_providers, sink_providers):
+                p.stop()
 
     def close(self):
         # Shutdown thread executors

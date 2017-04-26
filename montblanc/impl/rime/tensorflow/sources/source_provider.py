@@ -26,6 +26,14 @@ class AbstractSourceProvider(object):
         """ Return the name associated with this data source """
         raise NotImplementedError()
 
+    def start(self):
+        """ Called at the start of any solution """
+        raise NotImplementedError()
+
+    def stop(self):
+        """ Called at the end of any solution """
+        raise NotImplementedError()
+
     def close(self):
         """ Perform any required cleanup """
         raise NotImplementedError()
@@ -86,6 +94,14 @@ def find_sources(obj, argspec=None):
 
 class SourceProvider(AbstractSourceProvider):
 
+
+    def start(self):
+        """ Called at the start of any solution """
+        pass
+
+    def stop(self):
+        """ Called at the end of any solution """
+        pass
 
     def close(self):
         """ Perform any required cleanup. """

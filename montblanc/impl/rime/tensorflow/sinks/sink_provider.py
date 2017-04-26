@@ -26,6 +26,14 @@ class AbstractSinkProvider(object):
         """ Returns this data sink's name """
         raise NotImplementedError()
 
+    def start(self):
+        """ Called at the start of any solution """
+        raise NotImplementedError()
+
+    def stop(self):
+        """ Called at the end of any solution """
+        raise NotImplementedError()
+
     def close(self):
         """ Perform any required cleanup """
         raise NotImplementedError()
@@ -62,6 +70,13 @@ def find_sinks(obj):
 
 class SinkProvider(AbstractSinkProvider):
 
+    def start(self):
+        """ Called at the start of any solution """
+        pass
+
+    def stop(self):
+        """ Called at the end of any solution """
+        pass
 
     def close(self):
         """ Perform any required cleanup. NOOP """
