@@ -26,3 +26,4 @@ from .defaults_source_provider import (DefaultsSourceProvider,
 from .ms_source_provider import MSSourceProvider
 from .np_source_provider import NumpySourceProvider
 from .fits_beam_source_provider import FitsBeamSourceProvider
+from .cached_source_provider import CachedSourceProvider

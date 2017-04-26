@@ -244,39 +244,6 @@ def _axis_and_sign(ax_str):
     """ Extract axis and sign from given axis string """
     return (ax_str[1:], -1.0) if ax_str[0] == '-' else (ax_str, 1.0)
 
-def cache_fits_read(method):
-    """
-    Decorator for caching FitsBeamDataSource source function return values
-
-    Create a key index for the proxied array in the SourceContext.
-    Iterate over the array shape descriptor e.g.
-    (beam_lw, beam_mh, beam_nud, 4)
-    returning tuples containing the lower and upper extents
-    of string dimensions. Takes (0, d) in the case of an integer
-    dimensions.
-    """
-
-    @functools.wraps(method)
-    def memoizer(self, context):
-        # Defer to the method if no caching is enabled
-        if not self._is_cached:
-            return method(self, context)
-
-        # Construct the key for the given index
-        idx = context.array_extents(context.name)
-        key = tuple(i for t in idx for i in t)
-        # Access the sub-cache for this array
-        array_cache = self._cache[context.name]
-
-        # Cache miss, call the function
-        if key not in array_cache:
-            array_cache[key] = method(self, context)
-
-        return array_cache[key]
-
-    return memoizer
-
-
 class FitsBeamSourceProvider(SourceProvider):
     """
     Feeds holography cubes from a series of eight FITS files matching a
@@ -305,8 +272,7 @@ class FitsBeamSourceProvider(SourceProvider):
     inferred from the first file found and subsequent files should match
     that shape.
     """
-    def __init__(self, filename_schema, l_axis=None, m_axis=None,
-        cache=False):
+    def __init__(self, filename_schema, l_axis=None, m_axis=None):
         """
         Constructs a FitsBeamSourceProvider object
 
@@ -322,9 +288,6 @@ class FitsBeamSourceProvider(SourceProvider):
                 FITS axis interpreted as the M axis. `M` and `Y` are
                 sensible values here. `-M` will invert the coordinate
                 system on that axis.
-            cache : bool
-                if True, the data will be read from FITS file once
-                and cached on this object.
         """
         l_axis, l_sign = _axis_and_sign('L' if l_axis is None else l_axis)
         m_axis, m_sign = _axis_and_sign('M' if m_axis is None else m_axis)
@@ -350,10 +313,6 @@ class FitsBeamSourceProvider(SourceProvider):
         self._shape = tuple(axes.naxis[d] for d in dim_indices) + (4,)
         self._beam_freq_map = axes.grid[f_ax]
 
-        # Caching functionality
-        self._is_cached = cache
-        self._cache = collections.defaultdict(dict)
-
         # Now describe our dimension sizes
         self._dim_updates = [(n, axes.naxis[i]) for n, i
             in zip(beam_dims, dim_indices)]
@@ -364,7 +323,6 @@ class FitsBeamSourceProvider(SourceProvider):
     def name(self):
         return self._name
 
-    @cache_fits_read
     def ebeam(self, context):
         """ ebeam cube data source """
         if context.shape != self.shape:
@@ -382,12 +340,10 @@ class FitsBeamSourceProvider(SourceProvider):
 
         return ebeam
 
-    @cache_fits_read
     def beam_extents(self, context):
         """ Beam extent data source """
         return self._cube_extents.flatten().astype(context.dtype)
 
-    @cache_fits_read
     def beam_freq_map(self, context):
         """ Beam frequency map data source """
         return self._beam_freq_map.astype(context.dtype)
@@ -410,12 +366,7 @@ class FitsBeamSourceProvider(SourceProvider):
         """ Shape of the beam cube """
         return self._shape
 
-    def clear_cache(self):
-        self._cache.clear()
-
     def close(self):
-        self.clear_cache()
-
         for re, im in self._files.itervalues():
             re.close()
             im.close()

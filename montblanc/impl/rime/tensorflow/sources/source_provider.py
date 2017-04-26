@@ -38,10 +38,6 @@ class AbstractSourceProvider(object):
         """ Perform any required cleanup """
         raise NotImplementedError()
 
-    def clear_cache(self):
-        """ Clears any caches associated with the source """
-        raise NotImplementedError()
-
     def sources(self):
         """ Returns a dictionary of source methods, keyed on source name """
         raise NotImplementedError()
@@ -105,10 +101,6 @@ class SourceProvider(AbstractSourceProvider):
 
     def close(self):
         """ Perform any required cleanup. """
-        pass
-
-    def clear_cache(self):
-        """ Clears any caches associated with the source """
         pass
 
     def sources(self):
