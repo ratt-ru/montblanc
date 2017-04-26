@@ -25,7 +25,8 @@ except ImportError:
 
 class DataSinkBarrier(object):
     """
-    Simple barrier object that handles stores
+    Simple barrier object. Conceptually it's a thread-safe dictionary
+    of dictionaries supporting multiple levels of store and pop.
 
     .. code-block:: python
 
@@ -51,6 +52,15 @@ class DataSinkBarrier(object):
         print barrier.pop('bar')
     """
     def __init__(self, data_keys):
+        """
+        Construct the DataSinkBarrier
+
+        Parameters
+        ----------
+        data_keys : list
+            A list of keys that should be present in each entry
+        """
+
         self._data_keys = data_keys
         self._data_store = {}
         self._cond = threading.Condition(threading.Lock())
@@ -58,7 +68,22 @@ class DataSinkBarrier(object):
 
     def store(self, key, data_key, data=None):
         """
-        Store data in the barrier in the entry for key
+        Store data in the barrier in the entry associated with key
+
+        Parameters
+        ----------
+        key : object
+            Outer key
+        data_key : dict or list or object
+            If a dictionary, this will be used to update the inner entry
+            If a list, a dict will be created by zipping with data_keys
+            passed through to the constructor and used to update
+            the inner entry.
+            Otherwise, this will be the key use to store data in the
+            inner entry
+        data : object
+            Data associated with data_key, if data_key is not a
+            dict or list
         """
 
         if self.closed():
@@ -73,21 +98,10 @@ class DataSinkBarrier(object):
 
         # Guard access with a lock
         with self._cond:
-            # Obtain a possibly empty entry for this key
-            entry = self._data_store.setdefault(key, {})
-            entry.update(data_dict)
+            # Obtain a possibly empty entry for this key and update it
+            self._data_store.setdefault(key, {}).update(data_dict)
             # Notify any getters that a new entry is available
             self._cond.notifyAll()
-
-    def keys(self):
-        """ Returns barrier entry keys """
-        with self._cond:
-            return list(self._data_store.keys())
-
-    def __len__(self):
-        """ Returns the number of entries in the barrier """
-        with self._cond:
-            return len(self._data_store)
 
     def close(self):
         """ Closes the data barrier to stores and gets """
@@ -105,9 +119,9 @@ class DataSinkBarrier(object):
 
         Parameters
         ----------
-        key : str
+        key : object
             Key associated with the barrier entry
-        data_key : str
+        data_key : object
             Key associated with data inside entry
             associated with key.
         timeout : False or None or float
@@ -117,10 +131,10 @@ class DataSinkBarrier(object):
 
         Returns
         -------
-        object
+        object or dict
             The data mapped to data_key in the entry
             mapped to key. If data_key is None, the
-            entire entry is returned.
+            entire dictionary entry is returned.
         """
 
 
@@ -163,8 +177,8 @@ class DataSinkBarrier(object):
                     break
 
             if len(self._data_store) == 0 and self.closed():
-                raise ValueError("Data Barrier is closed '{}' '{}'".format(
-                                                    key, data_key))
+                raise ValueError("Data Barrier is closed '{}' '{}'"
+                                    .format(key, data_key))
 
             return _pop(self._data_store, key, data_key)
 

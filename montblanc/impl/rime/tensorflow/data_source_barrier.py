@@ -53,19 +53,40 @@ class DataSourceBarrier(object):
         barrier.store('bar', 'descriptor', 'bar')
     """
     def __init__(self, data_keys, callback):
+        """
+        Construct the DataSinkBarrier
+
+        Parameters
+        ----------
+        data_keys : list
+            A list of keys that should be present in each entry
+        callback : callable
+            Callable of the form :code:`def handle_data(key, entry)`
+        """
+
         self._data_keys = frozenset(data_keys)
         self._data_store = {}
         self._callback = callback
         self._lock = threading.Lock()
 
-    def __len__(self):
-        """ Returns the number of entries in the barrier """
-        with self._lock:
-            return len(self._data_store)
-
     def store(self, key, data_key, data=None):
         """
-        Store data in the barrier in the entry for key
+        Store data in the barrier in the entry associated with key
+
+        Parameters
+        ----------
+        key : object
+            Outer key
+        data_key : dict or list or object
+            If a dictionary, this will be used to update the inner entry
+            If a list, a dict will be created by zipping with data_keys
+            passed through to the constructor and used to update
+            the inner entry.
+            Otherwise, this will be the key use to store data in the
+            inner entry
+        data : object
+            Data associated with data_key, if data_key is not a
+            dict or list
         """
 
         if isinstance(data_key, dict) and data is None:
@@ -91,14 +112,14 @@ class DataSourceBarrier(object):
         if entry_full:
             self._callback(key, entry)
 
-def handle_data(key, entry):
-    for k, v in entry.iteritems():
-        print key, k, v
-
 import unittest
 
 class BarrierTest(unittest.TestCase):
     def test_barrier(self):
+        def handle_data(key, entry):
+            for k, v in entry.iteritems():
+                print key, k, v
+
         # Each dictionary entry should have
         # 'model_vis', 'uvw' and 'descriptor' keys
         barrier = DataSourceBarrier(
