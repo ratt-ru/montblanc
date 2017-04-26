@@ -847,8 +847,8 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     iter_dims = set(iter_dims)
 
     iterating = lambda a: len(iter_dims.intersection(a.shape)) > 0
-    feed_once, feed_all = _partition(iterating, input_arrays)
-    feed_once, feed_all = list(feed_once), list(feed_all)
+    feed_once, feed_many = _partition(iterating, input_arrays)
+    feed_once, feed_many = list(feed_once), list(feed_many)
 
     #======================================
     # Create tensorflow staging_areas which
@@ -861,7 +861,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
 
     # Create the staging_area for holding the input
     local.input = [create_staging_area_wrapper('input_%d' % i,
-                ['descriptor'] + [a.name for a in feed_all], dfs)
+                ['descriptor'] + [a.name for a in feed_many], dfs)
             for i in range(nr_of_input_staging_areas)]
 
     # Create source input staging_areas
