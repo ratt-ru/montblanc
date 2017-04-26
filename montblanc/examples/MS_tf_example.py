@@ -52,9 +52,7 @@ class RadioSourceProvider(SourceProvider):
         # Print the space of iteration
         montblanc.log.info(context.iter_args)
 
-        # Get the extents of the time, baseline and chan dimension
-        (lt, ut), (lb, ub), (lc, uc) = context.dim_extents(
-            'ntime', 'nbl', 'nchan')
+        (ls, us) = context.dim_extent('npsrc')
 
         lm[:,0] = 0.0008
         lm[:,1] = 0.0036
