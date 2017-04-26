@@ -220,7 +220,8 @@ from montblanc.config import RimeSolverConfig as Options
 from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
 from montblanc.impl.rime.tensorflow.sources import (SourceProvider,
     MSSourceProvider,
-    FitsBeamSourceProvider)
+    FitsBeamSourceProvider,
+    CachedSourceProvider)
 
 from montblanc.impl.rime.tensorflow.sinks import MSSinkProvider
 
@@ -286,14 +287,16 @@ slvr = montblanc.rime_solver(slvr_cfg)
 ms_mgr = MeasurementSetManager(msfile, slvr_cfg)
 
 source_providers = []
-source_providers.append(MSSourceProvider(ms_mgr, cache=True))
+source_providers.append(MSSourceProvider(ms_mgr))
 
 if beam_on == 1:
     beam_prov = FitsBeamSourceProvider(beam_file_pattern,
-        l_axis=l_axis, m_axis='Y', cache=True)
+        l_axis=l_axis, m_axis='Y')
     source_providers.append(beam_prov)
 
 source_providers.append(RadioSourceProvider())
+cache_prov = CachedSourceProvider(source_providers)
+source_providers = [cache_prov]
 
 sink_providers = [MSSinkProvider(ms_mgr, mb_vis_column)]
 slvr.solve(source_providers=source_providers,

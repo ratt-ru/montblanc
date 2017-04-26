@@ -31,44 +31,13 @@ import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 
 from montblanc.impl.rime.tensorflow.sources.source_provider import SourceProvider
 
-def cache_ms_read(method):
-    """
-    Decorator for caching MSRimeDataSource source function return values
-
-    Create a key index for the proxied array in the SourceContext.
-    Iterate over the array shape descriptor e.g. (ntime, nbl, 3)
-    returning tuples containing the lower and upper extents
-    of string dimensions. Takes (0, d) in the case of an integer
-    dimensions.
-    """
-
-    @functools.wraps(method)
-    def memoizer(self, context):
-        # Defer to the method if no caching is enabled
-        if not self._is_cached:
-            return method(self, context)
-
-        # Construct the key for the given index
-        idx = context.array_extents(context.name)
-        key = tuple(i for t in idx for i in t)
-        # Access the sub-cache for this array
-        array_cache = self._cache[context.name]
-
-        # Cache miss, call the function
-        if key not in array_cache:
-            array_cache[key] = method(self, context)
-
-        return array_cache[key]
-
-    return memoizer
-
 class MSSourceProvider(SourceProvider):
     """
     Source Provider that retrieves input data from a
     MeasurementSet
     """
 
-    def __init__(self, manager, vis_column=None, cache=False):
+    def __init__(self, manager, vis_column=None):
         """
         Constructs an MSSourceProvider object
 
@@ -88,10 +57,6 @@ class MSSourceProvider(SourceProvider):
 
         self._vis_column = 'DATA' if vis_column is None else vis_column
 
-        self._is_cached = cache
-
-        self._cache = collections.defaultdict(dict)
-
     def name(self):
         return self._name
 
@@ -99,7 +64,6 @@ class MSSourceProvider(SourceProvider):
         # Defer to manager's method
         return self._manager.updated_dimensions()
 
-    @cache_ms_read
     def phase_centre(self, context):
         # [0][0] because (a) we select only 1 row
         #                (b) assumes a NUM_POLY of 1
@@ -108,27 +72,23 @@ class MSSourceProvider(SourceProvider):
 
         return data.reshape(context.shape).astype(context.dtype)
 
-    @cache_ms_read
     def antenna_position(self, context):
         la, ua = context.dim_extents('na')
         data = self._manager.antenna_table.getcol(MS.POSITION,
                                             startrow=la, nrow=ua-la)
         return data.reshape(context.shape).astype(context.dtype)
 
-    @cache_ms_read
     def time(self, context):
         lt, ut = context.dim_extents('ntime')
         data = self._manager.ordered_time_table.getcol(MS.TIME,
                                             startrow=lt, nrow=ut-lt)
         return data.astype(context.dtype)
 
-    @cache_ms_read
     def frequency(self, context):
         """ Frequency data source """
         channels = self._manager.spectral_window_table.getcol(MS.CHAN_FREQ)
         return channels.reshape(context.shape).astype(context.dtype)
 
-    @cache_ms_read
     def ref_frequency(self, context):
         """ Reference frequency data source """
         num_chans = self._manager.spectral_window_table.getcol(MS.NUM_CHAN)
@@ -137,7 +97,6 @@ class MSSourceProvider(SourceProvider):
         data = np.hstack((np.repeat(rf, bs) for bs, rf in zip(num_chans, ref_freqs)))
         return data.reshape(context.shape).astype(context.dtype)
 
-    @cache_ms_read
     def uvw(self, context):
         """ Per-antenna UVW coordinate data source """
         # Special case for handling antenna uvw code
@@ -188,7 +147,6 @@ class MSSourceProvider(SourceProvider):
 
         return ant_uvw
 
-    @cache_ms_read
     def antenna1(self, context):
         """ antenna1 data source """
         lrow, urow = MS.uvw_row_extents(context)
@@ -197,7 +155,6 @@ class MSSourceProvider(SourceProvider):
 
         return antenna1.reshape(context.shape).astype(context.dtype)
 
-    @cache_ms_read
     def antenna2(self, context):
         """ antenna2 data source """
         lrow, urow = MS.uvw_row_extents(context)
@@ -206,7 +163,6 @@ class MSSourceProvider(SourceProvider):
 
         return antenna2.reshape(context.shape).astype(context.dtype)
 
-    @cache_ms_read
     def observed_vis(self, context):
         """ Observed visibility data source """
         lrow, urow = MS.row_extents(context)
@@ -216,7 +172,6 @@ class MSSourceProvider(SourceProvider):
 
         return data.reshape(context.shape).astype(context.dtype)
 
-    @cache_ms_read
     def flag(self, context):
         """ Flag data source """
         lrow, urow = MS.row_extents(context)
@@ -226,7 +181,6 @@ class MSSourceProvider(SourceProvider):
 
         return flag.reshape(context.shape).astype(context.dtype)
 
-    @cache_ms_read
     def weight(self, context):
         """ Weight data source """
         lrow, urow = MS.row_extents(context)
@@ -237,14 +191,6 @@ class MSSourceProvider(SourceProvider):
         # WEIGHT is applied across all channels
         weight = np.repeat(weight, self._manager.channels_per_band, 0)
         return weight.reshape(context.shape).astype(context.dtype)
-
-    def clear_cache(self):
-        """ Clears cached data on this Source Provider """
-        self._cache.clear()
-
-    def close(self):
-        """ Releases resources associated with this Source Provider """
-        self.clear_cache()
 
     def __enter__(self):
         return self

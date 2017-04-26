@@ -75,9 +75,6 @@ def source_send_data_barrier(data_source):
             },
         )
 
-        # TODO: Find a way to remove this, its not strictly necessary
-        # On the other hand, a return doesn't really hurt and fits
-        # the Data Source paradigm
         return data
 
     return memoizer
@@ -95,7 +92,7 @@ class ScatterSendSourceProvider(BaseScatterGatherProvider, SourceProvider):
         ops = [cfg["token_put_op"] for cfg in TLS]
         ops.extend(cfg["data_put_op"] for cfg in TLS)
         # Construct a name: placeholder map for each target
-        ph_maps = [{n: ph for n, ph in zip(cfg["names"], cfg["put_phs"])}
+        ph_maps = [{ n: ph for n, ph in zip(cfg["names"], cfg["put_phs"]) }
                             for cfg in TLS]
 
         def barrier_callback(descriptor, entry):
@@ -106,8 +103,8 @@ class ScatterSendSourceProvider(BaseScatterGatherProvider, SourceProvider):
 
             # Construct feed dictionary mapping data to each target's
             # placeholders
-            feed_dict = {ph_map[n]: d for n, d in entry.iteritems()
-                                        for ph_map in ph_maps}
+            feed_dict = { ph_map[n]: d for n, d in entry.iteritems()
+                                        for ph_map in ph_maps }
 
             # Feed queue token
             feed_dict.update({cfg["token_ph"]: 1 for cfg in TLS})
@@ -129,6 +126,15 @@ class ScatterSendSourceProvider(BaseScatterGatherProvider, SourceProvider):
         # Create data sources on this object
         for n, f in data_sources.iteritems():
             setattr(self, n, types.MethodType(f, self))
+
+    def updated_dimensions(self):
+        """ Update the dimensions """
+        return [d for p in self._providers
+                  for d in p.updated_dimensions()]
+
+    def name(self):
+        sub_prov_names = ', '.join([p.name() for p in self._providers])
+        return 'ScatterSend({})'.format(sub_prov_names)
 
     def signal_done(self):
         """ Indicate EOF to each target """
