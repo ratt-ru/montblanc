@@ -57,6 +57,23 @@ class MSSourceProvider(SourceProvider):
 
         self._vis_column = 'DATA' if vis_column is None else vis_column
 
+        # Cache columns on the object
+        # Handle these columns slightly differently
+        # They're used to compute the parallactic angle
+        # TODO: Fit them into the cache_ms_read strategy at some point
+
+        # Cache antenna positions
+        self._antenna_positions = manager.antenna_table.getcol(MS.POSITION)
+
+        # Cache timesteps
+        self._times = manager.ordered_time_table.getcol(MS.TIME)
+
+        # Cache the phase direction for the field
+        # [0][0] because (a) we select only 1 row
+        #                (b) assumes a NUM_POLY of 1
+        self._phase_dir = manager.field_table.getcol(MS.PHASE_DIR,
+            startrow=manager.field_id, nrow=1)[0][0]
+
     def name(self):
         return self._name
 
@@ -65,24 +82,16 @@ class MSSourceProvider(SourceProvider):
         return self._manager.updated_dimensions()
 
     def phase_centre(self, context):
-        # [0][0] because (a) we select only 1 row
-        #                (b) assumes a NUM_POLY of 1
-        data = self._manager.field_table.getcol(MS.PHASE_DIR,
-            startrow=self._manager.field_id, nrow=1)[0][0]
-
-        return data.reshape(context.shape).astype(context.dtype)
+        return self._phase_dir.astype(context.dtype)
 
     def antenna_position(self, context):
         la, ua = context.dim_extents('na')
-        data = self._manager.antenna_table.getcol(MS.POSITION,
-                                            startrow=la, nrow=ua-la)
-        return data.reshape(context.shape).astype(context.dtype)
+        return (self._antenna_positions[la:ua]
+                    .astype(context.dtype))
 
     def time(self, context):
         lt, ut = context.dim_extents('ntime')
-        data = self._manager.ordered_time_table.getcol(MS.TIME,
-                                            startrow=lt, nrow=ut-lt)
-        return data.astype(context.dtype)
+        return self._times[lt:ut].astype(context.dtype)
 
     def frequency(self, context):
         """ Frequency data source """
@@ -162,6 +171,17 @@ class MSSourceProvider(SourceProvider):
             MS.ANTENNA2, startrow=lrow, nrow=urow-lrow)
 
         return antenna2.reshape(context.shape).astype(context.dtype)
+
+    def parallactic_angles(self, context):
+        """ parallactic angle data source """
+        # Time and antenna extents
+        (lt, ut), (la, ua) = context.dim_extents('ntime', 'na')
+
+        return (mbu.parallactic_angles(self._times[lt:ut],
+                self._antenna_positions[la:ua], self._phase_dir)
+                                            .reshape(context.shape)
+                                            .astype(context.dtype))
+
 
     def observed_vis(self, context):
         """ Observed visibility data source """

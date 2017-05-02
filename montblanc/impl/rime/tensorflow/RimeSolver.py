@@ -969,10 +969,6 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         ntime, nbl, nchan, npol = [model_vis_shape[i] for i in range(4)]
         FT, CT = D.uvw.dtype, D.model_vis.dtype
 
-    # Compute parallactic angles
-    parallactic_angles = tf.py_func(mbu.parallactic_angles,
-        [D.time, D.antenna_position, D.phase_centre], FT)
-
     def antenna_jones(lm, stokes, alpha):
         """
         Compute the jones terms for each antenna.
@@ -1005,7 +1001,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
         ejones = rime.e_beam(lm, D.frequency,
             D.point_errors, D.antenna_scaling,
-            parallactic_angles,
+            D.parallactic_angles,
             D.beam_extents, D.beam_freq_map, D.ebeam)
 
         deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag]
