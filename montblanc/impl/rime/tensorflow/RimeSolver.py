@@ -35,22 +35,17 @@ import attr
 
 import montblanc
 import montblanc.util as mbu
-from montblanc.impl.rime.tensorflow import load_tf_lib
-from montblanc.impl.rime.tensorflow.cube_dim_transcoder import (
-                                    CubeDimensionTranscoder)
-from montblanc.impl.rime.tensorflow.sources import (SourceContext,
-                                                    DefaultsSourceProvider)
-
-from montblanc.impl.rime.tensorflow.staging_area_wrapper import (
-                                    create_staging_area_wrapper)
-
-from montblanc.impl.rime.tensorflow.sinks import (SinkContext,
-                                                  NullSinkProvider)
-
-from hypercube.dims import Dimension as HyperCubeDim
-
 from montblanc.solvers import MontblancTensorflowSolver
 from montblanc.config import RimeSolverConfig as Options
+
+from . import load_tf_lib
+from .cube_dim_transcoder import CubeDimensionTranscoder
+from .staging_area_wrapper import create_staging_area_wrapper
+from .sources import (SourceContext, DefaultsSourceProvider)
+from .sinks import (SinkContext, NullSinkProvider)
+from .start_context import StartContext
+from .stop_context import StopContext
+
 
 ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 
@@ -673,10 +668,6 @@ class RimeSolver(MontblancTensorflowSolver):
         print 'Source Providers', [sp.name() for sp in source_providers]
         print 'Sink Providers', [sp.name() for sp in sink_providers]
 
-        # Indicate solution started in providers
-        for p in itertools.chain(source_providers, sink_providers):
-            p.start()
-
         # Apply any dimension updates from the source provider
         # to the hypercube, taking previous reductions into account
         bytes_required = _apply_source_provider_dim_updates(
@@ -690,13 +681,22 @@ class RimeSolver(MontblancTensorflowSolver):
             self._previous_budget_dims, self._previous_budget = (
                 _budget(self.hypercube, self.config()))
 
+        # Determine the global iteration arguments
+        # e.g. [('ntime', 100), ('nbl', 20)]
+        global_iter_args = _iter_args(self._iter_dims, self.hypercube)
+
+        # Indicate solution started in providers
+        ctx = StartContext(self.hypercube, self.config(), global_iter_args)
+
+        for p in itertools.chain(source_providers, sink_providers):
+            p.start(ctx)
+
         #===================================
         # Assign data to Feed Once variables
         #===================================
 
         # Copy the hypercube
         cube = self.hypercube.copy()
-        global_iter_args = _iter_args(self._iter_dims, cube)
         array_schemas = cube.arrays(reify=True)
 
         # Construct data sources from those supplied by the
@@ -801,8 +801,9 @@ class RimeSolver(MontblancTensorflowSolver):
             self._iterations += 1
         finally:
             # Indicate solution stopped in providers
+            ctx = StopContext(self.hypercube, self.config(), global_iter_args)
             for p in itertools.chain(source_providers, sink_providers):
-                p.stop()
+                p.stop(ctx)
 
     def close(self):
         # Shutdown thread executors

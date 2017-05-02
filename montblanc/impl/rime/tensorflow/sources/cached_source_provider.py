@@ -118,10 +118,10 @@ class CachedSourceProvider(SourceProvider):
             return sum(a.nbytes for k, v in self._cache.iteritems()
                                 for a in v.itervalues())
 
-    def start(self):
+    def start(self, start_context):
         if self._clear_start:
             self.clear_cache()
 
-    def stop(self):
+    def stop(self, stop_context):
         if self._clear_stop:
             self.clear_cache()
