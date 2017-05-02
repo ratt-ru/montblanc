@@ -22,14 +22,6 @@
 from .context_help import context_help
 from .hypercube_proxy_metaclass import HypercubeProxyMetaClass
 
-class _setter_property(object):
-    def __init__(self, func, doc=None):
-        self.func = func
-        self.__doc__ = doc if doc is not None else func.__doc__
-
-    def __set__(self, obj, value):
-        return self.func(obj, value)
-
 class StartContext(object):
     """
     Start Context object passed to Providers.
@@ -64,9 +56,9 @@ class StartContext(object):
         self._cfg = slvr_cfg
         self._iter_args = iter_args
 
-    @_setter_property
-    def cube(self, value):
-        self._cube = value
+    @property
+    def cube(self):
+        return self._cube
 
     @property
     def cfg(self):
