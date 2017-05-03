@@ -163,7 +163,7 @@ else:
         'numpy >= 1.11.3',
         'numexpr >= 2.6.1',
         'python-casacore >= 2.1.2',
-        "{} >= 1.0.1".format(tensorflow_package),
+        "{} >= 1.1.0".format(tensorflow_package),
     ]
 
     from install.tensorflow_ops_ext import (BuildCommand,
