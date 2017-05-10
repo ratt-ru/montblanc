@@ -137,12 +137,13 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
     autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS)
 
     with MeasurementSetLoader(msfile, auto_correlations=autocor) as loader:
-        ntime, nbl, na, nbands, nchan = loader.get_dims()
+        ntime, nbl, na, nbands, nchan, npol = loader.get_dims()
         slvr_cfg[Options.NTIME] = ntime
         slvr_cfg[Options.NA] = na
         slvr_cfg[Options.NBL] = nbl
         slvr_cfg[Options.NBANDS] = nbands
         slvr_cfg[Options.NCHAN] = nchan
+        slvr_cfg[Options.NPOL] = npol
         slvr = slvr_class_type(slvr_cfg)
         loader.load(slvr, slvr_cfg)
         return slvr

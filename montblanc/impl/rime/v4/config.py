@@ -127,6 +127,8 @@ class Classifier(Enum):
     EKB_SQRT_INPUT = 'ekb_sqrt_input'
     COHERENCIES_INPUT = 'coherencies_input'
 
+
+
 # List of arrays
 A = [
     # UVW coordinates
@@ -177,15 +179,17 @@ A = [
         default=1,
         test=lambda slvr, ary: rary(ary)),
 
-    ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
+    ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 'npol'), 'ct',
         classifiers=frozenset([Classifier.E_BEAM_INPUT]),
-        default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:],
+        default=lambda s, ary: (np.array([1,0,0,0])[np.newaxis,np.newaxis,:] if ary.shape[3] == 4 
+            else np.array([1])[np.newaxis,np.newaxis,:]),
         test=lambda slvr, ary: rary(ary)),
 
     # Direction-Independent Effects
-    ary_dict('G_term', ('ntime', 'na', 'nchan', 4), 'ct',
+    ary_dict('G_term', ('ntime', 'na', 'nchan', 'npol'), 'ct',
         classifiers=frozenset([Classifier.COHERENCIES_INPUT]),
-        default=np.array([1,0,0,1])[np.newaxis,np.newaxis,np.newaxis,:],
+        default=lambda s, ary: (np.array([1,0,0,0])[np.newaxis,np.newaxis,:] if ary.shape[3] == 4 
+            else np.array([1])[np.newaxis,np.newaxis,:]),
         test=lambda slvr, ary: rary(ary)),
 
     # Source Definitions
@@ -195,9 +199,10 @@ A = [
         default=0,
         test=lambda slvr, ary: (rary(ary)-0.5) * 1e-1),
 
-    ary_dict('stokes', ('nsrc','ntime', 4), 'ft',
+    ary_dict('stokes', ('nsrc','ntime', 'npol'), 'ft',
         classifiers=frozenset([Classifier.B_SQRT_INPUT]),
-        default=np.array([1,0,0,0])[np.newaxis,np.newaxis,:],
+        default= lambda s, ary: (np.array([1,0,0,0])[np.newaxis,np.newaxis,:] if ary.shape[2] == 4 
+            else np.array([1])[np.newaxis,np.newaxis,:]),
         test=rand_stokes),
 
     ary_dict('alpha', ('nsrc','ntime'), 'ft',
@@ -216,7 +221,7 @@ A = [
         test=rand_sersic_shape),
 
     # Visibility flagging arrays
-    ary_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
+    ary_dict('flag', ('ntime', 'nbl', 'nchan', 'npol'), np.uint8,
         classifiers=frozenset([Classifier.X2_INPUT,
             Classifier.COHERENCIES_INPUT]),
         default=0,
@@ -224,23 +229,23 @@ A = [
             0, 1, size=ary.shape)),
 
     # Bayesian Data
-    ary_dict('weight_vector', ('ntime','nbl','nchan',4), 'ft',
+    ary_dict('weight_vector', ('ntime','nbl','nchan','npol'), 'ft',
         classifiers=frozenset([Classifier.X2_INPUT,
             Classifier.COHERENCIES_INPUT]),
         default=1,
         test=lambda slvr, ary: rary(ary)),
-    ary_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
+    ary_dict('observed_vis', ('ntime','nbl','nchan','npol'), 'ct',
         classifiers=frozenset([Classifier.X2_INPUT,
             Classifier.COHERENCIES_INPUT]),
         default=0,
         test=lambda slvr, ary: rary(ary)),
 
     # Result arrays
-    ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct',
+    ary_dict('B_sqrt', ('nsrc', 'ntime', 'nchan', 'npol'), 'ct',
         classifiers=frozenset([Classifier.GPU_SCRATCH])),
-    ary_dict('jones', ('nsrc','ntime','na','nchan',4), 'ct',
+    ary_dict('jones', ('nsrc','ntime','na','nchan','npol'), 'ct',
         classifiers=frozenset([Classifier.GPU_SCRATCH])),
-    ary_dict('model_vis', ('ntime','nbl','nchan',4), 'ct',
+    ary_dict('model_vis', ('ntime','nbl','nchan','npol'), 'ct',
         classifiers=frozenset([Classifier.SIMULATOR_OUTPUT])),
     ary_dict('chi_sqrd_result', ('ntime','nbl','nchan'), 'ft',
         classifiers=frozenset([Classifier.GPU_SCRATCH])),

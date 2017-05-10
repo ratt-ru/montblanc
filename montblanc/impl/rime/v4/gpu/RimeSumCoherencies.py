@@ -174,7 +174,12 @@ void rime_sum_coherencies_impl(
     // TODO uses 4 times the actually required space, since
     // we don't need to store a frequency per polarisation
     if(threadIdx.y == 0 && threadIdx.z == 0)
+    {
+      if (NPOL > 1)
         { shared.freq[threadIdx.x] = frequency[POLCHAN >> 2]; }
+      else
+        { shared.freq[threadIdx.x] = frequency[POLCHAN]; }
+    }
 
     // We process sources in batches, accumulating visibility values.
     // Visibilities are read in and written out at the start and end
@@ -202,7 +207,10 @@ void rime_sum_coherencies_impl(
         typename Tr::ct ant_one = jones[i];
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
-        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
+        if (NPOL > 1)
+           montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
+        else
+           montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
 
         polsum.x += ant_one.x;
         polsum.y += ant_one.y;
@@ -248,7 +256,11 @@ void rime_sum_coherencies_impl(
         ant_one.y *= exp;
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
-        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
+        if (NPOL > 1)
+          montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
+        else
+          montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
+       
 
         polsum.x += ant_one.x;
         polsum.y += ant_one.y;
@@ -298,7 +310,10 @@ void rime_sum_coherencies_impl(
         ant_one.y *= sersic_factor;
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
-        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
+        if (NPOL > 1)
+          montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
+        else
+          montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
 
         polsum.x += ant_one.x;
         polsum.y += ant_one.y;
@@ -320,12 +335,20 @@ void rime_sum_coherencies_impl(
     // Multiply the visibility by antenna 1's g term
     i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
     typename Tr::ct model_vis = G_term[i];
-    montblanc::jones_multiply_4x4_in_place<T>(model_vis, polsum);
+    if (NPOL > 1)
+        montblanc::jones_multiply_4x4_in_place<T>(model_vis, polsum);
+    else
+        montblanc::complex_multiply_in_place<T>(model_vis, polsum);
+   
 
     // Multiply the visibility by antenna 2's g term
     i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
     typename Tr::ct ant2_g_term = G_term[i];
-    montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(model_vis, ant2_g_term);
+    if (NPOL > 1)
+      montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(model_vis, ant2_g_term);
+    else
+      montblanc::complex_conjugate_multiply_in_place<T>(model_vis, ant2_g_term);
+    
 
     // Compute the chi squared sum terms
     i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
@@ -367,28 +390,36 @@ void rime_sum_coherencies_impl(
         obs_vis.y *= w;
     }
 
-    // Now, add the real and imaginary components
-    // of each adjacent group of four polarisations
-    // into the first polarisation.
-    typename Tr::ct other = cub::ShuffleIndex(obs_vis, cub::LaneId() + 2);
-
-    // Add polarisations 2 and 3 to 0 and 1
-    if((POLCHAN & 0x3) < 2)
+    if (NPOL > 1)
     {
-        obs_vis.x += other.x;
-        obs_vis.y += other.y;
-    }
+       // Now, add the real and imaginary components
+       // of each adjacent group of four polarisations
+       // into the first polarisation.
+       typename Tr::ct other = cub::ShuffleIndex(obs_vis, cub::LaneId() + 2);
 
-    other = cub::ShuffleIndex(obs_vis, cub::LaneId() + 1);
+       // Add polarisations 2 and 3 to 0 and 1
+       if((POLCHAN & 0x3) < 2)
+       {
+          obs_vis.x += other.x;
+          obs_vis.y += other.y;
+       }
 
-    // If this is the polarisation 0, add polarisation 1
-    // and write out this chi squared sum term
-    if((POLCHAN & 0x3) == 0) {
+       other = cub::ShuffleIndex(obs_vis, cub::LaneId() + 1);
+
+       // If this is the polarisation 0, add polarisation 1
+       // and write out this chi squared sum term
+      if((POLCHAN & 0x3) == 0) {
         obs_vis.x += other.x;
         obs_vis.y += other.y;
 
         i = (TIME*NBL + BL)*NCHAN + (POLCHAN >> 2);
         chi_sqrd_result[i] = obs_vis.x + obs_vis.y;
+      }
+    }
+    else
+    {
+      i = (TIME*NBL + BL)*NCHAN + POLCHAN;
+      chi_sqrd_result[i] = obs_vis.x + obs_vis.y;
     }
 }
 

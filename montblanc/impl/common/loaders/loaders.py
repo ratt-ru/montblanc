@@ -31,6 +31,7 @@ from montblanc.api.loaders import BaseLoader
 ANTENNA_TABLE = 'ANTENNA'
 SPECTRAL_WINDOW = 'SPECTRAL_WINDOW'
 FIELD_TABLE = 'FIELD'
+POL_TABLE = 'POLARIZATION'
 
 class MeasurementSetLoader(BaseLoader):
     LOG_PREFIX = 'LOADER:'
@@ -43,6 +44,7 @@ class MeasurementSetLoader(BaseLoader):
         self.antfile = '::'.join((self.msfile, ANTENNA_TABLE))
         self.freqfile = '::'.join((self.msfile, SPECTRAL_WINDOW))
         self.fieldfile = '::'.join((self.msfile, FIELD_TABLE))
+        self.polfile = '::'.join((self.msfile, POL_TABLE))
 
         montblanc.log.info("{lp} Opening Measurement Set {ms}.".format(
             lp=self.LOG_PREFIX, ms=self.msfile))
@@ -58,6 +60,7 @@ class MeasurementSetLoader(BaseLoader):
         # (2) baseline (ANTENNA1, ANTENNA2)
         # (3) band (SPECTRAL_WINDOW_ID via DATA_DESC_ID)
         ordering_query = ' '.join(["SELECT FROM $ms",
+            #"WHERE ANTENNA1 != ANTENNA2",
             "WHERE FIELD_ID={fid}".format(fid=field_id),
             "" if auto_correlations else "AND ANTENNA1 != ANTENNA2",
             "ORDERBY TIME, ANTENNA1, ANTENNA2, "
@@ -70,6 +73,7 @@ class MeasurementSetLoader(BaseLoader):
         self.tables['ant']  = at = pt.table(self.antfile, ack=False, readonly=True)
         self.tables['freq'] = ft = pt.table(self.freqfile, ack=False, readonly=True)
         self.tables['field'] = fit = pt.table(self.fieldfile, ack=False, readonly=True)
+        self.tables['pol'] = polt = pt.table(self.polfile, ack=False, readonly=True)
 
         self.nrows = ordered_ms.nrows()
         self.na = at.nrows()
@@ -79,6 +83,9 @@ class MeasurementSetLoader(BaseLoader):
         # Count number of baselines in the MS
         bl_query = "SELECT FROM $ordered_ms ORDERBY UNIQUE ANTENNA1, ANTENNA2"
         self.nbl = pt.taql(bl_query).nrows()
+
+        # Number of polarizations (assuming to be the same for all spectral windows)
+        self.npol = polt.getcol('NUM_CORR')[0]
 
         # Number of channels per band
         chan_per_band = ft.getcol('NUM_CHAN')
@@ -105,6 +112,8 @@ class MeasurementSetLoader(BaseLoader):
             aeq=autocor_eq, ebl=expected_nbl, astr=autocor_str, nbl=self.nbl))
         self.log("Found {nb} band(s), containing {cpb} channels.".format(
             nb=self.nbands, nc=chan_per_band[0], cpb=chan_per_band))
+        self.log("Found {npol} polarization(s) in the POLARIZATION table.".format(
+            npol=self.npol))
 
         # Sanity check computed rows vs actual rows
         computed_rows = self.ntime*self.nbl*self.nbands
@@ -116,13 +125,14 @@ class MeasurementSetLoader(BaseLoader):
                         nbl=self.nbl, nb=self.nbands,
                         cr=computed_rows, msr=self.nrows))
 
+
     def get_dims(self):
         """
         Returns a tuple with the number of
         timesteps, baselines, antenna, channel bands and channels
         """
         # Determine the problem dimensions
-        return self.ntime, self.nbl, self.na, self.nbands, self.nchan
+        return self.ntime, self.nbl, self.na, self.nbands, self.nchan, self.npol
 
     def log(self, msg, *args, **kwargs):
         montblanc.log.info('{lp} {m}'.format(lp=self.LOG_PREFIX, m=msg),

@@ -307,6 +307,9 @@ class CompositeRimeSolver(MontblancNumpySolver):
         cpu_slice['nvis'] = slice(0, 0, 1)
         gpu_slice['nvis'] = slice(0, 0, 1)
 
+        cpu_slice['npol'] = slice(0, npol, 1)
+        gpu_slice['npol'] = slice(0, npol, 1)
+
         montblanc.log.debug('Generating RIME slices')
 
         # Set up time slicing
@@ -1172,7 +1175,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         X2_sum = self.ft(0.0)
         if self.enable_sersic_grad:
             nssrc = self.dim_local_size('nssrc')
-            X2_grad = self.ft(np.zeros((3,nssrc)))
+            self.X2_grad = self.ft(np.zeros((3,nssrc)))
 
         # Sets of return value futures for each executor
         value_futures = [set() for ex in self.enqueue_executors]
@@ -1246,7 +1249,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
                         # Get chi-squared and model visibilities (and X2 gradient)
                         if self.enable_sersic_grad:
                             X2, pinned_model_vis, model_vis_idx, pinned_X2_grad = f.result()
-                            X2_grad += pinned_X2_grad
+                            self.X2_grad += pinned_X2_grad
                         else:
                             X2, pinned_model_vis, model_vis_idx = f.result()
                         # Sum X2
@@ -1269,7 +1272,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
             # Get chi-squared and model visibilities (and X2 gradient)
             if self.enable_sersic_grad:
                 X2, pinned_model_vis, model_vis_idx, pinned_X2_grad = f.result()
-                X2_grad += pinned_X2_grad
+                self.X2_grad += pinned_X2_grad
             else:
                 X2, pinned_model_vis, model_vis_idx = f.result()
             # Sum X2
@@ -1284,7 +1287,7 @@ class CompositeRimeSolver(MontblancNumpySolver):
         else:
             self.set_X2(X2_sum/self.sigma_sqrd)
             if self.enable_sersic_grad:
-                self.X2_grad = X2_grad/self.sigma_sqrd
+                self.X2_grad = self.X2_grad/self.sigma_sqrd
 
     def shutdown(self):
         """ Shutdown the solver """

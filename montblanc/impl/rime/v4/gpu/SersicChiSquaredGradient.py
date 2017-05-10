@@ -197,7 +197,13 @@ void sersic_chi_squared_gradient_impl(
       // TODO uses 4 times the actually required space, since
       // we don't need to store a frequency per polarisation
       if(threadIdx.y == 0 && threadIdx.z == 0)
-        { shared.freq[threadIdx.x] = frequency[POLCHAN >> 2]; }
+      {        
+        if (NPOL >1)
+          { shared.freq[threadIdx.x] = frequency[POLCHAN >> 2]; }
+        else
+          { shared.freq[threadIdx.x] = frequency[POLCHAN]; }
+      }
+
 
       i = (TIME*NBL +BL)* NPOLCHAN + POLCHAN;
       delta = observed_vis[i];
@@ -278,7 +284,11 @@ void sersic_chi_squared_gradient_impl(
         ant_one.y *= sersic_factor;
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
         typename Tr::ct ant_two = jones[i];
-        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
+        if (NPOL > 1)
+          montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
+        else
+          montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
+       
 
         dev_vis[0].x = ant_one.x*dev_e1;
         dev_vis[0].y = ant_one.y*dev_e1;
@@ -286,7 +296,7 @@ void sersic_chi_squared_gradient_impl(
         dev_vis[1].y = ant_one.y*dev_e2;
         dev_vis[2].x = ant_one.x*dev_scale;
         dev_vis[2].y = ant_one.y*dev_scale;
-   
+  /* 
         for (int p = 0; p < 3; p++)
         {
           // Multiply the visibility derivative by antenna 1's g term
@@ -300,7 +310,7 @@ void sersic_chi_squared_gradient_impl(
           montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant1_g_term, ant2_g_term);    
           dev_vis[p] = ant1_g_term;
         }
- 
+   */
       }   
       // Write partial derivative with respect to sersic parameters
       for (int p=0; p<3; p++)
