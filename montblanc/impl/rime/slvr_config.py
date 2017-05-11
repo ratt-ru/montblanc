@@ -63,6 +63,14 @@ class RimeSolverConfig(SolverConfig):
         "If True, chi-squared terms are weighted with a vectorised sigma. "
         "If False, chi-squared terms are weighted with a single scalar sigma.")
 
+    # Enabling chi squared gradient computation with respect Sersic parameters
+    SERSIC_GRADIENT = 'sersic_gradient'
+    DEFAULT_SERSIC_GRADIENT = False
+    VALID_SERSIC_GRADIENT = [True, False]
+    SERSIC_GRADIENT_DESCRIPTION = (
+        "If True, chi_squared gradient is computed with respect to the sersic parameters for each source.")
+
+
     # weight vector initialisation keyword and valid values
     # This SolverConfig determines whether
     INIT_WEIGHTS = 'init_weights'
@@ -198,6 +206,13 @@ class RimeSolverConfig(SolverConfig):
             SolverConfig.DEFAULT: DEFAULT_E_BEAM_DEPTH,
             SolverConfig.REQUIRED: True
         },
+
+        SERSIC_GRADIENT: {
+            SolverConfig.DESCRIPTION: SERSIC_GRADIENT_DESCRIPTION,
+            SolverConfig.VALID: VALID_SERSIC_GRADIENT,
+            SolverConfig.DEFAULT: DEFAULT_SERSIC_GRADIENT,
+            SolverConfig.REQUIRED: True
+        },
     }
 
     def parser(self):
@@ -220,6 +235,12 @@ class RimeSolverConfig(SolverConfig):
             type=int,
             help=self.E_BEAM_DEPTH_DESCRIPTION,
             default=self.DEFAULT_E_BEAM_DEPTH)
+
+        p.add_argument('--{v}'.format(v=self.SERSIC_GRADIENT),
+            required=False,
+            type=bool,
+            help=self.SERSIC_GRADIENT_DESCRIPTION,
+            default=self.DEFAULT_SERSIC_GRADIENT)
 
         p.add_argument('--{v}'.format(v=self.WEIGHT_VECTOR),
             required=False,

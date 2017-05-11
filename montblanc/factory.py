@@ -137,12 +137,13 @@ def create_rime_solver_from_ms(slvr_class_type, slvr_cfg):
     autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS)
 
     with MeasurementSetLoader(msfile, auto_correlations=autocor) as loader:
-        ntime, nbl, na, nbands, nchan = loader.get_dims()
+        ntime, nbl, na, nbands, nchan, npol = loader.get_dims()
         slvr_cfg[Options.NTIME] = ntime
         slvr_cfg[Options.NA] = na
         slvr_cfg[Options.NBL] = nbl
         slvr_cfg[Options.NBANDS] = nbands
         slvr_cfg[Options.NCHAN] = nchan
+        slvr_cfg[Options.NPOL] = npol
         slvr = slvr_class_type(slvr_cfg)
         loader.load(slvr, slvr_cfg)
         return slvr
@@ -167,7 +168,8 @@ def rime_solver(slvr_cfg):
     elif version == Options.VERSION_FIVE:
         from montblanc.impl.rime.v5.CompositeRimeSolver \
         import CompositeRimeSolver as RimeSolver
-        slvr_cfg[Options.CONTEXT] = __contexts
+        if slvr_cfg.get(Options.CONTEXT, None) is None: 
+            slvr_cfg[Options.CONTEXT] = __contexts
     else:
         raise ValueError('Invalid version %s' % version)
 

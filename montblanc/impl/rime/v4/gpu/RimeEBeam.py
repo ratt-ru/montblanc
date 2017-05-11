@@ -83,18 +83,19 @@ __constant__ rime_const_data C;
 #define BEAM_MH LOCAL(beam_mh)
 #define BEAM_NUD LOCAL(beam_nud)
 
+// Infer channel from x thread
+ __device__ __forceinline__ int thread_chan()
+    { return threadIdx.x >> 2; }
+
 // Infer polarisation from x thread
 __device__ __forceinline__ int ebeam_pol()
     { return threadIdx.x & 0x3; }
 
-// Infer channel from x thread
-__device__ __forceinline__ int thread_chan()
-    { return threadIdx.x >> 2; }
 
 template <
     typename T,
     typename Tr=montblanc::kernel_traits<T>,
-    typename Po=montblanc::kernel_policies<T> >
+    typename Po=montblanc::kernel_policies<T> > 
 __device__ __forceinline__
 void trilinear_interpolate(
     typename Tr::ct & pol_sum,
@@ -105,8 +106,7 @@ void trilinear_interpolate(
     const T & gchan,
     const T & weight)
 {
-    int i = ((int(gl)*BEAM_MH + int(gm))*BEAM_NUD + int(gchan))*NPOL
-        + ebeam_pol();
+    int i = ((int(gl)*BEAM_MH + int(gm))*BEAM_NUD + int(gchan))*NPOL +ebeam_pol();
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
     typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
@@ -114,6 +114,31 @@ void trilinear_interpolate(
     pol_sum.y += weight*pol.y;
     abs_sum += weight*Po::abs(pol);
 }
+
+
+template <
+    typename T,
+    typename Tr=montblanc::kernel_traits<T>,
+    typename Po=montblanc::kernel_policies<T> > 
+__device__ __forceinline__
+void trilinear_interpolate_J1(
+    typename Tr::ct & pol_sum,
+    typename Tr::ft & abs_sum,
+    typename Tr::ct * E_beam,
+    const T & gl,
+    const T & gm,
+    const T & gchan,
+    const T & weight)
+{
+    int i = ((int(gl)*BEAM_MH + int(gm))*BEAM_NUD + int(gchan));
+
+    // Perhaps unnecessary as long as BLOCKDIMX is 32
+    typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
+    pol_sum.x += weight*pol.x;
+    pol_sum.y += weight*pol.y;
+    abs_sum += weight*Po::abs(pol);
+}
+
 
 template <typename T> class EBeamTraits {};
 
@@ -343,6 +368,216 @@ void rime_jones_E_beam_impl(
     }
 }
 
+
+
+template <
+    typename T,
+    typename Tr=montblanc::kernel_traits<T>,
+    typename Po=montblanc::kernel_policies<T> >
+__device__
+void rime_jones1_E_beam_impl(
+    typename EBeamTraits<T>::LMType * lm,
+    typename EBeamTraits<T>::ParallacticAngleType * parallactic_angles,
+    typename EBeamTraits<T>::PointErrorType * point_errors,
+    typename EBeamTraits<T>::AntennaScaleType * antenna_scaling,
+    typename Tr::ft * frequency,
+    typename Tr::ct * E_beam,
+    typename Tr::ct * jones,
+    T beam_ll, T beam_lm, T beam_lfreq,
+    T beam_ul, T beam_um, T beam_ufreq)
+{
+    int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
+    int ANT = blockIdx.y*blockDim.y + threadIdx.y;
+    int TIME = blockIdx.z*blockDim.z + threadIdx.z;
+
+    typedef typename EBeamTraits<T>::LMType LMType;
+    typedef typename EBeamTraits<T>::PointErrorType PointErrorType;
+    typedef typename EBeamTraits<T>::AntennaScaleType AntennaScaleType;
+
+    if(TIME >= DEXT(ntime) || ANT >= DEXT(na) || POLCHAN >= DEXT(npolchan))
+        return;
+
+    __shared__ struct {
+        T lscale;             // l axis scaling factor
+        T mscale;             // m axis scaling factor
+        T pa_sin[BLOCKDIMZ][BLOCKDIMY];  // sin of parallactic angle
+        T pa_cos[BLOCKDIMZ][BLOCKDIMY];  // cos of parallactic angle
+        T gchan0[BLOCKDIMX];  // channel grid position (snapped)
+        T gchan1[BLOCKDIMX];  // channel grid position (snapped)
+        T chd[BLOCKDIMX];    // difference between gchan0 and actual grid position
+        PointErrorType pe[BLOCKDIMZ][BLOCKDIMY][BLOCKDIMX];  // pointing errors
+        AntennaScaleType as[BLOCKDIMY][BLOCKDIMX];           // antenna scaling
+    } shared;
+
+
+    int i;
+
+    // Precompute l and m scaling factors in shared memory
+    if(threadIdx.z == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+    {
+        shared.lscale = T(BEAM_LW - 1) / (beam_ul - beam_ll);
+        shared.mscale = T(BEAM_MH - 1) / (beam_um - beam_lm);
+    }
+
+    // Pointing errors vary by time, antenna and channel,
+    i = (TIME*NA + ANT)*NCHAN + POLCHAN;
+    shared.pe[threadIdx.z][threadIdx.y][threadIdx.x] = point_errors[i];
+
+    // Antenna scaling factors vary by antenna and channel,
+    // but not timestep
+    if(threadIdx.z == 0)
+    {
+        i = ANT*NCHAN + POLCHAN;
+        shared.as[threadIdx.y][threadIdx.x] = antenna_scaling[i];
+    }
+
+    // Frequency vary by channel, but not timestep or antenna
+    if(threadIdx.z == 0 && threadIdx.y == 0)
+    {
+        // Channel coordinate
+        // channel grid position
+        T freqscale = T(BEAM_NUD-1) / (beam_ufreq - beam_lfreq);
+        T chan = freqscale * (frequency[POLCHAN] - beam_lfreq);
+        // clamp to grid edges
+        chan = Po::clamp(chan, 0.0, BEAM_NUD-1);
+        // Snap to grid coordinate
+        shared.gchan0[threadIdx.x] = Po::floor(chan);
+        shared.gchan1[threadIdx.x] = Po::min(
+            shared.gchan0[threadIdx.x] + 1.0, BEAM_NUD-1);
+        // Offset of snapped coordinate from grid position
+        shared.chd[threadIdx.x] = chan - shared.gchan0[threadIdx.x];
+    }
+
+    // Parallactic angles vary by time and antenna, but not channel
+    if(threadIdx.x == 0)
+    {
+        i = TIME*NA + ANT;
+        T parangle = parallactic_angles[i];
+        Po::sincos(parangle,
+            &shared.pa_sin[threadIdx.z][threadIdx.y],
+            &shared.pa_cos[threadIdx.z][threadIdx.y]);
+    }
+
+    __syncthreads();
+
+    // Loop over sources
+    for(int SRC=0; SRC < DEXT(nsrc); ++SRC)
+    {
+        // lm coordinate for this source
+        LMType rlm = lm[SRC];
+
+        // L coordinate
+        // Rotate
+        T l = rlm.x*shared.pa_cos[threadIdx.z][threadIdx.y] -
+            rlm.y*shared.pa_sin[threadIdx.z][threadIdx.y];
+        // Add the pointing errors for this antenna.
+        l += shared.pe[threadIdx.z][threadIdx.y][threadIdx.x].x;
+        // Scale by antenna scaling factors
+        l *= shared.as[threadIdx.y][threadIdx.x].x;
+        // l grid position
+        l = shared.lscale * (l - beam_ll);
+        // clamp to grid edges
+        l = Po::clamp(0.0, l, BEAM_LW-1);
+        // Snap to grid coordinate
+        T gl0 = Po::floor(l);
+        T gl1 = Po::min(gl0 + 1.0, BEAM_LW-1);
+        // Offset of snapped coordinate from grid position
+        T ld = l - gl0;
+
+        // M coordinate
+        // rotate
+        T m = rlm.x*shared.pa_sin[threadIdx.z][threadIdx.y] +
+            rlm.y*shared.pa_cos[threadIdx.z][threadIdx.y];
+        // Add the pointing errors for this antenna.
+        m += shared.pe[threadIdx.z][threadIdx.y][threadIdx.x].y;
+        // Scale by antenna scaling factors
+        m *= shared.as[threadIdx.y][threadIdx.x].y;
+        // m grid position
+        m = shared.mscale * (m - beam_lm);
+        // clamp to grid edges
+        m = Po::clamp(0.0, m, BEAM_MH-1);
+        // Snap to grid position
+        T gm0 = Po::floor(m);
+        T gm1 = Po::min(gm0 + 1.0, BEAM_MH-1);
+        // Offset of snapped coordinate from grid position
+        T md = m - gm0;
+
+        typename Tr::ct pol_sum = Po::make_ct(0.0, 0.0);
+        typename Tr::ft abs_sum = T(0.0);
+
+        // A simplified trilinear weighting is used here. Given
+        // point x between points x1 and x2, with function f
+        // provided values f(x1) and f(x2) at these points.
+        //
+        // x1 ------- x ---------- x2
+        //
+        // Then, the value of f can be approximated using the following:
+        // f(x) ~= f(x1)(x2-x)/(x2-x1) + f(x2)(x-x1)/(x2-x1)
+        //
+        // Note how the value f(x1) is weighted with the distance
+        // from the opposite point (x2-x).
+        //
+        // As we are interpolating on a grid, we have the following
+        // 1. (x2 - x1) == 1
+        // 2. (x - x1)  == 1 - 1 + (x - x1)
+        //              == 1 - (x2 - x1) + (x - x1)
+        //              == 1 - (x2 - x)
+        // 2. (x2 - x)  == 1 - 1 + (x2 - x)
+        //              == 1 - (x2 - x1) + (x2 - x)
+        //              == 1 - (x - x1)
+        //
+        // Extending the above to 3D, we have
+        // f(x,y,z) ~= f(x1,y1,z1)(x2-x)(y2-y)(z2-z) + ...
+        //           + f(x2,y2,z2)(x-x1)(y-y1)(z-z1)
+        //
+        // f(x,y,z) ~= f(x1,y1,z1)(1-(x-x1))(1-(y-y1))(1-(z-z1)) + ...
+        //           + f(x2,y2,z2)   (x-x1)    (y-y1)    (z-z1)
+
+        // Load in the complex values from the E beam
+        // at the supplied coordinate offsets.
+        trilinear_interpolate_J1<T>(pol_sum, abs_sum, E_beam,
+            gl0, gm0, shared.gchan0[threadIdx.x],
+            (1.0f-ld)*(1.0f-md)*(1.0f-shared.chd[threadIdx.x]));
+        trilinear_interpolate_J1<T>(pol_sum, abs_sum, E_beam,
+            gl1, gm0, shared.gchan0[threadIdx.x],
+            ld*(1.0f-md)*(1.0f-shared.chd[threadIdx.x]));
+        trilinear_interpolate_J1<T>(pol_sum, abs_sum, E_beam,
+            gl0, gm1, shared.gchan0[threadIdx.x],
+            (1.0f-ld)*md*(1.0f-shared.chd[threadIdx.x]));
+        trilinear_interpolate_J1<T>(pol_sum, abs_sum, E_beam,
+            gl1, gm1, shared.gchan0[threadIdx.x],
+            ld*md*(1.0f-shared.chd[threadIdx.x]));
+
+        trilinear_interpolate_J1<T>(pol_sum, abs_sum, E_beam,
+            gl0, gm0, shared.gchan1[threadIdx.x],
+            (1.0f-ld)*(1.0f-md)*shared.chd[threadIdx.x]);
+        trilinear_interpolate_J1<T>(pol_sum, abs_sum, E_beam,
+            gl1, gm0, shared.gchan1[threadIdx.x],
+            ld*(1.0f-md)*shared.chd[threadIdx.x]);
+        trilinear_interpolate_J1<T>(pol_sum, abs_sum, E_beam,
+            gl0, gm1, shared.gchan1[threadIdx.x],
+            (1.0f-ld)*md*shared.chd[threadIdx.x]);
+        trilinear_interpolate_J1<T>(pol_sum, abs_sum, E_beam,
+            gl1, gm1, shared.gchan1[threadIdx.x],
+            ld*md*shared.chd[threadIdx.x]);
+
+        // Normalise the angle and multiply in the absolute sum
+        typename Tr::ft norm = Po::rsqrt(pol_sum.x*pol_sum.x + pol_sum.y*pol_sum.y);
+        if(!::isfinite(norm))
+            { norm = 1.0; }
+
+        pol_sum.x *= norm * abs_sum;
+        pol_sum.y *= norm * abs_sum;
+
+        i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
+        jones[i] = pol_sum;
+    }
+}
+
+
+
+
+
 extern "C" {
 
 #define stamp_jones_E_beam_fn(ft,ct,lm_type,pa_type,pe_type,as_type) \
@@ -365,6 +600,26 @@ rime_jones_E_beam_ ## ft( \
         beam_ul, beam_um, beam_ufreq); \
 }
 
+#define stamp_jones1_E_beam_fn(ft,ct,lm_type,pa_type,pe_type,as_type) \
+__global__ void \
+rime_jones1_E_beam_ ## ft( \
+    lm_type * lm, \
+    pa_type * parallactic_angles, \
+    pe_type * point_errors, \
+    as_type * antenna_scaling, \
+    ft * frequency, \
+    ct * E_beam, \
+    ct * jones, \
+    ft beam_ll, ft beam_lm, ft beam_lfreq, \
+    ft beam_ul, ft beam_um, ft beam_ufreq) \
+{ \
+    rime_jones1_E_beam_impl<ft>( \
+        lm, parallactic_angles, point_errors, \
+        antenna_scaling, frequency, E_beam, jones, \
+        beam_ll, beam_lm, beam_lfreq, \
+        beam_ul, beam_um, beam_ufreq); \
+}
+
 ${stamp_function}
 
 } // extern "C" {
@@ -376,7 +631,7 @@ class RimeEBeam(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-        ntime, na, npolchan = slvr.dim_local_size('ntime', 'na', 'npolchan')
+        ntime, na, npolchan, npol = slvr.dim_local_size('ntime', 'na', 'npolchan', 'npol')
 
         # Get a property dictionary off the solver
         D = slvr.template_dict()
@@ -400,12 +655,20 @@ class RimeEBeam(Node):
             'float' if slvr.is_float() else 'double',
             'float2' if slvr.is_float() else 'double2',
             'float2' if slvr.is_float() else 'double2'])
-        stamp_fn = ''.join(['stamp_jones_E_beam_fn(', stamp_args, ')'])
-        D['stamp_function'] = stamp_fn
 
-        kname = 'rime_jones_E_beam_float' \
-            if slvr.is_float() is True else \
-            'rime_jones_E_beam_double'
+        if npol == 4:
+            stamp_fn = ''.join(['stamp_jones_E_beam_fn(', stamp_args, ')'])
+            D['stamp_function'] = stamp_fn
+            kname = 'rime_jones_E_beam_float' \
+                if slvr.is_float() is True else \
+                'rime_jones_E_beam_double'
+
+        if npol == 1:
+            stamp_fn = ''.join(['stamp_jones1_E_beam_fn(', stamp_args, ')'])
+            D['stamp_function'] = stamp_fn
+            kname = 'rime_jones1_E_beam_float' \
+                if slvr.is_float() is True else \
+                'rime_jones1_E_beam_double'
 
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
 

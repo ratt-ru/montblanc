@@ -31,6 +31,7 @@ from montblanc.impl.rime.v5.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.rime.v5.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.rime.v5.gpu.RimeSumCoherencies import RimeSumCoherencies
 from montblanc.impl.rime.v5.gpu.RimeReduction import RimeReduction
+from montblanc.impl.rime.v5.gpu.SersicChiSquaredGradient import SersicChiSquaredGradient
 
 from montblanc.impl.rime.v4.RimeSolver import RimeSolver as RimeSolverV4
 
@@ -64,11 +65,14 @@ class RimeSolver(MontblancCUDASolver):
             slvr_cfg[Options.E_BEAM_DEPTH],
             description='E cube nu depth')
 
+        self.enable_sersic_grad = slvr_cfg.get(Options.SERSIC_GRADIENT)
+
         self.rime_e_beam = RimeEBeam()
         self.rime_b_sqrt = RimeBSqrt()
         self.rime_ekb_sqrt = RimeEKBSqrt()
         self.rime_sum = RimeSumCoherencies()
         self.rime_reduce = RimeReduction()
+        self.rime_sersic_gradient = SersicChiSquaredGradient()
 
         from montblanc.impl.rime.v4.ant_pairs import monkey_patch_antenna_pairs
         monkey_patch_antenna_pairs(self)
@@ -136,6 +140,8 @@ class RimeSolver(MontblancCUDASolver):
             self.rime_ekb_sqrt.initialise(self)
             self.rime_sum.initialise(self)
             self.rime_reduce.initialise(self)
+            if self.enable_sersic_grad:
+                self.rime_sersic_gradient.initialise(self)
 
     def solve(self):
         with self.context:
@@ -144,6 +150,8 @@ class RimeSolver(MontblancCUDASolver):
             self.rime_ekb_sqrt.execute(self)
             self.rime_sum.execute(self)
             self.rime_reduce.execute(self)
+            if self.enable_sersic_grad:
+                self.rime_sersic_gradient.execute(self)
 
     def shutdown(self):
         with self.context:
@@ -152,3 +160,5 @@ class RimeSolver(MontblancCUDASolver):
             self.rime_ekb_sqrt.shutdown(self)
             self.rime_sum.shutdown(self)
             self.rime_reduce.shutdown(self)
+            if self.enable_sersic_grad:
+                self.rime_sersic_gradient.shutdown(self)

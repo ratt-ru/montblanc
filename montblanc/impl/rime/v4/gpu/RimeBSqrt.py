@@ -127,6 +127,59 @@ void rime_jones_B_sqrt_impl(
     B_sqrt[i] = B_square_root;
 }
 
+
+
+// Case NPOL = 1
+
+template <
+    typename T,
+    typename Tr=montblanc::kernel_traits<T>,
+    typename Po=montblanc::kernel_policies<T> >
+__device__
+void rime_jones1_B_sqrt_impl(
+    T * stokes,
+    T * alpha,
+    T * frequency,
+    T * ref_frequency,
+    typename Tr::ct * B_sqrt)
+{
+    int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
+    int TIME = blockIdx.y*blockDim.y + threadIdx.y;
+    int SRC = blockIdx.z*blockDim.z + threadIdx.z;
+
+    if(SRC >= DEXT(nsrc) || TIME >= DEXT(ntime) || POLCHAN >= DEXT(nchan))
+        { return; }
+
+    __shared__ T freq_ratio[BLOCKDIMX];
+
+    // TODO. Using 3 times more shared memory than we
+    // really require here, since there's only
+    // one frequency per channel.
+    if(threadIdx.y == 0 && threadIdx.z == 0)
+    {
+        freq_ratio[threadIdx.x] = frequency[POLCHAN] / 
+            ref_frequency[POLCHAN];
+    }
+
+    __syncthreads();
+
+    // Calculate the power term
+    int i = SRC*NTIME + TIME;
+    typename Tr::ft power = Po::pow(freq_ratio[threadIdx.x], alpha[i]);
+
+    // Read in the stokes parameter,
+    // multiplying it by the power term
+    typename Tr::ft pol = stokes[i]*power;
+
+    // Write out the square root of the brightness
+    i = (SRC*NTIME + TIME)*NPOLCHAN + POLCHAN;
+    B_sqrt[i].x = Po::sqrt(pol);
+    B_sqrt[i].y = 0.;
+}
+
+
+
+
 extern "C" {
 
 #define stamp_jones_B_sqrt_fn(ft,ct) \
@@ -142,8 +195,26 @@ rime_jones_B_sqrt_ ## ft( \
         frequency, ref_frequency, B_sqrt); \
 }
 
+#define stamp_jones1_B_sqrt_fn(ft,ct) \
+__global__ void \
+rime_jones1_B_sqrt_ ## ft( \
+    ft * stokes, \
+    ft * alpha, \
+    ft * frequency, \
+    ft * ref_frequency, \
+    ct * B_sqrt) \
+{ \
+    rime_jones1_B_sqrt_impl<ft>(stokes, alpha, \
+        frequency, ref_frequency, B_sqrt); \
+}
+
+
 stamp_jones_B_sqrt_fn(float,float2);
 stamp_jones_B_sqrt_fn(double,double2);
+
+stamp_jones1_B_sqrt_fn(float,float2);
+stamp_jones1_B_sqrt_fn(double,double2);
+
 
 } // extern "C" {
 """)
@@ -154,8 +225,8 @@ class RimeBSqrt(Node):
 
     def initialise(self, solver, stream=None):
         slvr = solver
-        nsrc, ntime, npolchan = slvr.dim_local_size(
-            'nsrc', 'ntime', 'npolchan')
+        nsrc, ntime, npolchan, npol = slvr.dim_local_size(
+            'nsrc', 'ntime', 'npolchan', 'npol')
 
         # Get a property dictionary off the solver
         D = slvr.template_dict()
@@ -171,9 +242,14 @@ class RimeBSqrt(Node):
         regs = str(FLOAT_PARAMS['maxregs'] \
                 if slvr.is_float() else DOUBLE_PARAMS['maxregs'])
 
-        kname = 'rime_jones_B_sqrt_float' \
-            if slvr.is_float() is True else \
-            'rime_jones_B_sqrt_double'
+        if npol == 1:
+            kname = 'rime_jones1_B_sqrt_float' \
+                if slvr.is_float() is True else \
+                'rime_jones1_B_sqrt_double'
+        else:
+            kname = 'rime_jones_B_sqrt_float' \
+                if slvr.is_float() is True else \
+                'rime_jones_B_sqrt_double'
 
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
 

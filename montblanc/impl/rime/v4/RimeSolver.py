@@ -30,14 +30,24 @@ from montblanc.impl.rime.v4.gpu.RimeEBeam import RimeEBeam
 from montblanc.impl.rime.v4.gpu.RimeBSqrt import RimeBSqrt
 from montblanc.impl.rime.v4.gpu.RimeEKBSqrt import RimeEKBSqrt
 from montblanc.impl.rime.v4.gpu.RimeSumCoherencies import RimeSumCoherencies
+from montblanc.impl.rime.v4.gpu.SersicChiSquaredGradient import SersicChiSquaredGradient
 
 from montblanc.pipeline import Pipeline
 
 def get_pipeline(slvr_cfg):
-    return Pipeline([RimeBSqrt(),
-        RimeEBeam(),
-        RimeEKBSqrt(),
-        RimeSumCoherencies()])
+    sersic_grad = slvr_cfg[Options.SERSIC_GRADIENT]
+
+    if (sersic_grad):
+        return Pipeline([RimeBSqrt(),
+            RimeEBeam(),
+            RimeEKBSqrt(),
+            RimeSumCoherencies(),
+            SersicChiSquaredGradient()])
+    else:
+        return Pipeline([RimeBSqrt(),
+            RimeEBeam(),
+            RimeEKBSqrt(),
+            RimeSumCoherencies()])
 
 class RimeSolver(MontblancCUDASolver):
     """ RIME Solver Implementation """

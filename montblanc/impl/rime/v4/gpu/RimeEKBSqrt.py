@@ -110,7 +110,6 @@ void rime_jones_EKBSqrt_impl(
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
     int TIME = blockIdx.z*blockDim.z + threadIdx.z;
-    #define POL (threadIdx.x & 0x3)
 
     if(TIME >= DEXT(ntime) || ANT >= DEXT(na) || POLCHAN >= DEXT(npolchan))
         return;
@@ -134,7 +133,13 @@ void rime_jones_EKBSqrt_impl(
 
     // Wavelengths vary by channel, not by time and antenna
     if(threadIdx.y == 0 && threadIdx.z == 0)
+    {
+      if (NPOL > 1)
         { freq[threadIdx.x] = frequency[POLCHAN>>2]; }
+      else
+        { freq[threadIdx.x] = frequency[POLCHAN]; }
+    }
+   
 
     __syncthreads();
 
@@ -168,7 +173,11 @@ void rime_jones_EKBSqrt_impl(
         i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
         // Load in the E Beam, and multiply it by KB
         typename Tr::ct J = jones[i];
-        montblanc::jones_multiply_4x4_in_place<T>(J, cplx_phase);
+        if (NPOL > 1)
+          montblanc::jones_multiply_4x4_in_place<T>(J, cplx_phase);
+        else
+          montblanc::complex_multiply_in_place<T>(J, cplx_phase);
+       
 
         // Write out the jones matrices
         i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
