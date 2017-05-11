@@ -168,7 +168,8 @@ def rime_solver(slvr_cfg):
     elif version == Options.VERSION_FIVE:
         from montblanc.impl.rime.v5.CompositeRimeSolver \
         import CompositeRimeSolver as RimeSolver
-        slvr_cfg[Options.CONTEXT] = __contexts
+        if slvr_cfg.get(Options.CONTEXT, None) is None: 
+            slvr_cfg[Options.CONTEXT] = __contexts
     else:
         raise ValueError('Invalid version %s' % version)
 
