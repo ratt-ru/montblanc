@@ -52,7 +52,7 @@ class RadioSourceProvider(SourceProvider):
         # Print the space of iteration
         montblanc.log.info(context.iter_args)
 
-        (ls, us) = context.dim_extent('npsrc')
+        (ls, us) = context.dim_extents('npsrc')
 
         lm[:,0] = 0.0008
         lm[:,1] = 0.0036
