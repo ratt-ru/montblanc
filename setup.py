@@ -18,6 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import json
 import logging
 import os
 import sys
@@ -92,6 +93,9 @@ try:
     cuda_version = device_info['cuda_version']
     log.info("CUDA '{}' found. "
         "Installing tensorflow GPU".format(cuda_version))
+
+    log.info("CUDA code will be compiled for the following devices:\n{}"
+                .format(json.dumps(device_info['devices'], indent=2)))
 
     # Download and install cub
     install_cub(mb_inc_path)
