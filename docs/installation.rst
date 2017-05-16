@@ -83,16 +83,15 @@ Pre-requisites
 Installing the package
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Set the `CUDA_PATH` so that the setup script can find CUDA:
+Set the ``CUDA_PATH`` so that the setup script can find CUDA:
 
 .. code:: bash
 
     $ export CUDA_PATH=/usr/local/cuda-8.0
 
-If `nvcc` is installed in `/usr/bin/nvcc` (as in a standard Ubuntu installation)
-or somewhere on your `PATH`, you can leave `CUDA_PATH` unset. In this case
-setup will infer the CUDA_PATH as `/usr`
-
+If ``nvcc`` is installed in ``/usr/bin/nvcc`` (as in a standard Ubuntu installation)
+or somewhere on your ``PATH``, you can leave ``CUDA_PATH`` unset. In this case
+setup will infer the CUDA_PATH as ``/usr``
 
 It is strongly recommended that you perform the install within a
 `Virtual Environment <venv>`_.
