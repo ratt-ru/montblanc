@@ -94,6 +94,10 @@ try:
     log.info("CUDA '{}' found. "
         "Installing tensorflow GPU".format(cuda_version))
 
+
+    log.info("CUDA installation settings:\n{}"
+                .format(json.dumps(nvcc_settings, indent=2)))
+
     log.info("CUDA code will be compiled for the following devices:\n{}"
                 .format(json.dumps(device_info['devices'], indent=2)))
 
