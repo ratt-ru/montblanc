@@ -217,8 +217,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
         session_config = tf.ConfigProto(allow_soft_placement=True)
 
-        self._tf_session = tf.Session(tf_server_target,
-            graph=compute_graph, config=session_config)
+        self._tf_session = tf.Session(tf_server_target, graph=compute_graph,
+                                                        config=session_config)
         self._tf_session.run(init_op)
 
         #======================
