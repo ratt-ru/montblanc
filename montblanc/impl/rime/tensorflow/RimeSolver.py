@@ -342,15 +342,18 @@ class RimeSolver(MontblancTensorflowSolver):
         # Iterate through the hypercube space
         for i, iter_cube in enumerate(cube.cube_iter(*iter_args)):
             descriptor = self._transcoder.encode(iter_cube.dimensions(copy=False))
-            feed_dict = {LSA.descriptor.placeholders[0] : descriptor }
-            montblanc.log.debug('Encoding {i} {d}'.format(i=i, d=descriptor))
+            descriptor.flags.writeable = False
+            feed_dict = {LSA.descriptor.placeholders[0] : descriptor,
+                        LSA.descriptor.key_placeholder : i }
+            montblanc.log.info('Encoding {i} {d} {h}'.format(i=i, d=descriptor, h=i))
             session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
             descriptors_fed += 1
 
         montblanc.log.info("Done feeding {n} descriptors.".format(
             n=descriptors_fed))
 
-        feed_dict = {LSA.descriptor.placeholders[0] : [-1] }
+        feed_dict = {LSA.descriptor.placeholders[0] : [-1],
+                    LSA.descriptor.key_placeholder : i+1 }
         session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
 
     def _feed(self, cube, data_sources, data_sinks, global_iter_args):
@@ -388,7 +391,7 @@ class RimeSolver(MontblancTensorflowSolver):
         while True:
             try:
                 # Get the descriptor describing a portion of the RIME
-                result = session.run(LSA.descriptor.get_op)
+                key, result = session.run(LSA.descriptor.pop_op)
                 descriptor = result['descriptor']
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
@@ -408,7 +411,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
             feed_f = self._feed_executors[shard].submit(self._feed_actual,
                 data_sources.copy(), cube.copy(),
-                descriptor, shard,
+                key, descriptor, shard,
                 src_types, src_strides, src_staging_areas[shard],
                 global_iter_args)
 
@@ -434,7 +437,7 @@ class RimeSolver(MontblancTensorflowSolver):
             raise
 
     def _feed_actual_impl(self, data_sources, cube,
-            descriptor, shard,
+            key, descriptor, shard,
             src_types, src_strides, src_staging_areas,
             global_iter_args):
 
@@ -472,13 +475,16 @@ class RimeSolver(MontblancTensorflowSolver):
         # Create a feed dictionary from the input data
         feed_dict = { ph: data for (a, ph, data) in input_data }
 
+        # Add the key to insert
+        feed_dict[iq.key_placeholder] = key
+
         # Cache the inputs for this chunk of data,
         # so that sinks can access them
         input_cache = { a: data for (a, ph, data) in input_data }
         self._source_cache[descriptor.data] = input_cache
 
-        montblanc.log.info("Enqueueing chunk {d} on shard {sh}".format(
-            d=descriptor, sh=shard))
+        montblanc.log.info("Enqueueing chunk {h} {d} on shard {sh}".format(
+            d=descriptor, h=key, sh=shard))
 
         self._tfrun(iq.put_op, feed_dict=feed_dict)
 
@@ -490,7 +496,6 @@ class RimeSolver(MontblancTensorflowSolver):
             for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args)):
                 cube.update_dimensions(dim_desc)
                 s = dim_desc[0]['upper_extent'] - dim_desc[0]['lower_extent']
-
 
                 montblanc.log.info("'{ci}: Enqueueing {d} '{s}' '{t}' sources "
                     "on shard {sh}".format(d=descriptor,
@@ -847,7 +852,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     #=====================================
 
     local.descriptor = create_staging_area_wrapper('descriptors',
-        ['descriptor'], dfs)
+        ['descriptor'], dfs, ordered=True)
 
     #===========================================
     # Staging area for multiply fed data sources
@@ -876,7 +881,11 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     #======================================
 
     local.output = create_staging_area_wrapper('output',
+<<<<<<< ff50bc1313b4e1e114754b48783dd9bdf644a360
         ['descriptor', 'model_vis', 'chi_squared'], dfs)
+=======
+        ['descriptor', 'model_vis'], dfs, ordered=True)
+>>>>>>> Use MapStagingArea
 
     #=================================================
     # Create tensorflow variables which are
@@ -1088,7 +1097,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
             D.antenna1, D.antenna2, D.direction_independent_effects, D.flag,
             D.weight, D.model_vis, summed_coherencies, D.observed_vis)
 
-    # Create enstaging_area operation
+    # Create staging_area put operation
     put_op = LSA.output.put_from_list([D.descriptor, model_vis, chi_squared])
 
     # Return descriptor and enstaging_area operation
