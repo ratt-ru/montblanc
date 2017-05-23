@@ -112,22 +112,13 @@ class RimeSolver(MontblancTensorflowSolver):
         cube.register_properties(_massage_dtypes(P, T))
         cube.register_arrays(_massage_dtypes(A, T))
 
-        #==========================================
-        # Tensorflow Session and Thread Coordinator
-        #==========================================
-
-        # Create the tensorflow session object
-        # Use supplied target, if present
-        tf_server_target = slvr_cfg.get('tf_server_target', '')
-        self._tf_session = tf.Session(tf_server_target)
+        #=======================
+        # Data Sources and Sinks
+        #=======================
 
         # Get the defaults data source (default or test data)
         data_source = slvr_cfg.get(Options.DATA_SOURCE)
         montblanc.log.info("Defaults Data Source '{}'".format(data_source))
-
-        #=======================
-        # Data Sources and Sinks
-        #=======================
 
         # Construct list of data sources and sinks
         # internal to the solver.
@@ -241,6 +232,10 @@ class RimeSolver(MontblancTensorflowSolver):
         #==========================================
         # Tensorflow Session
         #==========================================
+
+        # Create the tensorflow session object
+        # Use supplied target, if present
+        tf_server_target = slvr_cfg.get('tf_server_target', '')
 
         montblanc.log.debug("Attaching session to tensorflow server "
             "'{tfs}'".format(tfs=tf_server_target))
