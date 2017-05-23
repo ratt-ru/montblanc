@@ -49,6 +49,7 @@ from .init_context import InitialisationContext
 ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 
 QUEUE_SIZE = 10
+FEED_ONCE_KEY = 0
 
 rime = load_tf_lib()
 
@@ -342,9 +343,8 @@ class RimeSolver(MontblancTensorflowSolver):
         # Iterate through the hypercube space
         for i, iter_cube in enumerate(cube.cube_iter(*iter_args)):
             descriptor = self._transcoder.encode(iter_cube.dimensions(copy=False))
-            descriptor.flags.writeable = False
             feed_dict = {LSA.descriptor.placeholders[0] : descriptor,
-                        LSA.descriptor.key_placeholder : i }
+                        LSA.descriptor.put_key_ph : i }
             montblanc.log.info('Encoding {i} {d} {h}'.format(i=i, d=descriptor, h=i))
             session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
             descriptors_fed += 1
@@ -352,8 +352,9 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.info("Done feeding {n} descriptors.".format(
             n=descriptors_fed))
 
+        # Indicate EOF
         feed_dict = {LSA.descriptor.placeholders[0] : [-1],
-                    LSA.descriptor.key_placeholder : i+1 }
+                    LSA.descriptor.put_key_ph : i+1 }
         session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
 
     def _feed(self, cube, data_sources, data_sinks, global_iter_args):
@@ -476,7 +477,7 @@ class RimeSolver(MontblancTensorflowSolver):
         feed_dict = { ph: data for (a, ph, data) in input_data }
 
         # Add the key to insert
-        feed_dict[iq.key_placeholder] = key
+        feed_dict[iq.put_key_ph] = key
 
         # Cache the inputs for this chunk of data,
         # so that sinks can access them
@@ -517,6 +518,8 @@ class RimeSolver(MontblancTensorflowSolver):
                         ad.shape, ad.dtype))
                     for (a, ph, ds, ad) in gen }
 
+                # Add the key to insert
+                feed_dict[staging_area.put_key_ph] = key + hash(chunk_i)
                 self._tfrun(staging_area.put_op, feed_dict=feed_dict)
 
     def _compute(self, feed_dict, shard):
@@ -610,6 +613,8 @@ class RimeSolver(MontblancTensorflowSolver):
             self._previous_budget_dims, self._previous_budget = (
                 _budget(self.hypercube, self.config()))
 
+        self._run_metadata.clear()
+
         # Determine the global iteration arguments
         # e.g. [('ntime', 100), ('nbl', 20)]
         global_iter_args = _iter_args(self._iter_dims, self.hypercube)
@@ -644,21 +649,29 @@ class RimeSolver(MontblancTensorflowSolver):
             for n, f in prov.sinks().iteritems()
             if not n == 'descriptor' }
 
-        # Construct a feed dictionary from data sources
-        feed_dict = {  fo.ph: _get_data(data_sources[k],
-                SourceContext(k, cube,
-                    self.config(), global_iter_args,
-                    cube.array(k) if k in cube.arrays() else {},
-                    array_schemas[k].shape,
-                    array_schemas[k].dtype))
-            for k, fo
-            in LSA.feed_once.iteritems() }
+        # Generate (name, placeholder, datasource, array schema)
+        # for the arrays required by each staging_area
+        gen = ((a, ph, data_sources[a], array_schemas[a])
+            for ph, a in zip(LSA.feed_once.placeholders,
+                             LSA.feed_once.fed_arrays))
 
-        self._run_metadata.clear()
+        # Get input data by calling the data source functors
+        input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
+                self.config(), global_iter_args,
+                cube.array(a) if a in cube.arrays() else {},
+                ad.shape, ad.dtype)))
+            for (a, ph, ds, ad) in gen]
 
-        # Run the assign operations for each feed_once variable
-        assign_ops = [fo.assign_op.op for fo in LSA.feed_once.itervalues()]
-        self._tfrun(assign_ops, feed_dict=feed_dict)
+        # Create a feed dictionary from the input data
+        feed_dict = { ph: data for (a, ph, data) in input_data }
+        # Add the key to insert
+        feed_dict[LSA.feed_once.put_key_ph] = FEED_ONCE_KEY
+            # self._tfrun()
+
+        # Clear all staging areas and populate the
+        # feed once staging area
+        clear_ops = [sa.clear_op for sa in LSA.all_staging_areas]
+        self._tfrun(clear_ops + [LSA.feed_once.put_op], feed_dict=feed_dict)
 
         try:
             # Run the descriptor executor immediately
@@ -726,6 +739,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
             self._iterations += 1
         finally:
+
             # Indicate solution stopped in providers
             ctx = StopContext(self.hypercube, self.config(), global_iter_args)
             for p in itertools.chain(source_providers, sink_providers):
@@ -886,32 +900,6 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
 =======
         ['descriptor', 'model_vis'], dfs, ordered=True)
 >>>>>>> Use MapStagingArea
-
-    #=================================================
-    # Create tensorflow variables which are
-    # fed only once via an assign operation
-    #=================================================
-
-    def _make_feed_once_tuple(array):
-        dtype = dfs[array.name].dtype
-
-        ph = tf.placeholder(dtype=dtype,
-            name=a.name + "_placeholder")
-
-        var = tf.Variable(tf.zeros(shape=(1,), dtype=dtype),
-            validate_shape=False,
-            name=array.name)
-
-        op = tf.assign(var, ph, validate_shape=False)
-        #op = tf.Print(op, [tf.shape(var), tf.shape(op)],
-        #    message="Assigning {}".format(array.name))
-
-        return FeedOnce(ph, var, op)
-
-    # Create placeholders, variables and assign operators
-    # for data sources that we will only feed once
-    local.feed_once = { a.name : _make_feed_once_tuple(a)
-                                     for a in feed_once }
 
     #=======================================================
     # Construct the list of data sources that need feeding
