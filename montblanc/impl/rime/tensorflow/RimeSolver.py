@@ -318,11 +318,36 @@ class RimeSolver(MontblancTensorflowSolver):
                         f.write(tl.generate_chrome_trace_format())
                         f.write('\n')
 
+        #============================
+        # Wrap tensorflow Session.run
+        #============================
 
-        self._should_trace = should_trace = False
-        self._trace_level = tf.RunOptions.FULL_TRACE if should_trace else tf.RunOptions.NO_TRACE
-        self._run_options = tf.RunOptions(trace_level=self._trace_level)
+        self._should_trace = False
         self._run_metadata = RunMetaData()
+
+        def _tfrunner(session, should_trace=False):
+            """ Wrap the tensorflow Session.run method """
+            trace_level = (tf.RunOptions.FULL_TRACE if should_trace
+                                            else tf.RunOptions.NO_TRACE)
+            options = tf.RunOptions(trace_level=trace_level)
+
+            def _runner(*args, **kwargs):
+                """ Pass options through """
+                return session.run(*args, options=options, **kwargs)
+
+            def _meta_runner(*args, **kwargs):
+                """ Aggregate run metadata for each run """
+                try:
+                    run_metadata = tf.RunMetadata()
+                    return session.run(*args, options=options,
+                                              run_metadata=run_metadata,
+                                            **kwargs)
+                finally:
+                    self._run_metadata.save(run_metadata)
+
+            return _meta_runner if should_trace else _runner
+
+        self._tfrun = _tfrunner(self._tf_session, self._should_trace)
         self._iterations = 0
 
     def _descriptor_feed(self):
@@ -484,11 +509,7 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.info("Enqueueing chunk {d} on shard {sh}".format(
             d=descriptor, sh=shard))
 
-        run_metadata = tf.RunMetadata()
-        session.run(iq.put_op, feed_dict=feed_dict,
-            options=self._run_options,
-            run_metadata=run_metadata)
-        self._run_metadata.save(run_metadata)
+        self._tfrun(iq.put_op, feed_dict=feed_dict)
 
         # For each source type, feed that source staging_area
         for src_type, staging_area, stride in zip(src_types, src_staging_areas, src_strides):
@@ -520,27 +541,14 @@ class RimeSolver(MontblancTensorflowSolver):
                         ad.shape, ad.dtype))
                     for (a, ph, ds, ad) in gen }
 
-                run_metadata = tf.RunMetadata()
-                session.run(staging_area.put_op, feed_dict=feed_dict,
-                    options=self._run_options,
-                    run_metadata=run_metadata)
-                self._run_metadata.save(run_metadata)
+                self._tfrun(staging_area.put_op, feed_dict=feed_dict)
 
     def _compute(self, feed_dict, shard):
         """ Call the tensorflow compute """
 
         try:
-            run_metadata = tf.RunMetadata()
-
-            descriptor, enq = self._tf_session.run(
-                self._tf_expr[shard],
-                feed_dict=feed_dict,
-                options=self._run_options,
-                run_metadata=run_metadata)
-
+            descriptor, enq = self._tfrun(self._tf_expr[shard], feed_dict=feed_dict)
             self._inputs_waiting.decrement(shard)
-
-            self._run_metadata.save(run_metadata)
 
         except Exception as e:
             montblanc.log.exception("Compute Exception")
@@ -559,11 +567,7 @@ class RimeSolver(MontblancTensorflowSolver):
         """ Consume """
 
         LSA = self._tf_feed_data.local
-        run_metadata = tf.RunMetadata()
-        output = self._tf_session.run(LSA.output.get_op,
-            options=self._run_options,
-            run_metadata=run_metadata)
-        self._run_metadata.save(run_metadata)
+        output = self._tfrun(LSA.output.get_op)
 
         # Expect the descriptor in the first tuple position
         assert len(output) > 0
@@ -665,11 +669,8 @@ class RimeSolver(MontblancTensorflowSolver):
         self._run_metadata.clear()
 
         # Run the assign operations for each feed_once variable
-        run_metadata = tf.RunMetadata()
         assign_ops = [fo.assign_op.op for fo in LSA.feed_once.itervalues()]
-        self._tf_session.run(assign_ops, feed_dict=feed_dict,
-            options=self._run_options, run_metadata=run_metadata)
-        self._run_metadata.save(run_metadata)
+        self._tfrun(assign_ops, feed_dict=feed_dict)
 
         try:
             # Run the descriptor executor immediately
