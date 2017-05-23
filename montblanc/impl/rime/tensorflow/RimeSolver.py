@@ -911,7 +911,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     # Create placeholders, variables and assign operators
     # for data sources that we will only feed once
     local.feed_once = { a.name : _make_feed_once_tuple(a)
-        for a in feed_once }
+                                     for a in feed_once }
 
     #=======================================================
     # Construct the list of data sources that need feeding
