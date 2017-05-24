@@ -654,6 +654,7 @@ class RimeSolver(MontblancTensorflowSolver):
         gen = ((a, ph, data_sources[a], array_schemas[a])
             for ph, a in zip(LSA.feed_once.placeholders,
                              LSA.feed_once.fed_arrays))
+<<<<<<< 2ae994303ba80da37ae652eb3a0f37d4447341e8
 
         # Get input data by calling the data source functors
         input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
@@ -662,6 +663,16 @@ class RimeSolver(MontblancTensorflowSolver):
                 ad.shape, ad.dtype)))
             for (a, ph, ds, ad) in gen]
 
+=======
+
+        # Get input data by calling the data source functors
+        input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
+                self.config(), global_iter_args,
+                cube.array(a) if a in cube.arrays() else {},
+                ad.shape, ad.dtype)))
+            for (a, ph, ds, ad) in gen]
+
+>>>>>>> Use staging area for feed once variables
         # Create a feed dictionary from the input data
         feed_dict = { ph: data for (a, ph, data) in input_data }
         # Add the key to insert
