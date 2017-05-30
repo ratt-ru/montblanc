@@ -941,8 +941,8 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
     # Pull RIME inputs out of the feed staging_area
     # of the relevant shard, adding the feed once
     # inputs to the dictionary
-    D = LSA.feed_many[shard].get_to_attrdict()
-    D.update({k: fo.var for k, fo in LSA.feed_once.iteritems()})
+    key, D = LSA.feed_many[shard].get_to_attrdict()
+    D.update(LSA.feed_once.peek(FEED_ONCE_KEY))
 
     with tf.device(device):
         # Infer chunk dimensions
