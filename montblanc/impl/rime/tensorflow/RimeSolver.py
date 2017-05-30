@@ -196,10 +196,14 @@ class RimeSolver(MontblancTensorflowSolver):
         from tensorflow.python.client import device_lib
         devices = device_lib.list_local_devices()
 
+        device_type = slvr_cfg.get('device_type', 'GPU').upper()
+
         gpus = [d.name for d in devices if d.device_type == 'GPU']
         cpus = [d.name for d in devices if d.device_type == 'CPU']
 
-        self._devices = cpus if len(gpus) == 0 else gpus
+        use_cpus = device_type == 'CPU' or len(gpus) == 0
+        montblanc.log.info("Using '{}' devices for compute".format(device_type))
+        self._devices = cpus if use_cpus else gpus
         self._shards_per_device = spd = 2
         self._nr_of_shards = shards = len(self._devices)*spd
         # shard_id == d*spd + shard
