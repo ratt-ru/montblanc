@@ -57,8 +57,6 @@ DataSource = attr.make_class("DataSource", ['source', 'dtype', 'name'],
     slots=True, frozen=True)
 DataSink = attr.make_class("DataSink", ['sink', 'name'],
     slots=True, frozen=True)
-FeedOnce = attr.make_class("FeedOnce", ['ph', 'var', 'assign_op'],
-    slots=True, frozen=True)
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
