@@ -54,6 +54,10 @@ def source_nr_vars():
     """ Returns a list of registered source number variables """
     return SOURCE_VAR_TYPES.values()
 
+def source_var_types():
+    """ Returns a mapping of source type to number variable """
+    return SOURCE_VAR_TYPES
+
 def default_sources(**kwargs):
     """
     Returns a dictionary mapping source types

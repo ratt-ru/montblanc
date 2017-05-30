@@ -369,9 +369,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
-        src_types = LSA.src_staging_areas.keys()
+        src_types = LSA.sources.keys()
         src_strides = [int(i) for i in cube.dim_extent_size(*src_types)]
-        src_staging_areas = [[LSA.src_staging_areas[t][s] for t in src_types]
+        src_staging_areas = [[LSA.sources[t][s] for t in src_types]
             for s in range(self._nr_of_shards)]
 
         compute_feed_dict = { ph: cube.dim_global_size(n) for
@@ -439,7 +439,7 @@ class RimeSolver(MontblancTensorflowSolver):
             global_iter_args):
 
         session = self._tf_session
-        iq = self._tf_feed_data.local.input[shard]
+        iq = self._tf_feed_data.local.feed_many[shard]
 
         # Decode the descriptor and update our cube dimensions
         dims = self._transcoder.decode(descriptor)
@@ -849,52 +849,78 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     input_arrays = [a for a in cube.arrays().itervalues()
                     if 'input' in a.tags]
 
-    def _partition(pred, iterable):
-        t1, t2 = itertools.tee(iterable)
-        return (itertools.ifilterfalse(pred, t1),
-            itertools.ifilter(pred, t2))
+    from montblanc.src_types import source_var_types
 
-    # Convert to set
-    iter_dims = set(iter_dims)
+    def _partition(iter_dims, data_sources):
+        """
+        Partition data sources into
 
-    iterating = lambda a: len(iter_dims.intersection(a.shape)) > 0
-    feed_once, feed_many = _partition(iterating, input_arrays)
-    feed_once, feed_many = list(feed_once), list(feed_many)
+        1. Dictionary of data sources associated with radio sources.
+        2. List of data sources to feed multiple times.
+        3. List of data sources to feed once.
+        """
 
-    #======================================
-    # Create tensorflow staging_areas which
-    # require feeding multiple times
-    #======================================
+        src_nr_vars = set(source_var_types().values())
+        iter_dims = set(iter_dims)
 
-    # Create the staging_area feeding descriptors into the system
+        src_data_sources = collections.defaultdict(list)
+        feed_many = []
+        feed_once = []
+
+        for ds in data_sources:
+            # Is this data source associated with
+            # a radio source (point, gaussian, etc.?)
+            src_int = src_nr_vars.intersection(ds.shape)
+
+            if len(src_int) > 1:
+                raise ValueError("Data source '{}' contains multiple "
+                                "source types '{}'".format(ds.name, src_int))
+            elif len(src_int) == 1:
+                # Yep, record appropriately and iterate
+                src_data_sources[src_int.pop()].append(ds)
+                continue
+
+            # Are we feeding this data source multiple times
+            # (Does it possess dimensions on which we iterate?)
+            if len(iter_dims.intersection(ds.shape)) > 0:
+                feed_many.append(ds)
+                continue
+
+            # Assume this is a data source that we only feed once
+            feed_once.append(ds)
+
+        return src_data_sources, feed_many, feed_once
+
+    src_data_sources, feed_many, feed_once = _partition(iter_dims,
+                                                        input_arrays)
+
+    #=====================================
+    # Descriptor staging area
+    #=====================================
+
     local.descriptor = create_staging_area_wrapper('descriptors',
         ['descriptor'], dfs)
 
-    # Create the staging_area for holding the input
-    local.input = [create_staging_area_wrapper('input_%d' % i,
+    #===========================================
+    # Staging area for multiply fed data sources
+    #===========================================
+
+    # Create the staging_area for holding the feed many input
+    local.feed_many = [create_staging_area_wrapper('feed_many_%d' % i,
                 ['descriptor'] + [a.name for a in feed_many], dfs)
             for i in range(nr_of_input_staging_areas)]
 
-    # Create source input staging_areas
-    local.point_source = [create_staging_area_wrapper('point_source_%d' % i,
-        ['point_lm', 'point_stokes', 'point_alpha'], dfs)
-        for i in range(nr_of_input_staging_areas)]
+    #=================================================
+    # Staging areas for each radio source data sources
+    #=================================================
 
-    local.gaussian_source = [create_staging_area_wrapper('gaussian_source_%d' % i,
-        ['gaussian_lm', 'gaussian_stokes', 'gaussian_alpha',
-            'gaussian_shape'], dfs)
-        for i in range(nr_of_input_staging_areas)]
+    # Create the source array staging areas
+    local.sources = { src_nr_var: [
+            create_staging_area_wrapper('%s_%d' % (src_type, i),
+            [a.name for a in src_data_sources[src_nr_var]], dfs)
+            for i in range(nr_of_input_staging_areas)]
 
-    local.sersic_source = [create_staging_area_wrapper('sersic_source_%d' % i,
-        ['sersic_lm', 'sersic_stokes', 'sersic_alpha',
-            'sersic_shape'], dfs)
-        for i in range(nr_of_input_staging_areas)]
-
-    # Source staging_areas to feed
-    local.src_staging_areas = src_staging_areas = {
-        'npsrc' : local.point_source,
-        'ngsrc' : local.gaussian_source,
-        'nssrc' : local.sersic_source,
+        for src_type, src_nr_var in source_var_types().iteritems()
     }
 
     #======================================
@@ -935,10 +961,10 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     #=======================================================
 
     # Data sources from input staging_areas
-    input_staging_areas = local.input + [q for sq in src_staging_areas.values() for q in sq]
-    input_sources = { a for q in input_staging_areas
-        for a in q.fed_arrays}
-
+    src_sa = [q for sq in local.sources.values() for q in sq]
+    all_staging_areas = local.feed_many + src_sa
+    input_sources = { a for q in all_staging_areas
+                        for a in q.fed_arrays}
     # Data sources from feed once variables
     input_sources.update(local.feed_once.keys())
 
@@ -955,8 +981,9 @@ def _construct_tensorflow_expression(feed_data, device, shard):
     LSA = feed_data.local
 
     # Pull RIME inputs out of the feed staging_area
-    # of the relevant shard
-    D = LSA.input[shard].get_to_attrdict()
+    # of the relevant shard, adding the feed once
+    # inputs to the dictionary
+    D = LSA.feed_many[shard].get_to_attrdict()
     D.update({k: fo.var for k, fo in LSA.feed_once.iteritems()})
 
     # Infer chunk dimensions
@@ -1021,7 +1048,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
     # While loop bodies
     def point_body(coherencies, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
-        lm, stokes, alpha = LSA.point_source[shard].get_to_list()
+        lm, stokes, alpha = LSA.sources['npsrc'][shard].get_to_list()
 
         # Maintain source counts
         nsrc = tf.shape(lm)[0]
@@ -1037,7 +1064,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
     def gaussian_body(coherencies, ngsrc, src_count):
         """ Accumulate coherencies for gaussian source batch """
-        lm, stokes, alpha, gauss_params = LSA.gaussian_source[shard].get_to_list()
+        lm, stokes, alpha, gauss_params = LSA.sources['ngsrc'][shard].get_to_list()
 
         # Maintain source counts
         nsrc = tf.shape(lm)[0]
@@ -1054,7 +1081,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
     def sersic_body(coherencies, nssrc, src_count):
         """ Accumulate coherencies for sersic source batch """
-        lm, stokes, alpha, sersic_params = LSA.sersic_source[shard].get_to_list()
+        lm, stokes, alpha, sersic_params = LSA.sources['nssrc'][shard].get_to_list()
 
         # Maintain source counts
         nsrc = tf.shape(lm)[0]
