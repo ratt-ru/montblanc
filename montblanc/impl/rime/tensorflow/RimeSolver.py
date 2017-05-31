@@ -675,12 +675,11 @@ class RimeSolver(MontblancTensorflowSolver):
         feed_dict = { ph: data for (a, ph, data) in input_data }
         # Add the key to insert
         feed_dict[LSA.feed_once.put_key_ph] = FEED_ONCE_KEY
-            # self._tfrun()
 
         # Clear all staging areas and populate the
         # feed once staging area
-        clear_ops = [sa.clear_op for sa in LSA.all_staging_areas]
-        self._tfrun(clear_ops + [LSA.feed_once.put_op], feed_dict=feed_dict)
+        self._tfrun([sa.clear_op for sa in LSA.all_staging_areas])
+        self._tfrun(LSA.feed_once.put_op, feed_dict=feed_dict)
 
         try:
             # Run the descriptor executor immediately
