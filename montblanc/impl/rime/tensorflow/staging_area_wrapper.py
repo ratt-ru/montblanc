@@ -33,6 +33,7 @@ class StagingAreaWrapper(object):
         self._peek_op = sa.get(self._peek_key_ph)
         self._pop_op = sa.get()
         self._clear_op = sa.clear()
+        self._size_op = sa.size()
 
     @property
     def staging_area(self):
@@ -98,6 +99,10 @@ class StagingAreaWrapper(object):
     @property
     def clear_op(self):
         return self._clear_op
+
+    @property
+    def size_op(self):
+        return self._size_op
 
 def create_staging_area_wrapper(name, fed_arrays, data_source, *args, **kwargs):
     return StagingAreaWrapper(name, fed_arrays, data_source, *args, **kwargs)
