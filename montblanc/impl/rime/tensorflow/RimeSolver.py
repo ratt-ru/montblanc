@@ -517,9 +517,7 @@ class RimeSolver(MontblancTensorflowSolver):
         """ Call the tensorflow compute """
 
         try:
-            montblanc.log.info("Computing {}".format(dev_id))
             descriptor, enq = self._tfrun(self._tf_expr[dev_id], feed_dict=feed_dict)
-            montblanc.log.info("Done Computing {}".format(dev_id))
             self._inputs_waiting.decrement(dev_id)
 
         except Exception as e:
