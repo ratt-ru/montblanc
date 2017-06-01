@@ -186,8 +186,8 @@ class RimeSolver(MontblancTensorflowSolver):
         with tf.Graph().as_default() as compute_graph:
             # Create our data feeding structure containing
             # input/output staging_areas and feed once variables
-            self._tf_feed_data = _construct_tensorflow_feed_data(
-                dfs, cube, self._iter_dims, ndevices)
+            self._tf_feed_data = _construct_tensorflow_staging_areas(
+                dfs, cube, self._iter_dims, self._devices)
 
             # Construct tensorflow expressions for each device
             self._tf_expr = [_construct_tensorflow_expression(
@@ -363,13 +363,13 @@ class RimeSolver(MontblancTensorflowSolver):
         """ Implementation of staging_area feeding """
         session = self._tf_session
         FD = self._tf_feed_data
-        LSA = FD.local_cpu
+        LSA = FD.local_compute
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
         src_types = LSA.sources[0].keys()
         src_strides = [int(i) for i in cube.dim_extent_size(*src_types)]
-        src_staging_areas = [[LSA.sources[t][d] for t in src_types]
+        src_staging_areas = [[LSA.sources[d][st] for st in src_types]
             for d in range(self._ndevices)]
 
         compute_feed_dict = { ph: cube.dim_global_size(n) for
@@ -434,7 +434,7 @@ class RimeSolver(MontblancTensorflowSolver):
             src_types, src_strides, src_staging_areas,
             global_iter_args):
 
-        iq = self._tf_feed_data.local_cpu.feed_many[dev_id]
+        iq = self._tf_feed_data.local_compute.feed_many[dev_id]
 
         # Decode the descriptor and update our cube dimensions
         dims = self._transcoder.decode(descriptor)
@@ -517,7 +517,9 @@ class RimeSolver(MontblancTensorflowSolver):
         """ Call the tensorflow compute """
 
         try:
+            montblanc.log.info("Computing {}".format(dev_id))
             descriptor, enq = self._tfrun(self._tf_expr[dev_id], feed_dict=feed_dict)
+            montblanc.log.info("Done Computing {}".format(dev_id))
             self._inputs_waiting.decrement(dev_id)
 
         except Exception as e:
@@ -536,7 +538,7 @@ class RimeSolver(MontblancTensorflowSolver):
     def _consume_impl(self, data_sinks, cube, global_iter_args):
         """ Consume """
 
-        LSA = self._tf_feed_data.local_cpu
+        LSA = self._tf_feed_data.local_compute
         key, output = self._tfrun(LSA.output.pop_op)
 
         # Expect the descriptor in the first tuple position
@@ -627,8 +629,9 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct data sources from those supplied by the
         # source providers, if they're associated with
         # input sources
-        LSA = self._tf_feed_data.local_cpu
-        input_sources = LSA.input_sources
+        LSA = self._tf_feed_data.local_compute
+        input_sources = self._tf_feed_data.local_cpu.input_sources
+        all_staging_areas = self._tf_feed_data.local_cpu.all_staging_areas
         data_sources = {n: DataSource(f, cube.array(n).dtype, prov.name())
             for prov in source_providers
             for n, f in prov.sources().iteritems()
@@ -643,8 +646,8 @@ class RimeSolver(MontblancTensorflowSolver):
         # Generate (name, placeholder, datasource, array schema)
         # for the arrays required by each staging_area
         gen = ((a, ph, data_sources[a], array_schemas[a])
-            for ph, a in zip(LSA.feed_once.placeholders,
-                             LSA.feed_once.fed_arrays))
+            for ph, a in zip(LSA.feed_once[0].placeholders,
+                             LSA.feed_once[0].fed_arrays))
 
         # Get input data by calling the data source functors
         input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
@@ -656,12 +659,12 @@ class RimeSolver(MontblancTensorflowSolver):
         # Create a feed dictionary from the input data
         feed_dict = { ph: data for (a, ph, data) in input_data }
         # Add the key to insert
-        feed_dict[LSA.feed_once.put_key_ph] = FEED_ONCE_KEY
+        feed_dict[LSA.feed_once[0].put_key_ph] = FEED_ONCE_KEY
 
         # Clear all staging areas and populate the
         # feed once staging area
-        self._tfrun([sa.clear_op for sa in LSA.all_staging_areas])
-        self._tfrun(LSA.feed_once.put_op, feed_dict=feed_dict)
+        self._tfrun([sa.clear_op for sa in all_staging_areas])
+        self._tfrun(LSA.feed_once[0].put_op, feed_dict=feed_dict)
 
         try:
             # Run the descriptor executor immediately
@@ -819,15 +822,19 @@ def _create_defaults_source_provider(cube, data_source):
 
     return default_prov
 
-def _construct_tensorflow_feed_data(dfs, cube, iter_dims, ndevices):
+def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
 
     FD = AttrDict()
     # https://github.com/bcj/AttrDict/issues/34
     FD._setattr('_sequence_type', list)
-    # Reference local staging_areas
+
+    # Reference local staging_areas on the CPU
     FD.local_cpu = local_cpu = AttrDict()
-    # https://github.com/bcj/AttrDict/issues/34
     local_cpu._setattr('_sequence_type', list)
+
+    # Reference local staging areas on compute device (GPUs)
+    FD.local_compute = local_compute = AttrDict()
+    local_compute._setattr('_sequence_type', list)
 
     # Create placholder variables for source counts
     FD.src_ph_vars = AttrDict({
@@ -861,28 +868,53 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims, ndevices):
     # Staging area for fed once data sources
     #======================================
 
-    local_cpu.feed_once = create_staging_area_wrapper('feed_once',
+    local_cpu.feed_once = create_staging_area_wrapper('feed_once_cpu',
         [a.name for a in feed_once], dfs)
+
+    # Create the staging_areas on the compute devices
+    staging_areas = []
+
+    for i, dev in enumerate(devices):
+        with tf.device(dev):
+            saw = create_staging_area_wrapper(
+                'feed_once_compute_%d' % i,
+                [a.name for a in feed_once],
+                dfs, ordered=True)
+            staging_areas.append(saw)
+
+    local_compute.feed_once = staging_areas
 
     #===========================================
     # Staging area for multiply fed data sources
     #===========================================
 
     # Create the staging_area for holding the feed many input
-    local_cpu.feed_many = [create_staging_area_wrapper('feed_many_%d' % i,
-                ['descriptor'] + [a.name for a in feed_many], dfs,
-                            ordered=True)
-                       for i in range(ndevices)]
+    local_cpu.feed_many = create_staging_area_wrapper(
+                'feed_many_cpu',
+                ['descriptor'] + [a.name for a in feed_many],
+                dfs, ordered=True)
+
+    # Create the staging_areas on the compute devices
+    staging_areas = []
+
+    for i, dev in enumerate(devices):
+        with tf.device(dev):
+            saw = create_staging_area_wrapper(
+                'feed_many_compute_%d' % i,
+                ['descriptor'] + [a.name for a in feed_many],
+                dfs, ordered=True)
+            staging_areas.append(saw)
+
+    local_compute.feed_many = staging_areas
 
     #=================================================
     # Staging areas for each radio source data sources
     #=================================================
 
     # Create the source array staging areas
-    local_cpu.sources = { src_nr_var: [
-        create_staging_area_wrapper('%s_%d' % (src_type, i),
+    local_cpu.sources = { src_nr_var: create_staging_area_wrapper(
+            '%s_cpu' % src_type,
             [a.name for a in src_data_sources[src_nr_var]], dfs)
-        for i in range(ndevices)]
 
         for src_type, src_nr_var in source_var_types().iteritems()
     }
@@ -906,6 +938,13 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims, ndevices):
     # The single output staging_area
     #======================================
 
+    for i, dev in enumerate(devices):
+        with tf.device(dev):
+            local_compute.output = create_staging_area_wrapper(
+                'output', ['descriptor', 'model_vis'],
+                dfs, ordered=True)
+
+
     local_cpu.output = create_staging_area_wrapper('output',
         ['descriptor', 'model_vis', 'chi_squared'], dfs, ordered=True)
 
@@ -914,8 +953,8 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims, ndevices):
     #=======================================================
 
     # Data sources from input staging_areas
-    src_sa = [q for sq in local_cpu.sources.values() for q in sq]
-    all_staging_areas = local_cpu.feed_many + [local_cpu.feed_once] + src_sa
+    src_sa = local_cpu.sources.values()
+    all_staging_areas = [local_cpu.feed_many] + [local_cpu.feed_once] + src_sa
     input_sources = { a for q in all_staging_areas
                         for a in q.fed_arrays}
     # Data sources from feed once variables
@@ -932,7 +971,7 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
     src_count = zero
     src_ph_vars = feed_data.src_ph_vars
 
-    LSA = feed_data.local_cpu
+    LSA = feed_data.local_compute
 
     polarisation_type = slvr_cfg['polarisation_type']
 
@@ -940,7 +979,7 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
     # for the relevant device, adding the feed once
     # inputs to the dictionary
     key, D = LSA.feed_many[dev_id].get_to_attrdict()
-    D.update(LSA.feed_once.peek(FEED_ONCE_KEY))
+    D.update(LSA.feed_once[dev_id].peek(FEED_ONCE_KEY))
 
     with tf.device(device):
         # Infer chunk dimensions
