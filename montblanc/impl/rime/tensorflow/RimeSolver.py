@@ -227,29 +227,6 @@ class RimeSolver(MontblancTensorflowSolver):
         self._compute_executors = [tpe(1) for i in range(ndevices)]
         self._consumer_executor = tpe(1)
 
-        class InputsWaiting(object):
-            """
-            Keep track of the number of inputs waiting
-            to be consumed on each device
-            """
-            def __init__(self, ndevices):
-                self._lock = threading.Lock()
-                self._inputs_waiting = np.zeros(shape=(ndevices,), dtype=np.int32)
-
-            def get(self):
-                with self._lock:
-                    return self._inputs_waiting
-
-            def increment(self, dev_id):
-                with self._lock:
-                    self._inputs_waiting[dev_id] += 1
-
-            def decrement(self, dev_id):
-                with self._lock:
-                    self._inputs_waiting[dev_id] -= 1
-
-        self._inputs_waiting = InputsWaiting(ndevices)
-
         #======================
         # Tracing
         #======================
@@ -383,9 +360,13 @@ class RimeSolver(MontblancTensorflowSolver):
 
         while True:
             try:
-                # Get the descriptor describing a portion of the RIME
-                key, result = session.run(FD.local_cpu.descriptor.pop_op)
-                descriptor = result['descriptor']
+                # Get the descriptor describing a portion of the RIME,
+                # as well as the number of entries in the compute staging areas
+                result = session.run({"pop" : FD.local_cpu.descriptor.pop_op,
+                                      "sizes" : [sa.size_op for sa in FD.local_compute.feed_many]})
+                key, map = result['pop']
+                descriptor = map["descriptor"]
+                sa_sizes = result["sizes"]
             except tf.errors.OutOfRangeError as e:
                 montblanc.log.exception("Descriptor reading exception")
 
@@ -398,9 +379,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Find indices of the emptiest staging_areas and, by implication
             # the device with the least work assigned to it
-            emptiest_staging_areas = np.argsort(self._inputs_waiting.get())
+            emptiest_staging_areas = np.argsort(sa_sizes)
             dev_id = emptiest_staging_areas[0]
-            dev_id = which_dev.next()
 
             feed_f = self._feed_executors[dev_id].submit(self._feed_actual,
                 data_sources.copy(), cube.copy(),
@@ -413,8 +393,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
             consume_f = self._consumer_executor.submit(self._consume,
                 data_sinks.copy(), cube.copy(), global_iter_args)
-
-            self._inputs_waiting.increment(dev_id)
 
             yield (feed_f, compute_f, consume_f)
 
@@ -518,8 +496,6 @@ class RimeSolver(MontblancTensorflowSolver):
 
         try:
             descriptor, enq = self._tfrun(self._tf_expr[dev_id], feed_dict=feed_dict)
-            self._inputs_waiting.decrement(dev_id)
-
         except Exception as e:
             montblanc.log.exception("Compute Exception")
             raise
