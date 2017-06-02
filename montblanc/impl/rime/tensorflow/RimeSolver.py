@@ -834,7 +834,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     FD.local_compute = local_compute = AttrDict()
     local_compute._setattr('_sequence_type', list)
 
-    # Create placholder variables for source counts
+    # Create placeholder variables for source counts
     FD.src_ph_vars = AttrDict({
         n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
         for n in ['nsrc'] + mbu.source_nr_vars()})
@@ -969,15 +969,23 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
     src_count = zero
     src_ph_vars = feed_data.src_ph_vars
 
-    LSA = feed_data.local_compute
+    local_cpu = feed_data.local_cpu
+    local_compute = feed_data.local_compute
 
     polarisation_type = slvr_cfg['polarisation_type']
 
-    # Pull RIME inputs out of the feed staging_area
+    # Create ops for copying from the CPU to the compute staging area
+    key, data = local_cpu.feed_once.get(FEED_ONCE_KEY)
+    stage_feed_once = local_compute.feed_once[dev_id].put(key, data)
+
+    key, data = local_cpu.feed_many.get()
+    stage_feed_many = local_compute.feed_many[dev_id].put(key, data)
+
+    # Pull RIME inputs out of the feed many staging_area
     # for the relevant device, adding the feed once
     # inputs to the dictionary
-    key, D = LSA.feed_many[dev_id].get_to_attrdict()
-    D.update(LSA.feed_once[dev_id].peek(FEED_ONCE_KEY))
+    key, D = local_compute.feed_many[dev_id].get_to_attrdict()
+    D.update(local_compute.feed_once[dev_id].peek(FEED_ONCE_KEY))
 
     with tf.device(device):
         # Infer chunk dimensions
@@ -1132,10 +1140,15 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
             D.weight, D.model_vis, summed_coherencies, D.observed_vis)
 
     # Create staging_area put operation
-    put_op = LSA.output.put_from_list([D.descriptor, model_vis, chi_squared])
+    stage_output = local_compute.output.put(key,
+        {'descriptor' : D.descriptor, 'model_vis': model_vis,
+                                'chi_squared': chi_squared})
+
+    out_key, out_data = local_compute.output.get(key)
+    unstage_output = local_cpu.output.put(out_key, out_data)
 
     # Return descriptor and staging_area operation
-    return D.descriptor, put_op
+    return D.descriptor, stage_output
 
 def _get_data(data_source, context):
     """ Get data from the data source, checking the return values """
