@@ -45,9 +45,8 @@ DOUBLE_PARAMS = {
 }
 
 KERNEL_TEMPLATE = string.Template("""
-#include \"math_constants.h\"
-#include <montblanc/include/abstraction.cuh>
-#include <montblanc/include/jones.cuh>
+#include <montblanc/abstraction.cuh>
+#include <montblanc/jones.cuh>
 
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
@@ -104,8 +103,8 @@ void rime_jones_EKBSqrt_impl(
     typename EKBTraits<T>::UVWType * uvw,
     typename EKBTraits<T>::LMType * lm,
     T * frequency,
-    typename Tr::ct * B_sqrt,
-    typename Tr::ct * jones)
+    typename Tr::CT * B_sqrt,
+    typename Tr::CT * jones)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int ANT = blockIdx.y*blockDim.y + threadIdx.y;
@@ -157,17 +156,17 @@ void rime_jones_EKBSqrt_impl(
 
         phase *= T(-TWO_PI_OVER_C) * freq[threadIdx.x];
 
-        typename Tr::ct cplx_phase;
+        typename Tr::CT cplx_phase;
         Po::sincos(phase, &cplx_phase.y, &cplx_phase.x);
 
         i = (SRC*NTIME + TIME)*NPOLCHAN + POLCHAN;
         // Load in the brightness square root
-        typename Tr::ct brightness_sqrt = B_sqrt[i];
+        typename Tr::CT brightness_sqrt = B_sqrt[i];
         montblanc::complex_multiply_in_place<T>(cplx_phase, brightness_sqrt);
 
         i = ((SRC*NTIME + TIME)*NA + ANT)*NPOLCHAN + POLCHAN;
         // Load in the E Beam, and multiply it by KB
-        typename Tr::ct J = jones[i];
+        typename Tr::CT J = jones[i];
         montblanc::jones_multiply_4x4_in_place<T>(J, cplx_phase);
 
         // Write out the jones matrices
@@ -179,14 +178,14 @@ void rime_jones_EKBSqrt_impl(
 
 extern "C" {
 
-#define stamp_rime_EKBSqrt_fn(ft,ct,uvw_type,lm_type) \
+#define stamp_rime_EKBSqrt_fn(ft,CT,uvw_type,lm_type) \
 __global__ void \
 rime_jones_EKBSqrt_ ## ft( \
     uvw_type * UVW, \
     lm_type * LM, \
     ft * frequency, \
-    ct * B_sqrt, \
-    ct * jones) \
+    CT * B_sqrt, \
+    CT * jones) \
 { \
     rime_jones_EKBSqrt_impl<ft>(UVW, LM, \
         frequency, B_sqrt, jones); \
@@ -226,8 +225,8 @@ class RimeEKBSqrt(Node):
 
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
         self.mod = SourceModule(kernel_string,
-            options=['-lineinfo','-maxrregcount', regs],
-            include_dirs=[montblanc.get_source_path()],
+            options=['-std=c++11', '-lineinfo','-maxrregcount', regs],
+            include_dirs=[montblanc.get_include_path()],
             no_extern_c=True)
 
         self.rime_const_data = self.mod.get_global('C')

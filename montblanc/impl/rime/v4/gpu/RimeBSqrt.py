@@ -45,9 +45,8 @@ DOUBLE_PARAMS = {
 }
 
 KERNEL_TEMPLATE = string.Template("""
-#include \"math_constants.h\"
-#include <montblanc/include/abstraction.cuh>
-#include <montblanc/include/brightness.cuh>
+#include <montblanc/abstraction.cuh>
+#include <montblanc/brightness.cuh>
 
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
@@ -86,7 +85,7 @@ void rime_jones_B_sqrt_impl(
     T * alpha,
     T * frequency,
     T * ref_frequency,
-    typename Tr::ct * B_sqrt)
+    typename Tr::CT * B_sqrt)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int TIME = blockIdx.y*blockDim.y + threadIdx.y;
@@ -111,13 +110,13 @@ void rime_jones_B_sqrt_impl(
 
     // Calculate the power term
     int i = SRC*NTIME + TIME;
-    typename Tr::ft power = Po::pow(freq_ratio[threadIdx.x], alpha[i]);
+    typename Tr::FT power = Po::pow(freq_ratio[threadIdx.x], alpha[i]);
 
     // Read in the stokes parameter,
     // multiplying it by the power term
     i = i*NPOL + POL;
-    typename Tr::ft pol = stokes[i]*power;
-    typename Tr::ct B_square_root;
+    typename Tr::FT pol = stokes[i]*power;
+    typename Tr::CT B_square_root;
 
     // Create the square root of the brightness matrix
     montblanc::create_brightness_sqrt<T>(B_square_root, pol);
@@ -129,16 +128,16 @@ void rime_jones_B_sqrt_impl(
 
 extern "C" {
 
-#define stamp_jones_B_sqrt_fn(ft,ct) \
+#define stamp_jones_B_sqrt_fn(FT,CT) \
 __global__ void \
-rime_jones_B_sqrt_ ## ft( \
-    ft * stokes, \
-    ft * alpha, \
-    ft * frequency, \
-    ft * ref_frequency, \
-    ct * B_sqrt) \
+rime_jones_B_sqrt_ ## FT( \
+    FT * stokes, \
+    FT * alpha, \
+    FT * frequency, \
+    FT * ref_frequency, \
+    CT * B_sqrt) \
 { \
-    rime_jones_B_sqrt_impl<ft>(stokes, alpha, \
+    rime_jones_B_sqrt_impl<FT>(stokes, alpha, \
         frequency, ref_frequency, B_sqrt); \
 }
 
@@ -178,8 +177,8 @@ class RimeBSqrt(Node):
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
 
         self.mod = SourceModule(kernel_string,
-            options=['-lineinfo','-maxrregcount', regs],
-            include_dirs=[montblanc.get_source_path()],
+            options=['-std=c++11', '-lineinfo','-maxrregcount', regs],
+            include_dirs=[montblanc.get_include_path()],
             no_extern_c=True)
 
         self.rime_const_data = self.mod.get_global('C')

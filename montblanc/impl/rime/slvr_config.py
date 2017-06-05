@@ -54,6 +54,18 @@ class RimeSolverConfig(SolverConfig):
         'Governs the level of discretisation of '
         'the nu (frequency) dimension.')
 
+    E_BEAM_FITS_FILENAMES = 'beam_fits_filenames'
+    DEFAULT_E_BEAM_FITS_FILENAMES = ''
+    E_BEAM_FITS_FILENAMES_DESCRIPTION = (
+        "Naming schema of the FITS files describing the "
+        "holographic beam cube. To fully describe the "
+        "cube, eight files are required, named according "
+        "to the '$(base_name)_$(corr)_$(reim).fits' convention, "
+        "where $(corr) and $(reim) are permuted by "
+        "[xx,xy,yx,yy] and [re,im] respectively. "
+        "Using uppercase $(CORR) and $(REIM) "
+        "in the schema will uppercase the substitutions.")
+
     # Should a weight vector (sigma) be used to
     # when calculating the chi-squared values?
     WEIGHT_VECTOR = 'weight_vector'
@@ -69,7 +81,7 @@ class RimeSolverConfig(SolverConfig):
     INIT_WEIGHTS_NONE = None
     INIT_WEIGHTS_SIGMA = 'sigma'
     INIT_WEIGHTS_WEIGHT = 'weight'
-    DEFAULT_INIT_WEIGHTS = INIT_WEIGHTS_NONE 
+    DEFAULT_INIT_WEIGHTS = INIT_WEIGHTS_NONE
     VALID_INIT_WEIGHTS = [INIT_WEIGHTS_NONE, INIT_WEIGHTS_SIGMA, INIT_WEIGHTS_WEIGHT]
     INIT_WEIGHTS_DESCRIPTION = (
         "Governs how the weight vector is initialised from a Measurement Set. "
@@ -125,8 +137,9 @@ class RimeSolverConfig(SolverConfig):
     VERSION_THREE = 'v3'
     VERSION_FOUR = 'v4'
     VERSION_FIVE = 'v5'
+    VERSION_TENSORFLOW = 'tf'
     DEFAULT_VERSION = VERSION_FOUR
-    VALID_VERSIONS = [VERSION_TWO, VERSION_FOUR, VERSION_FIVE]
+    VALID_VERSIONS = [VERSION_TWO, VERSION_FOUR, VERSION_FIVE, VERSION_TENSORFLOW]
     VERSION_DESCRIPTION = 'RIME Version'
 
     descriptions = {
@@ -198,6 +211,12 @@ class RimeSolverConfig(SolverConfig):
             SolverConfig.DEFAULT: DEFAULT_E_BEAM_DEPTH,
             SolverConfig.REQUIRED: True
         },
+
+        E_BEAM_FITS_FILENAMES: {
+            SolverConfig.DESCRIPTION: E_BEAM_FITS_FILENAMES_DESCRIPTION,
+            SolverConfig.DEFAULT: DEFAULT_E_BEAM_FITS_FILENAMES,
+            SolverConfig.REQUIRED: True
+        },
     }
 
     def parser(self):
@@ -220,6 +239,12 @@ class RimeSolverConfig(SolverConfig):
             type=int,
             help=self.E_BEAM_DEPTH_DESCRIPTION,
             default=self.DEFAULT_E_BEAM_DEPTH)
+
+        p.add_argument('--{v}'.format(v=self.E_BEAM_FITS_FILENAMES,
+            required=False,
+            type=str,
+            help=self.E_BEAM_FITS_FILENAMES_DESCRIPTION,
+            default=self.DEFAULT_E_BEAM_FITS_FILENAMES))
 
         p.add_argument('--{v}'.format(v=self.WEIGHT_VECTOR),
             required=False,

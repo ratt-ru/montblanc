@@ -121,7 +121,7 @@ class SolverConfig(object):
     DEFAULT_DTYPE = DTYPE_DOUBLE
     VALID_DTYPES = [DTYPE_FLOAT, DTYPE_DOUBLE]
     DTYPE_DESCRIPTION = (
-        'Type of floating point precision used to compute the RIME. ' 
+        'Type of floating point precision used to compute the RIME. '
         "If '{f}', compute the RIME with single-precision "
         "If '{d}', compute the RIME with double-precision.").format(
             f=DTYPE_FLOAT, d=DTYPE_DOUBLE)
@@ -139,12 +139,12 @@ class SolverConfig(object):
     DATA_SOURCE_MS = 'ms'
     DATA_SOURCE_TEST = 'test'
     DATA_SOURCE_EMPTY = 'empty'
-    DEFAULT_DATA_SOURCE = DATA_SOURCE_MS
+    DEFAULT_DATA_SOURCE = DATA_SOURCE_DEFAULT
     VALID_DATA_SOURCES = [DATA_SOURCE_DEFAULT, DATA_SOURCE_MS,
         DATA_SOURCE_TEST, DATA_SOURCE_EMPTY]
     DATA_SOURCE_DESCRIPTION = (
         "The data source for initialising data arrays. "
-        "If '{d}', data is initialised with defaults. " 
+        "If '{d}', data is initialised with defaults. "
         "If '{t}' filled with random test data. "
         "If '{ms}', some data will be read from a MeasurementSet, "
         "and defaults will be used for the rest. "
@@ -155,6 +155,20 @@ class SolverConfig(object):
     # MeasurementSet file
     MS_FILE = 'msfile'
     MS_FILE_DESCRIPTION = 'MeasurementSet file'
+
+    # Observed visibility MS data source
+    MS_VIS_INPUT_COLUMN = 'ms_vis_input_col'
+    DEFAULT_MS_VIS_INPUT_COLUMN = 'DATA'
+    MS_VIS_INPUT_COLUMN_DESCRIPTION = (
+        "Measurement Set column from which "
+        "observed visibilities will be read.")
+
+    # Model visibility MS data sink
+    MS_VIS_OUTPUT_COLUMN = 'ms_vis_output_col'
+    DEFAULT_MS_VIS_OUTPUT_COLUMN = 'MODEL_DATA'
+    MS_VIS_OUTPUT_COLUMN_DESCRIPTION = (
+        "Measurement Set column to which "
+        "model visibilities will be written.")
 
     DATA_ORDER = 'data_order'
     DATA_ORDER_CASA = 'casa'
@@ -240,6 +254,15 @@ class SolverConfig(object):
         MS_FILE: {
             DESCRIPTION:  MS_FILE_DESCRIPTION,
         },
+
+        MS_VIS_INPUT_COLUMN : {
+            DESCRIPTION: MS_VIS_INPUT_COLUMN_DESCRIPTION,
+        },
+
+        MS_VIS_OUTPUT_COLUMN : {
+            DESCRIPTION: MS_VIS_OUTPUT_COLUMN_DESCRIPTION,
+        },
+
 
         DATA_ORDER: {
             DESCRIPTION: DATA_ORDER_DESCRIPTION,
@@ -329,6 +352,18 @@ class SolverConfig(object):
             type=str,
             help=self.MS_FILE_DESCRIPTION)
 
+        p.add_argument('--{v}'.format(v=self.MS_VIS_INPUT_COLUMN),
+            required=False,
+            type=str,
+            help=self.MS_VIS_INPUT_COLUMN_DESCRIPTION,
+            default=self.DEFAULT_MS_VIS_INPUT_COLUMN)
+
+        p.add_argument('--{v}'.format(v=self.MS_VIS_OUTPUT_COLUMN),
+            required=False,
+            type=str,
+            help=self.MS_VIS_OUTPUT_COLUMN_DESCRIPTION,
+            default=self.DEFAULT_MS_VIS_OUTPUT_COLUMN)
+
         p.add_argument('--{v}'.format(v=self.DATA_ORDER),
             required=False,
             type=str,
@@ -351,7 +386,7 @@ class SolverConfig(object):
         # Load any montblanc section options into theargument parser
         if self.CFG_FILE in kwargs:
             import ConfigParser
-            
+
             montblanc.log.info("Loading defaults from '{cf}'.".format(
                 cf=kwargs[self.CFG_FILE]))
             config = ConfigParser.SafeConfigParser()

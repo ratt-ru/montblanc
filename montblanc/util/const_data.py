@@ -20,8 +20,6 @@
 
 import numpy as np
 
-from cffi import FFI
-
 from montblanc.src_types import (
     source_types,
     source_nr_vars,
@@ -43,6 +41,7 @@ class RimeConstDefinition(object):
     to GPUs.
     """
     def __init__(self, slvr):
+        from cffi import FFI
         self._ffi = FFI()
         # Parse the structure
         self._cstr = self._struct(slvr)
@@ -136,10 +135,10 @@ class RimeConstStruct(object):
         # If 'nsrc' exists set it by by summing each source type
         if cdim is not None and sum_nsrc is True:
             L = sum([getattr(getattr(self._cdata, s), 'lower_extent')
-                for s in source_nr_vars()])    
+                for s in source_nr_vars()])
 
             U = sum([getattr(getattr(self._cdata, s), 'upper_extent')
-                for s in source_nr_vars()])    
+                for s in source_nr_vars()])
 
             setattr(cdim, 'lower_extent', L)
             setattr(cdim, 'upper_extent', U)

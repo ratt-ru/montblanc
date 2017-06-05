@@ -19,6 +19,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
+
 import math
 import re
 
@@ -26,6 +27,8 @@ import montblanc
 
 from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
 from sky_model_parser import parse_sky_model
+from parallactic_angles import parallactic_angles
+
 
 from const_data import (
     create_rime_const_data)
@@ -78,6 +81,19 @@ def fmt_bytes(nbytes):
 def array_bytes(shape, dtype):
     """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
     return np.product(shape)*np.dtype(dtype).itemsize
+
+def random_float(shape, dtype):
+    return np.random.random(size=shape).astype(dtype)
+
+def random_complex(shape, ctype):
+    if ctype == np.complex64:
+        dtype = np.float32
+    elif ctype == np.complex128:
+        dtype = np.float64
+    else:
+        raise TypeError("Invalid complex type {ct}".format(ct=ctype))
+
+    return random_float(shape, dtype) + 1j*random_float(shape, dtype)
 
 def random_like(ary=None, shape=None, dtype=None):
     """
@@ -158,7 +174,7 @@ def dict_array_bytes_required(arrays, template):
 
 __DIM_REDUCTION_RE = re.compile(    # Capture Groups and Subgroups
     "^\s*(?P<name>[A-Za-z0-9_]*?)"  # 1.   Dimension name
-    "(?:\s*?=\s*?"                  # 2.   White spaces and =  
+    "(?:\s*?=\s*?"                  # 2.   White spaces and =
         "(?P<value>[0-9]*?)"        # 2.1  A value
         "(?P<percent>\%?)"          # 2.2  Possibly followed by a percentage
     ")?\s*?$")                      #      Capture group 2 possibly occurs
@@ -377,7 +393,7 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
     Also clamp number of threads to the problem dimension size,
     if necessary
     """
-    
+
     # Shift threads from the z dimension
     # into the y dimension
     while blockdimz > dimz:
@@ -411,55 +427,69 @@ def redistribute_threads(blockdimx, blockdimy, blockdimz,
 
     return blockdimx, blockdimy, blockdimz
 
-def parallactic_angles(field_centre, antenna_positions, times):
-    """
-    Computes parallactic angles per timestep for the given
-    reference antenna position and field centre.
 
-    Arguments:
-        field_centre : ndarray of shape (2,)
-            Field centre, should be obtained from MS PHASE_DIR
-        antenna_positions: ndarray of shape (na, 3)
-            Antenna positions, obtained from POSITION
-            column of MS ANTENNA sub-table
-        times: ndarray
-            Array of unique times with shape (ntime,),
-            obtained from TIME column of MS table
+def register_default_dimensions(cube, slvr_cfg):
+    """ Register the default dimensions for a RIME solver """
 
-    Returns:
-        An array of parallactic angles per time-step
+    from montblanc.config import RimeSolverConfig as Options
+    import montblanc.src_types as mbs
 
-    """
-    import pyrap.measures
-    import pyrap.quanta as pq
+    # Pull out the configuration options for the basics
+    autocor = slvr_cfg.get(Options.AUTO_CORRELATIONS)
+    ntime = slvr_cfg.get(Options.NTIME)
+    na = slvr_cfg.get(Options.NA)
+    nbands = slvr_cfg.get(Options.NBANDS)
+    nchan = slvr_cfg.get(Options.NCHAN)
+    npol = slvr_cfg.get(Options.NPOL)
 
-    pm = pyrap.measures.measures()
+    # Register these dimensions on this solver.
+    cube.register_dimension('ntime', ntime,
+        description=Options.NTIME_DESCRIPTION)
+    cube.register_dimension('na', na,
+        description=Options.NA_DESCRIPTION)
+    cube.register_dimension('nbands', nbands,
+        description=Options.NBANDS_DESCRIPTION)
+    cube.register_dimension('nchan', nchan,
+        description=Options.NCHAN_DESCRIPTION)
+    cube.register_dimension(Options.NPOL, npol,
+        description=Options.NPOL_DESCRIPTION)
 
-    ntime = times.shape[0]
-    na = antenna_positions.shape[0]
+    # Now get the size of the registered dimensions
+    ntime, na, nchan, npol = cube.dim_extent_size(
+        'ntime', 'na', 'nchan', 'npol')
 
-    # Create direction measure for the zenith
-    zenith = pm.direction('AZEL','0deg','90deg')
+    # Infer number of baselines from number of antenna,
+    # use this as the default value if not specific
+    # baseline numbers were provided
+    nbl = nr_of_baselines(na, autocor)
+    nbl = slvr_cfg.get(Options.NBL, nbl)
 
-    # Create position measures for each antenna
-    reference_positions = [pm.position('itrf',
-        *(pq.quantity(x,'m') for x in pos))
-        for pos in antenna_positions]
+    # Register the baseline dimension
+    cube.register_dimension('nbl', nbl,
+        description=Options.NBL_DESCRIPTION)
 
-    # Compute field centre in radians
-    fc_rad = pm.direction('J2000',
-        *(pq.quantity(f,'rad') for f in field_centre))
+    nbl = cube.dim_extent_size('nbl')
 
-    parallactic_angles = np.asarray([ 
-        # Set antenna position as the reference frame
-        pm.do_frame(rp) and 
-        # Set current time as the reference frame
-        pm.do_frame(pm.epoch("UTC",pq.quantity(t,"s"))) and
-        # Now compute the parallactic angle
-        pm.posangle(fc_rad, zenith).get_value("rad")
-        for t in times for rp in reference_positions])
+    # Register dependent dimensions
+    cube.register_dimension('npolchan', nchan*npol,
+        description='Polarised channels')
+    cube.register_dimension('nvis', ntime*nbl*nchan,
+        description='Visibilities')
 
-    return parallactic_angles.reshape(ntime, na)
+    # Convert the source types, and their numbers
+    # to their number variables and numbers
+    # { 'point':10 } => { 'npsrc':10 }
+    src_cfg = slvr_cfg[Options.SOURCES]
+    src_nr_vars = sources_to_nr_vars(src_cfg)
+    # Sum to get the total number of sources
+    cube.register_dimension('nsrc', sum(src_nr_vars.itervalues()),
+        description=Options.NSRC_DESCRIPTION)
+
+    # Register the individual source types
+    for nr_var, nr_of_src in src_nr_vars.iteritems():
+        cube.register_dimension(nr_var, nr_of_src,
+            description='{} sources'.format(mbs.SOURCE_DIM_TYPES[nr_var]))
+
 
 class ContextWrapper(object):
     """ Context Manager Wrapper for CUDA Contexts! """

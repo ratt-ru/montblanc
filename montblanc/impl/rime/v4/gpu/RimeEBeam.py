@@ -50,9 +50,7 @@ DOUBLE_PARAMS = {
 }
 
 KERNEL_TEMPLATE = string.Template("""
-#include \"math_constants.h\"
-#include <montblanc/include/abstraction.cuh>
-#include <montblanc/include/brightness.cuh>
+#include <montblanc/abstraction.cuh>
 
 #define BLOCKDIMX (${BLOCKDIMX})
 #define BLOCKDIMY (${BLOCKDIMY})
@@ -97,9 +95,9 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__ __forceinline__
 void trilinear_interpolate(
-    typename Tr::ct & pol_sum,
-    typename Tr::ft & abs_sum,
-    typename Tr::ct * E_beam,
+    typename Tr::CT & pol_sum,
+    typename Tr::FT & abs_sum,
+    typename Tr::CT * E_beam,
     const T & gl,
     const T & gm,
     const T & gchan,
@@ -109,7 +107,7 @@ void trilinear_interpolate(
         + ebeam_pol();
 
     // Perhaps unnecessary as long as BLOCKDIMX is 32
-    typename Tr::ct pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
+    typename Tr::CT pol = cub::ThreadLoad<cub::LOAD_LDG>(E_beam + i);
     pol_sum.x += weight*pol.x;
     pol_sum.y += weight*pol.y;
     abs_sum += weight*Po::abs(pol);
@@ -145,9 +143,9 @@ void rime_jones_E_beam_impl(
     typename EBeamTraits<T>::ParallacticAngleType * parallactic_angles,
     typename EBeamTraits<T>::PointErrorType * point_errors,
     typename EBeamTraits<T>::AntennaScaleType * antenna_scaling,
-    typename Tr::ft * frequency,
-    typename Tr::ct * E_beam,
-    typename Tr::ct * jones,
+    typename Tr::FT * frequency,
+    typename Tr::CT * E_beam,
+    typename Tr::CT * jones,
     T beam_ll, T beam_lm, T beam_lfreq,
     T beam_ul, T beam_um, T beam_ufreq)
 {
@@ -271,8 +269,8 @@ void rime_jones_E_beam_impl(
         // Offset of snapped coordinate from grid position
         T md = m - gm0;
 
-        typename Tr::ct pol_sum = Po::make_ct(0.0, 0.0);
-        typename Tr::ft abs_sum = T(0.0);
+        typename Tr::CT pol_sum = Po::make_ct(0.0, 0.0);
+        typename Tr::FT abs_sum = T(0.0);
 
         // A simplified trilinear weighting is used here. Given
         // point x between points x1 and x2, with function f
@@ -331,7 +329,7 @@ void rime_jones_E_beam_impl(
             ld*md*shared.chd[thread_chan()]);
 
         // Normalise the angle and multiply in the absolute sum
-        typename Tr::ft norm = Po::rsqrt(pol_sum.x*pol_sum.x + pol_sum.y*pol_sum.y);
+        typename Tr::FT norm = Po::rsqrt(pol_sum.x*pol_sum.x + pol_sum.y*pol_sum.y);
         if(!::isfinite(norm))
             { norm = 1.0; }
 
@@ -345,20 +343,20 @@ void rime_jones_E_beam_impl(
 
 extern "C" {
 
-#define stamp_jones_E_beam_fn(ft,ct,lm_type,pa_type,pe_type,as_type) \
+#define stamp_jones_E_beam_fn(FT,CT,lm_type,pa_type,pe_type,as_type) \
 __global__ void \
-rime_jones_E_beam_ ## ft( \
+rime_jones_E_beam_ ## FT( \
     lm_type * lm, \
     pa_type * parallactic_angles, \
     pe_type * point_errors, \
     as_type * antenna_scaling, \
-    ft * frequency, \
-    ct * E_beam, \
-    ct * jones, \
-    ft beam_ll, ft beam_lm, ft beam_lfreq, \
-    ft beam_ul, ft beam_um, ft beam_ufreq) \
+    FT * frequency, \
+    CT * E_beam, \
+    CT * jones, \
+    FT beam_ll, FT beam_lm, FT beam_lfreq, \
+    FT beam_ul, FT beam_um, FT beam_ufreq) \
 { \
-    rime_jones_E_beam_impl<ft>( \
+    rime_jones_E_beam_impl<FT>( \
         lm, parallactic_angles, point_errors, \
         antenna_scaling, frequency, E_beam, jones, \
         beam_ll, beam_lm, beam_lfreq, \
@@ -410,8 +408,8 @@ class RimeEBeam(Node):
         kernel_string = KERNEL_TEMPLATE.substitute(**D)
 
         self.mod = SourceModule(kernel_string,
-            options=['-lineinfo','-maxrregcount', regs],
-            include_dirs=[montblanc.get_source_path()],
+            options=['-std=c++11', '-lineinfo','-maxrregcount', regs],
+            include_dirs=[montblanc.get_include_path()],
             no_extern_c=True)
 
         self.rime_const_data = self.mod.get_global('C')

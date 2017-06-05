@@ -18,16 +18,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import numpy
-import numexpr
-import pycuda
 import os
 import sys
 import unittest
 
-import montblanc
 
 def print_versions():
+    import numpy
+    import numexpr
+    import montblanc
+    import pycuda
+
     """
     Print the versions of software relied upon by montblanc.
     Inspired by numexpr testing suite.

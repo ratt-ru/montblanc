@@ -43,6 +43,9 @@ SOURCE_VAR_TYPES = OrderedDict([
     (SERSIC_TYPE, SERSIC_NR_VAR)
 ])
 
+SOURCE_DIM_TYPES = OrderedDict((v, k) for (k, v)
+    in SOURCE_VAR_TYPES.iteritems())
+
 def source_types():
     """ Returns a list of registered source types """
     return SOURCE_VAR_TYPES.keys()
@@ -50,6 +53,10 @@ def source_types():
 def source_nr_vars():
     """ Returns a list of registered source number variables """
     return SOURCE_VAR_TYPES.values()
+
+def source_var_types():
+    """ Returns a mapping of source type to number variable """
+    return SOURCE_VAR_TYPES
 
 def default_sources(**kwargs):
     """
@@ -87,7 +94,7 @@ def default_sources(**kwargs):
             raise TypeError(('Supplied value %s '
                 'for source %s cannot be '
                 'converted to an integer') % \
-                    (value, k))    
+                    (value, k))
 
         total += value
         S[k] = value
@@ -105,9 +112,9 @@ def sources_to_nr_vars(sources):
 
     If, for example, we have 'point', 'gaussian' and 'sersic'
     source types, then passing the following dict as an argument
-    
+
     sources_to_nr_vars({'point':10, 'gaussian': 20})
-    
+
     will return an OrderedDict
 
     {'npsrc': 10, 'ngsrc': 20, 'nssrc': 0 }
@@ -153,7 +160,7 @@ def source_range_tuple(start, end, nr_var_dict):
     invalid = np.logical_not(np.logical_and(start_idx <= idx, idx <= end_idx))
     starts[invalid] = ends[invalid] = 0
 
-    # Modify the associated starting and ending positions 
+    # Modify the associated starting and ending positions
     starts[start_idx] = start
     ends[end_idx] = end
 

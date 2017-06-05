@@ -18,189 +18,183 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import hashlib
+import json
+import logging
 import os
-import urllib2
-import shutil
-import subprocess
 import sys
-import zipfile
+
+#==============
+# Setup logging
+#==============
+
+from install.install_log import log
+
+mb_path = 'montblanc'
+mb_inc_path = os.path.join(mb_path, 'include')
+
+#===================
+# Detect readthedocs
+#====================
+
+on_rtd = os.environ.get('READTHEDOCS') == 'True'
+
+#=================
+# Setup setuptools
+#=================
+
+import ez_setup
+ez_setup.use_setuptools()
+
 from setuptools import setup, find_packages
+from setuptools.extension import Extension
+from setuptools.dist import Distribution
 
-def dl_cub(cub_url, cub_archive_name):
-    """ Download cub archive from cub_url and store it in cub_archive_name """
-    with open(cub_archive_name, 'wb') as f:
-        remote_file = urllib2.urlopen(cub_url)
-        meta = remote_file.info()
+#=======================
+# Monkeypatch distutils
+#=======================
 
-        # The server may provide us with the size of the file.
-        cl_header = meta.getheaders("Content-Length")
-        remote_file_size = int(cl_header[0]) if len(cl_header) > 0 else '???'
+# Save the original command for use within the monkey-patched version
+_DISTUTILS_REINIT = Distribution.reinitialize_command
 
-        # Initialise variables
-        local_file_size = 0
-        block_size = 128*1024
+def reinitialize_command(self, command, reinit_subcommands):
+    """
+    Monkeypatch distutils.Distribution.reinitialize_command() to match behavior
+    of Distribution.get_command_obj()
+    This fixes a problem where 'pip install -e' does not reinitialise options
+    using the setup(options={...}) variable for the build_ext command.
+    This also effects other option sourcs such as setup.cfg.
+    """
+    cmd_obj = _DISTUTILS_REINIT(self, command, reinit_subcommands)
 
-        # Do the download
-        while True:
-            data = remote_file.read(block_size)
+    options = self.command_options.get(command)
 
-            if not data:
-                break
+    if options:
+        self._set_command_options(cmd_obj, options)
 
-            f.write(data)
-            local_file_size += len(data)
+    return cmd_obj
 
-            status = r"Downloading %s %10d/%s" % (cub_url,
-                local_file_size, remote_file_size)
-            status = status + chr(8)*(len(status)+1)
-            print status,
+# Replace original command with monkey-patched version
+Distribution.reinitialize_command = reinitialize_command
 
-        remote_file.close()
+#============================
+# Detect CUDA and GPU Devices
+#============================
 
-def sha_hash_file(filename):
-    # Compute the SHA1 hash
-    hash_sha = hashlib.sha1()
+# See if CUDA is installed and if any NVIDIA devices are available
+# Choose the tensorflow flavour to install (CPU or GPU)
+from install.cuda import inspect_cuda, InspectCudaException
+from install.cub import install_cub, InstallCubException
 
-    with open(filename, 'rb') as f:
-        for chunk in iter(lambda: f.read(1024*1024), b""):
-            hash_sha.update(chunk)
+try:
+    # Look for CUDA devices and NVCC/CUDA installation
+    device_info, nvcc_settings = inspect_cuda()
+    tensorflow_package = 'tensorflow-gpu'
 
-    return hash_sha.hexdigest()
+    cuda_version = device_info['cuda_version']
+    log.info("CUDA '{}' found. "
+        "Installing tensorflow GPU".format(cuda_version))
 
-def is_cub_installed(readme_filename, header_filename, cub_version_str):
-    # Check if the cub.h exists
-    if not os.path.exists(header_filename) or not os.path.isfile(header_filename):
-        return False
 
-    # Check if the README.md exists
-    if not os.path.exists(readme_filename) or not os.path.isfile(readme_filename):
-        return False
+    log.info("CUDA installation settings:\n{}"
+                .format(json.dumps(nvcc_settings, indent=2)))
 
-    # Search for the version string, returning True if found
-    with open(readme_filename, 'r') as f:
-        for line in f:
-            if line.find(cub_version_str) != -1:
-                return True
+    log.info("CUDA code will be compiled for the following devices:\n{}"
+                .format(json.dumps(device_info['devices'], indent=2)))
 
-    # Nothing found!
-    return False
+    # Download and install cub
+    install_cub(mb_inc_path)
 
-def install_cub():
-    """ Downloads and installs cub """
-    cub_url = 'https://github.com/NVlabs/cub/archive/1.5.2.zip'
-    cub_sha_hash = 'b98dabe346c5e1ab24db250379d73afe14189055'
-    cub_version_str = 'Current release: v1.5.2 (03/21/2016)'
-    cub_zip_file = 'cub.zip'
-    cub_zip_dir = 'cub-1.5.2'
-    src_path = os.path.join('montblanc', 'src')
-    cub_unzipped_path = os.path.join(src_path, cub_zip_dir)
-    cub_new_unzipped_path = os.path.join(src_path, 'cub')
-    cub_header = os.path.join(cub_new_unzipped_path, 'cub', 'cub.cuh')
-    cub_readme = os.path.join(cub_new_unzipped_path, 'README.md' )
+except InspectCudaException as e:
+    # Can't find a reasonable NVCC/CUDA install. Go with the CPU version
+    log.info("CUDA not found: {}. ".format(str(e)))
+    log.info("Installing tensorflow CPU")
 
-    # Check for a reasonably valid install
-    cub_installed = is_cub_installed(cub_readme, cub_header, cub_version_str)
-    print 'NVIDIA cub installed: %s' % cub_installed
-    if cub_installed:
-        return
-
-    # Do we already have a valid cub zip file
-    have_valid_cub_file = (os.path.exists(cub_zip_file) and
-        os.path.isfile(cub_zip_file) and
-        sha_hash_file(cub_zip_file) == cub_sha_hash)
-
-    print 'NVIDIA cub archive downloaded: %s' % have_valid_cub_file
-
-    # Download if we don't have a valid file
-    if not have_valid_cub_file:
-        dl_cub(cub_url, cub_zip_file)
-        cub_file_sha_hash = sha_hash_file(cub_zip_file)
-
-        # Compare against our supplied hash
-        assert cub_sha_hash == cub_file_sha_hash, \
-             ('Hash of file %s downloaded from %s '
-            'is %s and does not match the expected '
-            'hash of %s. Please manually download '
-            'as per the README.md instructions.') % (cub_zip_file,
-                cub_url, cub_sha_hash, cub_file_sha_hash)
-
-    # Unzip into montblanc/src/cub
-    with zipfile.ZipFile(cub_zip_file, 'r') as zip_file:
-        # Remove any existing installs
-        shutil.rmtree(cub_unzipped_path, ignore_errors=True)
-        shutil.rmtree(cub_new_unzipped_path, ignore_errors=True)
-
-        # Unzip
-        src_path = os.path.join('montblanc', 'src')
-        zip_file.extractall(src_path)
-
-        # Rename
-        shutil.move(cub_unzipped_path, cub_new_unzipped_path)
-
-        print 'NVIDIA cub archive unzipped into %s' % cub_new_unzipped_path
-
-    assert is_cub_installed(cub_readme, cub_header, cub_version_str),  \
-        ('cub installed unexpectedly failed!')
-
-    print 'NVIDIA cub install successful'
-
-install_cub()
-
-def get_version():
-    # Versioning code here, based on
-    # http://blogs.nopcode.org/brainstorm/2013/05/20/pragmatic-python-versioning-via-setuptools-and-git-tags/
-
-    # Fetch version from git tags, and write to version.py.
-    # Also, when git is not available (PyPi package), use stored version.py.
-    version_py = os.path.join('montblanc', 'version.py')
-
-    try:
-        version_git = subprocess.check_output(['git', 'describe', '--tags']).rstrip()
-    except:
-        with open(version_py, 'r') as fh:
-            version_git = open(version_py).read().strip().split('=')[-1].replace('"','')
-
-    version_msg = "# Do not edit this file, pipeline versioning is governed by git tags"
-
-    with open(version_py, 'w') as fh:
-        fh.write(version_msg + os.linesep + "__version__=\"" + version_git +"\"")
-
-    return version_git
+    device_info, nvcc_settings = {}, { 'cuda_available' : False }
+    tensorflow_package = 'tensorflow'
+except InstallCubException as e:
+    # This shouldn't happen and the user should fix it based on the exception
+    log.exception("NVIDIA cub install failed.")
+    raise
 
 def readme():
+    """ Return README.rst contents """
     with open('README.rst') as f:
         return f.read()
 
-def src_pkg_dirs():
+def include_pkg_dirs():
     """
     Recursively provide package_data directories for
-    directories in montblanc/src.
+    directories in montblanc/include.
     """
     pkg_dirs = []
 
-    mbdir = 'montblanc'
-    l = len(mbdir) + len(os.sep)
-    path = os.path.join(mbdir, 'src')
+    l = len(mb_path) + len(os.sep)
     # Ignore
-    exclude = ['docs', '.git', '.svn']
+    exclude = set(['docs', '.git', '.svn'])
 
-    # Walk 'montblanc/src'
-    for root, dirs, files in os.walk(path, topdown=True):
+    # Walk 'montblanc/include'
+    for root, dirs, files in os.walk(mb_inc_path, topdown=True):
         # Prune out everything we're not interested in
         # from os.walk's next yield.
         dirs[:] = [d for d in dirs if d not in exclude]
 
         for d in dirs:
             # OK, so everything starts with 'montblanc/'
-            # Take everything after that ('src...') and
+            # Take everything after that ('include...') and
             # append a '/*.*' to it
             pkg_dirs.append(os.path.join(root[l:], d, '*.*'))
 
     return pkg_dirs
 
+install_requires = [
+    'attrdict >= 2.0.0',
+    'attrs >= 16.3.0',
+    'enum34 >= 1.1.6',
+    'funcsigs >= 0.4',
+    'futures >= 3.0.5',
+    'hypercube == 0.3.3',
+]
+
+#===================================
+# Avoid binary packages and compiles
+# on readthedocs
+#===================================
+
+if on_rtd:
+    cmdclass = {}
+    ext_modules = []
+    ext_options = {}
+else:
+    # Add binary/C extension type packages
+    install_requires += [
+        'astropy >= 1.3.0',
+        'numpy >= 1.11.3',
+        'numexpr >= 2.6.1',
+        'python-casacore >= 2.1.2',
+        "{} >= 1.1.0".format(tensorflow_package),
+    ]
+
+    from install.tensorflow_ops_ext import (BuildCommand,
+        tensorflow_extension_name)
+
+    cmdclass = { 'build_ext' : BuildCommand }
+    # tensorflow_ops_ext.BuildCommand.run will
+    # expand this dummy extension to its full portential
+    ext_modules = [Extension(tensorflow_extension_name, ['rime.cu'])]
+    # Pass NVCC and CUDA settings through to the build extension
+    ext_options = {
+        'build_ext' : {
+            'nvcc_settings' : nvcc_settings,
+            'cuda_devices' : device_info,
+        },
+    }
+
+log.info('install_requires={}'.format(install_requires))
+
+from install.versioning import maintain_version
+
 setup(name='montblanc',
-    version=get_version(),
+    version=maintain_version(os.path.join('montblanc', 'version.py')),
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',
@@ -215,22 +209,12 @@ setup(name='montblanc',
     ],
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
+    cmdclass=cmdclass,
+    ext_modules=ext_modules,
+    options=ext_options,
     license='GPL2',
+    install_requires=install_requires,
     packages=find_packages(),
-    install_requires=[
-        'attrdict >= 2.0.0',
-        'cffi >= 1.1.2',
-        'enum34 >= 1.1.2',
-        'funcsigs >= 0.4',
-        'futures >= 3.0.3',
-        'hypercube >= 0.3.0a1',
-        'numpy >= 1.9.2',
-        'numexpr >= 2.4',
-        'pycuda >= 2016.1',
-        'pytools >= 2016.1',
-        'python-casacore >= 2.1.2',
-    ],
-    setup_requires=['numpy >= 1.9.2'],
-    package_data={'montblanc': src_pkg_dirs()},
+    package_data={'montblanc': include_pkg_dirs()},
     include_package_data=True,
     zip_safe=False)

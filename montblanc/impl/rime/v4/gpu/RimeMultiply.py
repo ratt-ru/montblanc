@@ -41,9 +41,7 @@ DOUBLE_PARAMS = {
 }
 
 KERNEL_TEMPLATE = string.Template("""
-#include <cstdio>
-#include \"math_constants.h\"
-#include <montblanc/include/abstraction.cuh>
+#include <montblanc/abstraction.cuh>
 
 #define NA ${na}
 #define NBL ${nbl}
@@ -63,7 +61,7 @@ template <
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__ void
-complex_multiply(const typename Tr::ct * lhs, const typename Tr::ct * rhs, typename Tr::ct * result)
+complex_multiply(const typename Tr::CT * lhs, const typename Tr::CT * rhs, typename Tr::CT * result)
 {
     result->x = lhs->x*rhs->x;
     result->y = lhs->x*rhs->y;
@@ -76,7 +74,7 @@ template <
     typename Tr=montblanc::kernel_traits<T>,
     typename Po=montblanc::kernel_policies<T> >
 __device__ void
-complex_multiply_add(const typename Tr::ct * lhs, const typename Tr::ct * rhs, typename Tr::ct * result)
+complex_multiply_add(const typename Tr::CT * lhs, const typename Tr::CT * rhs, typename Tr::CT * result)
 {
     result->x += lhs->x*rhs->x;
     result->y += lhs->x*rhs->y;
@@ -90,28 +88,28 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__
 void rime_jones_multiply_impl(
-    typename Tr::ct * lhs,
-    typename Tr::ct * rhs,
-    typename Tr::ct * out_jones)
+    typename Tr::CT * lhs,
+    typename Tr::CT * rhs,
+    typename Tr::CT * out_jones)
 {
-    __shared__ typename Tr::ct result[BLOCKDIMX];
+    __shared__ typename Tr::CT result[BLOCKDIMX];
 
     int i = blockIdx.x*blockDim.x + threadIdx.x;
 
     if(i >= NJONES)
         { return; }
 
-    const typename Tr::ct a00 = lhs[i]; i += NJONES;
-    const typename Tr::ct a01 = lhs[i]; i += NJONES;
-    const typename Tr::ct a10 = lhs[i]; i += NJONES;
-    const typename Tr::ct a11 = lhs[i];
+    const typename Tr::CT a00 = lhs[i]; i += NJONES;
+    const typename Tr::CT a01 = lhs[i]; i += NJONES;
+    const typename Tr::CT a10 = lhs[i]; i += NJONES;
+    const typename Tr::CT a11 = lhs[i];
 
     i = blockIdx.x*blockDim.x + threadIdx.x;
 
-    const typename Tr::ct b00 = rhs[i]; i += NJONES;
-    const typename Tr::ct b01 = rhs[i]; i += NJONES;
-    const typename Tr::ct b10 = rhs[i]; i += NJONES;
-    const typename Tr::ct b11 = rhs[i];
+    const typename Tr::CT b00 = rhs[i]; i += NJONES;
+    const typename Tr::CT b01 = rhs[i]; i += NJONES;
+    const typename Tr::CT b10 = rhs[i]; i += NJONES;
+    const typename Tr::CT b11 = rhs[i];
 
     complex_multiply<T>(&a00,&b00,&result[threadIdx.x]);
     complex_multiply_add<T>(&a01,&b10,&result[threadIdx.x]);
@@ -170,8 +168,8 @@ class RimeMultiply(Node):
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
-            options=['-lineinfo'],
-            include_dirs=[montblanc.get_source_path()],
+            options=['-std=c++11', '-lineinfo'],
+            include_dirs=[montblanc.get_include_path()],
             no_extern_c=True)
 
         kname = 'rime_jones_multiply_float' \

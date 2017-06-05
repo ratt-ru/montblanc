@@ -4,8 +4,11 @@ dist/
 montblanc.egg-info/
 *.pyc
 
-# cub files
+# Old source directory, this can be deprecated
 montblanc/src/cub
+
+# cub files
+montblanc/include/cub
 
 # Documentation build
 docs/_build
@@ -35,3 +38,28 @@ docs/make.bat
 *.exe
 *.out
 *.app
+
+# Text files
+*.txt
+*.json
+
+# Binary Cruft
+*.pdf
+*.zip
+
+# Tigger
+*.lsm
+*.lsm.html
+
+# MeqTrees
+.tdl.conf
+
+# FITS files
+*.fits
+*.FITS
+
+# Tensorflow build cruft
+montblanc/tensorflow/rime_ops/.d/
+montblanc/tensorflow/rime_ops/.swp
+
+

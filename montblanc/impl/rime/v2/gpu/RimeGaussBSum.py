@@ -43,9 +43,7 @@ DOUBLE_PARAMS = {
 }
 
 KERNEL_TEMPLATE = string.Template("""
-#include <cstdio>
-#include \"math_constants.h\"
-#include <montblanc/include/abstraction.cuh>
+#include <montblanc/abstraction.cuh>
 
 #define NA ${na}
 #define NBL ${nbl}
@@ -70,19 +68,19 @@ template <
     typename Po=montblanc::kernel_policies<T> >
 __device__
 void rime_gauss_B_sum_impl(
-    typename Tr::ft * uvw,
-    typename Tr::ft * brightness,
-    typename Tr::ft * gauss_shape,
-    typename Tr::ft * sersic_shape,
-    typename Tr::ft * wavelength,
+    typename Tr::FT * uvw,
+    typename Tr::FT * brightness,
+    typename Tr::FT * gauss_shape,
+    typename Tr::FT * sersic_shape,
+    typename Tr::FT * wavelength,
     int * antenna1,
     int * antenna2,
-    typename Tr::ct * jones_EK_scalar,
+    typename Tr::CT * jones_EK_scalar,
     int * flag,
-    typename Tr::ft * weight_vector,
-    typename Tr::ct * visibilities,
-    typename Tr::ct * data_vis,
-    typename Tr::ft * chi_sqrd_result)
+    typename Tr::FT * weight_vector,
+    typename Tr::CT * visibilities,
+    typename Tr::CT * data_vis,
+    typename Tr::FT * chi_sqrd_result)
 {
     int CHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
@@ -137,10 +135,10 @@ void rime_gauss_B_sum_impl(
     if(threadIdx.y == 0 && threadIdx.z == 0)
         { wl[threadIdx.x] = wavelength[CHAN]; }
 
-    typename Tr::ct Isum = Po::make_ct(0.0, 0.0);
-    typename Tr::ct Qsum = Po::make_ct(0.0, 0.0);
-    typename Tr::ct Usum = Po::make_ct(0.0, 0.0);
-    typename Tr::ct Vsum = Po::make_ct(0.0, 0.0);
+    typename Tr::CT Isum = Po::make_ct(0.0, 0.0);
+    typename Tr::CT Qsum = Po::make_ct(0.0, 0.0);
+    typename Tr::CT Usum = Po::make_ct(0.0, 0.0);
+    typename Tr::CT Vsum = Po::make_ct(0.0, 0.0);
 
     for(int SRC=0;SRC<NPSRC;++SRC)
     {
@@ -159,13 +157,13 @@ void rime_gauss_B_sum_impl(
 
         // Get the complex scalars for antenna two and conjugate it
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_two = jones_EK_scalar[i];
+        typename Tr::CT ant_two = jones_EK_scalar[i];
         // Get the complex scalar for antenna one
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i];
+        typename Tr::CT ant_one = jones_EK_scalar[i];
 
         montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
-        typename Tr::ct pol;
+        typename Tr::CT pol;
 
         pol.x = I[threadIdx.z]+Q[threadIdx.z]; pol.y = 0;
         montblanc::complex_multiply_in_place<T>(pol, ant_one);
@@ -221,14 +219,14 @@ void rime_gauss_B_sum_impl(
         // Get the complex scalars for antenna two,
         // multiply in the exponent and conjugate it
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_two = jones_EK_scalar[i];
+        typename Tr::CT ant_two = jones_EK_scalar[i];
         ant_two.x *= exp; ant_two.y *= exp;
         // Get the complex scalar for antenna one
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i];
+        typename Tr::CT ant_one = jones_EK_scalar[i];
 
         montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
-        typename Tr::ct pol;
+        typename Tr::CT pol;
 
         pol.x = I[threadIdx.z]+Q[threadIdx.z]; pol.y = 0;
         montblanc::complex_multiply_in_place<T>(pol, ant_one);
@@ -287,14 +285,14 @@ void rime_gauss_B_sum_impl(
         // Get the complex scalars for antenna two,
         // multiply in the exponent and conjugate it
         i = (TIME*NA*NSRC + ANT2*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_two = jones_EK_scalar[i];
+        typename Tr::CT ant_two = jones_EK_scalar[i];
         ant_two.x *= sersic_factor; ant_two.y *= sersic_factor;
         // Get the complex scalar for antenna one
         i = (TIME*NA*NSRC + ANT1*NSRC + SRC)*NCHAN + CHAN;
-        typename Tr::ct ant_one = jones_EK_scalar[i];
+        typename Tr::CT ant_one = jones_EK_scalar[i];
 
         montblanc::complex_conjugate_multiply_in_place<T>(ant_one, ant_two);
-        typename Tr::ct pol;
+        typename Tr::CT pol;
 
         pol.x = I[threadIdx.z]+Q[threadIdx.z]; pol.y = 0;
         montblanc::complex_multiply_in_place<T>(pol, ant_one);
@@ -317,7 +315,7 @@ void rime_gauss_B_sum_impl(
 
     // XX polarisation
     i = (TIME*NBL + BL)*NCHAN + CHAN;
-    typename Tr::ct delta = data_vis[i];
+    typename Tr::CT delta = data_vis[i];
 
     // Zero polarisation if flagged
     if(flag[i] > 0)
@@ -390,29 +388,29 @@ extern "C" {
 // Macro that stamps out different kernels, depending
 // on whether we're handling floats or doubles
 // Arguments
-// - ft: The floating point type. Should be float/double.
-// - ct: The complex type. Should be float2/double2.
+// - FT: The floating point type. Should be float/double.
+// - CT: The complex type. Should be float2/double2.
 // - apply_weights: boolean indicating whether we're weighting our visibilities
 // - symbol: u or w depending on whether we're handling unweighted/weighted visibilities.
 
-#define stamp_gauss_b_sum_fn(ft, ct, apply_weights, symbol) \
+#define stamp_gauss_b_sum_fn(FT, CT, apply_weights, symbol) \
 __global__ void \
-rime_gauss_B_sum_ ## symbol ## chi_ ## ft( \
-    ft * uvw, \
-    ft * brightness, \
-    ft * gauss_shape, \
-    ft * sersic_shape, \
-    ft * wavelength, \
+rime_gauss_B_sum_ ## symbol ## chi_ ## FT( \
+    FT * uvw, \
+    FT * brightness, \
+    FT * gauss_shape, \
+    FT * sersic_shape, \
+    FT * wavelength, \
     int * antenna1, \
     int * antenna2, \
-    ct * jones_EK_scalar, \
+    CT * jones_EK_scalar, \
     int * flag, \
-    ft * weight_vector, \
-    ct * visibilities, \
-    ct * data_vis, \
-    ft * chi_sqrd_result) \
+    FT * weight_vector, \
+    CT * visibilities, \
+    CT * data_vis, \
+    FT * chi_sqrd_result) \
 { \
-    rime_gauss_B_sum_impl<ft, apply_weights>(uvw, brightness, gauss_shape, sersic_shape, \
+    rime_gauss_B_sum_impl<FT, apply_weights>(uvw, brightness, gauss_shape, sersic_shape, \
         wavelength, antenna1, antenna2, jones_EK_scalar, flag, \
         weight_vector, visibilities, data_vis, \
         chi_sqrd_result); \
@@ -446,8 +444,8 @@ class RimeGaussBSum(Node):
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
-            options=['-lineinfo','-maxrregcount', regs],
-            include_dirs=[montblanc.get_source_path()],
+            options=['-std=c++11', '-lineinfo','-maxrregcount', regs],
+            include_dirs=[montblanc.get_include_path()],
             no_extern_c=True)
 
         self.kernel = self.mod.get_function(kname)

@@ -44,8 +44,7 @@ DOUBLE_PARAMS = {
 }
 
 KERNEL_TEMPLATE = string.Template("""
-#include \"math_constants.h\"
-#include <montblanc/include/abstraction.cuh>
+#include <montblanc/abstraction.cuh>
 
 #define NA ${na}
 #define NBL ${nbl}
@@ -69,7 +68,7 @@ void rime_jones_EK_impl(
     T * wavelength,
     T * ref_wavelength,
     T * point_errors,
-    typename Tr::ct * jones_scalar,
+    typename Tr::CT * jones_scalar,
     T beam_width,
     T beam_clip)
 {
@@ -172,20 +171,20 @@ void rime_jones_EK_impl(
 
 extern "C" {
 
-#define stamp_rime_ek_fn(ft,ct) \
+#define stamp_rime_ek_fn(FT,CT) \
 __global__ void \
-rime_jones_EK_ ## ft( \
-    ft * UVW, \
-    ft * LM, \
-    ft * brightness, \
-    ft * wavelength, \
-    ft * ref_wavelength, \
-    ft * point_errors, \
-    ct * jones, \
-    ft beam_width, \
-    ft beam_clip) \
+rime_jones_EK_ ## FT( \
+    FT * UVW, \
+    FT * LM, \
+    FT * brightness, \
+    FT * wavelength, \
+    FT * ref_wavelength, \
+    FT * point_errors, \
+    CT * jones, \
+    FT beam_width, \
+    FT beam_clip) \
 { \
-    rime_jones_EK_impl<ft>(UVW, LM, brightness, wavelength, ref_wavelength, \
+    rime_jones_EK_impl<FT>(UVW, LM, brightness, wavelength, ref_wavelength, \
         point_errors, jones, beam_width, beam_clip); \
 }
 
@@ -214,8 +213,8 @@ class RimeEK(Node):
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
-            options=['-lineinfo','-maxrregcount', regs],
-            include_dirs=[montblanc.get_source_path()],
+            options=['-std=c++11', '-lineinfo','-maxrregcount', regs],
+            include_dirs=[montblanc.get_include_path()],
             no_extern_c=True)
 
         self.kernel = self.mod.get_function(kname)

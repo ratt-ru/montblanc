@@ -11,9 +11,10 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   dims 
-
-.. include:: ../README.rst
+   installation
+   concepts
+   rime_compute
+   api
 
 
 Indices and tables

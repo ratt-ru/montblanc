@@ -47,10 +47,8 @@ DOUBLE_PARAMS = {
 
 KERNEL_TEMPLATE = string.Template("""
 #include <stdint.h>
-#include <cstdio>
-#include \"math_constants.h\"
-#include <montblanc/include/abstraction.cuh>
-#include <montblanc/include/jones.cuh>
+#include <montblanc/abstraction.cuh>
+#include <montblanc/jones.cuh>
 
 #define BLOCKDIMX ${BLOCKDIMX}
 #define BLOCKDIMY ${BLOCKDIMY}
@@ -109,18 +107,18 @@ template <
 __device__
 void rime_sum_coherencies_impl(
     typename SumCohTraits<T>::UVWType * uvw,
-    typename Tr::ft * gauss_shape,
-    typename Tr::ft * sersic_shape,
-    typename Tr::ft * frequency,
+    typename Tr::FT * gauss_shape,
+    typename Tr::FT * sersic_shape,
+    typename Tr::FT * frequency,
     int * antenna1,
     int * antenna2,
-    typename Tr::ct * jones,
+    typename Tr::CT * jones,
     uint8_t * flag,
-    typename Tr::ft * weight_vector,
-    typename Tr::ct * observed_vis,
-    typename Tr::ct * G_term,
-    typename Tr::ct * visibilities,
-    typename Tr::ft * chi_sqrd_result)
+    typename Tr::FT * weight_vector,
+    typename Tr::CT * observed_vis,
+    typename Tr::CT * G_term,
+    typename Tr::CT * visibilities,
+    typename Tr::FT * chi_sqrd_result)
 {
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
     int BL = blockIdx.y*blockDim.y + threadIdx.y;
@@ -182,7 +180,7 @@ void rime_sum_coherencies_impl(
 
     // Initialise polarisation to zero if this is the first batch.
     // Otherwise, read in the visibilities from the previous batch.
-    typename Tr::ct polsum = Po::make_ct(0.0, 0.0);
+    typename Tr::CT polsum = Po::make_ct(0.0, 0.0);
     if(LEXT(nsrc) > 0)
     {
         i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
@@ -199,9 +197,9 @@ void rime_sum_coherencies_impl(
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
         i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
-        typename Tr::ct ant_one = jones[i];
+        typename Tr::CT ant_one = jones[i];
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
-        typename Tr::ct ant_two = jones[i];
+        typename Tr::CT ant_two = jones[i];
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
 
         polsum.x += ant_one.x;
@@ -242,12 +240,12 @@ void rime_sum_coherencies_impl(
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
         i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
-        typename Tr::ct ant_one = jones[i];
+        typename Tr::CT ant_one = jones[i];
         // Multiple in the gaussian shape
         ant_one.x *= exp;
         ant_one.y *= exp;
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
-        typename Tr::ct ant_two = jones[i];
+        typename Tr::CT ant_two = jones[i];
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
 
         polsum.x += ant_one.x;
@@ -293,11 +291,11 @@ void rime_sum_coherencies_impl(
         // in the exponent term
         // Get the complex scalar for antenna one and conjugate it
         i = ((SRC*NTIME + TIME)*NA + ANT1)*NPOLCHAN + POLCHAN;
-        typename Tr::ct ant_one = jones[i];
+        typename Tr::CT ant_one = jones[i];
         ant_one.x *= sersic_factor;
         ant_one.y *= sersic_factor;
         i = ((SRC*NTIME + TIME)*NA + ANT2)*NPOLCHAN + POLCHAN;
-        typename Tr::ct ant_two = jones[i];
+        typename Tr::CT ant_two = jones[i];
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(ant_one, ant_two);
 
         polsum.x += ant_one.x;
@@ -319,17 +317,17 @@ void rime_sum_coherencies_impl(
 
     // Multiply the visibility by antenna 1's g term
     i = (TIME*NA + ANT1)*NPOLCHAN + POLCHAN;
-    typename Tr::ct model_vis = G_term[i];
+    typename Tr::CT model_vis = G_term[i];
     montblanc::jones_multiply_4x4_in_place<T>(model_vis, polsum);
 
     // Multiply the visibility by antenna 2's g term
     i = (TIME*NA + ANT2)*NPOLCHAN + POLCHAN;
-    typename Tr::ct ant2_g_term = G_term[i];
+    typename Tr::CT ant2_g_term = G_term[i];
     montblanc::jones_multiply_4x4_hermitian_transpose_in_place<T>(model_vis, ant2_g_term);
 
     // Compute the chi squared sum terms
     i = (TIME*NBL + BL)*NPOLCHAN + POLCHAN;
-    typename Tr::ct obs_vis = observed_vis[i];
+    typename Tr::CT obs_vis = observed_vis[i];
 
     // Zero the polarisation if it is flagged
     if(flag[i] > 0)
@@ -370,7 +368,7 @@ void rime_sum_coherencies_impl(
     // Now, add the real and imaginary components
     // of each adjacent group of four polarisations
     // into the first polarisation.
-    typename Tr::ct other = cub::ShuffleIndex(obs_vis, cub::LaneId() + 2);
+    typename Tr::CT other = cub::ShuffleIndex(obs_vis, cub::LaneId() + 2);
 
     // Add polarisations 2 and 3 to 0 and 1
     if((POLCHAN & 0x3) < 2)
@@ -397,29 +395,29 @@ extern "C" {
 // Macro that stamps out different kernels, depending
 // on whether we're handling floats or doubles
 // Arguments
-// - ft: The floating point type. Should be float/double.
-// - ct: The complex type. Should be float2/double2.
+// - FT: The floating point type. Should be float/double.
+// - CT: The complex type. Should be float2/double2.
 // - apply_weights: boolean indicating whether we're weighting our visibilities
 // - vis_output: integer specifying the visibility output strategy
 
-#define stamp_sum_coherencies_fn(ft, ct, uvwt, apply_weights, vis_output) \
+#define stamp_sum_coherencies_fn(FT, CT, uvwt, apply_weights, vis_output) \
 __global__ void \
 rime_sum_coherencies( \
     uvwt * uvw, \
-    ft * gauss_shape, \
-    ft * sersic_shape, \
-    ft * frequency, \
+    FT * gauss_shape, \
+    FT * sersic_shape, \
+    FT * frequency, \
     int * antenna1, \
     int * antenna2, \
-    ct * jones, \
+    CT * jones, \
     uint8_t * flag, \
-    ft * weight_vector, \
-    ct * observed_vis, \
-    ct * G_term, \
-    ct * visibilities, \
-    ft * chi_sqrd_result) \
+    FT * weight_vector, \
+    CT * observed_vis, \
+    CT * G_term, \
+    CT * visibilities, \
+    FT * chi_sqrd_result) \
 { \
-    rime_sum_coherencies_impl<ft, apply_weights, vis_output>( \
+    rime_sum_coherencies_impl<FT, apply_weights, vis_output>( \
         uvw, gauss_shape, sersic_shape, \
         frequency, antenna1, antenna2, jones, flag, \
         weight_vector, observed_vis, G_term, \
@@ -467,8 +465,8 @@ class RimeSumCoherencies(Node):
 
         self.mod = SourceModule(
             KERNEL_TEMPLATE.substitute(**D),
-            options=['-lineinfo','-maxrregcount', regs],
-            include_dirs=[montblanc.get_source_path()],
+            options=['-std=c++11', '-lineinfo','-maxrregcount', regs],
+            include_dirs=[montblanc.get_include_path()],
             no_extern_c=True)
 
         self.rime_const_data = self.mod.get_global('C')

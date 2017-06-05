@@ -20,6 +20,7 @@
 
 from montblanc.solvers.mb_numpy_solver import MontblancNumpySolver
 from montblanc.solvers.mb_cuda_solver import MontblancCUDASolver
+from montblanc.solvers.mb_tensorflow_solver import MontblancTensorflowSolver
 
 def copy_solver(src_slvr, dest_slvr, safe=False):
     """
