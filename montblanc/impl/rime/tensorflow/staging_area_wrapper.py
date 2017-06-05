@@ -28,12 +28,14 @@ class StagingAreaWrapper(object):
             shared_name=shared_name)
 
         self._put_op = sa.put(self._put_key_ph, {n: p for n, p
-                                            in zip(fed_arrays, placeholders)})
-        self._get_op = sa.get(self._get_key_ph)
-        self._peek_op = sa.get(self._peek_key_ph)
-        self._pop_op = sa.get()
-        self._clear_op = sa.clear()
-        self._size_op = sa.size()
+                                            in zip(fed_arrays, placeholders)},
+                                                name="%s_put_op" % name)
+        self._get_op = sa.get(self._get_key_ph, name="%s_get_op" % name)
+        self._peek_op = sa.get(self._peek_key_ph, name="%s_peek_op" % name)
+        self._pop_op = sa.get(name="%s_pop_op" % name)
+        self._clear_op = sa.clear(name="%s_clear_op" % name)
+        self._size_op = sa.size(name="%s_size_op" % name)
+        self._incomplete_size_op = sa.incomplete_size(name="%s_incomplete_size_op" % name)
 
     @property
     def staging_area(self):
@@ -59,25 +61,26 @@ class StagingAreaWrapper(object):
     def peek_key_ph(self):
         return self._peek_key_ph
 
-    def put(self, key, data, indices=None):
-        return self._staging_area.put(key, data, indices)
+    def put(self, key, data, indices=None, name=None):
+        return self._staging_area.put(key, data, indices, name=name)
 
-    def put_from_list(self, key, data):
+    def put_from_list(self, key, data, name=None):
         return self.put(key, {n: d for n,d
-                                in zip(self._fed_arrays, data)})
+                                in zip(self._fed_arrays, data)},
+                            name=name)
 
-    def get(self, key=None):
-        return self._staging_area.get(key)
+    def get(self, key=None, name=None):
+        return self._staging_area.get(key, name=name)
 
-    def peek(self, key=None):
-        return self._staging_area.peek(key)
+    def peek(self, key=None, name=None):
+        return self._staging_area.peek(key, name=name)
 
-    def get_to_list(self, key=None):
-        k, D = self.get(key)
+    def get_to_list(self, key=None, name=None):
+        k, D = self.get(key, name=name)
         return k, [D[n] for n in self._fed_arrays]
 
-    def get_to_attrdict(self, key=None):
-        key, values = self.get(key)
+    def get_to_attrdict(self, key=None, name=None):
+        key, values = self.get(key, name=name)
         return key, AttrDict(**values)
 
     @property
@@ -103,6 +106,10 @@ class StagingAreaWrapper(object):
     @property
     def size_op(self):
         return self._size_op
+
+    @property
+    def incomplete_size_op(self):
+        return self._incomplete_size_op
 
 def create_staging_area_wrapper(name, fed_arrays, data_source, *args, **kwargs):
     return StagingAreaWrapper(name, fed_arrays, data_source, *args, **kwargs)

@@ -212,8 +212,14 @@ class RimeSolver(MontblancTensorflowSolver):
 
         session_config = tf.ConfigProto(allow_soft_placement=True)
 
-        self._tf_session = tf.Session(tf_server_target, graph=compute_graph,
+        session = tf.Session(tf_server_target, graph=compute_graph,
                                                         config=session_config)
+
+        from tensorflow.python import debug as tf_debug
+
+        self._tf_session = session
+        #self._tf_session = tf_debug.LocalCLIDebugWrapperSession(session)
+
         self._tf_session.run(init_op)
 
         #======================
@@ -340,13 +346,14 @@ class RimeSolver(MontblancTensorflowSolver):
         """ Implementation of staging_area feeding """
         session = self._tf_session
         FD = self._tf_feed_data
-        LSA = FD.local_compute
+        LSA = FD.local_cpu
+        SSA = FD.local_compute.sources
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
-        src_types = LSA.sources[0].keys()
+        src_types = SSA[0].keys()
         src_strides = [int(i) for i in cube.dim_extent_size(*src_types)]
-        src_staging_areas = [[LSA.sources[d][st] for st in src_types]
+        src_staging_areas = [[SSA[d][st] for st in src_types]
             for d in range(self._ndevices)]
 
         compute_feed_dict = { ph: cube.dim_global_size(n) for
@@ -412,7 +419,7 @@ class RimeSolver(MontblancTensorflowSolver):
             src_types, src_strides, src_staging_areas,
             global_iter_args):
 
-        iq = self._tf_feed_data.local_compute.feed_many[dev_id]
+        iq = self._tf_feed_data.local_cpu.feed_many
 
         # Decode the descriptor and update our cube dimensions
         dims = self._transcoder.decode(descriptor)
@@ -495,11 +502,14 @@ class RimeSolver(MontblancTensorflowSolver):
         """ Call the tensorflow compute """
 
         try:
-            descriptor, enq = self._tfrun(self._tf_expr[dev_id], feed_dict=feed_dict)
+            expr = self._tf_expr[dev_id]
+            self._tfrun([expr.stage_feed_many,
+                         expr.stage_output,
+                         expr.stage_cpu_output],
+                            feed_dict=feed_dict)
         except Exception as e:
             montblanc.log.exception("Compute Exception")
             raise
-
 
     def _consume(self, data_sinks, cube, global_iter_args):
         """ Consume stub """
@@ -512,7 +522,7 @@ class RimeSolver(MontblancTensorflowSolver):
     def _consume_impl(self, data_sinks, cube, global_iter_args):
         """ Consume """
 
-        LSA = self._tf_feed_data.local_compute
+        LSA = self._tf_feed_data.local_cpu
         key, output = self._tfrun(LSA.output.pop_op)
 
         # Expect the descriptor in the first tuple position
@@ -603,9 +613,9 @@ class RimeSolver(MontblancTensorflowSolver):
         # Construct data sources from those supplied by the
         # source providers, if they're associated with
         # input sources
-        LSA = self._tf_feed_data.local_compute
-        input_sources = self._tf_feed_data.local_cpu.input_sources
-        all_staging_areas = self._tf_feed_data.local_cpu.all_staging_areas
+        LSA = self._tf_feed_data.local_cpu
+        CSA = self._tf_feed_data.local_compute
+        input_sources = LSA.input_sources
         data_sources = {n: DataSource(f, cube.array(n).dtype, prov.name())
             for prov in source_providers
             for n, f in prov.sources().iteritems()
@@ -620,8 +630,8 @@ class RimeSolver(MontblancTensorflowSolver):
         # Generate (name, placeholder, datasource, array schema)
         # for the arrays required by each staging_area
         gen = ((a, ph, data_sources[a], array_schemas[a])
-            for ph, a in zip(LSA.feed_once[0].placeholders,
-                             LSA.feed_once[0].fed_arrays))
+            for ph, a in zip(LSA.feed_once.placeholders,
+                             LSA.feed_once.fed_arrays))
 
         # Get input data by calling the data source functors
         input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
@@ -633,12 +643,15 @@ class RimeSolver(MontblancTensorflowSolver):
         # Create a feed dictionary from the input data
         feed_dict = { ph: data for (a, ph, data) in input_data }
         # Add the key to insert
-        feed_dict[LSA.feed_once[0].put_key_ph] = FEED_ONCE_KEY
+        feed_dict[LSA.feed_once.put_key_ph] = FEED_ONCE_KEY
 
         # Clear all staging areas and populate the
         # feed once staging area
-        self._tfrun([sa.clear_op for sa in all_staging_areas])
-        self._tfrun(LSA.feed_once[0].put_op, feed_dict=feed_dict)
+        self._tfrun([sa.clear_op for sa in LSA.all_staging_areas +
+                                           CSA.all_staging_areas])
+        self._tfrun([LSA.feed_once.put_op] +
+                    [e.stage_feed_once for e in self._tf_expr],
+                    feed_dict=feed_dict)
 
         try:
             # Run the descriptor executor immediately
@@ -798,6 +811,8 @@ def _create_defaults_source_provider(cube, data_source):
 
 def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
 
+    cpu_dev = tf.DeviceSpec(device_type='CPU')
+
     FD = AttrDict()
     # https://github.com/bcj/AttrDict/issues/34
     FD._setattr('_sequence_type', list)
@@ -835,15 +850,17 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     # Descriptor staging area
     #=====================================
 
-    local_cpu.descriptor = create_staging_area_wrapper('descriptors',
-        ['descriptor'], dfs, ordered=True)
+    with tf.device(cpu_dev):
+        local_cpu.descriptor = create_staging_area_wrapper('descriptors',
+            ['descriptor'], dfs, ordered=True)
 
     #======================================
     # Staging area for fed once data sources
     #======================================
 
-    local_cpu.feed_once = create_staging_area_wrapper('feed_once_cpu',
-        [a.name for a in feed_once], dfs)
+    with tf.device(cpu_dev):
+        local_cpu.feed_once = create_staging_area_wrapper('feed_once_cpu',
+            [a.name for a in feed_once], dfs, ordered=True)
 
     # Create the staging_areas on the compute devices
     staging_areas = []
@@ -863,10 +880,11 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     #===========================================
 
     # Create the staging_area for holding the feed many input
-    local_cpu.feed_many = create_staging_area_wrapper(
-                'feed_many_cpu',
-                ['descriptor'] + [a.name for a in feed_many],
-                dfs, ordered=True)
+    with tf.device(cpu_dev):
+        local_cpu.feed_many = create_staging_area_wrapper(
+                    'feed_many_cpu',
+                    ['descriptor'] + [a.name for a in feed_many],
+                    dfs, ordered=True)
 
     # Create the staging_areas on the compute devices
     staging_areas = []
@@ -886,12 +904,14 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     #=================================================
 
     # Create the source array staging areas
-    local_cpu.sources = { src_nr_var: create_staging_area_wrapper(
-            '%s_cpu' % src_type,
-            [a.name for a in src_data_sources[src_nr_var]], dfs)
+    with tf.device(cpu_dev):
+        local_cpu.sources = { src_nr_var: create_staging_area_wrapper(
+                '%s_cpu' % src_type,
+                [a.name for a in src_data_sources[src_nr_var]], dfs,
+                ordered=True)
 
-        for src_type, src_nr_var in source_var_types().iteritems()
-    }
+            for src_type, src_nr_var in source_var_types().iteritems()
+        }
 
     staging_areas = []
 
@@ -900,7 +920,8 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
             # Create the source array staging areas
             saws = {src_nr_var: create_staging_area_wrapper(
                 '%s_compute_%d' % (src_type, i),
-                [a.name for a in src_data_sources[src_nr_var]], dfs)
+                [a.name for a in src_data_sources[src_nr_var]], dfs,
+                ordered=True)
 
                  for src_type, src_nr_var in source_var_types().iteritems()
              }
@@ -918,8 +939,8 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
                 'output', ['descriptor', 'model_vis'],
                 dfs, ordered=True)
 
-
-    local_cpu.output = create_staging_area_wrapper('output',
+    with tf.device(cpu_dev):
+        local_cpu.output = create_staging_area_wrapper('output',
         ['descriptor', 'model_vis', 'chi_squared'], dfs, ordered=True)
 
     #=======================================================
@@ -937,6 +958,10 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     local_cpu.all_staging_areas = all_staging_areas
     local_cpu.input_sources = input_sources
 
+    src_sa = [sa for devsa in local_compute.sources for sa in devsa.values()]
+    all_staging_areas = local_compute.feed_many + local_compute.feed_once + src_sa
+    local_compute.all_staging_areas = all_staging_areas
+
     return FD
 
 def _construct_tensorflow_expression(feed_data, device, dev_id):
@@ -951,17 +976,21 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
     polarisation_type = slvr_cfg['polarisation_type']
 
     # Create ops for copying from the CPU to the compute staging area
-    key, data = local_cpu.feed_once.get(FEED_ONCE_KEY)
-    stage_feed_once = local_compute.feed_once[dev_id].put(key, data)
+    data = local_cpu.feed_once.peek(FEED_ONCE_KEY, name="cpu_feed_once_peek")
+    stage_feed_once = local_compute.feed_once[dev_id].put(FEED_ONCE_KEY, data,
+                                                  name="compute_feed_once_put")
 
-    key, data = local_cpu.feed_many.get()
-    stage_feed_many = local_compute.feed_many[dev_id].put(key, data)
+    key, data = local_cpu.feed_many.get(name="cpu_feed_many_get")
+    stage_feed_many = local_compute.feed_many[dev_id].put(key, data,
+                                                  name="compute_feed_many_put")
 
     # Pull RIME inputs out of the feed many staging_area
     # for the relevant device, adding the feed once
     # inputs to the dictionary
-    key, D = local_compute.feed_many[dev_id].get_to_attrdict()
-    D.update(local_compute.feed_once[dev_id].peek(FEED_ONCE_KEY))
+    key, D = local_compute.feed_many[dev_id].get_to_attrdict(
+                                                  name="compute_feed_many_get")
+    D.update(local_compute.feed_once[dev_id].peek(FEED_ONCE_KEY,
+                                                  name="compute_feed_once_peek"))
 
     with tf.device(device):
         # Infer chunk dimensions
@@ -1115,16 +1144,32 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
             D.antenna1, D.antenna2, D.direction_independent_effects, D.flag,
             D.weight, D.model_vis, summed_coherencies, D.observed_vis)
 
+<<<<<<< 6db974df8b0e8249c3a659be323c8b5673765af2
     # Create staging_area put operation
     stage_output = local_compute.output.put(key,
         {'descriptor' : D.descriptor, 'model_vis': model_vis,
                                 'chi_squared': chi_squared})
+=======
+        # Stage output in the compute output staging area
+        stage_output = local_compute.output.put(key,
+            {'descriptor' : D.descriptor, 'model_vis': model_vis})
+>>>>>>> Expose compute via staging operations
 
+    # Create ops for shifting output from compute staging area
+    # to CPU staging area
     out_key, out_data = local_compute.output.get(key)
-    unstage_output = local_cpu.output.put(out_key, out_data)
+    stage_cpu_output = local_cpu.output.put(out_key, out_data)
 
-    # Return descriptor and staging_area operation
-    return D.descriptor, stage_output
+    ComputeNodes = attr.make_class("ComputeNodes", ["stage_feed_many",
+                                                    "stage_feed_once",
+                                                    "stage_output",
+                                                    "stage_cpu_output"])
+
+    # Return Compute operations
+    return ComputeNodes(stage_feed_many,
+                        stage_feed_once,
+                        stage_output,
+                        stage_cpu_output)
 
 def _get_data(data_source, context):
     """ Get data from the data source, checking the return values """
