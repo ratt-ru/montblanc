@@ -172,7 +172,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         use_cpus = device_type == 'CPU'
         montblanc.log.info("Using '{}' devices for compute".format(device_type))
-        self._devices = cpus if use_cpus else gpus
+        self._devices = cpus if device_type == 'CPU' else gpus
 
         assert len(self._devices) > 0
 
