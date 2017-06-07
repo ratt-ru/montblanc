@@ -28,6 +28,7 @@ import montblanc
 from parallactic_angles import parallactic_angles
 
 from montblanc.src_types import (
+    source_var_types,
     source_types,
     source_nr_vars,
     default_sources,
