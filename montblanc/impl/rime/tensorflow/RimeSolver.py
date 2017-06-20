@@ -78,39 +78,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         cube, slvr_cfg = self.hypercube, self.config()
 
-        mbu.register_default_dimensions(cube, slvr_cfg)
-
-        # Configure the dimensions of the beam cube
-        cube.register_dimension('beam_lw',
-            slvr_cfg[Options.E_BEAM_WIDTH],
-            description='E Beam cube l width')
-
-        cube.register_dimension('beam_mh',
-            slvr_cfg[Options.E_BEAM_HEIGHT],
-            description='E Beam cube m height')
-
-        cube.register_dimension('beam_nud',
-            slvr_cfg[Options.E_BEAM_DEPTH],
-            description='E Beam cube nu depth')
-
-        #=========================================
-        # Register hypercube Arrays and Properties
-        #=========================================
-
-        from montblanc.impl.rime.tensorflow.config import (A, P)
-
-        def _massage_dtypes(A, T):
-            def _massage_dtype_in_dict(D):
-                new_dict = D.copy()
-                new_dict['dtype'] = mbu.dtype_from_str(D['dtype'], T)
-                return new_dict
-
-            return [_massage_dtype_in_dict(D) for D in A]
-
-
-        T = self.type_dict()
-        cube.register_properties(_massage_dtypes(P, T))
-        cube.register_arrays(_massage_dtypes(A, T))
+        _setup_hypercube(cube, slvr_cfg)
 
         #=======================
         # Data Sources and Sinks
@@ -1347,3 +1315,45 @@ def _apply_source_provider_dim_updates(cube, source_providers, budget_dims):
     # Return our cube size
     return cube.bytes_required()
 
+def _setup_hypercube(cube, slvr_cfg):
+    """ Sets up the hypercube given a solver configuration """
+    mbu.register_default_dimensions(cube, slvr_cfg)
+
+    # Configure the dimensions of the beam cube
+    cube.register_dimension('beam_lw',
+                            slvr_cfg[Options.E_BEAM_WIDTH],
+                            description='E Beam cube l width')
+
+    cube.register_dimension('beam_mh',
+                            slvr_cfg[Options.E_BEAM_HEIGHT],
+                            description='E Beam cube m height')
+
+    cube.register_dimension('beam_nud',
+                            slvr_cfg[Options.E_BEAM_DEPTH],
+                            description='E Beam cube nu depth')
+
+    # =========================================
+    # Register hypercube Arrays and Properties
+    # =========================================
+
+    from montblanc.impl.rime.tensorflow.config import (A, P)
+
+    def _massage_dtypes(A, T):
+        def _massage_dtype_in_dict(D):
+            new_dict = D.copy()
+            new_dict['dtype'] = mbu.dtype_from_str(D['dtype'], T)
+            return new_dict
+
+        return [_massage_dtype_in_dict(D) for D in A]
+
+    dtype = slvr_cfg.get('dtype', Options.DTYPE_FLOAT)
+    is_f32 = dtype == Options.DTYPE_FLOAT
+
+    T = {
+        'ft' : np.float32 if is_f32 else np.float64,
+        'ct' : np.complex64 if is_f32 else np.complex128,
+        'int' : int,
+    }
+
+    cube.register_properties(_massage_dtypes(P, T))
+    cube.register_arrays(_massage_dtypes(A, T))
