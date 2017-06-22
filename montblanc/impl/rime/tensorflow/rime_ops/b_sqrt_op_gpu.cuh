@@ -89,21 +89,26 @@ __global__ void rime_b_sqrt(
     if(SRC >= nsrc || TIME >= ntime || CHAN >= nchan)
         { return; }
 
-    __shared__  FT freq_ratio[LTr::BLOCKDIMX];
+    __shared__ FT src_rfreq[LTr::BLOCKDIMZ];
+    __shared__ FT freq[LTr::BLOCKDIMX];
 
-    // TODO. Using 3 times more shared memory than we
-    // really require here, since there's only
-    // one frequency per channel.
-    if(threadIdx.y == 0 && threadIdx.z == 0)
+    // Varies by channel
+    if(threadIdx.z == 0 && threadIdx.y == 0)
     {
-        freq_ratio[threadIdx.x] = (frequency[CHAN] / ref_freq[CHAN]);
+        freq[threadIdx.x] = frequency[CHAN];
+    }
+
+    // Varies by source
+    if(threadIdx.y == 0 && threadIdx.x == 0)
+    {
+        src_rfreq[threadIdx.z] = ref_freq[SRC];
     }
 
     __syncthreads();
 
     // Calculate power term
     int i = SRC*ntime + TIME;
-    FT power = Po::pow(freq_ratio[threadIdx.x], alpha[i]);
+    FT power = Po::pow(freq[threadIdx.x]/src_rfreq[threadIdx.z], alpha[i]);
 
     // Read in stokes parameters (IQUV)
     ST _stokes = stokes[i];

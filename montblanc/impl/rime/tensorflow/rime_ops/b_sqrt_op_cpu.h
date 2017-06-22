@@ -114,10 +114,11 @@ public:
                 {
                     // Compute square root of spectral index
                     FT psqrt = std::pow(
-                        frequency(chan)/ref_freq(chan),
+                        frequency(chan)/ref_freq(src),
                         alpha(src, time)*0.5);
 
-                    // Assign square root of the brightness matrix
+                    // Assign square root of the brightness matrix,
+                    // computed via cholesky decomposition
                     b_sqrt(src, time, chan, XX) = L00*psqrt;
                     b_sqrt(src, time, chan, XY) = 0.0;
                     b_sqrt(src, time, chan, YX) = L10*psqrt;

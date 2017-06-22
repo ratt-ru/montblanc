@@ -34,8 +34,8 @@ def brightness_numpy(stokes, alpha, frequency, ref_freq):
     V = stokes[:,:,3].reshape(nsrc, ntime, 1)
 
     # Compute the spectral index
-    freq_ratio = (frequency/ref_freq)[np.newaxis,np.newaxis,:]
-    power = np.power(freq_ratio, alpha[:,:,np.newaxis])
+    freq_ratio = frequency[None,None,:]/ref_freq[:,None,None]
+    power = np.power(freq_ratio, alpha[:,:,None])
 
     # Compute the brightness matrix
     B = np.empty(shape=(nsrc, ntime, nchan, 4), dtype=ctype)
@@ -69,7 +69,7 @@ np_stokes[-1,-1,:] = 0
 
 np_alpha = np.random.random(size=(nsrc, ntime)).astype(dtype)*0.8
 np_frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=dtype)
-np_ref_freq = np.full_like(np_frequency, 1.4e9)
+np_ref_freq = 0.2e9*np.random.random(size=(nsrc,)).astype(dtype) + 1.3e9
 
 # Create tensorflow arrays from the numpy arrays
 stokes = tf.Variable(np_stokes, name='stokes')

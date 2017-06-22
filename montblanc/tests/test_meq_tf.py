@@ -58,7 +58,6 @@ with pt.table(msfile, ack=False, readonly=False) as T:
 # Extract frequencies from the MS
 with pt.table(msfile + '::SPECTRAL_WINDOW', ack=False) as SW:
     frequency = SW.getcol('CHAN_FREQ')[0]
-    ref_freq = SW.getcol('REF_FREQUENCY')[0]
 
 bandwidth = frequency[-1] - frequency[0]
 
@@ -110,6 +109,7 @@ def get_point_sources(nsrc):
     stokes = np.empty(shape=(nsrc, 4), dtype=dtype)
     I, Q, U, V = stokes[:,0], stokes[:,1], stokes[:,2], stokes[:,3]
     alphas = np.empty(shape=(nsrc,), dtype=dtype)
+    ref_freq = np.empty(shape=(nsrc,), dtype=dtype)
 
     # Source coordinates between -0.5 and 0.5 degrees
     source_coords[:] = (rf(size=source_coords.shape) - 0.5)
@@ -129,23 +129,27 @@ def get_point_sources(nsrc):
 
     alphas[:] = 2*(np.random.random(size=alphas.size) - 0.5)
 
-    return np.deg2rad(source_coords), np.asarray(stokes), np.asarray(alphas)
+    ref_freq[:] = 1.3e9 + np.random.random(ref_freq.size)*0.2e9
+
+    return (np.deg2rad(source_coords), np.asarray(stokes),
+            np.asarray(alphas), np.asarray(ref_freq))
 
 def get_gaussian_sources(nsrc):
-    c, s, a = get_point_sources(nsrc)
+    c, s, a, r= get_point_sources(nsrc)
     gauss_shape = np.empty(shape=(3, nsrc), dtype=np.float64)
     gauss_shape[:] = rf(size=gauss_shape.shape)
-    return c, s, a, gauss_shape
+    return c, s, a, r, gauss_shape
 
 npsrc, ngsrc = 5, 5
 
-pt_lm, pt_stokes, pt_alpha = get_point_sources(npsrc)
+pt_lm, pt_stokes, pt_alpha, pt_ref_freq = get_point_sources(npsrc)
 
 assert pt_lm.shape == (npsrc, 2), pt_lm.shape
 assert pt_stokes.shape == (npsrc, 4), pt_stokes.shape
 assert pt_alpha.shape == (npsrc,), pt_alpha.shape
+assert pt_ref_freq.shape == (npsrc,), pt_ref_freq.shape
 
-g_lm, g_stokes, g_alpha, g_shape = get_gaussian_sources(ngsrc)
+g_lm, g_stokes, g_alpha, g_ref_freq, g_shape = get_gaussian_sources(ngsrc)
 
 #=========================================
 # Create Tigger ASCII sky model
@@ -160,16 +164,16 @@ with pt.table(msfile + '::FIELD', ack=False, readonly=True) as F:
 # Create the tigger sky model
 with open(tigger_sky_file, 'w') as f:
     f.write('#format: ra_d dec_d i q u v spi freq0 emaj_s emin_s pa_d\n')
-    it = enumerate(itertools.izip(pt_lm, pt_stokes, pt_alpha))
-    for i, ((l, m), (I, Q, U, V), alpha) in it:
+    it = enumerate(itertools.izip(pt_lm, pt_stokes, pt_alpha, pt_ref_freq))
+    for i, ((l, m), (I, Q, U, V), alpha, ref_freq) in it:
         ra, dec = lm_to_radec(l, m, ra0, dec0)
         l, m = np.rad2deg([ra,dec])
 
         f.write('{l:.20f} {m:.20f} {i} {q} {u} {v} {spi} {rf:.20f}\n'.format(
             l=l, m=m, i=I, q=Q, u=U, v=V, spi=alpha, rf=ref_freq))
 
-    it = enumerate(itertools.izip(g_lm, g_stokes, g_alpha, g_shape.T))
-    for i, ((l, m), (I, Q, U, V), alpha, (emaj, emin, pa)) in it:
+    it = enumerate(itertools.izip(g_lm, g_stokes, g_alpha, g_ref_freq, g_shape.T))
+    for i, ((l, m), (I, Q, U, V), alpha, ref_freq, (emaj, emin, pa)) in it:
         ra, dec = lm_to_radec(l, m, ra0, dec0)
         l, m = np.rad2deg([ra,dec])
         # Convert to seconds
@@ -241,6 +245,10 @@ class RadioSourceProvider(SourceProvider):
         (lp, up), (lt, ut) = context.dim_extents('npsrc', 'ntime')
         return np.tile(pt_alpha[lp:up, np.newaxis], [1, ut-lt])
 
+    def point_ref_freq(self, context):
+        (lp, up) = context.dim_extents('npsrc')
+        return pt_ref_freq[lp:up]
+
     def gaussian_lm(self, context):
         lg, ug = context.dim_extents('ngsrc')
         return g_lm[lg:ug, :]
@@ -252,6 +260,10 @@ class RadioSourceProvider(SourceProvider):
     def gaussian_alpha(self, context):
         (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
         return np.tile(g_alpha[lg:ug, np.newaxis], [1, ut-lt])
+
+    def gaussian_ref_freq(self, context):
+        (lg, ug) = context.dim_extents('ngsrc')
+        return g_ref_freq[lg:ug]
 
     def gaussian_shape(self, context):
         (lg, ug) = context.dim_extents('ngsrc')
@@ -268,9 +280,6 @@ class RadioSourceProvider(SourceProvider):
         gauss[2,:] = emin / emaj
 
         return gauss
-
-    def ref_frequency(self, context):
-        return np.full(context.shape, ref_freq, context.dtype)
 
     def updated_dimensions(self):
         return [('npsrc', pt_lm.shape[0]), ('ngsrc', g_lm.shape[0])]
