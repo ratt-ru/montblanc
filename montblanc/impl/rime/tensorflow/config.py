@@ -349,7 +349,7 @@ A = [
         units   = HERTZ),
 
     # Beam cube
-    array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
+    array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 'npol'), 'ct',
         default = identity_on_pols,
         test    = lambda s, c: rc(c.shape, c.dtype),
         tags    = "input, constant",
@@ -361,7 +361,7 @@ A = [
         units   = DIMENSIONLESS),
 
     # Direction-Independent Effects
-    array_dict('gterm', ('ntime', 'na', 'nchan', 4), 'ct',
+    array_dict('gterm', ('ntime', 'na', 'nchan', 'npol'), 'ct',
         default = identity_on_pols,
         test    = lambda s, c: rc(c.shape, c.dtype),
         tags    = "input, constant",
@@ -448,7 +448,7 @@ A = [
     # Observation Data
 
     # Visibility flagging array
-    array_dict('flag', ('ntime', 'nbl', 'nchan', 4), np.uint8,
+    array_dict('flag', ('ntime', 'nbl', 'nchan', 'npol'), np.uint8,
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: np.random.random_integers(0, 1,
             size=c.shape).astype(np.uint8),
@@ -457,7 +457,7 @@ A = [
             "computing a Residual or Chi-Squared value.",
         unut    = DIMENSIONLESS),
     # Weight array
-    array_dict('weight', ('ntime','nbl','nchan',4), 'ft',
+    array_dict('weight', ('ntime','nbl','nchan', 'npol'), 'ft',
         default = lambda s, c: np.ones(c.shape, c.dtype),
         test    = lambda s, c: rf(c.shape, c.dtype),
         tags    = "input, constant",
@@ -465,7 +465,7 @@ A = [
             "visibilities when computing a Chi-Squared value.",
         units   = DIMENSIONLESS),
     # Observed Visibilities
-    array_dict('observed_vis', ('ntime','nbl','nchan',4), 'ct',
+    array_dict('observed_vis', ('ntime','nbl','nchan', 'npol'), 'ct',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rc(c.shape, c.dtype),
         tags    = "input, constant",
@@ -473,7 +473,7 @@ A = [
             "Chi-Squared values."),
 
     # Model Visibilities
-    array_dict('model_vis', ('ntime','nbl','nchan',4), 'ct',
+    array_dict('model_vis', ('ntime','nbl','nchan', 'npol'), 'ct',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rc(c.shape, c.dtype),
         tags    = ("input, output, constant"),
@@ -484,13 +484,13 @@ A = [
             "In the context of output, these are the RIME model visibilities "),
 
     # Result arrays
-    array_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 4), 'ct',
+    array_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 'npol'), 'ct',
         tags="temporary"),
     array_dict('cplx_phase', ('nsrc','ntime','na','nchan'), 'ct',
         tags="temporary"),
-    array_dict('ejones', ('nsrc','ntime','na','nchan',4), 'ct',
+    array_dict('ejones', ('nsrc','ntime','na','nchan', 'npol'), 'ct',
         tags="temporary"),
-    array_dict('ant_jones', ('nsrc','ntime','na','nchan',4), 'ct',
+    array_dict('ant_jones', ('nsrc','ntime','na','nchan', 'npol'), 'ct',
         tags="temporary"),
     array_dict('sgn_brightness', ('nsrc', 'ntime'), np.int8,
         tags="temporary"),

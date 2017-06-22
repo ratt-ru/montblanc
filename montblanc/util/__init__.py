@@ -442,6 +442,10 @@ def register_default_dimensions(cube, slvr_cfg):
     nchan = slvr_cfg.get(Options.NCHAN)
     npol = slvr_cfg.get(Options.NPOL)
 
+    if not npol == 4:
+        raise ValueError("npol set to {}, but only 4 polarisations "
+                         "are currently supported.")
+
     # Register these dimensions on this solver.
     cube.register_dimension('ntime', ntime,
         description=Options.NTIME_DESCRIPTION)

@@ -34,6 +34,7 @@ import attr
 
 import montblanc
 import montblanc.util as mbu
+from montblanc.src_types import source_var_types
 from montblanc.solvers import MontblancTensorflowSolver
 from montblanc.config import RimeSolverConfig as Options
 
@@ -78,39 +79,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
         cube, slvr_cfg = self.hypercube, self.config()
 
-        mbu.register_default_dimensions(cube, slvr_cfg)
-
-        # Configure the dimensions of the beam cube
-        cube.register_dimension('beam_lw',
-            slvr_cfg[Options.E_BEAM_WIDTH],
-            description='E Beam cube l width')
-
-        cube.register_dimension('beam_mh',
-            slvr_cfg[Options.E_BEAM_HEIGHT],
-            description='E Beam cube m height')
-
-        cube.register_dimension('beam_nud',
-            slvr_cfg[Options.E_BEAM_DEPTH],
-            description='E Beam cube nu depth')
-
-        #=========================================
-        # Register hypercube Arrays and Properties
-        #=========================================
-
-        from montblanc.impl.rime.tensorflow.config import (A, P)
-
-        def _massage_dtypes(A, T):
-            def _massage_dtype_in_dict(D):
-                new_dict = D.copy()
-                new_dict['dtype'] = mbu.dtype_from_str(D['dtype'], T)
-                return new_dict
-
-            return [_massage_dtype_in_dict(D) for D in A]
-
-
-        T = self.type_dict()
-        cube.register_properties(_massage_dtypes(P, T))
-        cube.register_arrays(_massage_dtypes(A, T))
+        _setup_hypercube(cube, slvr_cfg)
 
         #=======================
         # Data Sources and Sinks
@@ -862,48 +831,6 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     input_arrays = [a for a in cube.arrays().itervalues()
                     if 'input' in a.tags]
 
-    from montblanc.src_types import source_var_types
-
-    def _partition(iter_dims, data_sources):
-        """
-        Partition data sources into
-
-        1. Dictionary of data sources associated with radio sources.
-        2. List of data sources to feed multiple times.
-        3. List of data sources to feed once.
-        """
-
-        src_nr_vars = set(source_var_types().values())
-        iter_dims = set(iter_dims)
-
-        src_data_sources = collections.defaultdict(list)
-        feed_many = []
-        feed_once = []
-
-        for ds in data_sources:
-            # Is this data source associated with
-            # a radio source (point, gaussian, etc.?)
-            src_int = src_nr_vars.intersection(ds.shape)
-
-            if len(src_int) > 1:
-                raise ValueError("Data source '{}' contains multiple "
-                                "source types '{}'".format(ds.name, src_int))
-            elif len(src_int) == 1:
-                # Yep, record appropriately and iterate
-                src_data_sources[src_int.pop()].append(ds)
-                continue
-
-            # Are we feeding this data source multiple times
-            # (Does it possess dimensions on which we iterate?)
-            if len(iter_dims.intersection(ds.shape)) > 0:
-                feed_many.append(ds)
-                continue
-
-            # Assume this is a data source that we only feed once
-            feed_once.append(ds)
-
-        return src_data_sources, feed_many, feed_once
-
     src_data_sources, feed_many, feed_once = _partition(iter_dims,
                                                         input_arrays)
 
@@ -1347,3 +1274,85 @@ def _apply_source_provider_dim_updates(cube, source_providers, budget_dims):
     # Return our cube size
     return cube.bytes_required()
 
+def _setup_hypercube(cube, slvr_cfg):
+    """ Sets up the hypercube given a solver configuration """
+    mbu.register_default_dimensions(cube, slvr_cfg)
+
+    # Configure the dimensions of the beam cube
+    cube.register_dimension('beam_lw',
+                            slvr_cfg[Options.E_BEAM_WIDTH],
+                            description='E Beam cube l width')
+
+    cube.register_dimension('beam_mh',
+                            slvr_cfg[Options.E_BEAM_HEIGHT],
+                            description='E Beam cube m height')
+
+    cube.register_dimension('beam_nud',
+                            slvr_cfg[Options.E_BEAM_DEPTH],
+                            description='E Beam cube nu depth')
+
+    # =========================================
+    # Register hypercube Arrays and Properties
+    # =========================================
+
+    from montblanc.impl.rime.tensorflow.config import (A, P)
+
+    def _massage_dtypes(A, T):
+        def _massage_dtype_in_dict(D):
+            new_dict = D.copy()
+            new_dict['dtype'] = mbu.dtype_from_str(D['dtype'], T)
+            return new_dict
+
+        return [_massage_dtype_in_dict(D) for D in A]
+
+    dtype = slvr_cfg.get('dtype', Options.DTYPE_FLOAT)
+    is_f32 = dtype == Options.DTYPE_FLOAT
+
+    T = {
+        'ft' : np.float32 if is_f32 else np.float64,
+        'ct' : np.complex64 if is_f32 else np.complex128,
+        'int' : int,
+    }
+
+    cube.register_properties(_massage_dtypes(P, T))
+    cube.register_arrays(_massage_dtypes(A, T))
+
+def _partition(iter_dims, data_sources):
+    """
+    Partition data sources into
+
+    1. Dictionary of data sources associated with radio sources.
+    2. List of data sources to feed multiple times.
+    3. List of data sources to feed once.
+    """
+
+    src_nr_vars = set(source_var_types().values())
+    iter_dims = set(iter_dims)
+
+    src_data_sources = collections.defaultdict(list)
+    feed_many = []
+    feed_once = []
+
+    for ds in data_sources:
+        # Is this data source associated with
+        # a radio source (point, gaussian, etc.?)
+        src_int = src_nr_vars.intersection(ds.shape)
+
+        if len(src_int) > 1:
+            raise ValueError("Data source '{}' contains multiple "
+                            "source types '{}'".format(ds.name, src_int))
+        elif len(src_int) == 1:
+            # Yep, record appropriately and iterate
+            src_data_sources[src_int.pop()].append(ds)
+            continue
+
+        # Are we feeding this data source multiple times
+        # (Does it possess dimensions on which we iterate?)
+        if len(iter_dims.intersection(ds.shape)) > 0:
+            feed_many.append(ds)
+            continue
+
+        # Assume this is a data source that we only feed once
+        feed_once.append(ds)
+
+    return src_data_sources, feed_many, feed_once
