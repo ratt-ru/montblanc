@@ -932,7 +932,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         ntime, nbl, nchan, npol = [model_vis_shape[i] for i in range(4)]
         FT, CT = D.uvw.dtype, D.model_vis.dtype
 
-    def antenna_jones(lm, stokes, alpha):
+    def antenna_jones(lm, stokes, alpha, ref_freq):
         """
         Compute the jones terms for each antenna.
 
@@ -950,7 +950,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         phase_imag = tf.check_numerics(tf.imag(cplx_phase), phase_msg)
 
         bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
-            D.frequency, D.ref_frequency, CT=CT)
+            D.frequency, ref_freq, CT=CT)
 
         # Check for nans/infs in the bsqrt
         bsqrt_msg = ("Check that your stokes parameters "
@@ -988,14 +988,15 @@ def _construct_tensorflow_expression(feed_data, device, shard):
     # While loop bodies
     def point_body(coherencies, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
-        lm, stokes, alpha = LSA.sources['npsrc'][shard].get_to_list()
+        S = LSA.sources['npsrc'][shard].get_to_attrdict()
 
         # Maintain source counts
-        nsrc = tf.shape(lm)[0]
+        nsrc = tf.shape(S.point_lm)[0]
         src_count += nsrc
         npsrc +=  nsrc
 
-        ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
+        ant_jones, sgn_brightness = antenna_jones(S.point_lm,
+            S.point_stokes, S.point_alpha, S.point_ref_freq)
         shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
             shape, ant_jones, sgn_brightness, coherencies)
@@ -1004,16 +1005,17 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
     def gaussian_body(coherencies, ngsrc, src_count):
         """ Accumulate coherencies for gaussian source batch """
-        lm, stokes, alpha, gauss_params = LSA.sources['ngsrc'][shard].get_to_list()
+        S = LSA.sources['ngsrc'][shard].get_to_attrdict()
 
         # Maintain source counts
-        nsrc = tf.shape(lm)[0]
+        nsrc = tf.shape(S.gaussian_lm)[0]
         src_count += nsrc
         ngsrc += nsrc
 
-        ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
+        ant_jones, sgn_brightness = antenna_jones(S.gaussian_lm,
+            S.gaussian_stokes, S.gaussian_alpha, S.gaussian_ref_freq)
         gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
-            D.frequency, gauss_params)
+            D.frequency, S.gaussian_shape)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
             gauss_shape, ant_jones, sgn_brightness, coherencies)
 
@@ -1021,16 +1023,17 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
     def sersic_body(coherencies, nssrc, src_count):
         """ Accumulate coherencies for sersic source batch """
-        lm, stokes, alpha, sersic_params = LSA.sources['nssrc'][shard].get_to_list()
+        S = LSA.sources['nssrc'][shard].get_to_attrdict()
 
         # Maintain source counts
-        nsrc = tf.shape(lm)[0]
+        nsrc = tf.shape(S.sersic_lm)[0]
         src_count += nsrc
         nssrc += nsrc
 
-        ant_jones, sgn_brightness = antenna_jones(lm, stokes, alpha)
+        ant_jones, sgn_brightness = antenna_jones(S.sersic_lm,
+            S.sersic_stokes, S.sersic_alpha, S.sersic_ref_freq)
         sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
-            D.frequency, sersic_params)
+            D.frequency, S.sersic_shape)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
             sersic_shape, ant_jones, sgn_brightness, coherencies)
 

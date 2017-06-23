@@ -32,7 +32,7 @@ auto bsqrt_shape_function = [](InferenceContext* c) {
         "frequency shape must be [nchan,] but is " + c->DebugString(frequency));
 
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(ref_freq, 1, &input),
-        "ref_freq shape must be [nchan,] but is " + c->DebugString(ref_freq));
+        "ref_freq shape must be [nsrc,] but is " + c->DebugString(ref_freq));
 
     // bsqrt output is (nsrc, ntime, nchan, 4)
     ShapeHandle bsqrt = c->MakeShape({

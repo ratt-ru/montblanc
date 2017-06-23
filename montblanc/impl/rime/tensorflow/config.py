@@ -219,6 +219,7 @@ STOKES_DESCRIPTION = ("(I,Q,U,V) Stokes parameters.")
 ALPHA_DESCRIPTION = ("Power term describing the distribution of a source's flux "
             "over frequency. Distribution is calculated as (nu/nu_ref)^alpha "
             "where nu is frequency.")
+REF_FREQ_DESCRIPTION = ("Reference frequency for {st} sources.")
 
 # Tag Description
 #
@@ -279,8 +280,7 @@ A = [
         description = "Index of the second antenna "
             "of the baseline pair."),
 
-    # Frequency and Reference Frequency arrays
-    # TODO: This is incorrect when channel local is not the same as channel global
+    # Frequency
     array_dict('frequency', ('nchan',), 'ft',
         default = lambda s, c: np.linspace(_freq_low, _freq_high,
                                 c.shape[0], dtype=c.dtype),
@@ -289,14 +289,6 @@ A = [
         tags    = "input",
         description = "Frequency. Frequencies from multiple bands "
             "are stacked on top of each other. ",
-        units   = HERTZ),
-
-    array_dict('ref_frequency', ('nchan',), 'ft',
-        default = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
-        test    = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
-        tags    = "input, constant",
-        description = "The reference frequency associated with the "
-            " channel's band.",
         units   = HERTZ),
 
     # Holographic Beam
@@ -388,6 +380,12 @@ A = [
         tags    = "input, constant",
         description = ALPHA_DESCRIPTION,
         units   = DIMENSIONLESS),
+    array_dict('point_ref_freq', ('npsrc',), 'ft',
+        default = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
+        test    = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
+        tags    = "input, constant",
+        description = REF_FREQ_DESCRIPTION.format(st="point"),
+        units   = HERTZ),
 
     # Gaussian Source Definitions
     array_dict('gaussian_lm', ('ngsrc',2), 'ft',
@@ -408,6 +406,12 @@ A = [
         tags    = "input, constant",
         description = ALPHA_DESCRIPTION,
         units   = DIMENSIONLESS),
+    array_dict('gaussian_ref_freq', ('ngsrc',), 'ft',
+        default = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
+        test    = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
+        tags    = "input, constant",
+        description = REF_FREQ_DESCRIPTION.format(st="gaussian"),
+        units   = HERTZ),
     array_dict('gaussian_shape', (3, 'ngsrc'), 'ft',
         default = default_gaussian_shape,
         test    = rand_gaussian_shape,
@@ -437,6 +441,12 @@ A = [
         tags    = "input, constant",
         description = ALPHA_DESCRIPTION,
         units   = DIMENSIONLESS),
+    array_dict('sersic_ref_freq', ('nssrc',), 'ft',
+        default = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
+        test    = lambda s, c: np.full(c.shape, _ref_freq, c.dtype),
+        tags    = "input, constant",
+        description = REF_FREQ_DESCRIPTION.format(st="sersic"),
+        units   = HERTZ),
     array_dict('sersic_shape', (3, 'nssrc'), 'ft',
         default = default_sersic_shape,
         test    = test_sersic_shape,
