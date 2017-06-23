@@ -294,7 +294,7 @@ A = [
     # Holographic Beam
 
     # Pointing errors
-    array_dict('point_errors', ('ntime','na','nchan', 2), 'ft',
+    array_dict('pointing_errors', ('ntime','na','nchan', 2), 'ft',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: (rf(c.shape, c.dtype)-0.5)*1e-2,
         tags    = "input, constant",
