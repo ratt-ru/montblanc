@@ -963,7 +963,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
         ejones = rime.e_beam(lm, D.frequency,
-            D.point_errors, D.antenna_scaling,
+            D.pointing_errors, D.antenna_scaling,
             D.parallactic_angles,
             D.beam_extents, D.beam_freq_map, D.ebeam)
 
