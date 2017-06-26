@@ -15,7 +15,7 @@ import montblanc
 import montblanc.util as mbu
 from montblanc.impl.rime.tensorflow.dask_tensorflow import start_tensorflow
 from montblanc.impl.rime.tensorflow.RimeSolver import (
-    _construct_tensorflow_feed_data,
+    _construct_tensorflow_staging_areas,
     _construct_tensorflow_expression,
     _partition,
     _setup_hypercube,
@@ -101,7 +101,7 @@ if __name__ == "__main__":
             def _setup_tensorflow():
                 from attrdict import AttrDict
                 from montblanc.impl.rime.tensorflow.RimeSolver import (
-                    _construct_tensorflow_feed_data,
+                    _construct_tensorflow_staging_areas,
                     _construct_tensorflow_expression)
 
                 TensorflowConfig = attr.make_class("TensorflowConfig", ["session", "feed_data"])
@@ -112,20 +112,15 @@ if __name__ == "__main__":
                 devices = device_lib.list_local_devices()
 
                 with tf.Graph().as_default() as compute_graph:
-                    shards_per_device = spd = 2
-                    shards = len(devices)*spd
-                    shard = lambda d, s: d*spd + s
-
                     # Create our data feeding structure containing
                     # input/output staging_areas and feed once variables
-                    feed_data = _construct_tensorflow_feed_data(
-                        input_arrays, cube, iter_dims, shards)
+                    feed_data = _construct_tensorflow_staging_areas(
+                        input_arrays, cube, iter_dims,
+                        [d.name for d in devices])
 
                     # Construct tensorflow expressions for each shard
-                    exprs = [_construct_tensorflow_expression(
-                            feed_data, dev, shard(d,s))
-                        for d, dev in enumerate([d.name for d in devices])
-                        for s in range(shards_per_device)]
+                    exprs = [_construct_tensorflow_expression(feed_data, dev, d)
+                        for d, dev in enumerate([d.name for d in devices])]
 
                     # Initialisation operation
                     init_op = tf.global_variables_initializer()
