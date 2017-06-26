@@ -213,7 +213,7 @@ class RimeSolver(MontblancTensorflowSolver):
         session_config = tf.ConfigProto(allow_soft_placement=True)
 
         session = tf.Session(tf_server_target, graph=compute_graph,
-                                                        config=session_config)
+                                                config=session_config)
 
         from tensorflow.python import debug as tf_debug
 
@@ -953,7 +953,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     input_sources = { a for q in all_staging_areas
                         for a in q.fed_arrays}
     # Data sources from feed once variables
-    input_sources.update(local.feed_once.keys())
+    input_sources.update(local_cpu.feed_once.fed_arrays)
 
     local_cpu.all_staging_areas = all_staging_areas
     local_cpu.input_sources = input_sources
@@ -1070,7 +1070,7 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
     # While loop bodies
     def point_body(coherencies, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
-        S = LSA.sources['npsrc'][dev_id].get_to_attrdict()
+        key, S = local_cpu.sources['npsrc'].get_to_attrdict()
 
         # Maintain source counts
         nsrc = tf.shape(S.point_lm)[0]
@@ -1087,7 +1087,7 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
 
     def gaussian_body(coherencies, ngsrc, src_count):
         """ Accumulate coherencies for gaussian source batch """
-        S = LSA.sources['ngsrc'][dev_id].get_to_attrdict()
+        key, S = local_cpu.sources['ngsrc'].get_to_attrdict()
 
         # Maintain source counts
         nsrc = tf.shape(S.gaussian_lm)[0]
@@ -1105,7 +1105,7 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
 
     def sersic_body(coherencies, nssrc, src_count):
         """ Accumulate coherencies for sersic source batch """
-        S = LSA.sources['nssrc'][dev_id].get_to_attrdict()
+        key, S = local_cpu.sources['nssrc'].get_to_attrdict()
 
         # Maintain source counts
         nsrc = tf.shape(S.sersic_lm)[0]
