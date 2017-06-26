@@ -846,14 +846,6 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     src_data_sources, feed_many, feed_once = _partition(iter_dims,
                                                         input_arrays)
 
-    # Add data sources describing input keys for each
-    # radio source type
-    for k in src_data_sources.keys():
-        name = "{}_keys".format(k)
-        ds = AttrDict(name=name, shape=(k,), dtype=np.int32)
-        dfs[name] = ds
-        feed_many.append(ds)
-
     #=====================================
     # Descriptor staging area
     #=====================================
