@@ -39,6 +39,15 @@ if __name__ == "__main__":
     with dd.Client(args.scheduler_address) as client:
         client.restart()
 
+        def _setup_worker(dask_worker=None):
+            """ Setup a thread local store and a thread lock on each worker """
+            import threading
+            dask_worker._thread_local = threading.local()
+            dask_worker._thread_lock = threading.Lock()
+            return "OK"
+
+        assert all([v == "OK" for v in client.run(_setup_worker).values()])
+
         sched_info = client.scheduler_info()
 
         nr_master=1
@@ -90,8 +99,6 @@ if __name__ == "__main__":
         Klass = attr.make_class("Klass", D.keys())
 
         def _predict(*args, **kwargs):
-            import threading
-
             import tensorflow as tf
 
             def _setup_tensorflow():
@@ -112,7 +119,7 @@ if __name__ == "__main__":
                         input_arrays, cube, iter_dims,
                         [d.name for d in devices])
 
-                    # Construct tensorflow expressions for each shard
+                    # Construct tensorflow expressions for each device
                     exprs = [_construct_tensorflow_expression(feed_data, dev, d)
                         for d, dev in enumerate([d.name for d in devices])]
 
@@ -131,13 +138,13 @@ if __name__ == "__main__":
 
             w = dd.get_worker()
 
-            if not hasattr(w, "_thread_local"):
-                w._thread_local = tl = threading.local()
-                tl.tf_cfg = _setup_tensorflow()
-            else:
-                tl = w._thread_local
+            with w._thread_lock:
+                if not hasattr(w._thread_local, 'tf_cfg'):
+                    tf_cfg = w._thread_local.tf_cfg = _setup_tensorflow()
+                else:
+                    tf_cfg = w._thread_local.tf_cfg
 
-            print(tl.tf_cfg)
+            print(tf_cfg)
 
             K = Klass(*args)
             D = attr.asdict(K)
