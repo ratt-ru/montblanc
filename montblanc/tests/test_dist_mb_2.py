@@ -1,25 +1,21 @@
 from __future__ import print_function
 
 import collections
-from pprint import pprint, pformat
-import threading
+from pprint import pprint
 
 import attr
 import dask
 import dask.array as da
 import distributed as dd
+import hypercube
 import numpy as np
 
-import hypercube
 import montblanc
 import montblanc.util as mbu
-from montblanc.impl.rime.tensorflow.dask_tensorflow import start_tensorflow
 from montblanc.impl.rime.tensorflow.RimeSolver import (
-    _construct_tensorflow_staging_areas,
-    _construct_tensorflow_expression,
     _partition,
-    _setup_hypercube,
-    )
+    _setup_hypercube)
+
 
 def create_argparser():
     import argparse
@@ -104,8 +100,6 @@ if __name__ == "__main__":
                     _construct_tensorflow_staging_areas,
                     _construct_tensorflow_expression)
 
-                TensorflowConfig = attr.make_class("TensorflowConfig", ["session", "feed_data"])
-
                 input_arrays["descriptor"] = AttrDict(dtype=np.int32)
 
                 from tensorflow.python.client import device_lib
@@ -130,7 +124,10 @@ if __name__ == "__main__":
                 session = tf.Session("", graph=compute_graph)
                 session.run(init_op)
 
-                return TensorflowConfig(session, feed_data)
+                TensorflowConfig = attr.make_class("TensorflowConfig",
+                                        ["session", "feed_data", "exprs"])
+
+                return TensorflowConfig(session, feed_data, exprs)
 
             w = dd.get_worker()
 
