@@ -144,8 +144,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Staging Area Data Source Configuration
         #================================
 
-        dfs = { n: DataSource(None, a.dtype, n)
-            for n, a in cube.arrays().iteritems()
+        dfs = { n: a for n, a in cube.arrays().iteritems()
             if not 'temporary' in a.tags }
 
         # Descriptors are not user-defined arrays
@@ -155,8 +154,7 @@ class RimeSolver(MontblancTensorflowSolver):
             raise KeyError("'descriptor' is reserved, "
                 "please use another array name.")
 
-        dfs['descriptor'] = DataSource(lambda c: np.int32([0]),
-                                        np.int32, 'Internal')
+        dfs['descriptor'] = AttrDict(dtype=np.int32)
 
         #=========================
         # Tensorflow devices
