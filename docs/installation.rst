@@ -109,17 +109,17 @@ Then, run:
 
 .. code:: bash
 
-    (mb) $ pip install --log=mb.log git+git://github.com/ska-sa/montblanc.git@rime-tf
+    (mb) $ pip install --log=mb.log git+git://github.com/ska-sa/montblanc.git@master
 
 Installing the package in development mode
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Clone the repository, checkout the rime-tf branch
+Clone the repository, checkout the master branch
 and pip install montblanc in development mode.
 
 .. code:: bash
 
-    (mb) $ git clone --branch rime-tf git://github.com/ska-sa/montblanc.git
+    (mb) $ git clone git://github.com/ska-sa/montblanc.git
     (mb) $ pip install --log=mb.log -e $HOME/montblanc
 
 Possible Issues
