@@ -40,19 +40,6 @@ if __name__ == "__main__":
     with dd.Client(args.scheduler_address) as client:
         client.restart()
 
-        def _setup_worker(dask_worker=None):
-            """ Setup a thread local store and a thread lock on each worker """
-            import threading
-            dask_worker._thread_lock = threading.Lock()
-            return "OK"
-
-        assert all([v == "OK" for v in client.run(_setup_worker).values()])
-
-        sched_info = client.scheduler_info()
-
-        nr_master=1
-        nr_worker=len(sched_info["workers"])-1
-
         # Create a hypercube for setting up our dask arrays
         cube = create_hypercube()
         print(cube)
@@ -61,6 +48,59 @@ if __name__ == "__main__":
         iter_dims = ['ntime', 'nbl']
         input_arrays = { a.name: a for a in cube.arrays().itervalues()
                                          if 'input' in a.tags }
+
+        def _setup_worker(dask_worker=None):
+            """ Setup a thread local store and a thread lock on each worker """
+            import threading
+
+            import tensorflow as tf
+
+            from montblanc.impl.rime.tensorflow.key_pool import KeyPool
+
+            def _setup_tensorflow():
+                from montblanc.impl.rime.tensorflow.RimeSolver import (
+                    _construct_tensorflow_staging_areas,
+                    _construct_tensorflow_expression)
+
+                from tensorflow.python.client import device_lib
+                devices = device_lib.list_local_devices()
+
+                with tf.Graph().as_default() as compute_graph:
+                    # Create our data feeding structure containing
+                    # input/output staging_areas and feed once variables
+                    feed_data = _construct_tensorflow_staging_areas(
+                        input_arrays, cube, iter_dims,
+                        [d.name for d in devices])
+
+                    # Construct tensorflow expressions for each device
+                    exprs = [_construct_tensorflow_expression(feed_data, dev, d)
+                        for d, dev in enumerate([d.name for d in devices])]
+
+                    # Initialisation operation
+                    init_op = tf.global_variables_initializer()
+                    # Now forbid modification of the graph
+                    compute_graph.finalize()
+
+                session = tf.Session("", graph=compute_graph)
+                session.run(init_op)
+
+                TensorflowConfig = attr.make_class("TensorflowConfig",
+                                        ["session", "feed_data", "exprs"])
+
+                return TensorflowConfig(session, feed_data, exprs)
+
+            dask_worker._worker_lock = threading.Lock()
+            dask_worker.tf_cfg = _setup_tensorflow()
+            dask_worker.key_pool = KeyPool()
+
+            return "OK"
+
+        assert all([v == "OK" for v in client.run(_setup_worker).values()])
+
+        sched_info = client.scheduler_info()
+
+        nr_master=1
+        nr_worker=len(sched_info["workers"])-1
 
         src_data_sources, feed_many, feed_once = _partition(iter_dims,
                                                         input_arrays.values())
@@ -102,48 +142,9 @@ if __name__ == "__main__":
         Klass = attr.make_class("Klass", D.keys())
 
         def _predict(*args, **kwargs):
-            import tensorflow as tf
-            from montblanc.impl.rime.tensorflow.key_pool import KeyPool
 
-            def _setup_tensorflow():
-                from attrdict import AttrDict
-                from montblanc.impl.rime.tensorflow.RimeSolver import (
-                    _construct_tensorflow_staging_areas,
-                    _construct_tensorflow_expression)
-
-                from tensorflow.python.client import device_lib
-                devices = device_lib.list_local_devices()
-
-                with tf.Graph().as_default() as compute_graph:
-                    # Create our data feeding structure containing
-                    # input/output staging_areas and feed once variables
-                    feed_data = _construct_tensorflow_staging_areas(
-                        input_arrays, cube, iter_dims,
-                        [d.name for d in devices])
-
-                    # Construct tensorflow expressions for each device
-                    exprs = [_construct_tensorflow_expression(feed_data, dev, d)
-                        for d, dev in enumerate([d.name for d in devices])]
-
-                    # Initialisation operation
-                    init_op = tf.global_variables_initializer()
-                    # Now forbid modification of the graph
-                    compute_graph.finalize()
-
-                session = tf.Session("", graph=compute_graph)
-                session.run(init_op)
-
-                TensorflowConfig = attr.make_class("TensorflowConfig",
-                                        ["session", "feed_data", "exprs"])
-
-                return TensorflowConfig(session, feed_data, exprs)
 
             w = dd.get_worker()
-
-            with w._thread_lock:
-                if not hasattr(w, 'tf_cfg'):
-                    w.tf_cfg = _setup_tensorflow()
-                    w.key_pool = KeyPool()
 
             tf_cfg = w.tf_cfg
             session = tf_cfg.session
@@ -250,7 +251,7 @@ if __name__ == "__main__":
             *input_dim_pairs,
             numblocks={a.name: a.numblocks for a in D.values()})
 
-        predict = _fix(predict)
+        # predict = _fix(predict)
         get_keys = predict.keys()
 
         [predict.update(d.dask) for d in D.values()]
