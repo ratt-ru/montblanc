@@ -116,7 +116,7 @@ def get_point_sources(nsrc):
     Q[:] = rf(size=Q.shape)*0.1
     U[:] = rf(size=U.shape)*0.1
     V[:] = rf(size=V.shape)*0.1
-    I[:] = np.sqrt(Q**2 + U**2 + V**2)
+    I[:] = np.sqrt(Q**2 + U**2 + V**2)*1.5 + rf(size=I.shape)*0.1
 
     # Zero and invert selected stokes parameters
     if nsrc > 0:
