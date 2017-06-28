@@ -168,7 +168,11 @@ class RimeSolver(MontblancTensorflowSolver):
         gpus = [d.name for d in devices if d.device_type == 'GPU']
         cpus = [d.name for d in devices if d.device_type == 'CPU']
 
-        use_cpus = device_type == 'CPU' or len(gpus) == 0
+        if device_type == 'GPU' and len(gpus) == 0:
+            montblanc.log.warn("No GPUs are present, falling back to CPU.")
+            device_type = 'CPU'
+
+        use_cpus = device_type == 'CPU'
         montblanc.log.info("Using '{}' devices for compute".format(device_type))
         self._devices = cpus if use_cpus else gpus
         self._shards_per_device = spd = 2
