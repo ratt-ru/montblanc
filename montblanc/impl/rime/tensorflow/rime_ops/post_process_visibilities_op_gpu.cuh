@@ -45,7 +45,7 @@ template <typename Traits>
 __global__ void rime_post_process_visibilities(
     const typename Traits::antenna_type * in_antenna1,
     const typename Traits::antenna_type * in_antenna2,
-    const typename Traits::gterm_type * in_gterm,
+    const typename Traits::die_type * in_die,
     const typename Traits::flag_type * in_flag,
     const typename Traits::weight_type * in_weight,
     const typename Traits::vis_type * in_base_vis,
@@ -88,19 +88,19 @@ __global__ void rime_post_process_visibilities(
 
     // Multiply the visibility by antenna 1's g term
     i = (time*na + ant1)*npolchan + polchan;
-    CT ant1_gterm = in_gterm[i];
+    CT ant1_die = in_die[i];
     montblanc::jones_multiply_4x4_in_place<FT>(
-        ant1_gterm, model_vis);
+        ant1_die, model_vis);
 
     // Shift result
-    model_vis.x = ant1_gterm.x;
-    model_vis.y = ant1_gterm.y;
+    model_vis.x = ant1_die.x;
+    model_vis.y = ant1_die.y;
 
     // Multiply the visibility by antenna 2's g term
     i = (time*na + ant2)*npolchan + polchan;
-    CT ant2_gterm = in_gterm[i];
+    CT ant2_die = in_die[i];
     montblanc::jones_multiply_4x4_hermitian_transpose_in_place<FT>(
-        model_vis, ant2_gterm);
+        model_vis, ant2_die);
 
     // Add any base visibilities
     model_vis.x += base_vis.x;
@@ -137,7 +137,7 @@ public:
         // Create variables for input tensors
         const auto & in_antenna1 = context->input(0);
         const auto & in_antenna2 = context->input(1);
-        const auto & in_gterm = context->input(2);
+        const auto & in_die = context->input(2);
         const auto & in_flag = context->input(3);
         const auto & in_weight = context->input(4);
         const auto & in_base_vis = context->input(5);
@@ -149,7 +149,7 @@ public:
         int nchan = in_model_vis.dim_size(2);
         int npol = in_model_vis.dim_size(3);
         int npolchan = npol*nchan;
-        int na = in_gterm.dim_size(1);
+        int na = in_die.dim_size(1);
 
         using LTr = LaunchTraits<FT>;
 
@@ -174,8 +174,8 @@ public:
             in_antenna1.flat<tensorflow::int32>().data());
         auto fin_antenna2 = reinterpret_cast<const typename Tr::antenna_type *>(
             in_antenna2.flat<tensorflow::int32>().data());
-        auto fin_gterm = reinterpret_cast<const typename Tr::gterm_type *>(
-            in_gterm.flat<CT>().data());
+        auto fin_die = reinterpret_cast<const typename Tr::die_type *>(
+            in_die.flat<CT>().data());
         auto fin_flag = reinterpret_cast<const typename Tr::flag_type *>(
             in_flag.flat<tensorflow::uint8>().data());
         auto fin_weight = reinterpret_cast<const typename Tr::weight_type *>(
@@ -238,7 +238,7 @@ public:
             <<<grid, block, 0, device.stream()>>>(
                 fin_antenna1,
                 fin_antenna2,
-                fin_gterm,
+                fin_die,
                 fin_flag,
                 fin_weight,
                 fin_base_vis,

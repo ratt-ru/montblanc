@@ -1061,7 +1061,7 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
         # Post process visibilities to produce model visibilites and chi squared
         model_vis, chi_squared = rime.post_process_visibilities(
-            D.antenna1, D.antenna2, D.gterm, D.flag,
+            D.antenna1, D.antenna2, D.direction_independent_effects, D.flag,
             D.weight, D.model_vis, summed_coherencies, D.observed_vis)
 
     # Create enstaging_area operation

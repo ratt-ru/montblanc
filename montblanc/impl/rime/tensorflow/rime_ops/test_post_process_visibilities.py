@@ -44,7 +44,7 @@ class TestPostProcessVisibilities(unittest.TestCase):
             size=[ntime, nbl]).astype(np.int32)
         antenna2 = np.random.randint(low=0, high=na,
             size=[ntime, nbl]).astype(np.int32)
-        gterm = rc(size=[ntime, na, nchan, 4])
+        direction_independent_effects = rc(size=[ntime, na, nchan, 4])
         flag = np.random.randint(low=0, high=2,
             size=[ntime, nbl, nchan, 4]).astype(np.uint8)
         weight = rf(size=[ntime, nbl, nchan, 4])
@@ -53,11 +53,11 @@ class TestPostProcessVisibilities(unittest.TestCase):
         observed_vis = rc(size=[ntime, nbl, nchan, 4])
 
         # Argument list
-        np_args = [antenna1, antenna2, gterm, flag, weight,
+        np_args = [antenna1, antenna2, direction_independent_effects, flag, weight,
             base_vis, model_vis, observed_vis]
         # Argument string name list
-        arg_names = ['antenna1', 'antenna2', 'gterm', 'flag', 'weight',
-            'base_vis', 'model_vis', 'observed_vis']
+        arg_names = ['antenna1', 'antenna2', 'direction_independent_effects',
+            'flag', 'weight', 'base_vis', 'model_vis', 'observed_vis']
         # Constructor tensorflow variables
         tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
