@@ -40,7 +40,7 @@ public:
         // Create reference to input Tensorflow tensors
         const auto & in_antenna1 = context->input(0);
         const auto & in_antenna2 = context->input(1);
-        const auto & in_gterm = context->input(2);
+        const auto & in_direction_independent_effects = context->input(2);
         const auto & in_flag = context->input(3);
         const auto & in_weight = context->input(4);
         const auto & in_base_vis = context->input(5);
@@ -67,7 +67,7 @@ public:
         // Extract Eigen tensors
         auto antenna1 = in_antenna1.tensor<tensorflow::int32, 2>();
         auto antenna2 = in_antenna2.tensor<tensorflow::int32, 2>();
-        auto gterm = in_gterm.tensor<CT, 4>();
+        auto direction_independent_effects = in_direction_independent_effects.tensor<CT, 4>();
         auto flag = in_flag.tensor<tensorflow::uint8, 4>();
         auto weight = in_weight.tensor<FT, 4>();
         auto base_vis = in_base_vis.tensor<CT, 4>();
@@ -97,11 +97,11 @@ public:
                     CT mv2 = model_vis(time, bl, chan, 2);
                     CT mv3 = model_vis(time, bl, chan, 3);
 
-                    // Reference gterm for antenna 1
-                    const CT & a0 = gterm(time, ant1, chan, 0);
-                    const CT & a1 = gterm(time, ant1, chan, 1);
-                    const CT & a2 = gterm(time, ant1, chan, 2);
-                    const CT & a3 = gterm(time, ant1, chan, 3);
+                    // Reference direction_independent_effects for antenna 1
+                    const CT & a0 = direction_independent_effects(time, ant1, chan, 0);
+                    const CT & a1 = direction_independent_effects(time, ant1, chan, 1);
+                    const CT & a2 = direction_independent_effects(time, ant1, chan, 2);
+                    const CT & a3 = direction_independent_effects(time, ant1, chan, 3);
 
                     // Multiply model visibilities by antenna 1 g
                     CT r0 = a0*mv0 + a1*mv2;
@@ -110,10 +110,10 @@ public:
                     CT r3 = a2*mv1 + a3*mv3;
 
                     // Conjugate transpose of antenna 2 g term
-                    CT b0 = std::conj(gterm(time, ant2, chan, 0));
-                    CT b1 = std::conj(gterm(time, ant2, chan, 2));
-                    CT b2 = std::conj(gterm(time, ant2, chan, 1));
-                    CT b3 = std::conj(gterm(time, ant2, chan, 3));
+                    CT b0 = std::conj(direction_independent_effects(time, ant2, chan, 0));
+                    CT b1 = std::conj(direction_independent_effects(time, ant2, chan, 2));
+                    CT b2 = std::conj(direction_independent_effects(time, ant2, chan, 1));
+                    CT b3 = std::conj(direction_independent_effects(time, ant2, chan, 3));
 
                     // Multiply to produce model visibilities
                     mv0 = r0*b0 + r1*b2;

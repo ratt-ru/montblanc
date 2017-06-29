@@ -353,7 +353,7 @@ A = [
         units   = DIMENSIONLESS),
 
     # Direction-Independent Effects
-    array_dict('gterm', ('ntime', 'na', 'nchan', 'npol'), 'ct',
+    array_dict('direction_independent_effects', ('ntime', 'na', 'nchan', 'npol'), 'ct',
         default = identity_on_pols,
         test    = lambda s, c: rc(c.shape, c.dtype),
         tags    = "input, constant",

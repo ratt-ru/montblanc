@@ -71,7 +71,7 @@ public:
     typedef int8_t sgn_brightness_type;
     typedef uint8_t flag_type;
     typedef float weight_type;
-    typedef float2 gterm_type;
+    typedef float2 die_type;
     typedef float2 vis_type;
 
 public:
@@ -221,7 +221,7 @@ public:
     typedef uint8_t flag_type;
     typedef int8_t sgn_brightness_type;
     typedef double weight_type;
-    typedef double2 gterm_type;
+    typedef double2 die_type;
     typedef double2 vis_type;
 
 

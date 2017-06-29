@@ -29,16 +29,16 @@ auto shape_function = [](InferenceContext* c) {
         "antenna2 must have shape [ntime, nbl] but is " +
         c->DebugString(in_antenna2));
 
-    // TODO. Check shape and dimension sizes for 'gterm'
-    ShapeHandle in_gterm = c->input(2);
-    // Assert 'gterm' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_gterm, 4, &input),
-        "gterm must have shape [ntime, na, nchan, 4] but is " +
-        c->DebugString(in_gterm));
-    // Assert 'gterm' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_gterm, 3), 4, &d),
-        "gterm must have shape [ntime, na, nchan, 4] but is " +
-        c->DebugString(in_gterm));
+    // TODO. Check shape and dimension sizes for 'direction_independent_effects'
+    ShapeHandle in_direction_independent_effects = c->input(2);
+    // Assert 'direction_independent_effects' number of dimensions
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_direction_independent_effects, 4, &input),
+        "direction_independent_effects must have shape [ntime, na, nchan, 4] but is " +
+        c->DebugString(in_direction_independent_effects));
+    // Assert 'direction_independent_effects' dimension '3' size
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_direction_independent_effects, 3), 4, &d),
+        "direction_independent_effects must have shape [ntime, na, nchan, 4] but is " +
+        c->DebugString(in_direction_independent_effects));
 
     // TODO. Check shape and dimension sizes for 'flag'
     ShapeHandle in_flag = c->input(3);
@@ -118,7 +118,7 @@ auto shape_function = [](InferenceContext* c) {
 REGISTER_OP("PostProcessVisibilities")
     .Input("antenna1: int32")
     .Input("antenna2: int32")
-    .Input("gterm: CT")
+    .Input("direction_independent_effects: CT")
     .Input("flag: uint8")
     .Input("weight: FT")
     .Input("base_vis: CT")
