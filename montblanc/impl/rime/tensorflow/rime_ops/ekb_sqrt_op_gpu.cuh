@@ -64,8 +64,19 @@ __global__ void rime_ekb_sqrt(
     int i;
 
     __shared__ struct {
-        CT feed_rotation[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][EKB_SQRT_NPOL];
+        CT fr[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][EKB_SQRT_NPOL];
     } shared;
+
+    // Feed rotation varies by time, antenna and polarisation
+    // Polarisation is baked into the X dimension, so use the
+    // first npol threads to load polarisation info
+    if(threadIdx.x < npol)
+    {
+        i = (time*na + ant)*npol + pol;
+        shared.fr[threadIdx.z][threadIdx.y][threadIdx.x] = feed_rotation[i];
+    }
+
+    __syncthreads();
 
     for(int src=0; src < nsrc; ++src)
     {
@@ -83,8 +94,7 @@ __global__ void rime_ekb_sqrt(
         montblanc::complex_multiply_in_place<FT>(cplx_phase, brightness_sqrt);
 
         // Load in the feed rotation and multiply by KB
-        i = (time*na + ant)*npol + pol;
-        CT L = feed_rotation[i];
+        CT L = shared.fr[threadIdx.z][threadIdx.y][pol];
 
         montblanc::jones_multiply_4x4_in_place<FT>(L, cplx_phase);
 
