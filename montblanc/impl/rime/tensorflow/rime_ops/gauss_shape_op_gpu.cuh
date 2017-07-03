@@ -3,12 +3,8 @@
 #ifndef RIME_GAUSS_SHAPE_OP_GPU_CUH
 #define RIME_GAUSS_SHAPE_OP_GPU_CUH
 
-// Include cub
-#include <cub/cub/cub.cuh>
-
-#include <montblanc/abstraction.cuh>
-
 #include "gauss_shape_op.h"
+#include <montblanc/abstraction.cuh>
 #include "constants.h"
 
 // Required in order for Eigen::GpuDevice to be an actual type
