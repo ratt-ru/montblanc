@@ -18,11 +18,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import threading
-
 import numpy as np
 
-thread_local = threading.local()
+import montblanc
+
+try:
+    import pyrap.measures
+
+    pm = pyrap.measures.measures()
+except ImportError as e:
+    pm = None
+    montblanc.log.warn("python-casacore import failed. "
+                       "Parallactic Angle computation will fail.")
 
 def parallactic_angles(times, antenna_positions, field_centre):
     """
@@ -43,16 +50,16 @@ def parallactic_angles(times, antenna_positions, field_centre):
         An array of parallactic angles per time-step
 
     """
-    import pyrap.measures
     import pyrap.quanta as pq
 
     try:
-        pm = thread_local.pm
-    except AttributeError:
-        pm = thread_local.pm = pyrap.measures.measures()
+        # Create direction measure for the zenith
+        zenith = pm.direction('AZEL','0deg','90deg')
+    except AttributeError as e:
+        if pm is None:
+            raise ImportError("python-casacore import failed")
 
-    # Create direction measure for the zenith
-    zenith = pm.direction('AZEL','0deg','90deg')
+        raise
 
     # Create position measures for each antenna
     reference_positions = [pm.position('itrf',
@@ -63,14 +70,14 @@ def parallactic_angles(times, antenna_positions, field_centre):
     fc_rad = pm.direction('J2000',
         *(pq.quantity(f,'rad') for f in field_centre))
 
-    parallactic_angles = np.asarray([[
-            # Set antenna position as the reference frame
-            pm.do_frame(rp) and
+    return np.asarray([
             # Set current time as the reference frame
-            pm.do_frame(pm.epoch("UTC",pq.quantity(t,"s"))) and
-            # Now compute the parallactic angle
-            pm.posangle(fc_rad, zenith).get_value("rad")]
-        for t in times
-        for rp in reference_positions])
-
-    return parallactic_angles
+            pm.do_frame(pm.epoch("UTC", pq.quantity(t, "s")))
+            and
+            [   # Set antenna position as the reference frame
+                pm.do_frame(rp)
+                and
+                pm.posangle(fc_rad, zenith).get_value("rad")
+                for rp in reference_positions
+            ]
+        for t in times])
