@@ -3,8 +3,12 @@
 #ifndef RIME_SERSIC_SHAPE_OP_GPU_CUH
 #define RIME_SERSIC_SHAPE_OP_GPU_CUH
 
-#include "sersic_shape_op.h"
+// Include cub
+#include <cub/cub/cub.cuh>
+
 #include <montblanc/abstraction.cuh>
+
+#include "sersic_shape_op.h"
 #include "constants.h"
 
 // Required in order for Eigen::GpuDevice to be an actual type

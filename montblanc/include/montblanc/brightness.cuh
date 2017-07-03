@@ -18,6 +18,9 @@
 #ifndef _MONTBLANC_BRIGHTNESS_CUH
 #define _MONTBLANC_BRIGHTNESS_CUH
 
+// Include cub
+#include <cub/cub/cub.cuh>
+
 #include <montblanc/abstraction.cuh>
 
 namespace montblanc {

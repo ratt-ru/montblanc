@@ -1,3 +1,5 @@
+#include <utility>
+
 #include <montblanc/abstraction.cuh>
 
 namespace montblanc {
