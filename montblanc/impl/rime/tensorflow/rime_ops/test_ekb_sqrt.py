@@ -14,17 +14,19 @@ rc = lambda *s: rf(*s) + rf(*s)*1j
 
 nsrc, ntime, na, nchan, npol = 10, 20, 7, 16, 4
 
-np_complex_phase = rc(nsrc, ntime, na, nchan);
 np_bsqrt = rc(nsrc, ntime, nchan, npol)
+np_complex_phase = rc(nsrc, ntime, na, nchan);
+np_feed_rotation = rc(ntime, na, npol)
 np_ejones = rc(nsrc, ntime, na, nchan, npol)
 
 args = map(lambda v, n: tf.Variable(v, name=n),
-    [np_complex_phase, np_bsqrt, np_ejones],
-    ["complex_phase", "bsqrt", "ejones"])
+    [np_bsqrt, np_complex_phase, np_feed_rotation, np_ejones],
+    ["bsqrt", "complex_phase", "feed_rotation", "ejones"])
 
-def ekb_sqrt(complex_phase, bsqrt, ejones):
+def ekb_sqrt(bsqrt, complex_phase, feed_rotation, ejones):
     from montblanc.impl.rime.v4.cpu.CPUSolver import CPUSolver
     tmp = bsqrt[:,:,np.newaxis,:,:]*complex_phase[:,:,:,:,np.newaxis]
+    #tmp = CPUSolver.jones_multiply(feed_rotation, tmp)
     result = CPUSolver.jones_multiply(ejones, tmp)
     return result.reshape(nsrc, ntime, na, nchan, npol)
 
@@ -44,7 +46,7 @@ with tf.Session() as S:
     # Run our expressions on CPU and GPU
     result_cpu = S.run(expr_cpu)
     result_gpu = S.run(expr_gpu)
-    result_np = ekb_sqrt(np_complex_phase, np_bsqrt, np_ejones)
+    result_np = ekb_sqrt(np_bsqrt, np_complex_phase, np_feed_rotation, np_ejones)
 
     # Check that CPU and GPU results agree
     assert result_cpu.shape == result_gpu.shape

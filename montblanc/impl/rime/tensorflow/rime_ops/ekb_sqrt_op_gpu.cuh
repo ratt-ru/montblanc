@@ -103,9 +103,10 @@ public:
         namespace tf = tensorflow;
 
         // Sanity check the input tensors
-        const tf::Tensor & in_complex_phase = context->input(0);
-        const tf::Tensor & in_bsqrt = context->input(1);
-        const tf::Tensor & in_ejones = context->input(2);
+        const tf::Tensor & in_bsqrt = context->input(0);
+        const tf::Tensor & in_complex_phase = context->input(1);
+        const tf::Tensor & in_feed_rotation = context->input(2);
+        const tf::Tensor & in_ejones = context->input(3);
 
         // Extract problem dimensions
         int nsrc = in_complex_phase.dim_size(0);
