@@ -18,6 +18,9 @@ MONTBLANC_EKB_SQRT_NAMESPACE_BEGIN
 // ekb_sqrt_op_cpu.cpp and ekb_sqrt_op_gpu.cu respectively
 template <typename Device, typename FT, typename CT> class EKBSqrt {};
 
+// Number of polarisations handled by this kernel
+constexpr int EKB_SQRT_NPOL = 4;
+
 MONTBLANC_EKB_SQRT_NAMESPACE_STOP
 MONTBLANC_NAMESPACE_STOP
 

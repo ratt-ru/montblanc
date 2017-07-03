@@ -40,21 +40,20 @@ template <> struct LaunchTraits<double>
 // CUDA kernel outline
 template <typename Traits>
 __global__ void rime_ekb_sqrt(
-    const typename Traits::CT * complex_phase,
     const typename Traits::CT * bsqrt,
+    const typename Traits::CT * complex_phase,
+    const typename Traits::CT * feed_rotation,
     const typename Traits::CT * ejones,
     typename Traits::CT * ant_jones,
     int nsrc, int ntime, int na, int nchan, int npol)
 {
-    // Shared memory usage unnecesssary, but demonstrates use of
-    // constant Trait members to create kernel shared memory.
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
     using LTr = LaunchTraits<FT>;
-    //__shared__ FT buffer[LTr::BLOCKDIMX];
 
     int polchan = blockIdx.x*blockDim.x + threadIdx.x;
     int chan = polchan / npol;
+    int pol = polchan & (npol-1);
     int ant = blockIdx.y*blockDim.y + threadIdx.y;
     int time = blockIdx.z*blockDim.z + threadIdx.z;
     int npolchan = nchan*npol;
@@ -64,7 +63,11 @@ __global__ void rime_ekb_sqrt(
 
     int i;
 
-    for(int src=0; src < nsrc; ++ src)
+    __shared__ struct {
+        CT feed_rotation[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][EKB_SQRT_NPOL];
+    } shared;
+
+    for(int src=0; src < nsrc; ++src)
     {
         // Load in bsqrt
         int src_time = src*ntime + time;
@@ -76,16 +79,22 @@ __global__ void rime_ekb_sqrt(
         i = src_time_ant*nchan + chan;
         CT cplx_phase = complex_phase[i];
 
-        // Load in the brightness square root and multiply the phase in
+        // Multiply brightness square root into the complex phase
         montblanc::complex_multiply_in_place<FT>(cplx_phase, brightness_sqrt);
 
+        // Load in the feed rotation and multiply by KB
+        i = (time*na + ant)*npol + pol;
+        CT L = feed_rotation[i];
+
+        montblanc::jones_multiply_4x4_in_place<FT>(L, cplx_phase);
+
+        // Load in the E Beam and multiply by LKB
         i = src_time_ant*npolchan + polchan;
         CT E = ejones[i];
 
-        // Load in the E Beam and multiply by KB
-        montblanc::jones_multiply_4x4_in_place<FT>(E, cplx_phase);
+        montblanc::jones_multiply_4x4_in_place<FT>(E, L);
 
-        // Output it
+        // Output final per antenna value
         ant_jones[i] = E;
     }
 }
@@ -116,6 +125,11 @@ public:
         int npol = in_bsqrt.dim_size(3);
         int npolchan = nchan*npol;
 
+        //GPU kernel above requires this hard-coded number
+        OP_REQUIRES(context, npol == EKB_SQRT_NPOL,
+            tf::errors::InvalidArgument("Number of polarisations '",
+                npol, "' does not equal '", EKB_SQRT_NPOL, "'."));
+
         tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
 
         // Allocate an output tensor
@@ -137,10 +151,12 @@ public:
         const auto & device = context->eigen_device<GPUDevice>();
 
         // Get pointers to flattened tensor data buffers
-        auto complex_phase = reinterpret_cast<const typename Tr::CT *>(
-            in_complex_phase.flat<CT>().data());
         auto bsqrt = reinterpret_cast<const typename Tr::CT *>(
             in_bsqrt.flat<CT>().data());
+        auto complex_phase = reinterpret_cast<const typename Tr::CT *>(
+            in_complex_phase.flat<CT>().data());
+        auto feed_rotation = reinterpret_cast<const typename Tr::CT *>(
+            in_feed_rotation.flat<CT>().data());
         auto ejones = reinterpret_cast<const typename Tr::CT *>(
             in_ejones.flat<CT>().data());
         auto ant_jones = reinterpret_cast<typename Tr::CT *>(
@@ -148,7 +164,7 @@ public:
 
         // Call the rime_ekb_sqrt CUDA kernel
         rime_ekb_sqrt<Tr><<<grid, block, 0, device.stream()>>>(
-            complex_phase, bsqrt, ejones, ant_jones,
+            bsqrt, complex_phase, feed_rotation, ejones, ant_jones,
             nsrc, ntime, na, nchan, npol);
     }
 };

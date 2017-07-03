@@ -25,9 +25,18 @@ args = map(lambda v, n: tf.Variable(v, name=n),
 
 def ekb_sqrt(bsqrt, complex_phase, feed_rotation, ejones):
     from montblanc.impl.rime.v4.cpu.CPUSolver import CPUSolver
-    tmp = bsqrt[:,:,np.newaxis,:,:]*complex_phase[:,:,:,:,np.newaxis]
-    #tmp = CPUSolver.jones_multiply(feed_rotation, tmp)
-    result = CPUSolver.jones_multiply(ejones, tmp)
+    result = bsqrt[:,:,np.newaxis,:,:]*complex_phase[:,:,:,:,np.newaxis]
+
+    fr_shape = feed_rotation.shape[0:-1] + (2,2)
+    res_shape = result.shape[0:-1] + (2,2)
+
+    # time, antenna, i, j
+    # src, time, antenna, channel, j, k
+    result = np.einsum("taij,stacjk->stacik",
+            feed_rotation.reshape(fr_shape),
+            result.reshape(res_shape))
+
+    result = CPUSolver.jones_multiply(ejones, result)
     return result.reshape(nsrc, ntime, na, nchan, npol)
 
 # Pin the compute to the CPU
@@ -50,6 +59,6 @@ with tf.Session() as S:
 
     # Check that CPU and GPU results agree
     assert result_cpu.shape == result_gpu.shape
-    assert np.allclose(result_cpu, result_gpu)
     assert np.allclose(result_cpu, result_np)
+    assert np.allclose(result_cpu, result_gpu)
 
