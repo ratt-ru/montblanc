@@ -1,28 +1,8 @@
-import os
-import timeit
+import unittest
 
 import numpy as np
 import tensorflow as tf
-
-# Load the library containing the custom operation
-from montblanc.impl.rime.tensorflow import load_tf_lib
-rime = load_tf_lib()
-
-def b_sqrt_op(stokes, alpha, frequency, ref_freq):
-    """
-    This function wraps rime_phase by deducing the
-    complex output result type from the input
-    """
-    stokes_dtype = stokes.dtype.base_dtype
-
-    if stokes_dtype == tf.float32:
-        CT = tf.complex64
-    elif stokes_dtype == tf.float64:
-        CT = tf.complex128
-    else:
-        raise TypeError("Unhandled type '{t}'".format(t=stokes.dtype))
-
-    return rime.b_sqrt(stokes, alpha, frequency, ref_freq, CT=CT)
+from tensorflow.python.client import device_lib
 
 def brightness_numpy(stokes, alpha, frequency, ref_freq):
     nsrc, ntime, _ = stokes.shape
@@ -37,8 +17,10 @@ def brightness_numpy(stokes, alpha, frequency, ref_freq):
     freq_ratio = frequency[None,None,:]/ref_freq[:,None,None]
     power = np.power(freq_ratio, alpha[:,:,None])
 
+    CT = np.complex128 if stokes.dtype == np.float64 else np.complex64
+
     # Compute the brightness matrix
-    B = np.empty(shape=(nsrc, ntime, nchan, 4), dtype=ctype)
+    B = np.empty(shape=(nsrc, ntime, nchan, 4), dtype=CT)
     B[:,:,:,0] = power*(I+Q)
     B[:,:,:,1] = power*(U+V*1j)
     B[:,:,:,2] = power*(U-V*1j)
@@ -46,82 +28,130 @@ def brightness_numpy(stokes, alpha, frequency, ref_freq):
 
     return B
 
-dtype, ctype = np.float64, np.complex128
-nsrc, ntime, na, nchan = 10, 50, 27, 32
+class TestBSqrt(unittest.TestCase):
+    """ Tests the BSqrt operator """
 
-# Set up our numpy input arrays
+    def setUp(self):
+        # Load the rime operation library
+        from montblanc.impl.rime.tensorflow import load_tf_lib
+        self.rime = load_tf_lib()
+        # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
+        self.gpu_devs = [d.name for d in device_lib.list_local_devices()
+                                if d.device_type == 'GPU']
 
-# Stokes parameters, should produce a positive definite matrix
-np_stokes = np.empty(shape=(nsrc, ntime, 4), dtype=dtype)
-Q = np_stokes[:,:,1] = np.random.random(size=(nsrc, ntime)) - 0.5
-U = np_stokes[:,:,2] = np.random.random(size=(nsrc, ntime)) - 0.5
-V = np_stokes[:,:,3] = np.random.random(size=(nsrc, ntime)) - 0.5
-noise = np.random.random(size=(nsrc, ntime))*0.1
-# Need I^2 = Q^2 + U^2 + V^2 + noise^2
-np_stokes[:,:,0] = np.sqrt(Q**2 + U**2 + V**2 + noise)
+    def test_b_sqrt(self):
+        """ Test the BSqrt operator """
+        # List of type constraint for testing this operator
+        permutations = [[np.float32, np.complex64, {'rtol': 1e-3}],
+                             [np.float64, np.complex128, {}]]
 
-# Choose random flux to invert
-mask = np.random.randint(0, 2, size=(nsrc, ntime)) == 1
-np_stokes[mask,0] = -np_stokes[mask,0]
+        # Run test with the type combinations above
+        for FT, CT, tols in permutations:
+            self._impl_test_b_sqrt(FT, CT, tols)
 
-# Make the last matrix zero to test the positive semi-definite case
-np_stokes[-1,-1,:] = 0
+    def _impl_test_b_sqrt(self, FT, CT, tols):
+        """ Implementation of the BSqrt operator test """
 
-np_alpha = np.random.random(size=(nsrc, ntime)).astype(dtype)*0.8
-np_frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=dtype)
-np_ref_freq = 0.2e9*np.random.random(size=(nsrc,)).astype(dtype) + 1.3e9
+        nsrc, ntime, na, nchan = 10, 50, 27, 32
 
-# Create tensorflow arrays from the numpy arrays
-stokes = tf.Variable(np_stokes, name='stokes')
-alpha = tf.Variable(np_alpha, name='alpha')
-frequency = tf.Variable(np_frequency, name='frequency')
-ref_freq = tf.Variable(np_ref_freq, name='ref_freq')
+        # Useful random floats functor
+        rf = lambda *s: np.random.random(size=s).astype(FT)
+        rc = lambda *s: (rf(*s) + 1j*rf(*s)).astype(CT)
 
-# Get an expression for the b sqrt op on the CPU
-with tf.device('/cpu:0'):
-    b_sqrt_op_cpu, invert_op_cpu = b_sqrt_op(stokes, alpha, frequency, ref_freq)
+        # Set up our numpy input arrays
 
-# Get an expression for the complex phase op on the GPU
-with tf.device('/gpu:0'):
-    b_sqrt_op_gpu, invert_op_gpu = b_sqrt_op(stokes, alpha, frequency, ref_freq)
+        # Stokes parameters, should produce a positive definite matrix
+        stokes = np.empty(shape=(nsrc, ntime, 4), dtype=FT)
+        Q = stokes[:,:,1] = rf(nsrc, ntime) - 0.5
+        U = stokes[:,:,2] = rf(nsrc, ntime) - 0.5
+        V = stokes[:,:,3] = rf(nsrc, ntime) - 0.5
+        noise = rf(nsrc, ntime)*0.1
+        # Need I^2 = Q^2 + U^2 + V^2 + noise^2
+        stokes[:,:,0] = np.sqrt(Q**2 + U**2 + V**2 + noise)
 
-init_op = tf.global_variables_initializer()
+        # Choose random flux to invert
+        mask = np.random.randint(0, 2, size=(nsrc, ntime)) == 1
+        stokes[mask,0] = -stokes[mask,0]
 
-# Now create a tensorflow Session to evaluate the above
-with tf.Session() as S:
-    S.run(init_op)
+        # Make the last matrix zero to test the positive semi-definite case
+        stokes[-1,-1,:] = 0
 
-    # Evaluate and time tensorflow CPU
-    start = timeit.default_timer()
-    tf_b_sqrt_op_cpu, invert_cpu = S.run([b_sqrt_op_cpu, invert_op_cpu])
-    print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)
+        alpha = rf(nsrc, ntime)*0.8
+        frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=FT)
+        ref_freq = 0.2e9*rf(nsrc,) + 1.3e9
 
-    # Evaluate and time tensorflow GPU
-    start = timeit.default_timer()
-    tf_b_sqrt_op_gpu, invert_gpu = S.run([b_sqrt_op_gpu, invert_op_gpu])
-    print 'Tensorflow GPU time %f' % (timeit.default_timer() - start)
+        # Argument list
+        np_args = [stokes, alpha, frequency, ref_freq]
+        # Argument string name list
+        arg_names = ["stokes", "alpha", "frequency", "ref_freq"]
 
-    # Get our actual brightness matrices
-    np_b = brightness_numpy(np_stokes, np_alpha, np_frequency, np_ref_freq)
+        # Constructor tensorflow variables
+        tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
-    # Check that our shapes and values agree with a certain tolerance
-    assert tf_b_sqrt_op_cpu.shape == (nsrc, ntime, nchan, 4)
-    assert np.allclose(tf_b_sqrt_op_cpu, tf_b_sqrt_op_gpu)
-    assert np.all(invert_cpu == invert_gpu)
+        def _pin_op(device, *tf_args):
+            """ Pin operation to device """
+            with tf.device(device):
+                return self.rime.b_sqrt(*tf_args, CT=CT)
 
-    # Reshape for 2x2 jones multiply below
-    b_flat = np_b.reshape(nsrc, ntime, nchan, 2, 2)
-    b_sqrt_flat = tf_b_sqrt_op_cpu.reshape(nsrc, ntime, nchan, 2, 2)
+        # Pin operation to CPU
+        cpu_op = _pin_op('/cpu:0', *tf_args)
 
-    # Multiplying the square root matrix
-    # by it's hermitian transpose
-    square = np.einsum("...ij,...kj->...ik",
-        b_sqrt_flat, b_sqrt_flat.conj())
+        # Run the op on all GPUs
+        gpu_ops = [_pin_op(d, *tf_args) for d in self.gpu_devs]
 
-    # Apply any sign inversions
-    square[:,:,:,:,:] *= invert_cpu[:,:,np.newaxis,np.newaxis,np.newaxis]
+        # Initialise variables
+        init_op = tf.global_variables_initializer()
 
-    # And we should obtain the brightness matrix
-    assert np.allclose(b_flat, square)
+        with tf.Session() as S:
+            S.run(init_op)
 
-print 'Tests Succeeded'
+            # Get the CPU bsqrt and invert flag
+            cpu_bsqrt, cpu_invert = S.run(cpu_op)
+
+            # Get our actual brightness matrices
+            b = brightness_numpy(stokes, alpha, frequency, ref_freq)
+            b_2x2 = b.reshape(nsrc, ntime, nchan, 2, 2)
+            b_sqrt_2x2 = cpu_bsqrt.reshape(nsrc, ntime, nchan, 2, 2)
+
+            # Multiplying the square root matrix
+            # by it's hermitian transpose
+            square = np.einsum("...ij,...kj->...ik",
+                b_sqrt_2x2, b_sqrt_2x2.conj())
+
+            # Apply any sign inversions
+            square[:,:,:,:,:] *= cpu_invert[:,:,None,None,None]
+
+            # And we should obtain the brightness matrix
+            assert np.allclose(b_2x2, square)
+
+            # Compare with GPU bsqrt and invert flag
+            for gpu_bsqrt, gpu_invert in S.run(gpu_ops):
+                self.assertTrue(np.all(cpu_invert == gpu_invert))
+
+                # Compare cpu and gpu
+                d = np.isclose(cpu_bsqrt, gpu_bsqrt, **tols)
+                d = np.invert(d)
+                p = np.nonzero(d)
+
+                if p[0].size == 0:
+                    continue
+
+                import itertools
+                it = (np.asarray(p).T, cpu_bsqrt[d], gpu_bsqrt[d])
+                it = enumerate(itertools.izip(*it))
+
+                msg = ["%s %s %s %s %s" % (i, idx, c, g, c-g)
+                            for i, (idx, c, g) in it]
+
+                self.fail("CPU/GPU bsqrt failed likely because the "
+                        "last polarisation for each entry differs slightly "
+                        "for FT=np.float32 and CT=np.complex64. "
+                        "FT='%s' CT='%s'."
+                        "Here are the values\n%s" % (FT, CT, '\n'.join(msg)))
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+
