@@ -1,9 +1,9 @@
 #if GOOGLE_CUDA
 
-#ifndef RIME_EKB_SQRT_OP_GPU_CUH
-#define RIME_EKB_SQRT_OP_GPU_CUH
+#ifndef RIME_CREATE_ANTENNA_JONES_OP_GPU_CUH
+#define RIME_CREATE_ANTENNA_JONES_OP_GPU_CUH
 
-#include "ekb_sqrt_op.h"
+#include "create_antenna_jones_op.h"
 #include <montblanc/abstraction.cuh>
 #include <montblanc/jones.cuh>
 
@@ -14,7 +14,7 @@
 #include "tensorflow/core/framework/op_kernel.h"
 
 MONTBLANC_NAMESPACE_BEGIN
-MONTBLANC_EKB_SQRT_NAMESPACE_BEGIN
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_BEGIN
 
 // For simpler partial specialisation
 typedef Eigen::GpuDevice GPUDevice;
@@ -39,7 +39,7 @@ template <> struct LaunchTraits<double>
 
 // CUDA kernel outline
 template <typename Traits>
-__global__ void rime_ekb_sqrt(
+__global__ void rime_create_antenna_jones(
     const typename Traits::CT * bsqrt,
     const typename Traits::CT * complex_phase,
     const typename Traits::CT * feed_rotation,
@@ -64,7 +64,7 @@ __global__ void rime_ekb_sqrt(
     int i;
 
     __shared__ struct {
-        CT fr[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][EKB_SQRT_NPOL];
+        CT fr[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][CREATE_ANTENNA_JONES_NPOL];
     } shared;
 
     // Feed rotation varies by time, antenna and polarisation
@@ -109,12 +109,12 @@ __global__ void rime_ekb_sqrt(
     }
 }
 
-// Specialise the EKBSqrt op for GPUs
+// Specialise the CreateAntennaJones op for GPUs
 template <typename FT, typename CT>
-class EKBSqrt<GPUDevice, FT, CT> : public tensorflow::OpKernel
+class CreateAntennaJones<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 public:
-    explicit EKBSqrt(tensorflow::OpKernelConstruction * context) :
+    explicit CreateAntennaJones(tensorflow::OpKernelConstruction * context) :
         tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
@@ -136,9 +136,9 @@ public:
         int npolchan = nchan*npol;
 
         //GPU kernel above requires this hard-coded number
-        OP_REQUIRES(context, npol == EKB_SQRT_NPOL,
+        OP_REQUIRES(context, npol == CREATE_ANTENNA_JONES_NPOL,
             tf::errors::InvalidArgument("Number of polarisations '",
-                npol, "' does not equal '", EKB_SQRT_NPOL, "'."));
+                npol, "' does not equal '", CREATE_ANTENNA_JONES_NPOL, "'."));
 
         tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
 
@@ -172,16 +172,16 @@ public:
         auto ant_jones = reinterpret_cast<typename Tr::CT *>(
             ant_jones_ptr->flat<CT>().data());
 
-        // Call the rime_ekb_sqrt CUDA kernel
-        rime_ekb_sqrt<Tr><<<grid, block, 0, device.stream()>>>(
+        // Call the rime_create_antenna_jones CUDA kernel
+        rime_create_antenna_jones<Tr><<<grid, block, 0, device.stream()>>>(
             bsqrt, complex_phase, feed_rotation, ejones, ant_jones,
             nsrc, ntime, na, nchan, npol);
     }
 };
 
-MONTBLANC_EKB_SQRT_NAMESPACE_STOP
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_STOP
 MONTBLANC_NAMESPACE_STOP
 
-#endif // #ifndef RIME_EKB_SQRT_OP_GPU_CUH
+#endif // #ifndef RIME_CREATE_ANTENNA_JONES_OP_GPU_CUH
 
 #endif // #if GOOGLE_CUDA

@@ -1,7 +1,7 @@
-#ifndef RIME_EKB_SQRT_OP_CPU_H
-#define RIME_EKB_SQRT_OP_CPU_H
+#ifndef RIME_CREATE_ANTENNA_JONES_OP_CPU_H
+#define RIME_CREATE_ANTENNA_JONES_OP_CPU_H
 
-#include "ekb_sqrt_op.h"
+#include "create_antenna_jones_op.h"
 
 // Required in order for Eigen::ThreadPoolDevice to be an actual type
 #define EIGEN_USE_THREADS
@@ -10,17 +10,17 @@
 #include "tensorflow/core/framework/op_kernel.h"
 
 MONTBLANC_NAMESPACE_BEGIN
-MONTBLANC_EKB_SQRT_NAMESPACE_BEGIN
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_BEGIN
 
 // For simpler partial specialisation
 typedef Eigen::ThreadPoolDevice CPUDevice;
 
-// Specialise the EKBSqrt op for CPUs
+// Specialise the CreateAntennaJones op for CPUs
 template <typename FT, typename CT>
-class EKBSqrt<CPUDevice, FT, CT> : public tensorflow::OpKernel
+class CreateAntennaJones<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 public:
-    explicit EKBSqrt(tensorflow::OpKernelConstruction * context) :
+    explicit CreateAntennaJones(tensorflow::OpKernelConstruction * context) :
         tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
@@ -41,9 +41,9 @@ public:
         int npol = in_bsqrt.dim_size(3);
 
         //GPU kernel above requires this hard-coded number
-        OP_REQUIRES(context, npol == EKB_SQRT_NPOL,
+        OP_REQUIRES(context, npol == CREATE_ANTENNA_JONES_NPOL,
             tf::errors::InvalidArgument("Number of polarisations '",
-                npol, "' does not equal '", EKB_SQRT_NPOL, "'."));
+                npol, "' does not equal '", CREATE_ANTENNA_JONES_NPOL, "'."));
 
         tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
 
@@ -107,7 +107,7 @@ public:
     }
 };
 
-MONTBLANC_EKB_SQRT_NAMESPACE_STOP
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_STOP
 MONTBLANC_NAMESPACE_STOP
 
-#endif // #ifndef RIME_EKB_SQRT_OP_CPU_H
+#endif // #ifndef RIME_CREATE_ANTENNA_JONES_OP_CPU_H

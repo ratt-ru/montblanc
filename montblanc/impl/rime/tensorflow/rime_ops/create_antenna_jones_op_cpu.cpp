@@ -1,10 +1,10 @@
-#include "ekb_sqrt_op_cpu.h"
+#include "create_antenna_jones_op_cpu.h"
 
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
 MONTBLANC_NAMESPACE_BEGIN
-MONTBLANC_EKB_SQRT_NAMESPACE_BEGIN
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_BEGIN
 
 using tensorflow::shape_inference::InferenceContext;
 using tensorflow::shape_inference::ShapeHandle;
@@ -67,8 +67,8 @@ auto ekb_shape_function = [](InferenceContext* c) {
 
 
 
-// Register the EKBSqrt operator.
-REGISTER_OP("EKBSqrt")
+// Register the CreateAntennaJones operator.
+REGISTER_OP("CreateAntennaJones")
     .Input("bsqrt: CT")
     .Input("complex_phase: CT")
     .Input("feed_rotation: CT")
@@ -79,22 +79,22 @@ REGISTER_OP("EKBSqrt")
     .SetShapeFn(ekb_shape_function);
 
 
-// Register a CPU kernel for EKBSqrt that handles floats
+// Register a CPU kernel for CreateAntennaJones that handles floats
 REGISTER_KERNEL_BUILDER(
-    Name("EKBSqrt")
+    Name("CreateAntennaJones")
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT")
     .Device(tensorflow::DEVICE_CPU),
-    EKBSqrt<CPUDevice, float, tensorflow::complex64>);
+    CreateAntennaJones<CPUDevice, float, tensorflow::complex64>);
 
-// Register a CPU kernel for EKBSqrt that handles doubles
+// Register a CPU kernel for CreateAntennaJones that handles doubles
 REGISTER_KERNEL_BUILDER(
-    Name("EKBSqrt")
+    Name("CreateAntennaJones")
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT")
     .Device(tensorflow::DEVICE_CPU),
-    EKBSqrt<CPUDevice, double, tensorflow::complex128>);
+    CreateAntennaJones<CPUDevice, double, tensorflow::complex128>);
 
 
-MONTBLANC_EKB_SQRT_NAMESPACE_STOP
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_STOP
 MONTBLANC_NAMESPACE_STOP

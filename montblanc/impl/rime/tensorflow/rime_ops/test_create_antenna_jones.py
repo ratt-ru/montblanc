@@ -23,7 +23,7 @@ args = map(lambda v, n: tf.Variable(v, name=n),
     [np_bsqrt, np_complex_phase, np_feed_rotation, np_ejones],
     ["bsqrt", "complex_phase", "feed_rotation", "ejones"])
 
-def ekb_sqrt(bsqrt, complex_phase, feed_rotation, ejones):
+def create_antenna_jones(bsqrt, complex_phase, feed_rotation, ejones):
     from montblanc.impl.rime.v4.cpu.CPUSolver import CPUSolver
     result = bsqrt[:,:,np.newaxis,:,:]*complex_phase[:,:,:,:,np.newaxis]
 
@@ -41,11 +41,11 @@ def ekb_sqrt(bsqrt, complex_phase, feed_rotation, ejones):
 
 # Pin the compute to the CPU
 with tf.device('/cpu:0'):
-    expr_cpu = rime.ekb_sqrt(*args, FT=dtype)
+    expr_cpu = rime.create_antenna_jones(*args, FT=dtype)
 
 # Pin the compute to the GPU
 with tf.device('/gpu:0'):
-    expr_gpu = rime.ekb_sqrt(*args, FT=dtype)
+    expr_gpu = rime.create_antenna_jones(*args, FT=dtype)
 
 init_op = tf.global_variables_initializer()
 
@@ -55,7 +55,7 @@ with tf.Session() as S:
     # Run our expressions on CPU and GPU
     result_cpu = S.run(expr_cpu)
     result_gpu = S.run(expr_gpu)
-    result_np = ekb_sqrt(np_bsqrt, np_complex_phase, np_feed_rotation, np_ejones)
+    result_np = create_antenna_jones(np_bsqrt, np_complex_phase, np_feed_rotation, np_ejones)
 
     # Check that CPU and GPU results agree
     assert result_cpu.shape == result_gpu.shape
