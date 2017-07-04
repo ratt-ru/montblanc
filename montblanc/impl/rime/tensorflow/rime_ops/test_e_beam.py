@@ -1,83 +1,111 @@
-import os
-import timeit
+
+import unittest
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.client import device_lib
 
-# Load the library containing the custom operation
-from montblanc.impl.rime.tensorflow import load_tf_lib
-rime = load_tf_lib()
+class TestEBeam(unittest.TestCase):
+    """ Tests the EBeam operator """
 
-dtype, ctype = np.float64, np.complex128
-nsrc, ntime, na, nchan = 20, 29, 14, 64
-beam_lw = beam_mh = beam_nud = 50
+    def setUp(self):
+        # Load the rime operation library
+        from montblanc.impl.rime.tensorflow import load_tf_lib
+        self.rime = load_tf_lib()
+        # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
+        self.gpu_devs = [d.name for d in device_lib.list_local_devices()
+                                if d.device_type == 'GPU']
 
-# Useful random floats functor
-rf = lambda *s: np.random.random(size=s).astype(dtype)
+    def test_e_beam(self):
+        """ Test the EBeam operator """
+        # List of type constraint for testing this operator
+        type_permutations = [[np.float32, np.complex64],
+                             [np.float64, np.complex128]]
 
-# Set up our numpy input arrays
-np_lm = (rf(nsrc,2)-0.5)*1e-1
-np_frequency = np.linspace(1e9, 2e9, nchan).astype(dtype)
-np_point_errors = (rf(ntime, na, nchan, 2)-0.5)*1e-2
-np_antenna_scaling = rf(na,nchan,2)
-np_parallactic_angle = np.deg2rad(rf(ntime, na)).astype(dtype)
-np_parallactic_angle_sin = np.sin(np_parallactic_angle)
-np_parallactic_angle_cos = np.cos(np_parallactic_angle)
-np_beam_extents = dtype([-0.9, -0.8, 1e9, 0.8, 0.9, 2e9])
-np_beam_freq_map = np.linspace(1e9, 2e9, beam_nud, endpoint=True).astype(dtype)
-np_e_beam = (rf(beam_lw, beam_mh, beam_nud, 4) +
-        1j*rf(beam_lw, beam_mh, beam_nud, 4)).astype(ctype)
+        # Run test with the type combinations above
+        for FT, CT in type_permutations:
+            self._impl_test_e_beam(FT, CT)
 
-# Create tensorflow variables
-args = map(lambda np, s: tf.Variable(np, name=s),
-    [np_lm, np_frequency, np_point_errors, np_antenna_scaling,
-    np_parallactic_angle_sin, np_parallactic_angle_cos,
-     np_beam_extents, np_beam_freq_map, np_e_beam],
-    ["lm", "frequency", "point_errors", "antenna_scaling",
-    "parallactic_angle_sin", "parallactic_angle_cos",
-     "beam_extents", "beam_freq_map", "e_beam"])
+    def _impl_test_e_beam(self, FT, CT):
+        """ Implementation of the EBeam operator test """
 
-from pprint import pprint
-pprint(args)
+        nsrc, ntime, na, nchan = 20, 29, 14, 64
+        beam_lw = beam_mh = beam_nud = 50
 
-# Get an expression for the e beam op on the CPU
-with tf.device('/cpu:0'):
-    e_beam_op_cpu = rime.e_beam(*args)
+        # Useful random floats functor
+        rf = lambda *s: np.random.random(size=s).astype(FT)
+        rc = lambda *s: (rf(*s) + 1j*rf(*s)).astype(CT)
 
-# Get an expression for the e beam op on the GPU
-with tf.device('/gpu:0'):
-    e_beam_op_gpu = rime.e_beam(*args)
+        # Set up our numpy input arrays
+        lm = (rf(nsrc, 2) - 0.5) * 1e-1
+        frequency = np.linspace(1e9, 2e9, nchan,dtype=FT)
+        point_errors = (rf(ntime, na, nchan, 2) - 0.5) * 1e-2
+        antenna_scaling = rf(na, nchan, 2)
+        parallactic_angle = np.deg2rad(rf(ntime, na))
+        parallactic_angle_sin = np.sin(parallactic_angle)
+        parallactic_angle_cos = np.cos(parallactic_angle)
+        beam_extents = FT([-0.9, -0.8, 1e9, 0.8, 0.9, 2e9])
+        beam_freq_map = np.linspace(1e9, 2e9, beam_nud, dtype=FT, endpoint=True)
+        e_beam = rc(beam_lw, beam_mh, beam_nud, 4)
 
-init_op = tf.global_variables_initializer()
+        # Argument list
+        np_args = [lm, frequency, point_errors, antenna_scaling,
+                     parallactic_angle_sin, parallactic_angle_cos,
+                     beam_extents, beam_freq_map, e_beam]
+        # Argument string name list
+        arg_names = ["lm", "frequency", "point_errors", "antenna_scaling",
+                     "parallactic_angle_sin", "parallactic_angle_cos",
+                     "beam_extents", "beam_freq_map", "e_beam"]
 
-# Now create a tensorflow Session to evaluate the above
-with tf.Session() as S:
-    S.run(init_op)
+        # Constructor tensorflow variables
+        tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
-    # Evaluate and time tensorflow CPU
-    start = timeit.default_timer()
-    tf_e_beam_op_cpu = S.run(e_beam_op_cpu)
-    print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)
+        def _pin_op(device, *tf_args):
+            """ Pin operation to device """
+            with tf.device(device):
+                return self.rime.e_beam(*tf_args)
 
-    # Evaluate and time tensorflow GPU
-    start = timeit.default_timer()
-    tf_e_beam_op_gpu = S.run(e_beam_op_gpu)
-    print 'Tensorflow GPU time %f' % (timeit.default_timer() - start)
+        # Pin operation to CPU
+        cpu_op = _pin_op('/cpu:0', *tf_args)
 
-    assert tf_e_beam_op_gpu.shape == tf_e_beam_op_cpu.shape
+        # Run the op on all GPUs
+        gpu_ops = [_pin_op(d, *tf_args) for d in self.gpu_devs]
 
-    proportion_acceptable = 1e-4
-    d = np.invert(np.isclose(tf_e_beam_op_cpu, tf_e_beam_op_gpu))
-    incorrect = d.sum()
-    proportion_incorrect = incorrect / float(d.size)
+        # Initialise variables
+        init_op = tf.global_variables_initializer()
 
-    assert proportion_incorrect < proportion_acceptable, (
-        'Proportion of incorrect E beam values {pi} '
-        '({i} out of {t}) '
-        'is greater than the accepted tolerance {pa}.').format(
-            pi=proportion_incorrect,
-            i=incorrect,
-            t=d.size,
-            pa=proportion_acceptable)
+        with tf.Session() as S:
+            S.run(init_op)
 
-    assert np.count_nonzero(tf_e_beam_op_cpu) > 0.8*tf_e_beam_op_cpu.size
+            # Get the CPU ejones
+            cpu_ejones = S.run(cpu_op)
+
+            # Check that most of them are non-zero
+            nz_cpu = np.count_nonzero((cpu_ejones))
+            self.assertTrue(nz_cpu > 0.8*cpu_ejones.size,
+                "Less than 80% of the ejones turns are non-zero")
+
+            # Compare with GPU ejones
+            for gpu_ejones in S.run(gpu_ops):
+                self.assertTrue(np.allclose(cpu_ejones, gpu_ejones),
+                    "This may fail due to discrepancies when rounding "
+                    "floating point values near an integer value. "
+                    "As the CPU and GPU may slightly differ, "
+                    "values may be slightly below and integer on the CPU "
+                    "and slghtly above on the GPU for instance. "
+                    "It may be appropriate to ignore this assert check. ")
+
+                proportion_acceptable = 1e-4
+                d = np.invert(np.isclose(cpu_ejones, gpu_ejones))
+                incorrect = d.sum()
+                proportion_incorrect = incorrect / float(d.size)
+
+                self.assertTrue(proportion_incorrect < proportion_acceptable,
+                    "Proportion of incorrect E beam values {pi} "
+                    "({i} out of {t}) is greater than the "
+                    "accepted tolerance {pa}.".format(
+                        pi=proportion_incorrect, i=incorrect,
+                        t=d.size, pa=proportion_acceptable))
+
+if __name__ == "__main__":
+    unittest.main()
