@@ -945,6 +945,9 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
         # Compute sine and cosine of parallactic angles
         pa_sin, pa_cos = rime.parallactic_angle_sin_cos(D.parallactic_angles)
+        # Compute feed rotation
+        feed_rotation = rime.feed_rotation(pa_sin, pa_cos,
+                                           feed_type='linear', CT=CT)
 
     def antenna_jones(lm, stokes, alpha, ref_freq):
         """
@@ -989,10 +992,12 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag]
         deps = [] # Do nothing for now
 
-        # Combine the complex phase, brightness square root and beam dde's
+        # Combine the brightness square root, complex phase,
+        # feed rotation and beam dde's
         with tf.control_dependencies(deps):
-            return (rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT),
-                sgn_brightness)
+            antenna_jones = rime.create_antenna_jones(bsqrt, cplx_phase,
+                                                    feed_rotation, ejones, FT=FT)
+            return antenna_jones, sgn_brightness
 
     # While loop condition for each point source type
     def point_cond(coherencies, npsrc, src_count):

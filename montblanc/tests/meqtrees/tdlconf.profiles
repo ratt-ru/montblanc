@@ -24,7 +24,9 @@ me.e_enable = 1
 me.e_module = Siamese_OMS_pybeams_fits
 me.epe_enable = 0
 me.g_enable = 0
-me.l_enable = 0
+me.l_advanced = 0
+me.l_enable = 1
+me.l_module = Rotation
 me.ncorr_enable = 0
 me.p_enable = 0
 me.sky.siamese_agw_azel_sky = 0
@@ -70,4 +72,5 @@ tiggerlsm.null_subset = None
 tiggerlsm.solvable_sources = 0
 uvw_refant = default
 uvw_source = from MS
+rot_l.enable_pa = enabled
 
