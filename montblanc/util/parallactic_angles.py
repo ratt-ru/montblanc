@@ -54,7 +54,7 @@ def parallactic_angles(times, antenna_positions, field_centre):
 
     try:
         # Create direction measure for the zenith
-        zenith = pm.direction('AZEL','0deg','90deg')
+        zenith = pm.direction('AZELGEO','0deg','90deg')
     except AttributeError as e:
         if pm is None:
             raise ImportError("python-casacore import failed")
