@@ -85,9 +85,10 @@ def parallactic_angles(times, antenna_positions, field_centre):
 
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz, CIRS, Angle
 from astropy.time import Time
+
 from astropy import units
 
-def _parallactic_angle_astropy(times, antenna_positions, field_centre):
+def _parallactic_angle_astropy(times, ap, fc):
     """
     Computes parallactic angles per timestep for the given
     reference antenna position and field centre.
@@ -96,10 +97,10 @@ def _parallactic_angle_astropy(times, antenna_positions, field_centre):
         times: ndarray
             Array of unique times with shape (ntime,),
             obtained from TIME column of MS table
-        antenna_positions: ndarray of shape (na, 3)
+        ap: ndarray of shape (na, 3)
             Antenna positions, obtained from POSITION
             column of MS ANTENNA sub-table
-        field_centre : ndarray of shape (2,)
+        fc : ndarray of shape (2,)
             Field centre, should be obtained from MS PHASE_DIR
 
     Returns:
@@ -109,13 +110,6 @@ def _parallactic_angle_astropy(times, antenna_positions, field_centre):
     from astropy.coordinates import EarthLocation, SkyCoord, AltAz, CIRS
     from astropy.time import Time
     from astropy import units
-
-    fc = field_centre
-    ap = antenna_positions
-
-    FT = times.dtype
-    ntime = times.shape[0]
-    na = antenna_positions.shape[0]
 
     # Convert from MJD second to MJD
     times = Time(times / 86400.00, format='mjd', scale='utc')
@@ -128,17 +122,10 @@ def _parallactic_angle_astropy(times, antenna_positions, field_centre):
     pole_cirs = pole.transform_to(cirs_frame)
     fc_cirs = fc.transform_to(cirs_frame)
 
-    pa = units.Quantity(np.empty((ntime, na), dtype=FT),
-        dtype=FT, unit=units.rad, copy=False)
-
-    for i, ant_pos in enumerate(ap):
-        altaz_frame = AltAz(location=ant_pos, obstime=times)
-        pole_altaz = pole_cirs.transform_to(altaz_frame)
-        fc_altaz = fc_cirs.transform_to(altaz_frame)
-        pa[:,i] = fc_altaz.position_angle(pole_altaz)
-
-    return pa
-#        print pa
+    altaz_frame = AltAz(location=ap[None,:], obstime=times[:,None])
+    pole_altaz = pole_cirs[:,None].transform_to(altaz_frame)
+    fc_altaz = fc_cirs[:,None].transform_to(altaz_frame)
+    return fc_altaz.position_angle(pole_altaz)
 
 if __name__ == "__main__":
     # 5s second types from 12h00 midday on 1st Feb
