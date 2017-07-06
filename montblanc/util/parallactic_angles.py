@@ -118,13 +118,9 @@ def _parallactic_angle_astropy(times, ap, fc):
     fc = SkyCoord(ra=fc[0], dec=fc[1], unit=units.rad, frame='fk5')
     pole = SkyCoord(ra=0, dec=90, unit=units.deg, frame='fk5')
 
-    cirs_frame = CIRS(obstime=times)
-    pole_cirs = pole.transform_to(cirs_frame)
-    fc_cirs = fc.transform_to(cirs_frame)
-
     altaz_frame = AltAz(location=ap[None,:], obstime=times[:,None])
-    pole_altaz = pole_cirs[:,None].transform_to(altaz_frame)
-    fc_altaz = fc_cirs[:,None].transform_to(altaz_frame)
+    pole_altaz = pole.transform_to(altaz_frame)
+    fc_altaz = fc.transform_to(altaz_frame)
     return fc_altaz.position_angle(pole_altaz)
 
 if __name__ == "__main__":
