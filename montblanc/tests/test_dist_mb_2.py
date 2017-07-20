@@ -147,13 +147,14 @@ if __name__ == "__main__":
 
             tf_cfg = w.tf_cfg
             session = tf_cfg.session
+            feed_internal = tf_cfg.feed_data.local_cpu.feed_internal
             feed_once = tf_cfg.feed_data.local_cpu.feed_once
             feed_many = tf_cfg.feed_data.local_cpu.feed_many
             feed_sources = tf_cfg.feed_data.local_cpu.sources
             key_pool = w.key_pool
 
-            print("Feed Sources {}".format({k: v.fed_arrays for k, v in
-                                                feed_sources.iteritems() }))
+            print("Feed Sources {}".format({ k: v.fed_arrays for k, v
+                                             in feed_sources.iteritems() }))
 
             K = Klass(*args)
             D = attr.asdict(K)
@@ -213,12 +214,6 @@ if __name__ == "__main__":
             src_keys_and_fn = { k: _source_keys_and_feed_fn(k, sa)
                                     for k, sa in feed_sources.items() }
 
-            # HACK the keys for each source onto the K objects
-            # See TODO in RimeSolver._construct_tensorflow_staging_areas
-            # for more information
-            for n, (k, fn) in src_keys_and_fn.iteritems():
-                setattr(K, "%s_keys" % n, k)
-
             feed_once_key = key_pool.get(1)
             feed_dict = { ph: getattr(K, n) for n, ph in
                 zip(feed_once.fed_arrays, feed_once.placeholders) }
@@ -230,6 +225,11 @@ if __name__ == "__main__":
                 zip(feed_many.fed_arrays, feed_many.placeholders) }
             feed_dict[feed_many.put_key_ph] = feed_many_key[0]
             session.run(feed_many.put_op, feed_dict=feed_dict)
+
+            feed_dict = { ph: src_keys_and_fn[n][0] for n, ph in
+                zip(feed_internal.fed_arrays, feed_internal.placeholders) }
+            feed_dict[feed_internal.put_key_ph] = feed_many_key[0]
+            session.run(feed_internal.put_op, feed_dict=feed_dict)
 
             # Now feed the source arrays
             for k, fn in src_keys_and_fn.values():

@@ -398,21 +398,18 @@ def _construct_tensorflow_staging_areas(cube, iter_dims, devices):
     src_data_sources, feed_many, feed_once = _partition(iter_dims,
                                                         input_arrays)
 
-    # Hack in staging area source key arrays
-    # into the feed_many staging area.
-    # TODO: Find some better way of doing this.
-    #       Problematic bit is that the the shape
-    #       of these arrays is npsrc/chunk
-    #       in the case of point sources for example
-    #       At the moment this doesn't fit nicely into
-    #       the partitioning scheme above as the keys
-    #       will change with each vis chunk and really
-    #       fit into the feed_many array
-    for src_type in src_data_sources.keys():
-        name = "{}_keys".format(src_type)
-        ds = AttrDict(name=name, shape=(1,), dtype=np.int32)
-        feed_many.append(ds)
-        input_arrays[name] = ds
+    #=======================================
+    # Staging area for internal data sources
+    #=======================================
+
+    internal_arrays = { st: AttrDict(name="%s_keys" % st,
+                                     shape=(1,), dtype=np.int32)
+                                for st in src_data_sources.keys() }
+
+    with tf.device(cpu_dev):
+        local_cpu.feed_internal = create_staging_area_wrapper('internal',
+            [n for n in internal_arrays.keys()],
+            internal_arrays, ordered=True)
 
     #======================================
     # Staging area for fed once data sources
