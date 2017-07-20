@@ -143,8 +143,6 @@ if __name__ == "__main__":
         Klass = attr.make_class("Klass", D.keys())
 
         def _predict(*args, **kwargs):
-
-
             w = dd.get_worker()
 
             tf_cfg = w.tf_cfg
@@ -170,6 +168,57 @@ if __name__ == "__main__":
 
             pprint({ k: _display(k, v) for k, v in D.items() })
 
+            def _source_keys_and_feed_fn(k, sa):
+                """ Returns (keys, feed function) for given source staging area """
+
+                # arrays in the staging area to feed
+                arrays = { n: (getattr(K, n), ph) for n, ph
+                                    in zip(sa.fed_arrays, sa.placeholders) }
+                # Get the actual arrays
+                data = [t[0] for t in arrays.values()]
+
+                if not all(type(data[0]) == type(d) for d in data):
+                    raise ValueError("Type mismatch in arrays "
+                                     "supplied for {}".format(k))
+
+                # Handle single ndarray case
+                if isinstance(data[0], np.ndarray):
+                    print("Handling numpy arrays for {}".format(k))
+                    if data[0].nbytes == 0:
+                        print("{} is zero-length, ignoring".format(k))
+                        return [], lambda: None
+
+                    keys = key_pool.get(1)
+                    feed_dict = {ph: d for n, (d, ph) in arrays.items()}
+                    feed_dict[sa.put_key_ph] = keys[0]
+                    from functools import partial
+                    fn = partial(session.run, sa.put_op, feed_dict=feed_dict)
+                    return keys, fn
+
+                # Handle multiple ndarrays in a list case
+                elif isinstance(data[0], list):
+                    print("Handling lists for {}".format(k))
+                    keys = key_pool.get(len(data[0]))
+
+                    def fn():
+                        for i, k in enumerate(keys):
+                            feed_dict = { ph: d[i] for n, (d, ph) in arrays.items() }
+                            feed_dict[sa.put_key_ph] = k
+                            session.run(sa.put_op, feed_dict=feed_dict)
+
+                    return keys, fn
+
+                raise ValueError("Unhandled case {}".format(type(data[0])))
+
+            src_keys_and_fn = { k: _source_keys_and_feed_fn(k, sa)
+                                    for k, sa in feed_sources.items() }
+
+            # HACK the keys for each source onto the K objects
+            # See TODO in RimeSolver._construct_tensorflow_staging_areas
+            # for more information
+            for n, (k, fn) in src_keys_and_fn.iteritems():
+                setattr(K, "%s_keys" % n, k)
+
             feed_once_key = key_pool.get(1)
             feed_dict = { ph: getattr(K, n) for n, ph in
                 zip(feed_once.fed_arrays, feed_once.placeholders) }
@@ -182,45 +231,20 @@ if __name__ == "__main__":
             feed_dict[feed_many.put_key_ph] = feed_many_key[0]
             session.run(feed_many.put_op, feed_dict=feed_dict)
 
-            feed_source_keys = []
+            # Now feed the source arrays
+            for k, fn in src_keys_and_fn.values():
+                fn()
 
-            for k, sa in feed_sources.items():
-                arrays = { n: (getattr(K, n), ph) for n, ph
-                                    in zip(sa.fed_arrays, sa.placeholders)}
-                data = [t[0] for t in arrays.values()]
-
-                if not all(type(data[0]) == type(d) for d in data):
-                    raise ValueError("Type mismatch in arrays supplied for {}"
-                                     .format(k))
-
-                if isinstance(data[0], np.ndarray):
-                    print("Handling numpy arrays for {}".format(k))
-                    if data[0].nbytes == 0:
-                        print("{} is zero-length, continuing".format(k))
-                        continue
-
-                    key = key_pool.get(1)
-                    feed_source_keys.extend(key)
-                    feed_dict = {ph: d for n, (d, ph) in arrays.items()}
-                    feed_dict[sa.put_key_ph] = key[0]
-                    session.run(sa.put_op, feed_dict=feed_dict)
-
-                elif isinstance(data[0], list):
-                    print("Handling lists for {}".format(k))
-                    keys = key_pool.get(len(data[0]))
-                    feed_source_keys.extend(keys)
-                    for i, k in enumerate(keys):
-                        feed_dict = {ph: d[i] for n, (d, ph) in arrays.items()}
-                        feed_dict[sa.put_key_ph] = k
-                        session.run(sa.put_op, feed_dict=feed_dict)
-                    print("Feed {} list elements".format(i+1))
-                else:
-                    raise ValueError("Unhandled case {}".format(type(data[0])))
-
-
+            # Release all keys
             key_pool.release(feed_once_key)
             key_pool.release(feed_many_key)
-            key_pool.release(feed_source_keys)
+            for k, fn in src_keys_and_fn.values():
+                key_pool.release(k)
+
+            # TODO: This will, in general not be true
+            assert key_pool.all_released()
+
+
 
         def _array_dims(array):
             """ Create array dimensions for da.core.top """
