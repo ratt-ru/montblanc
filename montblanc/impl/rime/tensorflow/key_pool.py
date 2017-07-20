@@ -19,6 +19,9 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import threading
+import unittest
+
+import six
 
 class KeyPool(object):
     """ Pool of reusable integer keys """
@@ -36,18 +39,21 @@ class KeyPool(object):
             remaining = nkeys - len(keys)
 
             if remaining > 0:
-                keys.extend(xrange(self._last_key, self._last_key + remaining))
+                extra_keys = six.moves.range(self._last_key, self._last_key + remaining)
+                keys.extend(extra_keys)
                 self._last_key += remaining
 
-        return keys
+            return keys
 
     def release(self, keys):
         """ Releases keys back into the pool """
         with self._lock:
             self._keys.extend(keys)
 
-import six
-import unittest
+    def all_released(self):
+        """ Have all keys been released """
+        with self._lock:
+            return len(self._keys) == self._last_key
 
 class KeyPoolTest(unittest.TestCase):
     def test_key_pool(self):
