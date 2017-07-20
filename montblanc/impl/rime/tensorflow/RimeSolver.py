@@ -449,11 +449,10 @@ def _construct_tensorflow_staging_areas(cube, iter_dims, devices):
 
     # Create the source array staging areas
     with tf.device(cpu_dev):
-        local_cpu.sources = { src_nr_var: create_staging_area_wrapper(
+        local_cpu.sources = { src_type: create_staging_area_wrapper(
                 '%s_cpu' % src_type,
-                [a.name for a in src_data_sources[src_nr_var]],
-                input_arrays,
-                ordered=True)
+                [a.name for a in src_data_sources[src_type]],
+                input_arrays, ordered=True)
 
             for src_type, src_nr_var in source_var_types().iteritems()
         }
@@ -463,11 +462,10 @@ def _construct_tensorflow_staging_areas(cube, iter_dims, devices):
     for i, dev in enumerate(devices):
         with tf.device(dev):
             # Create the source array staging areas
-            saws = {src_nr_var: create_staging_area_wrapper(
+            saws = { src_type: create_staging_area_wrapper(
                 '%s_compute_%d' % (src_type, i),
-                [a.name for a in src_data_sources[src_nr_var]],
-                input_arrays,
-                ordered=True)
+                [a.name for a in src_data_sources[src_type]],
+                input_arrays, ordered=True)
 
                  for src_type, src_nr_var in source_var_types().iteritems()
              }
@@ -618,7 +616,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     # While loop bodies
     def point_body(coherencies, npsrc, src_count):
         """ Accumulate visiblities for point source batch """
-        key, S = local_cpu.sources['npsrc'].get_to_attrdict()
+        key, S = local_cpu.sources['point'].get_to_attrdict()
 
         # Maintain source counts
         nsrc = tf.shape(S.point_lm)[0]
@@ -635,7 +633,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
 
     def gaussian_body(coherencies, ngsrc, src_count):
         """ Accumulate coherencies for gaussian source batch """
-        key, S = local_cpu.sources['ngsrc'].get_to_attrdict()
+        key, S = local_cpu.sources['gaussian'].get_to_attrdict()
 
         # Maintain source counts
         nsrc = tf.shape(S.gaussian_lm)[0]
@@ -653,7 +651,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
 
     def sersic_body(coherencies, nssrc, src_count):
         """ Accumulate coherencies for sersic source batch """
-        key, S = local_cpu.sources['nssrc'].get_to_attrdict()
+        key, S = local_cpu.sources['sersic'].get_to_attrdict()
 
         # Maintain source counts
         nsrc = tf.shape(S.sersic_lm)[0]
@@ -977,7 +975,10 @@ def _partition(iter_dims, data_sources):
     3. List of data sources to feed once.
     """
 
-    src_nr_vars = set(source_var_types().values())
+    # Map dimension to source types
+    src_dims_to_types = { v: k for k, v in source_var_types().items() }
+
+    src_dims = set(src_dims_to_types.keys())
     iter_dims = set(iter_dims)
 
     src_data_sources = collections.defaultdict(list)
@@ -987,14 +988,15 @@ def _partition(iter_dims, data_sources):
     for n, ds in data_sources.iteritems():
         # Is this data source associated with
         # a radio source (point, gaussian, etc.?)
-        src_int = src_nr_vars.intersection(ds.shape)
+        src_int = src_dims.intersection(ds.shape)
 
         if len(src_int) > 1:
             raise ValueError("Data source '{}' contains multiple "
                             "source types '{}'".format(n, src_int))
         elif len(src_int) == 1:
             # Yep, record appropriately and iterate
-            src_data_sources[src_int.pop()].append(ds)
+            src_type = src_dims_to_types[src_int.pop()]
+            src_data_sources[src_type].append(ds)
             continue
 
         # Are we feeding this data source multiple times
