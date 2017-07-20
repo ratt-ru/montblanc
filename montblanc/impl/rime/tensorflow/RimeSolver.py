@@ -138,13 +138,6 @@ class RimeSolver(MontblancTensorflowSolver):
         self._iter_dims = ['ntime', 'nbl']
         self._transcoder = CubeDimensionTranscoder(self._iter_dims)
 
-        #================================
-        # Staging Area Data Source Configuration
-        #================================
-
-        dfs = { n: a for n, a in cube.arrays().iteritems()
-            if not 'temporary' in a.tags }
-
         #=========================
         # Tensorflow devices
         #=========================
@@ -178,7 +171,7 @@ class RimeSolver(MontblancTensorflowSolver):
             # Create our data feeding structure containing
             # input/output staging_areas and feed once variables
             self._tf_feed_data = _construct_tensorflow_staging_areas(
-                dfs, cube, self._iter_dims, self._devices)
+                cube, self._iter_dims, self._devices)
 
             # Construct tensorflow expressions for each device
             self._tf_expr = [_construct_tensorflow_expression(
@@ -368,7 +361,7 @@ def _create_defaults_source_provider(cube, data_source):
 
     return default_prov
 
-def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
+def _construct_tensorflow_staging_areas(cube, iter_dims, devices):
 
     cpu_dev = tf.DeviceSpec(device_type='CPU')
 
@@ -399,8 +392,8 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     #========================================================
 
     # Take all arrays flagged as input
-    input_arrays = [a for a in cube.arrays().itervalues()
-                    if 'input' in a.tags]
+    input_arrays = { n: a for n, a in cube.arrays().iteritems()
+                                        if 'input' in a.tags }
 
     src_data_sources, feed_many, feed_once = _partition(iter_dims,
                                                         input_arrays)
@@ -411,7 +404,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
 
     with tf.device(cpu_dev):
         local_cpu.feed_once = create_staging_area_wrapper('feed_once_cpu',
-            [a.name for a in feed_once], dfs, ordered=True)
+            [a.name for a in feed_once], input_arrays, ordered=True)
 
     # Create the staging_areas on the compute devices
     staging_areas = []
@@ -421,7 +414,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
             saw = create_staging_area_wrapper(
                 'feed_once_compute_%d' % i,
                 [a.name for a in feed_once],
-                dfs, ordered=True)
+                input_arrays, ordered=True)
             staging_areas.append(saw)
 
     local_compute.feed_once = staging_areas
@@ -435,7 +428,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
         local_cpu.feed_many = create_staging_area_wrapper(
                     'feed_many_cpu',
                     [a.name for a in feed_many],
-                    dfs, ordered=True)
+                    input_arrays, ordered=True)
 
     # Create the staging_areas on the compute devices
     staging_areas = []
@@ -445,7 +438,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
             saw = create_staging_area_wrapper(
                 'feed_many_compute_%d' % i,
                 [a.name for a in feed_many],
-                dfs, ordered=True)
+                input_arrays, ordered=True)
             staging_areas.append(saw)
 
     local_compute.feed_many = staging_areas
@@ -458,7 +451,8 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     with tf.device(cpu_dev):
         local_cpu.sources = { src_nr_var: create_staging_area_wrapper(
                 '%s_cpu' % src_type,
-                [a.name for a in src_data_sources[src_nr_var]], dfs,
+                [a.name for a in src_data_sources[src_nr_var]],
+                input_arrays,
                 ordered=True)
 
             for src_type, src_nr_var in source_var_types().iteritems()
@@ -471,7 +465,8 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
             # Create the source array staging areas
             saws = {src_nr_var: create_staging_area_wrapper(
                 '%s_compute_%d' % (src_type, i),
-                [a.name for a in src_data_sources[src_nr_var]], dfs,
+                [a.name for a in src_data_sources[src_nr_var]],
+                input_arrays,
                 ordered=True)
 
                  for src_type, src_nr_var in source_var_types().iteritems()
@@ -989,14 +984,14 @@ def _partition(iter_dims, data_sources):
     feed_many = []
     feed_once = []
 
-    for ds in data_sources:
+    for n, ds in data_sources.iteritems():
         # Is this data source associated with
         # a radio source (point, gaussian, etc.?)
         src_int = src_nr_vars.intersection(ds.shape)
 
         if len(src_int) > 1:
             raise ValueError("Data source '{}' contains multiple "
-                            "source types '{}'".format(ds.name, src_int))
+                            "source types '{}'".format(n, src_int))
         elif len(src_int) == 1:
             # Yep, record appropriately and iterate
             src_data_sources[src_int.pop()].append(ds)

@@ -70,7 +70,7 @@ if __name__ == "__main__":
                     # Create our data feeding structure containing
                     # input/output staging_areas and feed once variables
                     feed_data = _construct_tensorflow_staging_areas(
-                        input_arrays, cube, iter_dims,
+                        cube, iter_dims,
                         [d.name for d in devices])
 
                     # Construct tensorflow expressions for each device
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         nr_worker=len(sched_info["workers"])-1
 
         src_data_sources, feed_many, feed_once = _partition(iter_dims,
-                                                        input_arrays.values())
+                                                        input_arrays)
 
         feed_once = { a.name: a for a in feed_once }
         feed_many = { a.name: a for a in feed_many }
