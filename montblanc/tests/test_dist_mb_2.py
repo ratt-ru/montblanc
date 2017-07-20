@@ -26,7 +26,6 @@ def create_argparser():
 def create_hypercube():
     cube = hypercube.HyperCube()
     _setup_hypercube(cube, montblanc.rime_solver_cfg())
-    cube.register_array(name="descriptor", dtype=np.int32, shape=(10,), tags="input")
     cube.update_dimension("npsrc", global_size=10, lower_extent=0, upper_extent=2)
     cube.update_dimension("nsrc", global_size=10, lower_extent=0, upper_extent=2)
     cube.update_dimension("ntime", global_size=100, lower_extent=0, upper_extent=10)
@@ -55,6 +54,8 @@ if __name__ == "__main__":
 
             import tensorflow as tf
 
+            slvr_cfg = {'polarisation_type' : 'linear'}
+
             from montblanc.impl.rime.tensorflow.key_pool import KeyPool
 
             def _setup_tensorflow():
@@ -73,7 +74,7 @@ if __name__ == "__main__":
                         [d.name for d in devices])
 
                     # Construct tensorflow expressions for each device
-                    exprs = [_construct_tensorflow_expression(feed_data, dev, d)
+                    exprs = [_construct_tensorflow_expression(feed_data, slvr_cfg, dev, d)
                         for d, dev in enumerate([d.name for d in devices])]
 
                     # Initialisation operation

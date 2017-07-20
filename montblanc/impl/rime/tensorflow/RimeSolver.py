@@ -145,15 +145,6 @@ class RimeSolver(MontblancTensorflowSolver):
         dfs = { n: a for n, a in cube.arrays().iteritems()
             if not 'temporary' in a.tags }
 
-        # Descriptors are not user-defined arrays
-        # but a variable passed through describing a chunk of the
-        # problem. Make it look as if it's an array
-        if 'descriptor' in dfs:
-            raise KeyError("'descriptor' is reserved, "
-                "please use another array name.")
-
-        dfs['descriptor'] = AttrDict(dtype=np.int32)
-
         #=========================
         # Tensorflow devices
         #=========================
@@ -191,7 +182,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Construct tensorflow expressions for each device
             self._tf_expr = [_construct_tensorflow_expression(
-                                self._tf_feed_data, dev, d)
+                                self._tf_feed_data, slvr_cfg, dev, d)
                 for d, dev in enumerate(self._devices)]
 
             # Initialisation operation
@@ -221,17 +212,6 @@ class RimeSolver(MontblancTensorflowSolver):
         #self._tf_session = tf_debug.LocalCLIDebugWrapperSession(session)
 
         self._tf_session.run(init_op)
-
-        #======================
-        # Thread pool executors
-        #======================
-
-        tpe = cf.ThreadPoolExecutor
-
-        self._descriptor_executor = tpe(1)
-        self._feed_executors = [tpe(1) for i in range(ndevices)]
-        self._compute_executors = [tpe(1) for i in range(ndevices)]
-        self._consumer_executor = tpe(1)
 
         #======================
         # Tracing
@@ -299,204 +279,6 @@ class RimeSolver(MontblancTensorflowSolver):
         self._tfrun = _tfrunner(self._tf_session, self._should_trace)
         self._iterations = 0
 
-    def _descriptor_feed(self):
-        try:
-            self._descriptor_feed_impl()
-        except Exception as e:
-            montblanc.log.exception("Descriptor Exception")
-            raise
-
-    def _descriptor_feed_impl(self):
-        session = self._tf_session
-
-        # Copy dimensions of the main cube
-        cube = self.hypercube.copy()
-        LSA = self._tf_feed_data.local_cpu
-
-        # Get space of iteration
-        iter_args = _iter_args(self._iter_dims, cube)
-        descriptors_fed = 0
-
-        # Iterate through the hypercube space
-        for i, iter_cube in enumerate(cube.cube_iter(*iter_args)):
-            descriptor = self._transcoder.encode(iter_cube.dimensions(copy=False))
-            feed_dict = {LSA.descriptor.placeholders[0] : descriptor,
-                        LSA.descriptor.put_key_ph : i }
-            montblanc.log.info('Encoding {i} {d} {h}'.format(i=i, d=descriptor, h=i))
-            session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
-            descriptors_fed += 1
-
-        montblanc.log.info("Done feeding {n} descriptors.".format(
-            n=descriptors_fed))
-
-        # Indicate EOF
-        feed_dict = {LSA.descriptor.placeholders[0] : [-1],
-                    LSA.descriptor.put_key_ph : i+1 }
-        session.run(LSA.descriptor.put_op, feed_dict=feed_dict)
-
-    def _feed(self, cube, data_sources, data_sinks, global_iter_args):
-        """ Feed stub """
-        try:
-            self._feed_impl(cube, data_sources, data_sinks, global_iter_args)
-        except Exception as e:
-            montblanc.log.exception("Feed Exception")
-            raise
-
-    def _feed_impl(self, cube, data_sources, data_sinks, global_iter_args):
-        """ Implementation of staging_area feeding """
-        session = self._tf_session
-        FD = self._tf_feed_data
-        LSA = FD.local_cpu
-        SSA = FD.local_compute.sources
-
-        # Get source strides out before the local sizes are modified during
-        # the source loops below
-        src_types = SSA[0].keys()
-        src_strides = [int(i) for i in cube.dim_extent_size(*src_types)]
-        src_staging_areas = [[SSA[d][st] for st in src_types]
-            for d in range(self._ndevices)]
-
-        compute_feed_dict = { ph: cube.dim_global_size(n) for
-            n, ph in FD.src_ph_vars.iteritems() }
-        compute_feed_dict.update({ ph: getattr(cube, n) for
-            n, ph in FD.property_ph_vars.iteritems() })
-
-        chunks_fed = 0
-
-        which_dev = itertools.cycle([d for d in range(self._ndevices)])
-
-        while True:
-            try:
-                # Get the descriptor describing a portion of the RIME,
-                # as well as the number of entries in the compute staging areas
-                result = session.run({"pop" : FD.local_cpu.descriptor.pop_op,
-                                      "sizes" : [sa.size_op for sa in FD.local_compute.feed_many]})
-                key, map = result['pop']
-                descriptor = map["descriptor"]
-                sa_sizes = result["sizes"]
-            except tf.errors.OutOfRangeError as e:
-                montblanc.log.exception("Descriptor reading exception")
-
-            # Quit if EOF
-            if descriptor[0] == -1:
-                break
-
-            # Make it read-only so we can hash the contents
-            descriptor.flags.writeable = False
-
-            # Find indices of the emptiest staging_areas and, by implication
-            # the device with the least work assigned to it
-            emptiest_staging_areas = np.argsort(sa_sizes)
-            dev_id = emptiest_staging_areas[0]
-
-            feed_f = self._feed_executors[dev_id].submit(self._feed_actual,
-                data_sources.copy(), cube.copy(),
-                key, descriptor, dev_id,
-                src_types, src_strides, src_staging_areas[dev_id],
-                global_iter_args)
-
-            compute_f = self._compute_executors[dev_id].submit(self._compute,
-                compute_feed_dict, dev_id)
-
-            consume_f = self._consumer_executor.submit(self._consume,
-                data_sinks.copy(), cube.copy(), global_iter_args)
-
-            yield (feed_f, compute_f, consume_f)
-
-            chunks_fed += 1
-
-        montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
-
-    def _feed_actual(self, *args):
-        try:
-            return self._feed_actual_impl(*args)
-        except Exception as e:
-            montblanc.log.exception("Feed Exception")
-            raise
-
-    def _feed_actual_impl(self, data_sources, cube,
-            key, descriptor, dev_id,
-            src_types, src_strides, src_staging_areas,
-            global_iter_args):
-
-        iq = self._tf_feed_data.local_cpu.feed_many
-
-        # Decode the descriptor and update our cube dimensions
-        dims = self._transcoder.decode(descriptor)
-        cube.update_dimensions(dims)
-
-        # Determine array shapes and data types for this
-        # portion of the hypercube
-        array_schemas = cube.arrays(reify=True)
-
-        # Inject a data source and array schema for the
-        # descriptor staging_area items.
-        # These aren't full on arrays per se
-        # but they need to work within the feeding framework
-        array_schemas['descriptor'] = descriptor
-        data_sources['descriptor'] = DataSource(
-            lambda c: descriptor, np.int32, 'Internal')
-
-        # Generate (name, placeholder, datasource, array schema)
-        # for the arrays required by each staging_area
-        gen = ((a, ph, data_sources[a], array_schemas[a])
-            for ph, a in zip(iq.placeholders, iq.fed_arrays))
-
-        # Get input data by calling the data source functors
-        input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
-                self.config(), global_iter_args,
-                cube.array(a) if a in cube.arrays() else {},
-                ad.shape, ad.dtype)))
-            for (a, ph, ds, ad) in gen]
-
-        # Create a feed dictionary from the input data
-        feed_dict = { ph: data for (a, ph, data) in input_data }
-
-        # Add the key to insert
-        feed_dict[iq.put_key_ph] = key
-
-        # Cache the inputs for this chunk of data,
-        # so that sinks can access them
-        input_cache = { a: data for (a, ph, data) in input_data }
-        self._source_cache[descriptor.data] = input_cache
-
-        montblanc.log.info("Enqueueing chunk {h} {d} on device {di}".format(
-            d=descriptor, h=key, di=dev_id))
-
-        self._tfrun(iq.put_op, feed_dict=feed_dict)
-
-        # For each source type, feed that source staging_area
-        for src_type, staging_area, stride in zip(src_types, src_staging_areas, src_strides):
-            iter_args = [(src_type, stride)]
-
-            # Iterate over chunks of the source
-            for chunk_i, dim_desc in enumerate(cube.dim_iter(*iter_args)):
-                cube.update_dimensions(dim_desc)
-                s = dim_desc[0]['upper_extent'] - dim_desc[0]['lower_extent']
-
-                montblanc.log.info("'{ci}: Enqueueing {d} '{s}' '{t}' sources "
-                    "on device {di}".format(d=descriptor,
-                        ci=chunk_i, s=s, t=src_type, di=dev_id))
-
-                # Determine array shapes and data types for this
-                # portion of the hypercube
-                array_schemas = cube.arrays(reify=True)
-
-                # Generate (name, placeholder, datasource, array descriptor)
-                # for the arrays required by each staging_area
-                gen = [(a, ph, data_sources[a], array_schemas[a])
-                    for ph, a in zip(staging_area.placeholders, staging_area.fed_arrays)]
-
-                # Create a feed dictionary by calling the data source functors
-                feed_dict = { ph: _get_data(ds, SourceContext(a, cube,
-                        self.config(), global_iter_args + iter_args,
-                        cube.array(a) if a in cube.arrays() else {},
-                        ad.shape, ad.dtype))
-                    for (a, ph, ds, ad) in gen }
-
-                # Add the key to insert
-                feed_dict[staging_area.put_key_ph] = key + hash(chunk_i)
-                self._tfrun(staging_area.put_op, feed_dict=feed_dict)
 
     def _compute(self, feed_dict, dev_id):
         """ Call the tensorflow compute """
@@ -511,231 +293,8 @@ class RimeSolver(MontblancTensorflowSolver):
             montblanc.log.exception("Compute Exception")
             raise
 
-    def _consume(self, data_sinks, cube, global_iter_args):
-        """ Consume stub """
-        try:
-            return self._consume_impl(data_sinks, cube, global_iter_args)
-        except Exception as e:
-            montblanc.log.exception("Consumer Exception")
-            raise e, None, sys.exc_info()[2]
-
-    def _consume_impl(self, data_sinks, cube, global_iter_args):
-        """ Consume """
-
-        LSA = self._tf_feed_data.local_cpu
-        key, output = self._tfrun(LSA.output.pop_op)
-
-        # Expect the descriptor in the first tuple position
-        assert len(output) > 0
-        assert LSA.output.fed_arrays[0] == 'descriptor'
-
-        descriptor = output['descriptor']
-        # Make it read-only so we can hash the contents
-        descriptor.flags.writeable = False
-
-        dims = self._transcoder.decode(descriptor)
-        cube.update_dimensions(dims)
-
-        # Obtain and remove input data from the source cache
-        try:
-            input_data = self._source_cache.pop(descriptor.data)
-        except KeyError:
-            raise ValueError("No input data cache available "
-                "in source cache for descriptor {}!"
-                    .format(descriptor))
-
-        # For each array in our output, call the associated data sink
-        gen = ((n, a) for n, a in output.iteritems() if not n == 'descriptor')
-
-        for n, a in gen:
-            sink_context = SinkContext(n, cube,
-                self.config(), global_iter_args,
-                cube.array(n) if n in cube.arrays() else {},
-                a, input_data)
-
-            _supply_data(data_sinks[n], sink_context)
-
-    def solve(self, *args, **kwargs):
-        #  Obtain source and sink providers, including internal providers
-        source_providers = (self._source_providers +
-            kwargs.get('source_providers', []))
-        sink_providers = (self._sink_providers +
-            kwargs.get('sink_providers', []))
-
-        src_provs_str = 'Source Providers ' + str([sp.name() for sp
-                                                in source_providers])
-        snk_provs_str = 'Sink Providers ' + str([sp.name() for sp
-                                                in sink_providers])
-
-        montblanc.log.info(src_provs_str)
-        montblanc.log.info(snk_provs_str)
-
-        # Allow providers to initialise themselves based on
-        # the given configuration
-        ctx = InitialisationContext(self.config())
-
-        for p in itertools.chain(source_providers, sink_providers):
-            p.init(ctx)
-
-        # Apply any dimension updates from the source provider
-        # to the hypercube, taking previous reductions into account
-        bytes_required = _apply_source_provider_dim_updates(
-            self.hypercube, source_providers,
-            self._previous_budget_dims)
-
-        # If we use more memory than previously,
-        # perform another budgeting operation
-        # to make sure everything fits
-        if bytes_required > self._previous_budget:
-            self._previous_budget_dims, self._previous_budget = (
-                _budget(self.hypercube, self.config()))
-
-        self._run_metadata.clear()
-
-        # Determine the global iteration arguments
-        # e.g. [('ntime', 100), ('nbl', 20)]
-        global_iter_args = _iter_args(self._iter_dims, self.hypercube)
-
-        # Indicate solution started in providers
-        ctx = StartContext(self.hypercube, self.config(), global_iter_args)
-
-        for p in itertools.chain(source_providers, sink_providers):
-            p.start(ctx)
-
-        #===================================
-        # Assign data to Feed Once variables
-        #===================================
-
-        # Copy the hypercube
-        cube = self.hypercube.copy()
-        array_schemas = cube.arrays(reify=True)
-
-        # Construct data sources from those supplied by the
-        # source providers, if they're associated with
-        # input sources
-        LSA = self._tf_feed_data.local_cpu
-        CSA = self._tf_feed_data.local_compute
-        input_sources = LSA.input_sources
-        data_sources = {n: DataSource(f, cube.array(n).dtype, prov.name())
-            for prov in source_providers
-            for n, f in prov.sources().iteritems()
-            if n in input_sources}
-
-        # Get data sinks from supplied providers
-        data_sinks = { n: DataSink(f, prov.name())
-            for prov in sink_providers
-            for n, f in prov.sinks().iteritems()
-            if not n == 'descriptor' }
-
-        # Generate (name, placeholder, datasource, array schema)
-        # for the arrays required by each staging_area
-        gen = ((a, ph, data_sources[a], array_schemas[a])
-            for ph, a in zip(LSA.feed_once.placeholders,
-                             LSA.feed_once.fed_arrays))
-
-        # Get input data by calling the data source functors
-        input_data = [(a, ph, _get_data(ds, SourceContext(a, cube,
-                self.config(), global_iter_args,
-                cube.array(a) if a in cube.arrays() else {},
-                ad.shape, ad.dtype)))
-            for (a, ph, ds, ad) in gen]
-
-        # Create a feed dictionary from the input data
-        feed_dict = { ph: data for (a, ph, data) in input_data }
-        # Add the key to insert
-        feed_dict[LSA.feed_once.put_key_ph] = FEED_ONCE_KEY
-
-        # Clear all staging areas and populate the
-        # feed once staging area
-        self._tfrun([sa.clear_op for sa in LSA.all_staging_areas +
-                                           CSA.all_staging_areas])
-        self._tfrun([LSA.feed_once.put_op] +
-                    [e.stage_feed_once for e in self._tf_expr],
-                    feed_dict=feed_dict)
-
-        try:
-            # Run the descriptor executor immediately
-            params = self._descriptor_executor.submit(self._descriptor_feed)
-
-            # Sets to track futures not yet completed
-            feed_not_done = set()
-            compute_not_done = set([params])
-            consume_not_done = set()
-            throttle_factor = self._ndevices*QUEUE_SIZE
-
-            # _feed_impl generates 3 futures
-            # one for feeding data, one for computing with this data
-            # and another for consuming it.
-            # Iterate over these futures
-            for feed, compute, consume in self._feed_impl(cube,
-                data_sources, data_sinks, global_iter_args):
-
-                feed_not_done.add(feed)
-                compute_not_done.add(compute)
-                consume_not_done.add(consume)
-
-                # If there are many feed futures in flight,
-                # perform throttling
-                if len(feed_not_done) > throttle_factor*2:
-                    # Wait for throttle_factor futures to complete
-                    fit = cf.as_completed(feed_not_done)
-                    feed_done = set(itertools.islice(fit, throttle_factor))
-                    feed_not_done.difference_update(feed_done)
-
-                    # Take an completed compute and consume
-                    # futures immediately
-                    compute_done, compute_not_done = cf.wait(
-                        compute_not_done, timeout=0,
-                        return_when=cf.FIRST_COMPLETED)
-                    consume_done, consume_not_done = cf.wait(
-                        consume_not_done, timeout=0,
-                        return_when=cf.FIRST_COMPLETED)
-
-                    # Get future results, mainly to fire exceptions
-                    for i, f in enumerate(itertools.chain(feed_done,
-                                        compute_done, consume_done)):
-                        f.result()
-
-                    not_done = sum(len(s) for s in (feed_not_done,
-                        compute_not_done, consume_not_done))
-
-                    montblanc.log.debug("Consumed {} futures. "
-                        "{} remaining".format(i, not_done))
-
-            # Request future results, mainly for exceptions
-            for f in cf.as_completed(itertools.chain(feed_not_done,
-                    compute_not_done, consume_not_done)):
-
-                f.result()
-
-        except (KeyboardInterrupt, SystemExit) as e:
-            montblanc.log.exception('Solving interrupted')
-            raise
-        except:
-            montblanc.log.exception('Solving exception')
-        else:
-            if self._should_trace:
-                self._run_metadata.write(self._iterations)
-
-            self._iterations += 1
-        finally:
-
-            # Indicate solution stopped in providers
-            ctx = StopContext(self.hypercube, self.config(), global_iter_args)
-            for p in itertools.chain(source_providers, sink_providers):
-                p.stop(ctx)
-
-            montblanc.log.info('Solution Completed')
-
-
     def close(self):
-        # Shutdown thread executors
-        self._descriptor_executor.shutdown()
-        [fe.shutdown() for fe in self._feed_executors]
-        [ce.shutdown() for ce in self._compute_executors]
-        self._consumer_executor.shutdown()
-
-        # Shutdown thte tensorflow session
+        # Shutdown the tensorflow session
         self._tf_session.close()
 
         # Shutdown data sources
@@ -846,14 +405,6 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     src_data_sources, feed_many, feed_once = _partition(iter_dims,
                                                         input_arrays)
 
-    #=====================================
-    # Descriptor staging area
-    #=====================================
-
-    with tf.device(cpu_dev):
-        local_cpu.descriptor = create_staging_area_wrapper('descriptors',
-            ['descriptor'], dfs, ordered=True)
-
     #======================================
     # Staging area for fed once data sources
     #======================================
@@ -883,7 +434,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     with tf.device(cpu_dev):
         local_cpu.feed_many = create_staging_area_wrapper(
                     'feed_many_cpu',
-                    ['descriptor'] + [a.name for a in feed_many],
+                    [a.name for a in feed_many],
                     dfs, ordered=True)
 
     # Create the staging_areas on the compute devices
@@ -893,7 +444,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
         with tf.device(dev):
             saw = create_staging_area_wrapper(
                 'feed_many_compute_%d' % i,
-                ['descriptor'] + [a.name for a in feed_many],
+                [a.name for a in feed_many],
                 dfs, ordered=True)
             staging_areas.append(saw)
 
@@ -936,12 +487,12 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     for i, dev in enumerate(devices):
         with tf.device(dev):
             local_compute.output = create_staging_area_wrapper(
-                'output', ['descriptor', 'model_vis'],
+                'output', ['model_vis'],
                 dfs, ordered=True)
 
     with tf.device(cpu_dev):
         local_cpu.output = create_staging_area_wrapper('output',
-        ['descriptor', 'model_vis', 'chi_squared'], dfs, ordered=True)
+        ['model_vis', 'chi_squared'], dfs, ordered=True)
 
     #=======================================================
     # Construct the list of data sources that need feeding
@@ -964,7 +515,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
 
     return FD
 
-def _construct_tensorflow_expression(feed_data, device, dev_id):
+def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     """ Constructs a tensorflow expression for computing the RIME """
     zero = tf.constant(0)
     src_count = zero
@@ -976,13 +527,11 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
     polarisation_type = slvr_cfg['polarisation_type']
 
     # Create ops for copying from the CPU to the compute staging area
-    data = local_cpu.feed_once.peek(FEED_ONCE_KEY, name="cpu_feed_once_peek")
-    stage_feed_once = local_compute.feed_once[dev_id].put(FEED_ONCE_KEY, data,
-                                                  name="compute_feed_once_put")
+    key, data = local_cpu.feed_once.get(FEED_ONCE_KEY)
+    stage_feed_once = local_compute.feed_once[dev_id].put(key, data)
 
-    key, data = local_cpu.feed_many.get(name="cpu_feed_many_get")
-    stage_feed_many = local_compute.feed_many[dev_id].put(key, data,
-                                                  name="compute_feed_many_put")
+    key, data = local_cpu.feed_many.get()
+    stage_feed_many = local_compute.feed_many[dev_id].put(key, data)
 
     # Pull RIME inputs out of the feed many staging_area
     # for the relevant device, adding the feed once
@@ -1144,16 +693,11 @@ def _construct_tensorflow_expression(feed_data, device, dev_id):
             D.antenna1, D.antenna2, D.direction_independent_effects, D.flag,
             D.weight, D.model_vis, summed_coherencies, D.observed_vis)
 
-<<<<<<< 6db974df8b0e8249c3a659be323c8b5673765af2
     # Create staging_area put operation
     stage_output = local_compute.output.put(key,
-        {'descriptor' : D.descriptor, 'model_vis': model_vis,
-                                'chi_squared': chi_squared})
-=======
+        {'model_vis': model_vis,'chi_squared': chi_squared})
         # Stage output in the compute output staging area
         stage_output = local_compute.output.put(key,
-            {'descriptor' : D.descriptor, 'model_vis': model_vis})
->>>>>>> Expose compute via staging operations
 
     # Create ops for shifting output from compute staging area
     # to CPU staging area
