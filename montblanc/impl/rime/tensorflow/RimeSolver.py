@@ -492,7 +492,7 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
 
     with tf.device(cpu_dev):
         local_cpu.output = create_staging_area_wrapper('output',
-        ['model_vis', 'chi_squared'], dfs, ordered=True)
+            ['model_vis', 'chi_squared'], dfs, ordered=True)
 
     #=======================================================
     # Construct the list of data sources that need feeding
@@ -688,7 +688,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
             sersic_cond, sersic_body,
             [summed_coherencies, zero, src_count])
 
-        # Post process visibilities to produce model visibilites and chi squared
+        # Post process visibilities to produce model visibilities and chi squared
         model_vis, chi_squared = rime.post_process_visibilities(
             D.antenna1, D.antenna2, D.direction_independent_effects, D.flag,
             D.weight, D.model_vis, summed_coherencies, D.observed_vis)
@@ -697,7 +697,12 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     stage_output = local_compute.output.put(key,
         {'model_vis': model_vis,'chi_squared': chi_squared})
         # Stage output in the compute output staging area
+<<<<<<< 361a74f3647b4aee84478e85b0003320f32e7c60
         stage_output = local_compute.output.put(key,
+=======
+        stage_output = local_compute.output.put(key, {'model_vis': model_vis,
+                                                'chi_squared': chi_squared})
+>>>>>>> Add chi-squared to the output staging area
 
     # Create ops for shifting output from compute staging area
     # to CPU staging area

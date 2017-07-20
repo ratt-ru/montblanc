@@ -484,7 +484,7 @@ A = [
     array_dict('model_vis', ('ntime','nbl','nchan', 'npol'), 'ct',
         default = lambda s, c: np.zeros(c.shape, c.dtype),
         test    = lambda s, c: rc(c.shape, c.dtype),
-        tags    = ("input, output, constant"),
+        tags    = "input, output, constant",
         description = "Model visibilities. In the context of input, these values "
             "will be added to the model visibilities computed by the RIME. "
             "This mechanism allows visibilities to be accumulated over different "
