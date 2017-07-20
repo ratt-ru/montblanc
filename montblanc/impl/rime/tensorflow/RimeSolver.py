@@ -484,15 +484,19 @@ def _construct_tensorflow_staging_areas(dfs, cube, iter_dims, devices):
     # The single output staging_area
     #======================================
 
+    output_arrays = { n: a for n, a in cube.arrays().iteritems()
+                                            if 'output' in a.tags }
+
     for i, dev in enumerate(devices):
         with tf.device(dev):
             local_compute.output = create_staging_area_wrapper(
-                'output', ['model_vis'],
-                dfs, ordered=True)
+                'output', output_arrays.keys(),
+                output_arrays, ordered=True)
 
     with tf.device(cpu_dev):
-        local_cpu.output = create_staging_area_wrapper('output',
-            ['model_vis', 'chi_squared'], dfs, ordered=True)
+        local_cpu.output = create_staging_area_wrapper(
+            'output',  output_arrays.keys(),
+            output_arrays, ordered=True)
 
     #=======================================================
     # Construct the list of data sources that need feeding
