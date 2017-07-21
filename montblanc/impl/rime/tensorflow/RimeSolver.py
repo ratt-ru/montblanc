@@ -403,7 +403,7 @@ def _construct_tensorflow_staging_areas(cube, iter_dims, devices):
     #=======================================
 
     internal_arrays = { "%s_keys" % st: AttrDict(name="%s_keys" % st,
-                                     shape=(1,), dtype=np.int32)
+                                     shape=(1,), dtype=np.int64)
                                 for st in src_data_sources.keys() }
 
     with tf.device(cpu_dev):
