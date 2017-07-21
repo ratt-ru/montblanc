@@ -562,6 +562,37 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     D.update(local_compute.feed_once[dev_id].peek(local_cpu.feed_once_key,
                                                   name="compute_feed_once_peek"))
 
+    # Get internal data for this computation
+    _, I = local_cpu.feed_internal.get_to_attrdict(local_cpu.feed_many_key,
+                                                name="compute_feed_internal_key")
+
+    stage_source_loops = []
+
+    for src_type in source_var_types().keys():
+        keys = getattr(I, "%s_keys" % src_type)
+
+        # How many chunks should be fed?
+        nsrc_chunks = tf.cast(tf.shape(keys)[0], tf.int64)
+
+        def cond(chunk):
+            return tf.less(chunk, nsrc_chunks)
+
+        def body(chunk):
+            key, data = local_cpu.sources[src_type].get(keys[chunk],
+                                            name="cpu_%s_get" % src_type)
+
+            feed_src_chunk = local_compute.sources[dev_id][src_type].put(key, data,
+                                                      name="compute_%s_put" % src_type)
+
+            with tf.control_dependencies([feed_src_chunk]):
+                return [chunk + 1]
+
+        loop = tf.while_loop(cond, body, [tf.constant(0,dtype=tf.int64)])
+        stage_source_loops.append(loop)
+
+    stage_source_data = tf.group(*stage_source_loops)
+
+    # Infer chunk dimensions
     with tf.device(device):
         # Infer chunk dimensions
         model_vis_shape = tf.shape(D.model_vis)
@@ -725,12 +756,14 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
 
     ComputeNodes = attr.make_class("ComputeNodes", ["stage_feed_many",
                                                     "stage_feed_once",
+                                                    "stage_source_data",
                                                     "stage_output",
                                                     "stage_cpu_output"])
 
     # Return Compute operations
     return ComputeNodes(stage_feed_many,
                         stage_feed_once,
+                        stage_source_data,
                         stage_output,
                         stage_cpu_output)
 

@@ -241,6 +241,7 @@ if __name__ == "__main__":
                           local_cpu.feed_many_key: feed_many_key[0] }
             session.run([exprs[0].stage_feed_once,
                         exprs[0].stage_feed_many,
+                        exprs[0].stage_source_data,
                         exprs[0].stage_output,
                         exprs[0].stage_cpu_output],
                             feed_dict=feed_dict)
