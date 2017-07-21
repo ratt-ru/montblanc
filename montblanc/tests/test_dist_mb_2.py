@@ -104,7 +104,7 @@ if __name__ == "__main__":
         nr_worker=len(sched_info["workers"])-1
 
         src_data_sources, feed_many, feed_once = _partition(iter_dims,
-                                                        input_arrays)
+                                                            input_arrays)
 
         feed_once = { a.name: a for a in feed_once }
         feed_many = { a.name: a for a in feed_many }
@@ -147,10 +147,12 @@ if __name__ == "__main__":
 
             tf_cfg = w.tf_cfg
             session = tf_cfg.session
-            feed_internal = tf_cfg.feed_data.local_cpu.feed_internal
-            feed_once = tf_cfg.feed_data.local_cpu.feed_once
-            feed_many = tf_cfg.feed_data.local_cpu.feed_many
+            local_cpu = tf_cfg.feed_data.local_cpu
+            feed_internal = local_cpu.feed_internal
+            feed_once = local_cpu.feed_once
+            feed_many = local_cpu.feed_many
             feed_sources = tf_cfg.feed_data.local_cpu.sources
+            exprs = tf_cfg.exprs
             key_pool = w.key_pool
 
             print("Feed Sources {}".format({ k: v.fed_arrays for k, v
@@ -235,6 +237,14 @@ if __name__ == "__main__":
             for k, fn in src_keys_and_fn.values():
                 fn()
 
+            feed_dict = { local_cpu.feed_once_key: feed_once_key[0],
+                          local_cpu.feed_many_key: feed_many_key[0] }
+            session.run([exprs[0].stage_feed_once,
+                        exprs[0].stage_feed_many,
+                        exprs[0].stage_output,
+                        exprs[0].stage_cpu_output],
+                            feed_dict=feed_dict)
+
             # Release all keys
             key_pool.release(feed_once_key)
             key_pool.release(feed_many_key)
@@ -256,15 +266,20 @@ if __name__ == "__main__":
                                   for v in (a.name,
                                             _array_dims(input_arrays[n])))
 
-        def _fix(D):
-            """ Simplify lists of length 1 """
+        def _flatten_single_sequences(D):
+            """ Simplify tuples and lists of length 1 """
             if isinstance(D, list):
-                return _fix(D[0]) if len(D) == 1 else [_fix(v) for v in D]
+                return (_flatten_single_sequences(D[0])
+                        if len(D) == 1
+                        else [_flatten_single_sequences(v) for v in D])
             # Don't simplify tuples as these can represent keys
             elif isinstance(D, tuple):
-                return _fix(D[0]) if len(D) == 1 else tuple(_fix(v) for v in D)
+                return (_flatten_single_sequences(D[0])
+                        if len(D) == 1
+                        else tuple(_flatten_single_sequences(v) for v in D))
             elif isinstance(D, collections.Mapping):
-                return { k: _fix(v) for k, v in D.items() }
+                return { k: _flatten_single_sequences(v)
+                            for k, v in D.items() }
             else:
                 return D
 
@@ -276,7 +291,7 @@ if __name__ == "__main__":
             *input_dim_pairs,
             numblocks={a.name: a.numblocks for a in D.values()})
 
-        # predict = _fix(predict)
+        predict = _flatten_single_sequences(predict)
         get_keys = predict.keys()
 
         [predict.update(d.dask) for d in D.values()]
