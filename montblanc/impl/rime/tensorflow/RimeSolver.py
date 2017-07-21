@@ -523,6 +523,9 @@ def _construct_tensorflow_staging_areas(cube, iter_dims, devices):
     all_staging_areas = local_compute.feed_many + local_compute.feed_once + src_sa
     local_compute.all_staging_areas = all_staging_areas
 
+    local_cpu.feed_once_key = tf.placeholder(tf.int64, name="feed_once_key")
+    local_cpu.feed_many_key = tf.placeholder(tf.int64, name="feed_many_key")
+
     return FD
 
 def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
@@ -536,19 +539,27 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
 
     polarisation_type = slvr_cfg['polarisation_type']
 
-    # Create ops for copying from the CPU to the compute staging area
-    key, data = local_cpu.feed_once.get(FEED_ONCE_KEY)
-    stage_feed_once = local_compute.feed_once[dev_id].put(key, data)
+    # Create ops for copying from the CPU to compute staging areas
 
-    key, data = local_cpu.feed_many.get()
-    stage_feed_many = local_compute.feed_many[dev_id].put(key, data)
+    # Feed Once Staging Area
+    data = local_cpu.feed_once.peek(local_cpu.feed_once_key,
+                                    name="cpu_feed_once_peek")
+    stage_feed_once = local_compute.feed_once[dev_id].put(
+                                    local_cpu.feed_once_key, data,
+                                    name="compute_feed_once_put")
+
+    # Feed Many Staging Area
+    key, data = local_cpu.feed_many.get(local_cpu.feed_many_key,
+                                        name="cpu_feed_many_get")
+    stage_feed_many = local_compute.feed_many[dev_id].put(key, data,
+                                                  name="compute_feed_many_put")
 
     # Pull RIME inputs out of the feed many staging_area
     # for the relevant device, adding the feed once
     # inputs to the dictionary
-    key, D = local_compute.feed_many[dev_id].get_to_attrdict(
+    key, D = local_compute.feed_many[dev_id].get_to_attrdict(local_cpu.feed_many_key,
                                                   name="compute_feed_many_get")
-    D.update(local_compute.feed_once[dev_id].peek(FEED_ONCE_KEY,
+    D.update(local_compute.feed_once[dev_id].peek(local_cpu.feed_once_key,
                                                   name="compute_feed_once_peek"))
 
     with tf.device(device):
@@ -703,16 +714,9 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
             D.antenna1, D.antenna2, D.direction_independent_effects, D.flag,
             D.weight, D.model_vis, summed_coherencies, D.observed_vis)
 
-    # Create staging_area put operation
-    stage_output = local_compute.output.put(key,
-        {'model_vis': model_vis,'chi_squared': chi_squared})
-        # Stage output in the compute output staging area
-<<<<<<< 361a74f3647b4aee84478e85b0003320f32e7c60
+        # Create staging_area put operation
         stage_output = local_compute.output.put(key,
-=======
-        stage_output = local_compute.output.put(key, {'model_vis': model_vis,
-                                                'chi_squared': chi_squared})
->>>>>>> Add chi-squared to the output staging area
+            {'model_vis': model_vis,'chi_squared': chi_squared})
 
     # Create ops for shifting output from compute staging area
     # to CPU staging area
