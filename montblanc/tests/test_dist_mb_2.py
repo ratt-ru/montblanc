@@ -213,7 +213,7 @@ if __name__ == "__main__":
 
                 raise ValueError("Unhandled case {}".format(type(data[0])))
 
-            src_keys_and_fn = { k: _source_keys_and_feed_fn(k, sa)
+            src_keys_and_fn = { "%s_keys" % k : _source_keys_and_feed_fn(k, sa)
                                     for k, sa in feed_sources.items() }
 
             feed_once_key = key_pool.get(1)

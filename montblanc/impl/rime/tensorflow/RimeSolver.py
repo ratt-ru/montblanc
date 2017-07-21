@@ -402,7 +402,7 @@ def _construct_tensorflow_staging_areas(cube, iter_dims, devices):
     # Staging area for internal data sources
     #=======================================
 
-    internal_arrays = { st: AttrDict(name="%s_keys" % st,
+    internal_arrays = { "%s_keys" % st: AttrDict(name="%s_keys" % st,
                                      shape=(1,), dtype=np.int32)
                                 for st in src_data_sources.keys() }
 
