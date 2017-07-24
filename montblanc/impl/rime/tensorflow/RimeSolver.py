@@ -659,24 +659,23 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
             return antenna_jones, sgn_brightness
 
     # While loop condition for each point source type
-    def point_cond(coherencies, npsrc, src_count):
-        return tf.less(npsrc, src_ph_vars.npsrc)
+    def point_cond(coherencies, chunk):
+        return tf.less(chunk, tf.shape(I.point_keys)[0])
 
-    def gaussian_cond(coherencies, ngsrc, src_count):
-        return tf.less(ngsrc, src_ph_vars.ngsrc)
+    def gaussian_cond(coherencies, chunk):
+        return tf.less(chunk, tf.shape(I.gaussian_keys)[0])
 
-    def sersic_cond(coherencies, nssrc, src_count):
-        return tf.less(nssrc, src_ph_vars.nssrc)
+    def sersic_cond(coherencies, chunk):
+        return tf.less(chunk, tf.shape(I.sersic_keys)[0])
 
     # While loop bodies
-    def point_body(coherencies, npsrc, src_count):
+    def point_body(coherencies, chunk):
         """ Accumulate visiblities for point source batch """
-        key, S = local_cpu.sources['point'].get_to_attrdict()
+        point_sources = local_compute.sources[dev_id]['point']
+        _, S = point_sources.get_to_attrdict(I.point_keys[chunk])
 
-        # Maintain source counts
+        # Get source count for this chunk
         nsrc = tf.shape(S.point_lm)[0]
-        src_count += nsrc
-        npsrc +=  nsrc
 
         ant_jones, sgn_brightness = antenna_jones(S.point_lm,
             S.point_stokes, S.point_alpha, S.point_ref_freq)
@@ -684,16 +683,12 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
             shape, ant_jones, sgn_brightness, coherencies)
 
-        return coherencies, npsrc, src_count
+        return coherencies, chunk + 1
 
-    def gaussian_body(coherencies, ngsrc, src_count):
+    def gaussian_body(coherencies, chunk):
         """ Accumulate coherencies for gaussian source batch """
-        key, S = local_cpu.sources['gaussian'].get_to_attrdict()
-
-        # Maintain source counts
-        nsrc = tf.shape(S.gaussian_lm)[0]
-        src_count += nsrc
-        ngsrc += nsrc
+        gaussian_sources = local_compute.sources[dev_id]['gaussian']
+        _, S = gaussian_sources.get_to_attrdict(I.gaussian_keys[chunk])
 
         ant_jones, sgn_brightness = antenna_jones(S.gaussian_lm,
             S.gaussian_stokes, S.gaussian_alpha, S.gaussian_ref_freq)
@@ -702,16 +697,12 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
             gauss_shape, ant_jones, sgn_brightness, coherencies)
 
-        return coherencies, ngsrc, src_count
+        return coherencies, chunk + 1
 
-    def sersic_body(coherencies, nssrc, src_count):
+    def sersic_body(coherencies, chunk):
         """ Accumulate coherencies for sersic source batch """
-        key, S = local_cpu.sources['sersic'].get_to_attrdict()
-
-        # Maintain source counts
-        nsrc = tf.shape(S.sersic_lm)[0]
-        src_count += nsrc
-        nssrc += nsrc
+        sersic_sources = local_compute.sources[dev_id]['sersic']
+        _, S = sersic_sources.get_to_attrdict(I.sersic_keys[chunk])
 
         ant_jones, sgn_brightness = antenna_jones(S.sersic_lm,
             S.sersic_stokes, S.sersic_alpha, S.sersic_ref_freq)
@@ -720,25 +711,25 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
             sersic_shape, ant_jones, sgn_brightness, coherencies)
 
-        return coherencies, nssrc, src_count
+        return coherencies, chunk + 1
 
     with tf.device(device):
         base_coherencies = tf.zeros(shape=[ntime,nbl,nchan,npol], dtype=CT)
 
         # Evaluate point sources
-        summed_coherencies, npsrc, src_count = tf.while_loop(
-            point_cond, point_body,
-            [base_coherencies, zero, src_count])
+        summed_coherencies, point_chunks = tf.while_loop(point_cond,
+                                                point_body,
+                                                [base_coherencies, zero])
 
         # Evaluate gaussians
-        summed_coherencies, ngsrc, src_count = tf.while_loop(
-            gaussian_cond, gaussian_body,
-            [summed_coherencies, zero, src_count])
+        summed_coherencies, gaussian_chunks = tf.while_loop(gaussian_cond,
+                                                gaussian_body,
+                                                [summed_coherencies, zero])
 
         # Evaluate sersics
-        summed_coherencies, nssrc, src_count = tf.while_loop(
-            sersic_cond, sersic_body,
-            [summed_coherencies, zero, src_count])
+        summed_coherencies, sersic_chunks = tf.while_loop(sersic_cond,
+                                                sersic_body,
+                                                [summed_coherencies, zero])
 
         # Post process visibilities to produce model visibilities and chi squared
         model_vis, chi_squared = rime.post_process_visibilities(
