@@ -200,7 +200,7 @@ if __name__ == "__main__":
 
                 # Handle multiple ndarrays in a list case
                 elif isinstance(data[0], list):
-                    print("Handling lists for {}".format(k))
+                    print("Handling list of size {} for {}".format(len(data[0]), k))
                     keys = key_pool.get(len(data[0]))
 
                     def fn():
