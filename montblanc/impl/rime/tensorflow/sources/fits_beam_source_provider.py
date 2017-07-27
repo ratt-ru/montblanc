@@ -156,10 +156,11 @@ class FitsAxes(object):
         self.crval[index] = self.crval0[index]*scale
         self.cdelta[index] = self.cdelta0[index]*scale
 
-CORRELATIONS = ('xx', 'xy', 'yx', 'yy')
+CIRCULAR_CORRELATIONS = ('rr', 'rl', 'lr', 'll')
+LINEAR_CORRELATIONS = ('xx', 'xy', 'yx', 'yy')
 REIM = ('re', 'im')
 
-def _create_filenames(filename_schema):
+def _create_filenames(filename_schema, feed_type):
     """
     Returns a dictionary of beam filename pairs,
     keyed on correlation,from the cartesian product
@@ -190,16 +191,28 @@ def _create_filenames(filename_schema):
             reim=ri.lower(), REIM=ri.upper())
                 for ri in REIM)
 
+    if feed_type == 'linear':
+        CORRELATIONS = LINEAR_CORRELATIONS
+    elif feed_type == 'circular':
+        CORRELATIONS = CIRCULAR_CORRELATIONS
+    else:
+        raise ValueError("Invalid feed_type '{}'. "
+            "Should be 'linear' or 'circular'")
+
     return collections.OrderedDict(
         (c, _re_im_filenames(c, template))
         for c in CORRELATIONS)
 
 def _open_fits_files(filenames):
+    """
+    Given a {correlation: filename} mapping for filenames
+    returns a {correlation: file handle} mapping
+    """
     kw = { 'mode' : 'update', 'memmap' : False }
 
     def _fh(fn):
         """ Returns a filehandle or None if file does not exist """
-        return fits.open(fn, **kw) if os.path.exists(fn)  else None
+        return fits.open(fn, **kw) if os.path.exists(fn) else None
 
     return collections.OrderedDict(
             (corr, tuple(_fh(fn) for fn in files))
@@ -271,6 +284,10 @@ class FitsBeamSourceProvider(SourceProvider):
     and real/imaginary component. The shape of the FITS data will be
     inferred from the first file found and subsequent files should match
     that shape.
+
+    The type of correlation will be derived from the feed type.
+    Currently, linear :code:`['xx', 'xy', 'yx', 'yy']` and
+    circular :code:`['rr', 'rl', 'lr', 'll']` are supported.
     """
     def __init__(self, filename_schema, l_axis=None, m_axis=None):
         """
@@ -292,36 +309,59 @@ class FitsBeamSourceProvider(SourceProvider):
         l_axis, l_sign = _axis_and_sign('L' if l_axis is None else l_axis)
         m_axis, m_sign = _axis_and_sign('M' if m_axis is None else m_axis)
 
-        fits_dims = (l_axis, m_axis, 'FREQ')
-        beam_dims = ('beam_lw', 'beam_mh', 'beam_nud')
+        self._l_axis = l_axis
+        self._l_sign = l_sign
+        self._m_axis = m_axis
+        self._m_sign = m_sign
+
+        self._fits_dims = fits_dims = (l_axis, m_axis, 'FREQ')
+        self._beam_dims = ('beam_lw', 'beam_mh', 'beam_nud')
 
         self._filename_schema = filename_schema
         self._name = "FITS Beams '{s}'".format(s=filename_schema)
-        self._filenames = filenames = _create_filenames(filename_schema)
+
+        # Have we initialised this object?
+        self._initialised = False
+
+        # Have we already reported our dimensions?
+        self._dim_updates_indicated = False
+
+    def _initialise(self, feed_type="linear"):
+        """
+        Initialise the object by generating appropriate filenames,
+        opening associated file handles and inspecting the FITS axes
+        of these files.
+        """
+        self._filenames = filenames = _create_filenames(self._filename_schema,
+                                                        feed_type)
         self._files = files = _open_fits_files(filenames)
         self._axes = axes = _create_axes(filenames, files)
         self._dim_indices = dim_indices = l_ax, m_ax, f_ax = tuple(
-            axes.iaxis(d) for d in fits_dims)
+            axes.iaxis(d) for d in self._fits_dims)
 
         # Complain if we can't find required axes
-        for i, ax in zip(dim_indices, fits_dims):
+        for i, ax in zip(dim_indices, self._fits_dims):
             if i == -1:
                 raise ValueError("'%s' axis not found!" % ax)
 
         self._cube_extents = _cube_extents(axes, l_ax, m_ax, f_ax,
-            l_sign, m_sign)
+            self._l_sign, self._m_sign)
         self._shape = tuple(axes.naxis[d] for d in dim_indices) + (4,)
         self._beam_freq_map = axes.grid[f_ax]
 
         # Now describe our dimension sizes
         self._dim_updates = [(n, axes.naxis[i]) for n, i
-            in zip(beam_dims, dim_indices)]
+            in zip(self._beam_dims, dim_indices)]
 
-        # Have we already reported our dimensions?
-        self._dim_updates_indicated = False
+        self._initialised = True
 
     def name(self):
+        """ Name of this Source Provider """
         return self._name
+
+    def init(self, init_context):
+        """ Perform any initialisation """
+        self._initialise()
 
     def ebeam(self, context):
         """ ebeam cube data source """
@@ -349,7 +389,9 @@ class FitsBeamSourceProvider(SourceProvider):
         return self._beam_freq_map.astype(context.dtype)
 
     def updated_dimensions(self):
-        # Dimension updates bave been indicated, don't send them again
+        """ Indicate dimension sizes """
+
+        # Dimension updates have been indicated, don't send them again
         if self._dim_updates_indicated is True:
             return ()
 
@@ -367,6 +409,9 @@ class FitsBeamSourceProvider(SourceProvider):
         return self._shape
 
     def close(self):
+        if not hasattr(self, "_files"):
+            return
+
         for re, im in self._files.itervalues():
             re.close()
             im.close()
