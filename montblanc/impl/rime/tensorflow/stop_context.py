@@ -36,7 +36,7 @@ class StopContext(object):
         ...
 
         class CustomSourceProvider(SourceProvider):
-            def stop(self, context):
+            def stop(self, stop_context):
                 # Query dimensions directly
                 (lt, ut), (lb, ub) = context.dim_extents("ntime", "nbl")
                 ...

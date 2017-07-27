@@ -1,8 +1,25 @@
 API
 ===
 
-Source and Sink Contexts
-~~~~~~~~~~~~~~~~~~~~~~~~
+Contexts
+~~~~~~~~
+
+Contexts are objects supplying information to implementers of Providers.
+
+.. module:: montblanc.impl.rime.tensorflow.init_context
+
+.. autoclass:: InitialisationContext()
+    :members: cfg
+
+.. module:: montblanc.impl.rime.tensorflow.start_context
+
+.. autoclass:: StartContext()
+    :members: cube, cfg
+
+.. module:: montblanc.impl.rime.tensorflow.stop_context
+
+.. autoclass:: StopContext()
+    :members: cube, cfg
 
 .. module:: montblanc.impl.rime.tensorflow.sources.source_context
 
