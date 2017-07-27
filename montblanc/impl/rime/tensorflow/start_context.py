@@ -37,7 +37,7 @@ class StartContext(object):
         ...
 
         class CustomSourceProvider(SourceProvider):
-            def start(self, context):
+            def start(self, start_context):
                 # Query dimensions directly
                 (lt, ut), (lb, ub) = context.dim_extents("ntime", "nbl")
                 ...

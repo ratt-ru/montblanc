@@ -100,6 +100,11 @@ class CachedSourceProvider(SourceProvider):
             else:
                 setattr(self, n, types.MethodType(ds, self))
 
+    def init(self, init_context):
+        """ Perform any initialisation required """
+        for p in self._providers:
+            p.init(init_context)
+
     def updated_dimensions(self):
         """ Update the dimensions """
         return [d for p in self._providers
@@ -117,11 +122,3 @@ class CachedSourceProvider(SourceProvider):
         with self._lock:
             return sum(a.nbytes for k, v in self._cache.iteritems()
                                 for a in v.itervalues())
-
-    def start(self, start_context):
-        if self._clear_start:
-            self.clear_cache()
-
-    def stop(self, stop_context):
-        if self._clear_stop:
-            self.clear_cache()

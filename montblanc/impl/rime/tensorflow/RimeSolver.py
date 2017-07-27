@@ -45,7 +45,7 @@ from .sources import (SourceContext, DefaultsSourceProvider)
 from .sinks import (SinkContext, NullSinkProvider)
 from .start_context import StartContext
 from .stop_context import StopContext
-
+from .init_context import InitialisationContext
 
 ONE_KB, ONE_MB, ONE_GB = 1024, 1024**2, 1024**3
 
@@ -584,6 +584,13 @@ class RimeSolver(MontblancTensorflowSolver):
 
         montblanc.log.info(src_provs_str)
         montblanc.log.info(snk_provs_str)
+
+        # Allow providers to initialise themselves based on
+        # the given configuration
+        ctx = InitialisationContext(self.config())
+
+        for p in itertools.chain(source_providers, sink_providers):
+            p.init(ctx)
 
         # Apply any dimension updates from the source provider
         # to the hypercube, taking previous reductions into account
