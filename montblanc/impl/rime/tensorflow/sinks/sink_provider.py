@@ -26,6 +26,10 @@ class AbstractSinkProvider(object):
         """ Returns this data sink's name """
         raise NotImplementedError()
 
+    def init(self, init_context):
+        """ Called when initialising Providers """
+        raise NotImplementedError()
+
     def start(self, start_context):
         """ Called at the start of any solution """
         raise NotImplementedError()
@@ -69,6 +73,10 @@ def find_sinks(obj):
         if inspect.getargspec(m)[0] == SINK_ARGSPEC }
 
 class SinkProvider(AbstractSinkProvider):
+
+    def init(self, init_context):
+        """ Called when initialising Providers """
+        pass
 
     def start(self, start_context):
         """ Called at the start of any solution """
