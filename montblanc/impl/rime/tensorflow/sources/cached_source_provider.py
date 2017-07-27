@@ -105,6 +105,22 @@ class CachedSourceProvider(SourceProvider):
         for p in self._providers:
             p.init(init_context)
 
+    def start(self, start_context):
+        """ Perform any logic on solution start """
+        for p in self._providers:
+            p.start(start_context)
+
+        if self._clear_start:
+            self.clear_cache()
+
+    def stop(self, stop_context):
+        """ Perform any logic on solution stop """
+        for p in self._providers:
+            p.stop(stop_context)
+
+        if self._clear_stop:
+            self.clear_cache()
+
     def updated_dimensions(self):
         """ Update the dimensions """
         return [d for p in self._providers
