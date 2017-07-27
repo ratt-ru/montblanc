@@ -1,9 +1,9 @@
 #if GOOGLE_CUDA
 
-#ifndef RIME_EKB_SQRT_OP_GPU_CUH
-#define RIME_EKB_SQRT_OP_GPU_CUH
+#ifndef RIME_CREATE_ANTENNA_JONES_OP_GPU_CUH
+#define RIME_CREATE_ANTENNA_JONES_OP_GPU_CUH
 
-#include "ekb_sqrt_op.h"
+#include "create_antenna_jones_op.h"
 #include <montblanc/abstraction.cuh>
 #include <montblanc/jones.cuh>
 
@@ -14,7 +14,7 @@
 #include "tensorflow/core/framework/op_kernel.h"
 
 MONTBLANC_NAMESPACE_BEGIN
-MONTBLANC_EKB_SQRT_NAMESPACE_BEGIN
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_BEGIN
 
 // For simpler partial specialisation
 typedef Eigen::GpuDevice GPUDevice;
@@ -39,22 +39,21 @@ template <> struct LaunchTraits<double>
 
 // CUDA kernel outline
 template <typename Traits>
-__global__ void rime_ekb_sqrt(
-    const typename Traits::CT * complex_phase,
+__global__ void rime_create_antenna_jones(
     const typename Traits::CT * bsqrt,
+    const typename Traits::CT * complex_phase,
+    const typename Traits::CT * feed_rotation,
     const typename Traits::CT * ejones,
     typename Traits::CT * ant_jones,
     int nsrc, int ntime, int na, int nchan, int npol)
 {
-    // Shared memory usage unnecesssary, but demonstrates use of
-    // constant Trait members to create kernel shared memory.
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
     using LTr = LaunchTraits<FT>;
-    //__shared__ FT buffer[LTr::BLOCKDIMX];
 
     int polchan = blockIdx.x*blockDim.x + threadIdx.x;
     int chan = polchan / npol;
+    int pol = polchan & (npol-1);
     int ant = blockIdx.y*blockDim.y + threadIdx.y;
     int time = blockIdx.z*blockDim.z + threadIdx.z;
     int npolchan = nchan*npol;
@@ -64,7 +63,22 @@ __global__ void rime_ekb_sqrt(
 
     int i;
 
-    for(int src=0; src < nsrc; ++ src)
+    __shared__ struct {
+        CT fr[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][CREATE_ANTENNA_JONES_NPOL];
+    } shared;
+
+    // Feed rotation varies by time, antenna and polarisation
+    // Polarisation is baked into the X dimension, so use the
+    // first npol threads to load polarisation info
+    if(threadIdx.x < npol)
+    {
+        i = (time*na + ant)*npol + pol;
+        shared.fr[threadIdx.z][threadIdx.y][threadIdx.x] = feed_rotation[i];
+    }
+
+    __syncthreads();
+
+    for(int src=0; src < nsrc; ++src)
     {
         // Load in bsqrt
         int src_time = src*ntime + time;
@@ -76,26 +90,31 @@ __global__ void rime_ekb_sqrt(
         i = src_time_ant*nchan + chan;
         CT cplx_phase = complex_phase[i];
 
-        // Load in the brightness square root and multiply the phase in
+        // Multiply brightness square root into the complex phase
         montblanc::complex_multiply_in_place<FT>(cplx_phase, brightness_sqrt);
 
+        // Load in the feed rotation and multiply by KB
+        CT L = shared.fr[threadIdx.z][threadIdx.y][pol];
+
+        montblanc::jones_multiply_4x4_in_place<FT>(L, cplx_phase);
+
+        // Load in the E Beam and multiply by LKB
         i = src_time_ant*npolchan + polchan;
         CT E = ejones[i];
 
-        // Load in the E Beam and multiply by KB
-        montblanc::jones_multiply_4x4_in_place<FT>(E, cplx_phase);
+        montblanc::jones_multiply_4x4_in_place<FT>(E, L);
 
-        // Output it
+        // Output final per antenna value
         ant_jones[i] = E;
     }
 }
 
-// Specialise the EKBSqrt op for GPUs
+// Specialise the CreateAntennaJones op for GPUs
 template <typename FT, typename CT>
-class EKBSqrt<GPUDevice, FT, CT> : public tensorflow::OpKernel
+class CreateAntennaJones<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 public:
-    explicit EKBSqrt(tensorflow::OpKernelConstruction * context) :
+    explicit CreateAntennaJones(tensorflow::OpKernelConstruction * context) :
         tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
@@ -103,9 +122,10 @@ public:
         namespace tf = tensorflow;
 
         // Sanity check the input tensors
-        const tf::Tensor & in_complex_phase = context->input(0);
-        const tf::Tensor & in_bsqrt = context->input(1);
-        const tf::Tensor & in_ejones = context->input(2);
+        const tf::Tensor & in_bsqrt = context->input(0);
+        const tf::Tensor & in_complex_phase = context->input(1);
+        const tf::Tensor & in_feed_rotation = context->input(2);
+        const tf::Tensor & in_ejones = context->input(3);
 
         // Extract problem dimensions
         int nsrc = in_complex_phase.dim_size(0);
@@ -114,6 +134,11 @@ public:
         int nchan = in_complex_phase.dim_size(3);
         int npol = in_bsqrt.dim_size(3);
         int npolchan = nchan*npol;
+
+        //GPU kernel above requires this hard-coded number
+        OP_REQUIRES(context, npol == CREATE_ANTENNA_JONES_NPOL,
+            tf::errors::InvalidArgument("Number of polarisations '",
+                npol, "' does not equal '", CREATE_ANTENNA_JONES_NPOL, "'."));
 
         tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
 
@@ -136,25 +161,27 @@ public:
         const auto & device = context->eigen_device<GPUDevice>();
 
         // Get pointers to flattened tensor data buffers
-        auto complex_phase = reinterpret_cast<const typename Tr::CT *>(
-            in_complex_phase.flat<CT>().data());
         auto bsqrt = reinterpret_cast<const typename Tr::CT *>(
             in_bsqrt.flat<CT>().data());
+        auto complex_phase = reinterpret_cast<const typename Tr::CT *>(
+            in_complex_phase.flat<CT>().data());
+        auto feed_rotation = reinterpret_cast<const typename Tr::CT *>(
+            in_feed_rotation.flat<CT>().data());
         auto ejones = reinterpret_cast<const typename Tr::CT *>(
             in_ejones.flat<CT>().data());
         auto ant_jones = reinterpret_cast<typename Tr::CT *>(
             ant_jones_ptr->flat<CT>().data());
 
-        // Call the rime_ekb_sqrt CUDA kernel
-        rime_ekb_sqrt<Tr><<<grid, block, 0, device.stream()>>>(
-            complex_phase, bsqrt, ejones, ant_jones,
+        // Call the rime_create_antenna_jones CUDA kernel
+        rime_create_antenna_jones<Tr><<<grid, block, 0, device.stream()>>>(
+            bsqrt, complex_phase, feed_rotation, ejones, ant_jones,
             nsrc, ntime, na, nchan, npol);
     }
 };
 
-MONTBLANC_EKB_SQRT_NAMESPACE_STOP
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_STOP
 MONTBLANC_NAMESPACE_STOP
 
-#endif // #ifndef RIME_EKB_SQRT_OP_GPU_CUH
+#endif // #ifndef RIME_CREATE_ANTENNA_JONES_OP_GPU_CUH
 
 #endif // #if GOOGLE_CUDA

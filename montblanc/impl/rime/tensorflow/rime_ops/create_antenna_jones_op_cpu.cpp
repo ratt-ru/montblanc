@@ -1,10 +1,10 @@
-#include "ekb_sqrt_op_cpu.h"
+#include "create_antenna_jones_op_cpu.h"
 
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
 MONTBLANC_NAMESPACE_BEGIN
-MONTBLANC_EKB_SQRT_NAMESPACE_BEGIN
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_BEGIN
 
 using tensorflow::shape_inference::InferenceContext;
 using tensorflow::shape_inference::ShapeHandle;
@@ -17,9 +17,10 @@ auto ekb_shape_function = [](InferenceContext* c) {
     DimensionHandle d;
 
     // Get input shapes
-    ShapeHandle complex_phase = c->input(0);
-    ShapeHandle bsqrt = c->input(1);
-    ShapeHandle ejones = c->input(2);
+    ShapeHandle bsqrt = c->input(0);
+    ShapeHandle complex_phase = c->input(1);
+    ShapeHandle feed_rotation = c->input(2);
+    ShapeHandle ejones = c->input(3);
 
     // complex_phase
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(complex_phase, 4, &input),
@@ -33,6 +34,14 @@ auto ekb_shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(bsqrt, 3), 4, &d),
         "bsqrt shape must be [nsrc, na, nchan, 4] but is " +
         c->DebugString(bsqrt));
+
+    // feed_rotation
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(feed_rotation, 3, &input),
+        "bsqrt shape must be [ntime, na, 4] but is " +
+        c->DebugString(feed_rotation));
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(feed_rotation, 2), 4, &d),
+        "bsqrt shape must be [ntime, na, 4] but is " +
+        c->DebugString(feed_rotation));
 
     // ejones
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(ejones, 5, &input),
@@ -58,10 +67,11 @@ auto ekb_shape_function = [](InferenceContext* c) {
 
 
 
-// Register the EKBSqrt operator.
-REGISTER_OP("EKBSqrt")
-    .Input("complex_phase: CT")
+// Register the CreateAntennaJones operator.
+REGISTER_OP("CreateAntennaJones")
     .Input("bsqrt: CT")
+    .Input("complex_phase: CT")
+    .Input("feed_rotation: CT")
     .Input("ejones: CT")
     .Output("ant_jones: CT")
     .Attr("FT: {float, double} = DT_FLOAT")
@@ -69,22 +79,22 @@ REGISTER_OP("EKBSqrt")
     .SetShapeFn(ekb_shape_function);
 
 
-// Register a CPU kernel for EKBSqrt that handles floats
+// Register a CPU kernel for CreateAntennaJones that handles floats
 REGISTER_KERNEL_BUILDER(
-    Name("EKBSqrt")
+    Name("CreateAntennaJones")
     .TypeConstraint<float>("FT")
     .TypeConstraint<tensorflow::complex64>("CT")
     .Device(tensorflow::DEVICE_CPU),
-    EKBSqrt<CPUDevice, float, tensorflow::complex64>);
+    CreateAntennaJones<CPUDevice, float, tensorflow::complex64>);
 
-// Register a CPU kernel for EKBSqrt that handles doubles
+// Register a CPU kernel for CreateAntennaJones that handles doubles
 REGISTER_KERNEL_BUILDER(
-    Name("EKBSqrt")
+    Name("CreateAntennaJones")
     .TypeConstraint<double>("FT")
     .TypeConstraint<tensorflow::complex128>("CT")
     .Device(tensorflow::DEVICE_CPU),
-    EKBSqrt<CPUDevice, double, tensorflow::complex128>);
+    CreateAntennaJones<CPUDevice, double, tensorflow::complex128>);
 
 
-MONTBLANC_EKB_SQRT_NAMESPACE_STOP
+MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_STOP
 MONTBLANC_NAMESPACE_STOP

@@ -130,7 +130,8 @@ __global__ void rime_e_beam(
     const typename Traits::frequency_type * frequency,
     const typename Traits::point_error_type * point_errors,
     const typename Traits::antenna_scale_type * antenna_scaling,
-    const typename Traits::FT * parallactic_angle,
+    const typename Traits::FT * parallactic_angle_sin,
+    const typename Traits::FT * parallactic_angle_cos,
     const typename Traits::FT * beam_freq_map,
     const typename Traits::CT * ebeam,
     typename Traits::CT * jones,
@@ -242,10 +243,8 @@ __global__ void rime_e_beam(
     if(threadIdx.x == 0)
     {
         i = TIME*na + ANT;
-        FT parangle = parallactic_angle[i];
-        Po::sincos(parangle,
-            &shared.pa_sin[threadIdx.z][threadIdx.y],
-            &shared.pa_cos[threadIdx.z][threadIdx.y]);
+        shared.pa_sin[threadIdx.z][threadIdx.y] = parallactic_angle_sin[i];
+        shared.pa_cos[threadIdx.z][threadIdx.y] = parallactic_angle_cos[i];
     }
 
     __syncthreads();
@@ -384,10 +383,11 @@ public:
         const tf::Tensor & in_frequency = context->input(1);
         const tf::Tensor & in_point_errors = context->input(2);
         const tf::Tensor & in_antenna_scaling = context->input(3);
-        const tf::Tensor & in_parallactic_angle = context->input(4);
-        const tf::Tensor & in_beam_extents = context->input(5);
-        const tf::Tensor & in_beam_freq_map = context->input(6);
-        const tf::Tensor & in_ebeam = context->input(7);
+        const tf::Tensor & in_parallactic_angle_sin = context->input(4);
+        const tf::Tensor & in_parallactic_angle_cos = context->input(5);
+        const tf::Tensor & in_beam_extents = context->input(6);
+        const tf::Tensor & in_beam_freq_map = context->input(7);
+        const tf::Tensor & in_ebeam = context->input(8);
 
         // Extract problem dimensions
         int nsrc = in_lm.dim_size(0);
@@ -448,9 +448,12 @@ public:
                 in_antenna_scaling.flat<FT>().data());
         auto jones = reinterpret_cast<typename Tr::CT *>(
                 jones_ptr->flat<CT>().data());
-        auto parallactic_angle = reinterpret_cast<
+        auto parallactic_angle_sin = reinterpret_cast<
             const typename Tr::FT *>(
-                in_parallactic_angle.tensor<FT, 2>().data());
+                in_parallactic_angle_sin.tensor<FT, 2>().data());
+        auto parallactic_angle_cos = reinterpret_cast<
+            const typename Tr::FT *>(
+                in_parallactic_angle_cos.tensor<FT, 2>().data());
         auto beam_freq_map = reinterpret_cast<
             const typename Tr::FT *>(
                 in_beam_freq_map.tensor<FT, 1>().data());
@@ -460,7 +463,8 @@ public:
 
         rime_e_beam<Tr><<<grid, blocks, 0, stream>>>(
             lm, frequency, point_errors, antenna_scaling,
-            parallactic_angle, beam_freq_map, ebeam, jones,
+            parallactic_angle_sin, parallactic_angle_cos,
+            beam_freq_map, ebeam, jones,
             lower_l, lower_m, upper_l, upper_m,
             nsrc, ntime, na, nchan, npolchan,
             beam_lw, beam_mh, beam_nud);

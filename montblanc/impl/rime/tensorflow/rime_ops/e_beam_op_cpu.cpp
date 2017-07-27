@@ -20,10 +20,11 @@ auto ebeam_shape_function = [](InferenceContext* c) {
     ShapeHandle frequency = c->input(1);
     ShapeHandle point_errors = c->input(2);
     ShapeHandle antenna_scaling = c->input(3);
-    ShapeHandle parallactic_angle = c->input(4);
-    ShapeHandle beam_extents = c->input(5);
-    ShapeHandle beam_freq_map = c->input(6);
-    ShapeHandle ebeam = c->input(7);
+    ShapeHandle parallactic_angle_sin = c->input(4);
+    ShapeHandle parallactic_angle_cos = c->input(5);
+    ShapeHandle beam_extents = c->input(6);
+    ShapeHandle beam_freq_map = c->input(7);
+    ShapeHandle ebeam = c->input(8);
 
     // lm should be shape (nsrc, 2)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(lm, 2, &input),
@@ -51,10 +52,15 @@ auto ebeam_shape_function = [](InferenceContext* c) {
         "point_errors shape must be [na, nchan, 2] but is " +
         c->DebugString(antenna_scaling));
 
-    // parallactic angle should be shape (ntime, na)
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(parallactic_angle, 2, &input),
-        "parallactic_angle shape must be [ntime, na] but is " +
-        c->DebugString(parallactic_angle));
+    // parallactic angle_sin should be shape (ntime, na)
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(parallactic_angle_sin, 2, &input),
+        "parallactic_angle shape_sin must be [ntime, na] but is " +
+        c->DebugString(parallactic_angle_sin));
+
+    // parallactic angle_cos should be shape (ntime, na)
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(parallactic_angle_cos, 2, &input),
+        "parallactic_angle_cos shape must be [ntime, na] but is " +
+        c->DebugString(parallactic_angle_cos));
 
     // beam_extents
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(beam_extents, 1, &input),
@@ -80,8 +86,8 @@ auto ebeam_shape_function = [](InferenceContext* c) {
     // E Jones output is (nsrc, ntime, na, nchan, 4)
     ShapeHandle ejones = c->MakeShape({
         c->Dim(lm, 0),
-        c->Dim(parallactic_angle, 0),
-        c->Dim(parallactic_angle, 1),
+        c->Dim(parallactic_angle_sin, 0),
+        c->Dim(parallactic_angle_sin, 1),
         c->Dim(frequency, 0),
         4});
 
@@ -97,7 +103,8 @@ REGISTER_OP("EBeam")
     .Input("frequency: FT")
     .Input("point_errors: FT")
     .Input("antenna_scaling: FT")
-    .Input("parallactic_angle: FT")
+    .Input("parallactic_angle_sin: FT")
+    .Input("parallactic_angle_cos: FT")
     .Input("beam_extents: FT")
     .Input("beam_freq_map: FT")
     .Input("e_beam: CT")

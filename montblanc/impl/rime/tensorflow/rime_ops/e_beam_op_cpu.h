@@ -47,10 +47,11 @@ public:
         const tf::Tensor & in_frequency = context->input(1);
         const tf::Tensor & in_point_errors = context->input(2);
         const tf::Tensor & in_antenna_scaling = context->input(3);
-        const tf::Tensor & in_parallactic_angle = context->input(4);
-        const tf::Tensor & in_beam_extents = context->input(5);
-        const tf::Tensor & in_beam_freq_map = context->input(6);
-        const tf::Tensor & in_ebeam = context->input(7);
+        const tf::Tensor & in_parallactic_angle_sin = context->input(4);
+        const tf::Tensor & in_parallactic_angle_cos = context->input(5);
+        const tf::Tensor & in_beam_extents = context->input(6);
+        const tf::Tensor & in_beam_freq_map = context->input(7);
+        const tf::Tensor & in_ebeam = context->input(8);
 
         // Extract problem dimensions
         int nsrc = in_lm.dim_size(0);
@@ -96,7 +97,8 @@ public:
         auto frequency = in_frequency.tensor<FT, 1>();
         auto point_errors = in_point_errors.tensor<FT, 4>();
         auto antenna_scaling = in_antenna_scaling.tensor<FT, 3>();
-        auto parallactic_angle = in_parallactic_angle.tensor<FT, 2>();
+        auto parallactic_angle_sin = in_parallactic_angle_sin.tensor<FT, 2>();
+        auto parallactic_angle_cos = in_parallactic_angle_cos.tensor<FT, 2>();
         auto beam_freq_map_flat = in_beam_freq_map.flat<FT>();
         auto beam_freq_map_begin = beam_freq_map_flat.data();
         auto beam_freq_map_end = beam_freq_map_begin + beam_freq_map_flat.size();
@@ -163,9 +165,8 @@ public:
             for(int ant=0; ant < na; ++ant)
             {
                 // Rotation angle
-                FT angle = parallactic_angle(time, ant);
-                FT sint = std::sin(angle);
-                FT cost = std::cos(angle);
+                const FT & sint = parallactic_angle_sin(time, ant);
+                const FT & cost = parallactic_angle_cos(time, ant);
 
                 for(int src=0; src < nsrc; ++src)
                 {

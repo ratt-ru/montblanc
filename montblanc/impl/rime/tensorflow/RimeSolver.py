@@ -935,11 +935,19 @@ def _construct_tensorflow_expression(feed_data, device, shard):
     D = LSA.feed_many[shard].get_to_attrdict()
     D.update({k: fo.var for k, fo in LSA.feed_once.iteritems()})
 
-    # Infer chunk dimensions
     with tf.device(device):
+        # Infer chunk dimensions
         model_vis_shape = tf.shape(D.model_vis)
         ntime, nbl, nchan, npol = [model_vis_shape[i] for i in range(4)]
+
+        # Infer float and complex type
         FT, CT = D.uvw.dtype, D.model_vis.dtype
+
+        # Compute sine and cosine of parallactic angles
+        pa_sin, pa_cos = rime.parallactic_angle_sin_cos(D.parallactic_angles)
+        # Compute feed rotation
+        feed_rotation = rime.feed_rotation(pa_sin, pa_cos,
+                                           feed_type='linear', CT=CT)
 
     def antenna_jones(lm, stokes, alpha, ref_freq):
         """
@@ -947,6 +955,8 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
         lm, stokes and alpha are the source variables.
         """
+
+        # Compute the complex phase
         cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
 
         # Check for nans/infs in the complex phase
@@ -958,6 +968,8 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         phase_real = tf.check_numerics(tf.real(cplx_phase), phase_msg)
         phase_imag = tf.check_numerics(tf.imag(cplx_phase), phase_msg)
 
+        # Compute the square root of the brightness matrix
+        # (as well as the sign)
         bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
             D.frequency, ref_freq, CT=CT)
 
@@ -971,18 +983,21 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         bsqrt_real = tf.check_numerics(tf.real(bsqrt), bsqrt_msg)
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
+        # Compute the direction dependent effects from the beam
         ejones = rime.e_beam(lm, D.frequency,
             D.pointing_errors, D.antenna_scaling,
-            D.parallactic_angles,
+            pa_sin, pa_cos,
             D.beam_extents, D.beam_freq_map, D.ebeam)
 
         deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag]
         deps = [] # Do nothing for now
 
-
+        # Combine the brightness square root, complex phase,
+        # feed rotation and beam dde's
         with tf.control_dependencies(deps):
-            return (rime.ekb_sqrt(cplx_phase, bsqrt, ejones, FT=FT),
-                sgn_brightness)
+            antenna_jones = rime.create_antenna_jones(bsqrt, cplx_phase,
+                                                    feed_rotation, ejones, FT=FT)
+            return antenna_jones, sgn_brightness
 
     # While loop condition for each point source type
     def point_cond(coherencies, npsrc, src_count):
