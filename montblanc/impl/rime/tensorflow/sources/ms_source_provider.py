@@ -26,7 +26,6 @@ import types
 import numpy as np
 
 import montblanc.util as mbu
-from montblanc.config import RimeSolverConfig as Options
 import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 
 from montblanc.impl.rime.tensorflow.sources.source_provider import SourceProvider

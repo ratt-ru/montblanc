@@ -36,7 +36,6 @@ import montblanc
 import montblanc.util as mbu
 from montblanc.src_types import source_var_types
 from montblanc.solvers import MontblancTensorflowSolver
-from montblanc.config import RimeSolverConfig as Options
 
 from . import load_tf_lib
 from .cube_dim_transcoder import CubeDimensionTranscoder
@@ -86,7 +85,7 @@ class RimeSolver(MontblancTensorflowSolver):
         #=======================
 
         # Get the defaults data source (default or test data)
-        data_source = slvr_cfg.get(Options.DATA_SOURCE)
+        data_source = slvr_cfg['data_source']
         montblanc.log.info("Defaults Data Source '{}'".format(data_source))
 
         # Construct list of data sources and sinks
@@ -768,9 +767,8 @@ def _create_defaults_source_provider(cube, data_source):
 
     # Obtain default data sources for each array,
     # Just take from defaults if test data isn't specified
-    staging_area_data_source = (Options.DATA_SOURCE_DEFAULT
-        if not data_source == Options.DATA_SOURCE_TEST
-        else data_source)
+    staging_area_data_source = ('default' if not data_source == 'test'
+                                                      else data_source)
 
     cache = True
 
@@ -1160,7 +1158,7 @@ def _budget(cube, slvr_cfg):
     mem_budget = slvr_cfg.get('mem_budget', 2*ONE_GB)
     bytes_required = cube.bytes_required()
 
-    src_dims = mbu.source_nr_vars() + [Options.NSRC]
+    src_dims = mbu.source_nr_vars() + ['nsrc']
     dim_names = ['na', 'nbl', 'ntime'] + src_dims
     global_sizes = cube.dim_global_size(*dim_names)
     na, nbl, ntime = global_sizes[:3]
@@ -1176,7 +1174,7 @@ def _budget(cube, slvr_cfg):
             yield [('ntime', t)]
 
         # Attempt reduction over source
-        sbs = slvr_cfg.get(Options.SOURCE_BATCH_SIZE)
+        sbs = slvr_cfg['source_batch_size']
         srange = _uniq_log2_range(10, sbs, 5) if sbs > 10 else 10
         src_dim_gs = global_sizes[3:]
 
@@ -1310,16 +1308,13 @@ def _setup_hypercube(cube, slvr_cfg):
     mbu.register_default_dimensions(cube, slvr_cfg)
 
     # Configure the dimensions of the beam cube
-    cube.register_dimension('beam_lw',
-                            slvr_cfg[Options.E_BEAM_WIDTH],
+    cube.register_dimension('beam_lw', 10,
                             description='E Beam cube l width')
 
-    cube.register_dimension('beam_mh',
-                            slvr_cfg[Options.E_BEAM_HEIGHT],
+    cube.register_dimension('beam_mh', 10,
                             description='E Beam cube m height')
 
-    cube.register_dimension('beam_nud',
-                            slvr_cfg[Options.E_BEAM_DEPTH],
+    cube.register_dimension('beam_nud', 10,
                             description='E Beam cube nu depth')
 
     # =========================================
@@ -1336,8 +1331,8 @@ def _setup_hypercube(cube, slvr_cfg):
 
         return [_massage_dtype_in_dict(D) for D in A]
 
-    dtype = slvr_cfg.get('dtype', Options.DTYPE_FLOAT)
-    is_f32 = dtype == Options.DTYPE_FLOAT
+    dtype = slvr_cfg['dtype']
+    is_f32 = dtype == 'float'
 
     T = {
         'ft' : np.float32 if is_f32 else np.float64,

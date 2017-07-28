@@ -23,7 +23,6 @@ import collections
 import numpy as np
 
 import montblanc
-from montblanc.config import RimeSolverConfig as Options
 
 from hypercube import HyperCube
 import pyrap.tables as pt
@@ -179,7 +178,7 @@ class MeasurementSetManager(object):
                 "!= SPECTRAL_WINDOW.nrows()")
 
         # Hard code auto-correlations and field_id 0
-        self._auto_correlations = auto_correlations = slvr_cfg[Options.AUTO_CORRELATIONS]
+        self._auto_correlations = auto_correlations = slvr_cfg['auto_correlations']
         self._field_id = field_id = 0
 
         # Create a view over the MS, ordered by
