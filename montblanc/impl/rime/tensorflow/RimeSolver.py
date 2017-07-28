@@ -195,7 +195,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Construct tensorflow expressions for each shard
             self._tf_expr = [_construct_tensorflow_expression(
-                    self._tf_feed_data, dev, self._shard(d,s))
+                    slvr_cfg, self._tf_feed_data,
+                    dev, self._shard(d,s))
                 for d, dev in enumerate(self._devices)
                 for s in range(self._shards_per_device)]
 
@@ -921,7 +922,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
 
     return FD
 
-def _construct_tensorflow_expression(feed_data, device, shard):
+def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
     """ Constructs a tensorflow expression for computing the RIME """
     zero = tf.constant(0)
     src_count = zero
@@ -945,9 +946,13 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
         # Compute sine and cosine of parallactic angles
         pa_sin, pa_cos = rime.parallactic_angle_sin_cos(D.parallactic_angles)
+
+        # Get feed type configuration, assuming linear...
+        feed_type = slvr_cfg.get('feed_type', 'linear')
+
         # Compute feed rotation
         feed_rotation = rime.feed_rotation(pa_sin, pa_cos,
-                                           feed_type='linear', CT=CT)
+                                           feed_type=feed_type, CT=CT)
 
     def antenna_jones(lm, stokes, alpha, ref_freq):
         """
@@ -955,6 +960,15 @@ def _construct_tensorflow_expression(feed_data, device, shard):
 
         lm, stokes and alpha are the source variables.
         """
+
+        # b_sqrt handles linear polarisations by default
+        if feed_type == 'linear':
+            pass
+        # swap stokes parameters around to handle circular polarisations
+        elif feed_type == 'circular':
+            stokes = rime.circular_stokes_swap(stokes)
+        else:
+            raise ValueError("Invalid feed_type '{}'".format(feed_type))
 
         # Compute the complex phase
         cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
