@@ -38,8 +38,8 @@ base_beam_file = os.path.join(beam_dir, beam_file_prefix)
 beam_file_pattern = ''.join((base_beam_file, '_$(corr)_$(reim).fits'))
 l_axis = '-X'
 
-# Feed type
-feed_type = 'linear'
+# Polarisation type
+pol_type = 'linear'
 
 # Find the location of the meqtree pipeliner script
 meqpipe_actual = subprocess.check_output(['which', meqpipe]).strip()
@@ -65,7 +65,7 @@ with pt.table(msfile + '::SPECTRAL_WINDOW', ack=False) as SW:
 bandwidth = frequency[-1] - frequency[0]
 
 # Get filenames from pattern and open the files
-filenames = _create_filenames(beam_file_pattern, feed_type)
+filenames = _create_filenames(beam_file_pattern, pol_type)
 files = _open_fits_files(filenames)
 fgen = [f for (re, im) in files.itervalues() for f in (re, im)]
 
@@ -292,7 +292,7 @@ slvr_cfg = montblanc.rime_solver_cfg(
     data_source=Options.DATA_SOURCE_DEFAULT,
     dtype='double' if dtype == np.float64 else 'float',
     auto_correlations=False,
-    feed_type=feed_type,
+    polarisation_type=pol_type,
     version='tf')
 
 slvr = montblanc.rime_solver(slvr_cfg)

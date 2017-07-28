@@ -363,7 +363,7 @@ class FitsBeamSourceProvider(SourceProvider):
         """ Perform any initialisation """
 
         # Get the feed type, assuming linear
-        feed_type = init_context.cfg.get('feed_type', 'linear')
+        feed_type = init_context.cfg.get('polarisation_type', 'linear')
         self._initialise(feed_type)
 
     def ebeam(self, context):
