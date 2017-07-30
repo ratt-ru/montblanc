@@ -85,7 +85,7 @@ def rime_solver_cfg(**kwargs):
     try:
         cfg_file = kwargs.pop('cfg_file')
     except KeyError as e:
-        slvr_cfg = {}
+        slvr_cfg = kwargs
     else:
         cfg = load_config(cfg_file)
         slvr_cfg = _merge_copy(cfg, kwargs)
