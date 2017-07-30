@@ -930,7 +930,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
     LSA = feed_data.local
 
-    polarisation_type = slvr_cfg.get('polarisation_type', 'linear')
+    polarisation_type = slvr_cfg['polarisation_type']
 
     # Pull RIME inputs out of the feed staging_area
     # of the relevant shard, adding the feed once

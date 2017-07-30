@@ -65,7 +65,7 @@ with pt.table(msfile + '::SPECTRAL_WINDOW', ack=False) as SW:
 bandwidth = frequency[-1] - frequency[0]
 
 # Get filenames from pattern and open the files
-filenames = _create_filenames(beam_file_pattern, pol_type)
+filenames = _create_filenames(beam_file_pattern, "linear")
 files = _open_fits_files(filenames)
 fgen = [f for (re, im) in files.itervalues() for f in (re, im)]
 

@@ -361,7 +361,7 @@ class FitsBeamSourceProvider(SourceProvider):
 
     def init(self, init_context):
         """ Perform any initialisation """
-        self._initialise(init_context.cfg.get('polarisation_type', 'linear'))
+        self._initialise(init_context.cfg['polarisation_type'])
 
     def ebeam(self, context):
         """ ebeam cube data source """
