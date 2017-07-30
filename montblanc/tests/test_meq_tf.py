@@ -30,6 +30,9 @@ cfg_file = os.path.join(meq_dir, 'tdlconf.profiles')
 sim_script = os.path.join(meq_dir, 'turbo-sim.py')
 tigger_sky_file = os.path.join(meq_dir, 'sky_model.txt')
 
+# Polarisation type
+pol_type = 'linear'
+
 # Directory in which we expect our beams to be located
 beam_on = 1
 beam_dir = os.path.join(data_dir, 'beams')
@@ -62,7 +65,7 @@ with pt.table(msfile + '::SPECTRAL_WINDOW', ack=False) as SW:
 bandwidth = frequency[-1] - frequency[0]
 
 # Get filenames from pattern and open the files
-filenames = _create_filenames(beam_file_pattern, "linear")
+filenames = _create_filenames(beam_file_pattern, pol_type)
 files = _open_fits_files(filenames)
 fgen = [f for (re, im) in files.itervalues() for f in (re, im)]
 
@@ -288,6 +291,7 @@ slvr_cfg = montblanc.rime_solver_cfg(
     mem_budget=1024*1024*1024,
     data_source=Options.DATA_SOURCE_DEFAULT,
     dtype='double' if dtype == np.float64 else 'float',
+    polarisation_type=pol_type,
     auto_correlations=False,
     version='tf')
 

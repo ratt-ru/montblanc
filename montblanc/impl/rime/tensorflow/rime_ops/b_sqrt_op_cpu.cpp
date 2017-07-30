@@ -62,6 +62,7 @@ REGISTER_OP("BSqrt")
     .Output("sgn_brightness: int8")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
+    .Attr("polarisation_type: {'linear', 'circular'} = 'linear'")
     .SetShapeFn(bsqrt_shape_function);
 
 REGISTER_KERNEL_BUILDER(

@@ -195,6 +195,7 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Construct tensorflow expressions for each shard
             self._tf_expr = [_construct_tensorflow_expression(
+                    slvr_cfg,
                     self._tf_feed_data, dev, self._shard(d,s))
                 for d, dev in enumerate(self._devices)
                 for s in range(self._shards_per_device)]
@@ -921,13 +922,15 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
 
     return FD
 
-def _construct_tensorflow_expression(feed_data, device, shard):
+def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
     """ Constructs a tensorflow expression for computing the RIME """
     zero = tf.constant(0)
     src_count = zero
     src_ph_vars = feed_data.src_ph_vars
 
     LSA = feed_data.local
+
+    polarisation_type = slvr_cfg.get('polarisation_type', 'linear')
 
     # Pull RIME inputs out of the feed staging_area
     # of the relevant shard, adding the feed once
@@ -946,8 +949,8 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         # Compute sine and cosine of parallactic angles
         pa_sin, pa_cos = rime.parallactic_angle_sin_cos(D.parallactic_angles)
         # Compute feed rotation
-        feed_rotation = rime.feed_rotation(pa_sin, pa_cos,
-                                           feed_type='linear', CT=CT)
+        feed_rotation = rime.feed_rotation(pa_sin, pa_cos, CT=CT,
+                                           feed_type=polarisation_type)
 
     def antenna_jones(lm, stokes, alpha, ref_freq):
         """
@@ -971,7 +974,8 @@ def _construct_tensorflow_expression(feed_data, device, shard):
         # Compute the square root of the brightness matrix
         # (as well as the sign)
         bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
-            D.frequency, ref_freq, CT=CT)
+            D.frequency, ref_freq, CT=CT,
+            polarisation_type=polarisation_type)
 
         # Check for nans/infs in the bsqrt
         bsqrt_msg = ("Check that your stokes parameters "

@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
-def brightness_numpy(stokes, alpha, frequency, ref_freq):
+def brightness_numpy(stokes, alpha, frequency, ref_freq, pol_type):
     nsrc, ntime, _ = stokes.shape
     nchan, = frequency.shape
 
@@ -12,6 +12,13 @@ def brightness_numpy(stokes, alpha, frequency, ref_freq):
     Q = stokes[:,:,1].reshape(nsrc, ntime, 1)
     U = stokes[:,:,2].reshape(nsrc, ntime, 1)
     V = stokes[:,:,3].reshape(nsrc, ntime, 1)
+
+    if pol_type == "linear":
+        pass
+    elif pol_type == "circular":
+        Q, U, V = V, Q, U
+    else:
+        raise ValueError("Invalid pol_type '{}'".format(pol_type))
 
     # Compute the spectral index
     freq_ratio = frequency[None,None,:]/ref_freq[:,None,None]
@@ -42,14 +49,16 @@ class TestBSqrt(unittest.TestCase):
     def test_b_sqrt(self):
         """ Test the BSqrt operator """
         # List of type constraint for testing this operator
-        permutations = [[np.float32, np.complex64, {'rtol': 1e-3}],
-                             [np.float64, np.complex128, {}]]
+        permutations = [[np.float32, np.complex64, 'linear', {'rtol': 1e-3}],
+                        [np.float32, np.complex64, 'circular', {'rtol': 1e-3}],
+                        [np.float64, np.complex128, 'linear', {}],
+                        [np.float64, np.complex128, 'circular', {}]]
 
         # Run test with the type combinations above
-        for FT, CT, tols in permutations:
-            self._impl_test_b_sqrt(FT, CT, tols)
+        for FT, CT, pol_type, tols in permutations:
+            self._impl_test_b_sqrt(FT, CT, pol_type, tols)
 
-    def _impl_test_b_sqrt(self, FT, CT, tols):
+    def _impl_test_b_sqrt(self, FT, CT, pol_type, tols):
         """ Implementation of the BSqrt operator test """
 
         nsrc, ntime, na, nchan = 10, 50, 27, 32
@@ -91,7 +100,8 @@ class TestBSqrt(unittest.TestCase):
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return self.rime.b_sqrt(*tf_args, CT=CT)
+                return self.rime.b_sqrt(*tf_args, CT=CT,
+                                        polarisation_type=pol_type)
 
         # Pin operation to CPU
         cpu_op = _pin_op('/cpu:0', *tf_args)
@@ -109,7 +119,7 @@ class TestBSqrt(unittest.TestCase):
             cpu_bsqrt, cpu_invert = S.run(cpu_op)
 
             # Get our actual brightness matrices
-            b = brightness_numpy(stokes, alpha, frequency, ref_freq)
+            b = brightness_numpy(stokes, alpha, frequency, ref_freq, pol_type)
             b_2x2 = b.reshape(nsrc, ntime, nchan, 2, 2)
             b_sqrt_2x2 = cpu_bsqrt.reshape(nsrc, ntime, nchan, 2, 2)
 
