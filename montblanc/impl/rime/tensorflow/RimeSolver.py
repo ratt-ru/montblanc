@@ -162,7 +162,7 @@ class RimeSolver(MontblancTensorflowSolver):
         from tensorflow.python.client import device_lib
         devices = device_lib.list_local_devices()
 
-        device_type = slvr_cfg.get('device_type', 'GPU').upper()
+        device_type = slvr_cfg['device_type'].upper()
 
         gpus = [d.name for d in devices if d.device_type == 'GPU']
         cpus = [d.name for d in devices if d.device_type == 'CPU']
