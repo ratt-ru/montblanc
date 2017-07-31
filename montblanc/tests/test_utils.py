@@ -28,8 +28,6 @@ import montblanc
 import montblanc.factory
 import montblanc.util as mbu
 
-from montblanc.config import RimeSolverConfig as Options
-
 class TestUtils(unittest.TestCase):
     """
     TestUtil class defining unit tests for
@@ -44,67 +42,6 @@ class TestUtils(unittest.TestCase):
     def tearDown(self):
         """ Tear down each test case """
         pass
-
-    def test_numeric_shapes(self):
-        """ Test that we can convert shapes with string arguments into numeric shapes """
-
-        shape_one = (5,'ntime','nchan')
-        shape_two = (10, 'nsrc')
-        ignore = ['ntime']
-
-        ri = np.random.randint
-
-        gns = mbu.shape_from_str_tuple
-        P = { 'ntime' : ri(5,10), 'nbl' : ri(3,5), 'nchan' : 4,
-            'nsrc' : ri(4,10) }
-
-        ntime, nbl, nchan, nsrc = P['ntime'], P['nbl'], P['nchan'], P['nsrc']
-
-        self.assertTrue(gns(shape_one, P) == (5,ntime,nchan))
-        self.assertTrue(gns(shape_two, P) == (10,nsrc))
-
-        self.assertTrue(gns(shape_one, P, ignore=ignore) == (5,nchan))
-        self.assertTrue(gns(shape_two, P, ignore=ignore) == (10,nsrc))
-
-    def test_array_conversion(self):
-        """
-        Test that we can produce NumPy code that automagically translates
-        between shapes with string expressions
-        """
-
-        props = { 'ntime' : np.random.randint(5,10),
-                    'nbl' : np.random.randint(3,5),
-                    'nchan' : 16 }
-
-        ntime, nbl, nchan = props['ntime'], props['nbl'], props['nchan']
-
-        f = mbu.array_convert_function(
-            (3,'ntime*nchan','nbl'), ('nchan', 'nbl*ntime*3'), props)
-
-        ary = np.random.random(size=(3, ntime*nchan, nbl))
-        self.assertTrue(np.all(f(ary) ==
-            ary.reshape(3,ntime,nchan,nbl) \
-            .transpose(2,3,1,0) \
-            .reshape(nchan, nbl*ntime*3)))
-
-    def test_eval_expr(self):
-        """ Test evaluation expression and parsing """
-        props = { 'ntime' : 7, 'nbl' : 4 }
-
-        self.assertTrue(mbu.eval_expr(
-            '1+2*ntime+nbl', props) == (1+2*props['ntime']+props['nbl']))
-
-        self.assertTrue(mbu.eval_expr(
-            'ntime*nbl*3', props) == props['ntime']*props['nbl']*3)
-
-        self.assertTrue(mbu.eval_expr_names_and_nrs(
-            '1+2*ntime+nbl') == [1,2,'ntime','nbl'])
-
-        self.assertTrue(mbu.eval_expr_names_and_nrs(
-            'ntime*nbl+3-1') == ['ntime','nbl',3,1])
-
-        self.assertTrue(mbu.eval_expr_names_and_nrs(
-            'ntime*3+1-nbl') == ['ntime',3,1,'nbl'])
 
     def test_baseline_antenna_nrs(self):
         """ Test conversion between antenna and baseline numbers """
@@ -160,84 +97,6 @@ class TestUtils(unittest.TestCase):
             if np.issubdtype(dtype, np.complexfloating):
                 proportion_cplx = np.sum(np.iscomplex(random_ary)) / random_ary.size
                 self.assertTrue(proportion_cplx > 0.9)
-
-    def test_sky_model(self):
-        """ Test sky model file loading """
-
-        sky_model_file_contents = (
-            '# format npsrc: l, m, I, Q, U, V\n'
-            '11, 12, 13, 14, 15, 16\n'
-            '21, 22, 23, 24, 25, 26\n'
-            '# format ngsrc: l, m, I, Q, U, V, el, em, eR\n'
-            '31, 32, 33, 34, 35, 36, 37, 38, 39\n'
-            '41, 42, 43, 44, 45, 46, 47, 48, 49\n')
-
-        with tempfile.NamedTemporaryFile('w') as f:
-            f.write(sky_model_file_contents)
-            f.flush()
-
-            result = mbu.parse_sky_model(f.name)
-            A, S = result.arrays, result.src_counts
-
-        self.assertTrue(S['npsrc'] == 2)
-        self.assertTrue(S['ngsrc'] == 2)
-
-        self.assertTrue(A['l'] == ['11', '21', '31', '41'])
-        self.assertTrue(A['m'] == ['12', '22', '32', '42'])
-        self.assertTrue(A['I'] == ['13', '23', '33', '43'])
-        self.assertTrue(A['Q'] == ['14', '24', '34', '44'])
-        self.assertTrue(A['U'] == ['15', '25', '35', '45'])
-        self.assertTrue(A['V'] == ['16', '26', '36', '46'])
-        self.assertTrue(A['el'] == ['37', '47'])
-        self.assertTrue(A['em'] == ['38', '48'])
-        self.assertTrue(A['eR'] == ['39', '49'])
-
-        ft = np.float32
-        shape = (2, S['npsrc'] + S['ngsrc'])
-        ary = result.shape_arrays(['l','m'], shape, ft)
-        self.assertTrue(ary.shape == shape)
-
-        fl = (((np.arange(4) + 1)*10) + 1).astype(ft)
-        fm = (((np.arange(4) + 1)*10) + 2).astype(ft)
-        self.assertTrue(np.all(ary[0] == fl))
-        self.assertTrue(np.all(ary[1] == fm))
-
-    def test_config_file(self):
-        """ Test config file """
-        import tempfile
-
-        key, value = 'frobulate', 'laksfjdsflk'
-
-        cfg_file_contents = (
-            "[montblanc]\n"
-            "na = 10\n"
-            "nchan = 64\n"
-            "{k} = {v}\n".format(k=key, v=value))
-
-        with tempfile.NamedTemporaryFile('w') as f:
-            f.write(cfg_file_contents)
-            f.flush()
-
-            # Create some keyword arguments used for
-            # generating the RIME solver configuration.
-            # We provide a configuration file that will
-            # provide some defaults which should be overwridden
-            # by these keyword arguments.
-            D = {
-                Options.CFG_FILE: f.name,
-                Options.DATA_SOURCE: Options.DATA_SOURCE_DEFAULT,
-                Options.VERSION: Options.VERSION_FOUR,
-                Options.NA: 14
-            }
-
-            slvr_cfg = montblanc.rime_solver_cfg(**D)
-
-            assert slvr_cfg[Options.NA] == 14
-            assert slvr_cfg[Options.NCHAN] == 64
-            assert slvr_cfg[Options.VERSION] == Options.VERSION_FOUR
-            assert slvr_cfg[key] == value
-
-
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestUtils)

@@ -24,8 +24,6 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.config import RimeSolverConfig as Options
-
 from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
 from montblanc.impl.rime.tensorflow.sources import (SourceProvider,
     FitsBeamSourceProvider,
@@ -109,10 +107,6 @@ if __name__ == '__main__':
         type=lambda v: v.lower() in ("yes", "true", "t", "1"),
         choices=[True, False], default=False,
         help='Handle auto-correlations')
-    parser.add_argument('-v','--version',dest='version', type=str,
-        default=Options.VERSION_TENSORFLOW,
-        choices=[Options.VERSION_TENSORFLOW],
-        help='RIME Pipeline Version.')
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -121,12 +115,10 @@ if __name__ == '__main__':
     [h.setLevel(logging.DEBUG) for h in montblanc.log.handlers]
 
     slvr_cfg = montblanc.rime_solver_cfg(
-        ntime=10000, na=3000, nchan=128,
         mem_budget=1024*1024*1024,
-        data_source=Options.DATA_SOURCE_DEFAULT,
+        data_source='default',
         dtype='double',
-        auto_correlations=args.auto_correlations,
-        version=args.version)
+        auto_correlations=args.auto_correlations)
 
     with montblanc.rime_solver(slvr_cfg) as slvr:
         # Manages measurement sets
