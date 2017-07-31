@@ -195,8 +195,8 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Construct tensorflow expressions for each shard
             self._tf_expr = [_construct_tensorflow_expression(
-                    slvr_cfg, self._tf_feed_data,
-                    dev, self._shard(d,s))
+                    slvr_cfg,
+                    self._tf_feed_data, dev, self._shard(d,s))
                 for d, dev in enumerate(self._devices)
                 for s in range(self._shards_per_device)]
 
@@ -930,24 +930,13 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
     LSA = feed_data.local
 
+    polarisation_type = slvr_cfg.get('polarisation_type', 'linear')
+
     # Pull RIME inputs out of the feed staging_area
     # of the relevant shard, adding the feed once
     # inputs to the dictionary
     D = LSA.feed_many[shard].get_to_attrdict()
     D.update({k: fo.var for k, fo in LSA.feed_once.iteritems()})
-
-    def _get_pol_type(slvr_cfg):
-        pol_type = slvr_cfg.get('polarisation_type', 'linear')
-        valid_pols = ('linear', 'circular')
-
-        if not pol_type in valid_pols:
-            raise ValueError("'{}' is not a valid polarisation type. "
-                            "Use one of '{}'".format(pol_type, valid_pols))
-
-        return pol_type
-
-    # Get polarisation type, assuming linear...
-    pol_type = _get_pol_type(slvr_cfg)
 
     with tf.device(device):
         # Infer chunk dimensions
@@ -959,11 +948,9 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
         # Compute sine and cosine of parallactic angles
         pa_sin, pa_cos = rime.parallactic_angle_sin_cos(D.parallactic_angles)
-
         # Compute feed rotation
-        feed_rotation = rime.feed_rotation(pa_sin, pa_cos,
-                                           feed_type=pol_type,
-                                           CT=CT)
+        feed_rotation = rime.feed_rotation(pa_sin, pa_cos, CT=CT,
+                                           feed_type=polarisation_type)
 
     def antenna_jones(lm, stokes, alpha, ref_freq):
         """
@@ -971,15 +958,6 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
         lm, stokes and alpha are the source variables.
         """
-
-        # b_sqrt handles linear polarisations by default
-        if pol_type == 'linear':
-            pass
-        # swap stokes parameters around to handle circular polarisations
-        elif pol_type == 'circular':
-            stokes = rime.circular_stokes_swap(stokes)
-        else:
-            raise ValueError("Invalid polarisation_type '{}'".format(pol_type))
 
         # Compute the complex phase
         cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
@@ -996,7 +974,8 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         # Compute the square root of the brightness matrix
         # (as well as the sign)
         bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
-            D.frequency, ref_freq, CT=CT)
+            D.frequency, ref_freq, CT=CT,
+            polarisation_type=polarisation_type)
 
         # Check for nans/infs in the bsqrt
         bsqrt_msg = ("Check that your stokes parameters "

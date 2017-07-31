@@ -18,8 +18,16 @@ typedef Eigen::ThreadPoolDevice CPUDevice;
 template <typename FT, typename CT>
 class BSqrt<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
+private:
+    std::string polarisation_type;
+
 public:
-    explicit BSqrt(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+    explicit BSqrt(tensorflow::OpKernelConstruction * context) :
+        tensorflow::OpKernel(context)
+    {
+        OP_REQUIRES_OK(context, context->GetAttr("polarisation_type",
+                                                 &polarisation_type));
+    }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
@@ -63,7 +71,14 @@ public:
         auto b_sqrt = b_sqrt_ptr->tensor<CT, 4>();
         auto sgn_brightness = invert_ptr->tensor<tf::int8, 2>();
 
-        enum { iI, iQ, iU, iV };
+        // Linear polarisation or circular polarisation
+        bool linear = (polarisation_type == "linear");
+        unsigned int iI = 0;
+        unsigned int iQ = linear ? 1 : 3;
+        unsigned int iU = linear ? 2 : 1;
+        unsigned int iV = linear ? 3 : 2;
+
+        // Correlation indices
         enum { XX, XY, YX, YY };
 
         constexpr FT zero = 0.0;
@@ -74,7 +89,10 @@ public:
         {
             for(int time=0; time < ntime; ++time)
             {
-                // Reference stokes parameters
+                // Reference stokes parameters.
+                // Input order of stokes parameters differs
+                // depending on whether linear or circular polarisation
+                // is used, but the rest of the calculation is the same...
                 FT I = stokes(src, time, iI);
                 FT Q = stokes(src, time, iQ);
                 FT U = stokes(src, time, iU);

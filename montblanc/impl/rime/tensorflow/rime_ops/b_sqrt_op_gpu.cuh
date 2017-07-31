@@ -68,6 +68,7 @@ __global__ void rime_b_sqrt(
     const typename Traits::frequency_type * ref_freq,
     typename Traits::visibility_type * B_sqrt,
     typename Traits::sgn_brightness_type * sgn_brightness,
+    bool linear,
     int nsrc, int ntime, int nchan)
 {
     // Simpler float and complex types
@@ -112,10 +113,10 @@ __global__ void rime_b_sqrt(
 
     // Read in stokes parameters (IQUV)
     ST _stokes = stokes[i];
-    FT & I = _stokes.x;
-    FT & Q = _stokes.y;
-    FT & U = _stokes.z;
-    FT & V = _stokes.w;
+    FT & I = linear ? _stokes.x : _stokes.x;
+    FT & Q = linear ? _stokes.y : _stokes.w;
+    FT & U = linear ? _stokes.z : _stokes.y;
+    FT & V = linear ? _stokes.w : _stokes.z;
 
     I *= power;
     Q *= power;
@@ -184,7 +185,16 @@ template <typename FT, typename CT>
 class BSqrt<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 public:
-    explicit BSqrt(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+private:
+    std::string polarisation_type;
+
+public:
+    explicit BSqrt(tensorflow::OpKernelConstruction * context) :
+        tensorflow::OpKernel(context)
+    {
+        OP_REQUIRES_OK(context, context->GetAttr("polarisation_type",
+                                                 &polarisation_type));
+    }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
@@ -200,6 +210,8 @@ public:
         int nsrc = in_stokes.dim_size(0);
         int ntime = in_stokes.dim_size(1);
         int nchan = in_frequency.dim_size(0);
+
+        bool linear = (polarisation_type == "linear");
 
         // Reason about the shape of the b_sqrt tensor and
         // create a pointer to it
@@ -230,12 +242,6 @@ public:
         dim3 grid(montblanc::grid_from_thread_block(
             blocks, nchan, ntime, nsrc));
 
-        //printf("Threads per block: X %d Y %d Z %d\n",
-        //    blocks.x, blocks.y, blocks.z);
-
-        //printf("Grid: X %d Y %d Z %d\n",
-        //    grid.x, grid.y, grid.z);
-
         // Get the device pointers of our GPU memory arrays
         auto stokes = reinterpret_cast<const typename Tr::stokes_type *>(
             in_stokes.flat<FT>().data());
@@ -255,6 +261,7 @@ public:
         rime_b_sqrt<Tr> <<<grid, blocks, 0, stream>>>(stokes,
             alpha, frequency, ref_freq,
             b_sqrt, sgn_brightness,
+            linear,
             nsrc, ntime, nchan);
     }
 };

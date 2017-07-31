@@ -30,6 +30,9 @@ cfg_file = os.path.join(meq_dir, 'tdlconf.profiles')
 sim_script = os.path.join(meq_dir, 'turbo-sim.py')
 tigger_sky_file = os.path.join(meq_dir, 'sky_model.txt')
 
+# Polarisation type
+pol_type = 'linear'
+
 # Directory in which we expect our beams to be located
 beam_on = 1
 beam_dir = os.path.join(data_dir, 'beams')
@@ -37,9 +40,6 @@ beam_file_prefix = 'beam'
 base_beam_file = os.path.join(beam_dir, beam_file_prefix)
 beam_file_pattern = ''.join((base_beam_file, '_$(corr)_$(reim).fits'))
 l_axis = '-X'
-
-# Polarisation type
-pol_type = 'linear'
 
 # Find the location of the meqtree pipeliner script
 meqpipe_actual = subprocess.check_output(['which', meqpipe]).strip()
@@ -291,8 +291,8 @@ slvr_cfg = montblanc.rime_solver_cfg(
     mem_budget=1024*1024*1024,
     data_source=Options.DATA_SOURCE_DEFAULT,
     dtype='double' if dtype == np.float64 else 'float',
-    auto_correlations=False,
     polarisation_type=pol_type,
+    auto_correlations=False,
     version='tf')
 
 slvr = montblanc.rime_solver(slvr_cfg)
