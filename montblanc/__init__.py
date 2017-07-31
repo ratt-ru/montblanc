@@ -58,41 +58,6 @@ class MontblancConstants(object):
 # Create a constants object
 constants = MontblancConstants()
 
-def source_types():
-    """
-    Returns the source types available in montblanc
-
-    >>> montblanc.source_types()
-    %s
-    """
-    return montblanc.src_types.SOURCE_VAR_TYPES.keys()
-
-source_types.__doc__ %= montblanc.src_types.SOURCE_VAR_TYPES.keys()
-
-def sources(**kwargs):
-    """
-    Keyword arguments
-    -----------------
-    Keyword argument names should be name of source types
-    registered with montblanc. Their values should be
-    the number of these sources types.
-
-    Returns
-    -------
-    A dict containing source type numbers for all
-    valid source types (%s).
-
-    >>> %s
-    %s
-
-    """    
-    return montblanc.src_types.default_sources(**kwargs)
-
-# Substitute docstring variables
-sources.__doc__ %= (', '.join(source_types()),
-    'montblanc.sources(point=10, gaussian=20)',
-    sources(point=10, gaussian=20))
-
 def rime_solver_cfg(**kwargs):
     """
     Produces a SolverConfiguration object, inherited from
@@ -107,25 +72,30 @@ def rime_solver_cfg(**kwargs):
     Returns
     -------
     A SolverConfiguration object.
-
-    montblanc.rime_solver_cfg(msfile='WSRT.MS',
-        sources=montblanc.source(point=10,gaussian=20))
-
-    Valid configuration options are
-    %s
     """
 
-    from montblanc.impl.rime.slvr_config import (
-        RimeSolverConfig as Options)
+    from configuration import load_config, config_validator
 
-    slvr_cfg = Options().gen_cfg(**kwargs)
+    def _merge_copy(d1, d2):
+        return { k: _merge_copy(d1[k], d2[k]) if k in d1
+                                                and isinstance(d1[k], dict)
+                                                and isinstance(d2[k], dict)
+                                            else d2[k] for k in d2 }
 
-    # Assume a MeasurementSet data source, if none is supplied
-    slvr_cfg.setdefault(Options.DATA_SOURCE, Options.DATA_SOURCE_MS)
+    try:
+        cfg_file = kwargs.pop('cfg_file')
+    except KeyError as e:
+        slvr_cfg = kwargs
+    else:
+        cfg = load_config(cfg_file)
+        slvr_cfg = _merge_copy(cfg, kwargs)
 
-    return slvr_cfg
+    validator = config_validator()
+    if not validator.validate(slvr_cfg):
+        raise ValueError("Configuration Validation Error\n{}".format(
+                            validator._errors))
 
-rime_solver_cfg.__doc__ %= (montblanc.config.describe_options())
+    return validator.document
 
 def rime_solver(slvr_cfg):
     """
@@ -146,6 +116,3 @@ def rime_solver(slvr_cfg):
     import montblanc.factory
 
     return montblanc.factory.rime_solver(slvr_cfg)
-
-def tf_rime_graph(slvr_cfg):
-    pass

@@ -22,7 +22,6 @@ import sys
 
 import montblanc
 
-from montblanc.config import RimeSolverConfig as Options
 from montblanc.impl.rime.tensorflow.sinks.sink_provider import SinkProvider
 import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 

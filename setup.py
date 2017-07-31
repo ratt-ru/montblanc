@@ -168,9 +168,11 @@ else:
     # Add binary/C extension type packages
     install_requires += [
         'astropy >= 1.3.0',
+        'cerberus >= 1.1',
         'numpy >= 1.11.3',
         'numexpr >= 2.6.1',
         'python-casacore >= 2.1.2',
+        'ruamel.yaml >= 0.15.22',
         "{} >= 1.2.1".format(tensorflow_package),
     ]
 

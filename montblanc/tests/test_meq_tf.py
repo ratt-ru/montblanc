@@ -222,8 +222,6 @@ cmd_list = ['python',
 
 import montblanc
 
-from montblanc.config import RimeSolverConfig as Options
-
 from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
 from montblanc.impl.rime.tensorflow.sources import (SourceProvider,
     MSSourceProvider,
@@ -289,7 +287,7 @@ class RadioSourceProvider(SourceProvider):
 
 slvr_cfg = montblanc.rime_solver_cfg(
     mem_budget=1024*1024*1024,
-    data_source=Options.DATA_SOURCE_DEFAULT,
+    data_source='default',
     dtype='double' if dtype == np.float64 else 'float',
     polarisation_type=pol_type,
     auto_correlations=False,

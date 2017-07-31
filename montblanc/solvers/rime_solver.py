@@ -28,7 +28,6 @@ except ImportError:
 
 import montblanc
 from hypercube import HyperCube
-from montblanc.config import RimeSolverConfig as Options
 
 import montblanc.util as mbu
 
@@ -45,26 +44,20 @@ class RIMESolver(object):
         self._slvr_cfg = slvr_cfg
 
         # Configure our floating point and complex types
-        if slvr_cfg[Options.DTYPE] == Options.DTYPE_FLOAT:
+        if slvr_cfg['dtype'] == 'float':
             self.ft = np.float32
             self.ct = np.complex64
-        elif slvr_cfg[Options.DTYPE] == Options.DTYPE_DOUBLE:
+        elif slvr_cfg['dtype'] == 'double':
             self.ft = np.float64
             self.ct = np.complex128
         else:
-            raise TypeError('Invalid dtype %s ' % slvr_cfg[Options.DTYPE])
+            raise TypeError('Invalid dtype %s ' % slvr_cfg['dtype'])
 
         # Maintain a hypercube
         self._cube = HyperCube()
 
-        # Should we use the weight vector when computing the X2?
-        self._use_weight_vector = slvr_cfg.get(Options.WEIGHT_VECTOR)
-
         # Is this solver handling auto-correlations
-        self._is_auto_correlated = slvr_cfg.get(Options.AUTO_CORRELATIONS)
-
-        # Is this solver outputting visibilities or residuals
-        self._visibility_output = slvr_cfg.get(Options.VISIBILITY_OUTPUT)
+        self._is_auto_correlated = slvr_cfg['auto_correlations']
 
     @property
     def hypercube(self):

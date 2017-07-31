@@ -28,7 +28,6 @@ from hypercube.array_factory import (
     generic_stitch)
 
 from rime_solver import RIMESolver
-from montblanc.config import SolverConfig as Options
 
 class MontblancTensorflowSolver(RIMESolver):
     def __init__(self, slvr_cfg):

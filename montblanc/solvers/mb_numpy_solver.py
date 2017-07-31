@@ -27,7 +27,6 @@ from hypercube.array_factory import (
     generic_stitch)
 
 from rime_solver import RIMESolver
-from montblanc.config import SolverConfig as Options
 
 class MontblancNumpySolver(RIMESolver):
     def __init__(self, slvr_cfg):
@@ -35,7 +34,7 @@ class MontblancNumpySolver(RIMESolver):
 
     def create_arrays(self, ignore=None, supplied=None):
         """
-        Create any necessary arrays on the solver. 
+        Create any necessary arrays on the solver.
 
         Arguments
         ---------
@@ -83,4 +82,4 @@ class MontblancNumpySolver(RIMESolver):
                 pass
             else:
                 self.init_array(name, cpu_ary,
-                    array.get(Options.DATA_SOURCE_DEFAULT, None))    
+                    array.get(Options.DATA_SOURCE_DEFAULT, None))

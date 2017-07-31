@@ -29,7 +29,6 @@ from hypercube.array_factory import (
     gpuarray_factory)
 
 from rime_solver import RIMESolver
-from montblanc.config import SolverConfig as Options
 import montblanc.util as mbu
 
 class MontblancCUDASolver(RIMESolver):
@@ -51,7 +50,7 @@ class MontblancCUDASolver(RIMESolver):
             pass
         else:
             self.init_array(name, cpu_ary,
-                array.get(Options.DATA_SOURCE_DEFAULT, None))    
+                array.get(Options.DATA_SOURCE_DEFAULT, None))
 
         # We don't use gpuarray.zeros, since it fails for
         # a zero-length array. This is kind of bad since
@@ -125,7 +124,7 @@ class MontblancCUDASolver(RIMESolver):
 
     def create_arrays(self, ignore=None, supplied=None):
         """
-        Create any necessary arrays on the solver. 
+        Create any necessary arrays on the solver.
 
         Arguments
         ---------
@@ -180,7 +179,7 @@ class MontblancCUDASolver(RIMESolver):
     def shutdown(self):
         """ Stop the RIME solver """
         with self.context:
-            self.pipeline.shutdown(self)             
+            self.pipeline.shutdown(self)
 
     def transfer_method_name(self, name):
         """ Constructs a transfer method name, given the array name """
@@ -188,4 +187,4 @@ class MontblancCUDASolver(RIMESolver):
 
     def retrieve_method_name(self, name):
         """ Constructs a transfer method name, given the array name """
-        return 'retrieve_' + name            
+        return 'retrieve_' + name

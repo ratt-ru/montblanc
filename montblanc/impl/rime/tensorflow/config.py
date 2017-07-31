@@ -23,8 +23,6 @@ import numpy as np
 import montblanc
 import montblanc.util as mbu
 
-from montblanc.config import (RimeSolverConfig as Options)
-
 from montblanc.util import (
     random_float as rf,
     random_complex as rc)
