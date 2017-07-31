@@ -66,7 +66,7 @@ P = [
 
 def default_base_ant_pairs(self, context):
     """ Compute base antenna pairs """
-    k = 0 if context.cfg[Options.AUTO_CORRELATIONS] == True else 1
+    k = 0 if context.cfg['auto_correlations'] == True else 1
     na = context.dim_global_size('na')
     gen = (i.astype(context.dtype) for i in np.triu_indices(na, k))
 

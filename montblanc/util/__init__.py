@@ -25,13 +25,7 @@ import re
 
 import montblanc
 
-from ary_dim_eval import eval_expr, eval_expr_names_and_nrs
-from sky_model_parser import parse_sky_model
 from parallactic_angles import parallactic_angles
-
-
-from const_data import (
-    create_rime_const_data)
 
 from montblanc.src_types import (
     source_types,

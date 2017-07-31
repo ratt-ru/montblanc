@@ -69,15 +69,6 @@ class RIMESolver(object):
     def is_double(self):
         return self.ft == np.float64
 
-    def use_weight_vector(self):
-        return self._use_weight_vector
-
-    def outputs_model_visibilities(self):
-        return self._visibility_output == Options.VISIBILITY_OUTPUT_MODEL
-
-    def outputs_residuals(self):
-        return self._visibility_output == Options.VISIBILITY_OUTPUT_RESIDUALS
-
     def is_autocorrelated(self):
         """ Does this solver handle autocorrelations? """
         return self._is_auto_correlated == True

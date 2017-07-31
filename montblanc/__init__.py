@@ -21,8 +21,6 @@
 import inspect
 import os
 
-import montblanc.config
-
 from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
 from montblanc.version import __version__
