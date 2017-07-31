@@ -28,7 +28,13 @@ def config_validator():
             '__description__': "Data Source for initialising inputs. "
                                "If 'default', initialised with defaults, "
                                "If 'test', initialised with sensible "
-                               "test data. " },
+                               "test data." },
+
+        'device_type': {
+            'type': 'string',
+            'allowed': ['CPU', 'GPU'],
+            'default': 'GPU',
+            '__description__': "Device to use by default." },
 
         'dtype': {
             'type': 'string',
