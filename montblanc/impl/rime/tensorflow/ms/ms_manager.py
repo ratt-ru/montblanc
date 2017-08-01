@@ -253,9 +253,6 @@ class MeasurementSetManager(object):
                     msr=oms.nrows(), ms=msname,
                     er=expected_rows, rd=row_desc, d=dim_desc))
 
-        # Have we indicated dimensions updates?
-        self._dim_updates_indicated = False
-
     def close(self):
         # Close all the tables
         for table in self._tables.itervalues():
@@ -274,11 +271,6 @@ class MeasurementSetManager(object):
         return self._nchanperband
 
     def updated_dimensions(self):
-        # Dimension updates bave been indicated, don't send them again
-        if self._dim_updates_indicated is True:
-            return ()
-
-        self._dim_updates_indicated = True
         return [(k, v) for k, v in self._dim_sizes.iteritems()]
 
     @property
