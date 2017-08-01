@@ -323,9 +323,6 @@ class FitsBeamSourceProvider(SourceProvider):
         # Have we initialised this object?
         self._initialised = False
 
-        # Have we already reported our dimensions?
-        self._dim_updates_indicated = False
-
     def _initialise(self, feed_type="linear"):
         """
         Initialise the object by generating appropriate filenames,
@@ -390,12 +387,6 @@ class FitsBeamSourceProvider(SourceProvider):
 
     def updated_dimensions(self):
         """ Indicate dimension sizes """
-
-        # Dimension updates have been indicated, don't send them again
-        if self._dim_updates_indicated is True:
-            return ()
-
-        self._dim_updates_indicated = True
         return self._dim_updates
 
     @property
