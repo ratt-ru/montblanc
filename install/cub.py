@@ -97,7 +97,7 @@ def is_cub_installed(readme_filename, header_filename, cub_version_str):
 def install_cub(mb_inc_path):
     """ Downloads and installs cub into mb_inc_path """
     cub_url = 'https://github.com/NVlabs/cub/archive/1.6.4.zip'
-    cub_sha_hash = '7b669a049f05db811086d7774847cade6c88d1ec'
+    cub_sha_hash = '0d5659200132c2576be0b3959383fa756de6105d'
     cub_version_str = 'Current release: v1.6.4 (12/06/2016)'
     cub_zip_file = 'cub.zip'
     cub_zip_dir = 'cub-1.6.4'
