@@ -1,7 +1,7 @@
 Montblanc
 =========
 
-A `Tensorflow <https://www.tensorflow.org/>_`_ implementation
+A `Tensorflow <https://www.tensorflow.org/>`_ implementation
 of the Radio Interferometry Measurement Equation,
 and a foothill of Mount Exaflop.
 
