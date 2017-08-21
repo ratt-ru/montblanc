@@ -4,7 +4,7 @@ Requirements
 If you wish to take advantage of GPU Acceleration, the following are required:
 
 - `CUDA 8.0  <CUDA_>`_.
-- `cuDNN 5.1 <cudnn_>`_ for CUDA 8.0.
+- `cuDNN 6.0 <cudnn_>`_ for CUDA 8.0.
 - A Kepler or later model NVIDIA GPU.
 
 Installation
@@ -15,7 +15,7 @@ Certain pre-requisites must be installed:
 Pre-requisites
 ~~~~~~~~~~~~~~
 
-- GPU Acceleration requires `CUDA 8.0 <CUDA_>`_ and `cuDNN 5.1 for CUDA 8.0 <cudnn_>`_.
+- GPU Acceleration requires `CUDA 8.0 <CUDA_>`_ and `cuDNN 6.0 for CUDA 8.0 <cudnn_>`_.
 
   - It is often easier to CUDA install from the `NVIDIA <CUDA_>`_ site on Linux systems.
   - You will need to sign up for the `NVIDIA Developer Program <cudnn_>`_ to download cudNN.
@@ -25,7 +25,7 @@ Pre-requisites
   If your CUDA installation does not live in ``/usr``, it  helps to set a
   number of environment variables for this to proceed smoothly.
   For example, if CUDA is installed in ``/usr/local/cuda-8.0`` and cuDNN is unzipped
-  into ``/usr/local/cudnn-5.1-cuda-8.0``, run the following on the command line or
+  into ``/usr/local/cudnn-6.0-cuda-8.0``, run the following on the command line or
   place it in your ``.bashrc``
 
   .. code:: bash
@@ -36,8 +36,8 @@ Pre-requisites
       $ export LD_LIBRARY_PATH=$CUDA_PATH/lib64:$LD_LIBRARY_PATH
       $ export LD_LIBRARY_PATH=$CUDA_PATH/extras/CUPTI/lib64/:$LD_LIBRARY_PATH
 
-      # CUDNN 5.1 (CUDA 8.0)
-      $ export CUDNN_HOME=/usr/local/cudnn-5.1-cuda-8.0
+      # CUDNN 6.0 (CUDA 8.0)
+      $ export CUDNN_HOME=/usr/local/cudnn-6.0-cuda-8.0
       $ export C_INCLUDE_PATH=$CUDNN_HOME/include:$C_INCLUDE_PATH
       $ export CPLUS_INCLUDE_PATH=$CUDNN_HOME/include:$CPLUS_INCLUDE_PATH
       $ export LD_LIBRARY_PATH=$CUDNN_HOME/lib64:$LD_LIBRARY_PATH
