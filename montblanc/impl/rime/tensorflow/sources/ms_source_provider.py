@@ -47,9 +47,6 @@ class MSSourceProvider(SourceProvider):
             the Measurement Set.
         vis_column: str
             Column from which observed visibilities will be read
-        cache: bool
-            Indicates whether data will be cached on this
-            Source Provider.
         """
         self._manager = manager
         self._name = "Measurement Set '{ms}'".format(ms=manager.msname)

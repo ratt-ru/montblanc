@@ -80,6 +80,14 @@ Source Provider Implementations
 
     .. automethod:: __init__
 
+.. module:: montblanc.impl.rime.tensorflow.sources.cached_source_provider
+
+.. autoclass:: CachedSourceProvider()
+    :members:
+
+    .. automethod:: __init__
+
+
 Sink Provider Implementations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
