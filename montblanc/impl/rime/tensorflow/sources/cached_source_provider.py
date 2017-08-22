@@ -23,6 +23,7 @@ import functools
 import threading
 import types
 
+import montblanc
 from .source_provider import SourceProvider
 
 def _cache(method):
@@ -51,6 +52,16 @@ def _cache(method):
                 array_cache[key] = method(context)
 
             return array_cache[key]
+
+    return memoizer
+
+def _proxy(method):
+    """
+    Decorator returning a method that proxies a data source.
+    """
+    @functools.wraps(method)
+    def memoizer(self, context):
+        return method(context)
 
     return memoizer
 
@@ -86,19 +97,32 @@ class CachedSourceProvider(SourceProvider):
         prov_data_sources = { n: ds for prov in providers
                             for n, ds in prov.sources().iteritems() }
 
+        # Uniquely identify data source keys
+        prov_ds = set(prov_data_sources.keys())
+
         # Cache all data sources by default
         if cache_data_sources is None:
-            cache_data_sources = prov_data_sources.keys()
+            cache_data_sources = prov_ds
+        else:
+            # Uniquely identify cached data sources
+            cache_data_sources = set(cache_data_sources)
+            ds_diff = list((cache_data_sources.difference(prov_ds)))
 
-        # Uniquely identify cached data sources
-        cache_data_sources = set(cache_data_sources)
+            if len(ds_diff) > 0:
+                montblanc.log.warning("'{}' was requested to cache the "
+                                     "following data source(s) '{}' "
+                                    "but they were not present on the "
+                                    "supplied providers '{}'".format(
+                                        self.name(), ds_diff,
+                                        [p.name() for p in providers]))
+
 
         # Construct data sources on this source provider
         for n, ds in prov_data_sources.iteritems():
             if n in cache_data_sources:
                 setattr(self, n, types.MethodType(_cache(ds), self))
             else:
-                setattr(self, n, lambda *a, **kw: ds(*a, **kw))
+                setattr(self, n, types.MethodType(_proxy(ds), self))
 
     def init(self, init_context):
         """ Perform any initialisation required """
