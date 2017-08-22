@@ -98,7 +98,7 @@ class CachedSourceProvider(SourceProvider):
             if n in cache_data_sources:
                 setattr(self, n, types.MethodType(_cache(ds), self))
             else:
-                setattr(self, n, types.MethodType(ds, self))
+                setattr(self, n, lambda *a, *kw: ds(*a, *kw))
 
     def init(self, init_context):
         """ Perform any initialisation required """
