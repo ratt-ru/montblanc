@@ -150,6 +150,7 @@ install_requires = [
     'attrdict >= 2.0.0',
     'attrs >= 16.3.0',
     'bitstring >= 3.1.5',
+    'boltons >= 17.1.0',
     'dask >= 0.15.2',
     'distributed >= 1.18.3',
     'enum34 >= 1.1.6',
