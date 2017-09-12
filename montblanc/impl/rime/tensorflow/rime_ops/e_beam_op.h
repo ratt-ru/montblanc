@@ -1,8 +1,6 @@
 #ifndef RIME_E_BEAM_OP_H_
 #define RIME_E_BEAM_OP_H_
 
-#include "rime_constant_structures.h"
-
 namespace montblanc {
 namespace ebeam {
 
