@@ -157,6 +157,7 @@ install_requires = [
     'funcsigs >= 0.4',
     'futures >= 3.0.5',
     'hypercube == 0.3.3',
+    'xarray-ms >= 0.0.1',
 ]
 
 #===================================
@@ -173,8 +174,10 @@ else:
     install_requires += [
         'astropy >= 1.3.0',
         'cerberus >= 1.1',
+        'cppimport >= 17.7.24',
         'numpy >= 1.11.3',
         'numexpr >= 2.6.1',
+        'pybind11 >= 2.2.0',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
         "{} >= 1.3.0".format(tensorflow_package),
