@@ -219,20 +219,24 @@ __global__ void rime_e_beam(
     // Frequency vary by channel, but not timestep or antenna
     if(threadIdx.z == 0 && threadIdx.y == 0 && ebeam_pol() == 0)
     {
-        // Channel coordinate
-        // channel grid position
+        // Get frequency and clamp to extents of the beam
         FT freq = frequency[POLCHAN >> 2];
+        freq = Po::min(freq, shared.beam_freq_map[beam_nud-1]);
+        freq = Po::max(freq, 0);
+
         int lower, upper;
 
-        find_freq_bounds<Traits, Po>(lower, upper, beam_freq_map,
-            freq, beam_nud);
+        // Channel coordinate
+        // channel grid position
+        find_freq_bounds<Traits, Po>(lower, upper,
+            shared.beam_freq_map, freq, beam_nud);
 
         // Snap to grid coordinate
         shared.gchan0[thread_chan()] = FT(lower);
         shared.gchan1[thread_chan()] = FT(upper);
 
-        FT lower_freq = beam_freq_map[lower];
-        FT upper_freq = beam_freq_map[upper];
+        FT lower_freq = shared.beam_freq_map[lower];
+        FT upper_freq = shared.beam_freq_map[upper];
         FT freq_diff = upper_freq - lower_freq;
 
         // Offset of snapped coordinate from grid position

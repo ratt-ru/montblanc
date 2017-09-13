@@ -99,14 +99,17 @@ public:
         auto antenna_scaling = in_antenna_scaling.tensor<FT, 3>();
         auto parallactic_angle_sin = in_parallactic_angle_sin.tensor<FT, 2>();
         auto parallactic_angle_cos = in_parallactic_angle_cos.tensor<FT, 2>();
-        auto beam_freq_map_flat = in_beam_freq_map.flat<FT>();
-        auto beam_freq_map_begin = beam_freq_map_flat.data();
-        auto beam_freq_map_end = beam_freq_map_begin + beam_freq_map_flat.size();
+        auto beam_freq_map = in_beam_freq_map.flat<FT>();
+        auto beam_freq_map_begin = beam_freq_map.data();
+        auto beam_freq_map_end = beam_freq_map_begin + beam_freq_map.size();
         auto e_beam = in_ebeam.tensor<CT, 4>();
         auto jones = jones_ptr->tensor<CT, 5>();
 
         constexpr FT zero = 0.0;
         constexpr FT one = 1.0;
+
+        FT lower_f = beam_freq_map(0);
+        FT upper_f = beam_freq_map(beam_freq_map.size()-1);
 
         FT lmax = FT(beam_lw - one);
         FT mmax = FT(beam_mh - one);
@@ -121,7 +124,10 @@ public:
         #pragma omp parallel for
         for(int chan=0; chan < nchan; chan++)
         {
+            // Get frequency and clamp to extents of the beam cube
             FT f = frequency(chan);
+            f = std::min(f, upper_f);
+            f = std::max(lower_f, f);
 
             // This really should work, but for beam_freq_map[i] < f < beam_freq_map[i+1]
             // it returns i+1...
