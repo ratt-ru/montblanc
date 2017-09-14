@@ -21,6 +21,7 @@
 import json
 import logging
 import os
+from os.path import join as pjoin
 import sys
 
 #==============
@@ -30,7 +31,7 @@ import sys
 from install.install_log import log
 
 mb_path = 'montblanc'
-mb_inc_path = os.path.join(mb_path, 'include')
+mb_inc_path = pjoin(mb_path, 'include')
 
 #===================
 # Detect readthedocs
@@ -142,9 +143,22 @@ def include_pkg_dirs():
             # OK, so everything starts with 'montblanc/'
             # Take everything after that ('include...') and
             # append a '/*.*' to it
-            pkg_dirs.append(os.path.join(root[l:], d, '*.*'))
+            pkg_dirs.append(pjoin(root[l:], d, '*.*'))
 
     return pkg_dirs
+
+
+def include_pkg_dirs():
+    mb_inc_path = pjoin("montblanc", "include")
+    l = len("montblanc") + len(os.sep)
+
+    exclude = set(['docs', '.git', '.svn'])
+
+    return [pjoin(path, d, '*.*')[l:] for path, dirs, files
+                    in os.walk(mb_inc_path, topdown=True)
+                    for d in dirs if d not in exclude]
+
+
 
 install_requires = [
     'attrdict >= 2.0.0',
@@ -196,7 +210,7 @@ log.info('install_requires={}'.format(install_requires))
 from install.versioning import maintain_version
 
 setup(name='montblanc',
-    version=maintain_version(os.path.join('montblanc', 'version.py')),
+    version=maintain_version(pjoin('montblanc', 'version.py')),
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',
