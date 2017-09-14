@@ -39,17 +39,18 @@ void _antenna_uvw_loop(
     py::array_t<FT, flags> & uvw,
     py::array_t<IT, flags> & antenna1,
     py::array_t<IT, flags> & antenna2,
-    AntennaUVWMap<FT, IT> & antenna_uvw)
+    AntennaUVWMap<FT, IT> & antenna_uvw,
+    IT start, IT end)
 {
     // Special case, infer the first (two) antenna coordinate(s)
     // from the first row
     if(antenna_uvw.size() == 0)
     {
-        IT ant1 = *antenna1.data(0);
-        IT ant2 = *antenna2.data(0);
-        const FT * u = uvw.data(0,0);
-        const FT * v = uvw.data(0,1);
-        const FT * w = uvw.data(0,2);
+        IT ant1 = *antenna1.data(start);
+        IT ant2 = *antenna2.data(start);
+        const FT * u = uvw.data(start,0);
+        const FT * v = uvw.data(start,1);
+        const FT * w = uvw.data(start,2);
 
         // Choose first antenna value as the origin
         antenna_uvw.insert({ ant1, UVWCoordinate<FT>(0,0,0) });
@@ -63,7 +64,7 @@ void _antenna_uvw_loop(
     }
 
     // Handle the rest of the rows
-    for(int row=1; row < antenna1.shape(0); ++row)
+    for(IT row=start+1; row < end; ++row)
     {
         IT ant1 = *antenna1.data(row);
         IT ant2 = *antenna2.data(row);
@@ -121,7 +122,9 @@ template <typename FT, typename IT>
 py::array_t<FT, flags> antenna_uvw(
     py::array_t<FT, flags> uvw,
     py::array_t<IT, flags> antenna1,
-    py::array_t<IT, flags> antenna2)
+    py::array_t<IT, flags> antenna2,
+    py::array_t<IT, flags> time_chunks,
+    IT nr_of_antenna)
 {
     py::gil_scoped_release release;
 
@@ -134,42 +137,46 @@ py::array_t<FT, flags> antenna_uvw(
     if(uvw.ndim() != 2 || uvw.shape(1) != 3)
         { throw std::invalid_argument("uvw shape should be (nrow, 3)");}
 
+    if(nr_of_antenna < 1)
+        { throw std::invalid_argument("nr_of_antenna < 1"); }
+
+    IT ntime = time_chunks.size();
+
     AntennaUVWMap<FT, IT> antenna_uvw;
+    // Create numpy array holding the antenna coordinates
+    py::array_t<FT, flags> result({int(ntime), int(nr_of_antenna), 3});
 
-    // Loop twice
-    _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw);
-//    _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw);
-
-    // Find the largest antenna number
-    IT largest_ant = -1;
-
-    for(const auto & ant: antenna_uvw)
-        { largest_ant = std::max(largest_ant, ant.first); }
-
-    if(largest_ant < 0)
-        { throw std::invalid_argument("largest_ant < 0"); }
-
-    // Create a numpy array holding the antenna coordinates
-    py::array_t<FT, flags> result({int(largest_ant)+1, 3});
-
-    for(IT i=0; i<largest_ant+1; ++i)
+    // Find antenna UVW coordinates for each time chunk
+    for(IT t=0, start=0; t<ntime; start += *time_chunks.data(t), ++t)
     {
-        auto ant = antenna_uvw.find(i);
+        IT length = *time_chunks.data(t);
 
-        // Not there, nan the antenna UVW coord
-        if(ant == antenna_uvw.end())
+        // Loop twice
+        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, start, start+length);
+        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, start, start+length);
+
+        for(IT a=0; a<nr_of_antenna; ++a)
         {
-            *result.mutable_data(i, 0) = std::numeric_limits<FT>::quiet_NaN();
-            *result.mutable_data(i, 1) = std::numeric_limits<FT>::quiet_NaN();
-            *result.mutable_data(i, 2) = std::numeric_limits<FT>::quiet_NaN();
+            auto ant = antenna_uvw.find(a);
+
+            // Not there, nan the antenna UVW coord
+            if(ant == antenna_uvw.end())
+            {
+                *result.mutable_data(t, a, 0) = std::numeric_limits<FT>::quiet_NaN();
+                *result.mutable_data(t, a, 1) = std::numeric_limits<FT>::quiet_NaN();
+                *result.mutable_data(t, a, 2) = std::numeric_limits<FT>::quiet_NaN();
+            }
+            // Set the antenna UVW coordinate
+            else
+            {
+                *result.mutable_data(t, a, 0) = ant->second.u;
+                *result.mutable_data(t, a, 1) = ant->second.v;
+                *result.mutable_data(t, a, 2) = ant->second.w;
+            }
+
         }
-        // Set the antenna UVW coordinate
-        else
-        {
-            *result.mutable_data(i, 0) = ant->second.u;
-            *result.mutable_data(i, 1) = ant->second.v;
-            *result.mutable_data(i, 2) = ant->second.w;
-        }
+
+        antenna_uvw.clear();
     }
 
     return result;

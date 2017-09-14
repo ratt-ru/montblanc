@@ -10,26 +10,26 @@ dsmod = cppimport.imp("dataset_mod")
 class TestDatasetmod(unittest.TestCase):
     def test_uvw_antenna(self):
         na = 17
+        ntime = 1
 
         # For both auto correlations and without them
         for auto_cor in (0, 1):
             # Compute default antenna pairs
             ant1, ant2 = np.triu_indices(na, auto_cor)
 
-            # Get the unique antenna indices
-            ant_i = np.unique(np.concatenate([ant1, ant2]))
-
             # Create random per-antenna UVW coordinates.
             # zeroing the first antenna
-            ant_uvw = np.random.random(size=(na,3)).astype(np.float64)
-            ant_uvw[0,:] = 0
+            ant_uvw = np.random.random(size=(ntime,na,3)).astype(np.float64)
+            ant_uvw[0,0,:] = 0
+
+            time_chunks = np.array([ant1.size], dtype=ant1.dtype)
 
             # Compute per-baseline UVW coordinates.
-            bl_uvw =  ant_uvw[ant1] - ant_uvw[ant2]
+            bl_uvw =  (ant_uvw[:,ant1,:] - ant_uvw[:,ant2,:]).reshape(-1, 3)
 
             # Now recover the per-antenna and per-baseline UVW coordinates.
-            rant_uvw = dsmod.antenna_uvw(bl_uvw, ant1, ant2)
-            rbl_uvw = rant_uvw[ant1] - rant_uvw[ant2]
+            rant_uvw = dsmod.antenna_uvw(bl_uvw, ant1, ant2, time_chunks, na)
+            rbl_uvw = rant_uvw[:,ant1,:] - rant_uvw[:,ant2,:]
 
             if not np.allclose(rbl_uvw, bl_uvw):
                 self.fail("Recovered baselines do "
@@ -42,54 +42,72 @@ class TestDatasetmod(unittest.TestCase):
 
     def test_uvw_antenna_missing_bl(self):
         na = 17
-        remove_ants = [0, 1, 7]
-        valid_ants = list(set(six.moves.range(na)).difference(remove_ants))
+        removed_ants_per_time = ([0, 1, 7], [2,10,15,9], [3, 6, 9, 12])
 
         # For both auto correlations and without them
         for auto_cor in (0, 1):
-            # Compute default antenna pairs
-            ant1, ant2 = np.triu_indices(na, auto_cor)
 
-            # Shuffle the antenna indices
-            idx = np.arange(ant1.size)
-            np.random.shuffle(idx)
+            def _create_ant_arrays():
+                for remove_ants in removed_ants_per_time:
+                    # Compute default antenna pairs
+                    ant1, ant2 = np.triu_indices(na, auto_cor)
 
-            ant1 = ant1[idx]
-            ant2 = ant2[idx]
+                    # Shuffle the antenna indices
+                    idx = np.arange(ant1.size)
+                    np.random.shuffle(idx)
 
-            # Remove any baselines containing flagged antennae
-            reduce_tuple = tuple(a != ra for a in (ant1, ant2)
-                                        for ra in remove_ants)
+                    ant1 = ant1[idx]
+                    ant2 = ant2[idx]
 
-            keep = np.logical_and.reduce(reduce_tuple)
-            ant1 = ant1[keep]
-            ant2 = ant2[keep]
+                    # Remove any baselines containing flagged antennae
+                    reduce_tuple = tuple(a != ra for a in (ant1, ant2)
+                                                for ra in remove_ants)
 
-            # Get the unique antenna indices, and from
-            # this, the maximum possible number of antenna
-            ant_i = np.unique(np.concatenate([ant1, ant2]))
-            na = np.max(ant_i)+1
+                    keep = np.logical_and.reduce(reduce_tuple)
+                    ant1 = ant1[keep]
+                    ant2 = ant2[keep]
 
-            # Create random per-antenna UVW coordinates.
-            # zeroing the first antenna
-            ant_uvw = np.random.random(size=(na,3)).astype(np.float64)
-            ant_uvw[valid_ants[0],:] = 0
+                    valid_ants = list(set(six.moves.range(na)).difference(remove_ants))
 
-            # Compute per-baseline UVW coordinates.
-            bl_uvw =  ant_uvw[ant1] - ant_uvw[ant2]
+                    yield valid_ants, remove_ants, ant1, ant2
 
-            # Now recover the per-antenna and per-baseline UVW coordinates.
-            rant_uvw = dsmod.antenna_uvw(bl_uvw, ant1, ant2)
 
-            rbl_uvw = rant_uvw[ant1] - rant_uvw[ant2]
+            valid_ants, remove_ants, ant1, ant2 = zip(*list(_create_ant_arrays()))
 
-            if not np.allclose(bl_uvw, rbl_uvw):
+            bl_uvw = []
+
+            for t, (va, ra, a1, a2) in enumerate(zip(valid_ants, remove_ants, ant1, ant2)):
+                # Create random per-antenna UVW coordinates.
+                # zeroing the first valid antenna
+                ant_uvw = np.random.random(size=(na,3)).astype(np.float64)
+                ant_uvw[va[0],:] = 0
+                # Create per-baseline UVW coordinates for this time chunk
+                bl_uvw.append(ant_uvw[a1,:] - ant_uvw[a2,:])
+
+            # Produced concatenated antenna and baseline uvw arrays
+            time_chunks = np.array([a.size for a in ant1], dtype=ant1[0].dtype)
+            cant1 = np.concatenate(ant1)
+            cant2 = np.concatenate(ant2)
+            cbl_uvw = np.concatenate(bl_uvw)
+
+            # Now recover the per-antenna and per-baseline UVW coordinates
+            # for the ntime chunks
+            rant_uvw = dsmod.antenna_uvw(cbl_uvw, cant1, cant2, time_chunks, na)
+
+            # Reconstruct the baseline UVW coordinates for each chunk
+            rbl_uvw = np.concatenate([rant_uvw[t,a1,:] - rant_uvw[t,a2,:]
+                        for t, (a1, a2) in enumerate(zip(ant1, ant2))])
+
+            # Check that they agree
+            if not np.allclose(cbl_uvw, rbl_uvw):
                 self.fail("Recovered baselines do "
                           "not agree\nant1 %s\nant2 %s" % (
                             pformat(ant1), pformat(ant2)))
 
-            # All missing antenna's are nanned
-            self.assertTrue(np.all(np.isnan(rant_uvw[remove_ants])))
+            # Check that the coordinates of the removed antenna
+            # are nan in each time chunk
+            for t, ra in enumerate(remove_ants):
+                self.assertTrue(np.all(np.isnan(rant_uvw[t,ra,:])))
 
 if __name__ == "__main__":
     unittest.main()
