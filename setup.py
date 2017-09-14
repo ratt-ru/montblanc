@@ -181,10 +181,11 @@ if on_rtd:
 else:
     # Add binary/C extension type packages
     install_requires += [
-        'astropy >= 1.3.0',
+        'astropy >= 2.0.2',
+        'cppimport >= 17.7.24',
         'cerberus >= 1.1',
         'numpy >= 1.11.3',
-        'numexpr >= 2.6.1',
+        'pybind11 >= 2.2.0',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
         "{} >= 1.3.0".format(tensorflow_package),
