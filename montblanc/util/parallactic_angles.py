@@ -18,9 +18,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
+import cppimport
 import numpy as np
+import pybind11
 
 import montblanc
+
+cppimport.set_quiet(False)
+mod = cppimport.imp("montblanc.util.casa_parangles")
+mod = mod.util.casa_parangles
 
 try:
     import pyrap.measures
@@ -151,6 +157,25 @@ if __name__ == "__main__":
                 dtype=np.float64)
 
     phase_centre = np.array([ 0.        ,  1.04719755], dtype=np.float64)
+
+    import time
+
+    t = time.clock()
+    cangles = mod.parallactic_angles(ftimes, antenna_positions, phase_centre)
+    print 'cangles dones in %f' % (time.clock() - t)
+
+    t = time.time()
+    pa_astro = _parallactic_angle_astropy(ftimes, antenna_positions, phase_centre)
+    print "pa_astropy done in ", time.time() - t
+
+    t = time.clock()
+    pangles = parallactic_angles(ftimes, antenna_positions, phase_centre)
+    print 'pangles dones in %f' % (time.clock() - t)
+
+    assert np.allclose(cangles, pangles)
+
+    import sys
+    sys.exit(0)
 
     import time
 

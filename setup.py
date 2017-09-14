@@ -232,6 +232,5 @@ setup(name='montblanc',
     license='GPL2',
     install_requires=install_requires,
     packages=find_packages(),
-    package_data={'montblanc': include_pkg_dirs()},
-    include_package_data=True,
+    package_data={'montblanc': include_pkg_dirs() + [pjoin("util", "*.cpp")] },
     zip_safe=False)
