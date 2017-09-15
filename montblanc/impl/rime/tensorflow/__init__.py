@@ -34,7 +34,7 @@ def load_tf_lib():
         return __rime_lib
 
     mb_path = montblanc.get_montblanc_path()
-    rime_lib_path = os.path.join(mb_path, 'extensions', 'tensorflow', 'rime.so')
+    rime_lib_path = os.path.join(mb_path, 'ext', 'rime.so')
     __rime_lib = tf.load_op_library(rime_lib_path)
 
     return __rime_lib

@@ -27,7 +27,7 @@ from setuptools.command.build_ext import build_ext
 
 from install_log import log
 
-tensorflow_extension_name = 'montblanc.extensions.tensorflow.rime'
+tensorflow_extension_name = 'montblanc.ext.rime'
 
 def customize_compiler_for_nvcc(compiler, nvcc_settings, device_info):
     """inject deep into distutils to customize gcc/nvcc dispatch """
