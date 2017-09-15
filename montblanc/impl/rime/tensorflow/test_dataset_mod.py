@@ -76,6 +76,7 @@ class TestDatasetmod(unittest.TestCase):
 
             bl_uvw = []
 
+            # Create per-baseline UVW coordinates for each time chunk
             for t, (va, ra, a1, a2) in enumerate(zip(valid_ants, remove_ants, ant1, ant2)):
                 # Create random per-antenna UVW coordinates.
                 # zeroing the first valid antenna
@@ -107,7 +108,9 @@ class TestDatasetmod(unittest.TestCase):
             # Check that the coordinates of the removed antenna
             # are nan in each time chunk
             for t, ra in enumerate(remove_ants):
-                self.assertTrue(np.all(np.isnan(rant_uvw[t,ra,:])))
+                self.assertTrue(np.all(np.isnan(rant_uvw[t,ra,:])),
+                    "Removed antenna '%s' UVW coordinates "
+                    "in time chunk '%d' are not nan" % (ra, t))
 
 if __name__ == "__main__":
     unittest.main()

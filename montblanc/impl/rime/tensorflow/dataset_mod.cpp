@@ -6,10 +6,9 @@ cfg['compiler_args'] = ['-std=c++11', '-fvisibility=hidden']
 */
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
-
 #include <limits>
-#include <unordered_map>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
@@ -19,47 +18,37 @@ namespace py = pybind11;
 
 constexpr unsigned int flags = py::array::c_style;
 
-template <typename FT>
-class UVWCoordinate
-{
-public:
-    FT u,v,w;
-
-    UVWCoordinate(const FT & u=FT(),
-                const FT & v=FT(),
-                const FT & w=FT())
-        : u(u), v(v), w(w) {}
-};
-
-template <typename FT, typename IT>
-using AntennaUVWMap = std::unordered_map<IT, UVWCoordinate<FT>>;
-
 template <typename FT, typename IT>
 void _antenna_uvw_loop(
     py::array_t<FT, flags> & uvw,
     py::array_t<IT, flags> & antenna1,
     py::array_t<IT, flags> & antenna2,
-    AntennaUVWMap<FT, IT> & antenna_uvw,
-    IT start, IT end)
+    py::array_t<FT, flags> & antenna_uvw,
+    IT tc, IT start, IT end)
 {
-    // Special case, infer the first (two) antenna coordinate(s)
-    // from the first row
-    if(antenna_uvw.size() == 0)
+    IT ant1 = *antenna1.data(start);
+    IT ant2 = *antenna2.data(start);
+
+    // If ant1 associated with starting row is nan
+    // initial values have not yet been assigned. Do so.
+    if(std::isnan(*antenna_uvw.data(tc,ant1,0)))
     {
-        IT ant1 = *antenna1.data(start);
-        IT ant2 = *antenna2.data(start);
-        const FT * u = uvw.data(start,0);
-        const FT * v = uvw.data(start,1);
-        const FT * w = uvw.data(start,2);
-
         // Choose first antenna value as the origin
-        antenna_uvw.insert({ ant1, UVWCoordinate<FT>(0,0,0) });
+        *antenna_uvw.mutable_data(tc,ant1,0) = 0.0;
+        *antenna_uvw.mutable_data(tc,ant1,1) = 0.0;
+        *antenna_uvw.mutable_data(tc,ant1,2) = 0.0;
 
-        // If this is not an auto-correlation
-        // set second antenna value as baseline inverse
+        // Only set the second antenna value if
+        // this is not an auto-correlation.
         if(ant1 != ant2)
         {
-            antenna_uvw.insert({ ant2, UVWCoordinate<FT>(-*u, -*v, -*w) });
+            const FT * u = uvw.data(start,0);
+            const FT * v = uvw.data(start,1);
+            const FT * w = uvw.data(start,2);
+
+            *antenna_uvw.mutable_data(tc,ant2,0) = -*u;
+            *antenna_uvw.mutable_data(tc,ant2,1) = -*v;
+            *antenna_uvw.mutable_data(tc,ant2,2) = -*w;
         }
     }
 
@@ -72,12 +61,15 @@ void _antenna_uvw_loop(
         const FT * v = uvw.data(row,1);
         const FT * w = uvw.data(row,2);
 
-        // Lookup any existing antenna values
-        auto ant1_lookup = antenna_uvw.find(ant1);
-        auto ant2_lookup = antenna_uvw.find(ant2);
+        // Reference each antenna's possibly discovered
+        // UVW coordinate in the array
+        FT * ant1_uvw = antenna_uvw.mutable_data(tc, ant1);
+        FT * ant2_uvw = antenna_uvw.mutable_data(tc, ant2);
 
-        bool ant1_found = ant1_lookup != antenna_uvw.end();
-        bool ant2_found = ant2_lookup != antenna_uvw.end();
+        // Are antenna one and two's u coordinate nan
+        // and therefore is the coordinate discovered?
+        bool ant1_found = !std::isnan(ant1_uvw[0]);
+        bool ant2_found = !std::isnan(ant2_uvw[0]);
 
         if(ant1_found && ant2_found)
         {
@@ -95,25 +87,18 @@ void _antenna_uvw_loop(
             // Infer antenna2's coordinate from antenna1
             //    u12 = u1 - u2
             // => u2 = u1 - u12
-            const auto & ant1_uvw = ant1_lookup->second;
-
-            antenna_uvw.insert({ ant2, UVWCoordinate<FT>(
-                ant1_uvw.u - *u,
-                ant1_uvw.v - *v,
-                ant1_uvw.w - *w) });
+            ant2_uvw[0] = ant1_uvw[0] - *u;
+            ant2_uvw[1] = ant1_uvw[1] - *v;
+            ant2_uvw[2] = ant1_uvw[2] - *w;
         }
         else if (!ant1_found && ant2_found)
         {
-            // Infer antenna1's coordinate from antenna1
+            // Infer antenna1's coordinate from antenna2
             //    u12 = u1 - u2
             // => u1 = u12 + u2
-
-            const auto & ant2_uvw = ant2_lookup->second;
-
-            antenna_uvw.insert({ ant1, UVWCoordinate<FT>(
-                *u + ant2_uvw.u,
-                *v + ant2_uvw.v,
-                *w + ant2_uvw.w) });
+            ant1_uvw[0] = *u + ant2_uvw[0];
+            ant1_uvw[1] = *v + ant2_uvw[1];
+            ant1_uvw[2] = *w + ant2_uvw[2];
         }
     }
 }
@@ -142,9 +127,12 @@ py::array_t<FT, flags> antenna_uvw(
 
     IT ntime = time_chunks.size();
 
-    AntennaUVWMap<FT, IT> antenna_uvw;
     // Create numpy array holding the antenna coordinates
-    py::array_t<FT, flags> result({int(ntime), int(nr_of_antenna), 3});
+    py::array_t<FT, flags> antenna_uvw({int(ntime), int(nr_of_antenna), 3});
+
+    // nan everything in the array
+    for(IT i=0; i< antenna_uvw.size(); ++i)
+        { antenna_uvw.mutable_data()[i] = std::numeric_limits<FT>::quiet_NaN(); }
 
     // Find antenna UVW coordinates for each time chunk
     for(IT t=0, start=0; t<ntime; start += *time_chunks.data(t), ++t)
@@ -152,36 +140,14 @@ py::array_t<FT, flags> antenna_uvw(
         IT length = *time_chunks.data(t);
 
         // Loop twice
-        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, start, start+length);
-        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, start, start+length);
+        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, t, start, start+length);
+        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, t, start, start+length);
 
-        for(IT a=0; a<nr_of_antenna; ++a)
-        {
-            auto ant = antenna_uvw.find(a);
 
-            // Not there, nan the antenna UVW coord
-            if(ant == antenna_uvw.end())
-            {
-                *result.mutable_data(t, a, 0) = std::numeric_limits<FT>::quiet_NaN();
-                *result.mutable_data(t, a, 1) = std::numeric_limits<FT>::quiet_NaN();
-                *result.mutable_data(t, a, 2) = std::numeric_limits<FT>::quiet_NaN();
-            }
-            // Set the antenna UVW coordinate
-            else
-            {
-                *result.mutable_data(t, a, 0) = ant->second.u;
-                *result.mutable_data(t, a, 1) = ant->second.v;
-                *result.mutable_data(t, a, 2) = ant->second.w;
-            }
-
-        }
-
-        antenna_uvw.clear();
     }
 
-    return result;
+    return antenna_uvw;
 }
-
 
 PYBIND11_MODULE(dataset_mod, m) {
     m.doc() = "auto-compiled c++ extension";
