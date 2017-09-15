@@ -20,14 +20,6 @@ def default_base_ant_pairs(antenna, auto_correlations=False):
     k = 0 if auto_correlations == True else 1
     return np.triu_indices(antenna, k)
 
-a1, a2 = default_base_ant_pairs(8, False)
-uvw = np.random.random(size=(a1.size,3))
-
-fuvw = dsmod.antenna_uvw(uvw.astype(np.float32),a1,a2)
-duvw = dsmod.antenna_uvw(uvw.astype(np.float64),a1,a2)
-
-print fuvw
-
 def default_antenna1(ds, schema):
     """ Default antenna 1 """
     ap = default_base_ant_pairs(ds.dims['antenna'],
