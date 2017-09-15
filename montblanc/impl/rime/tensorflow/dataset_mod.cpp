@@ -39,7 +39,7 @@ void _antenna_uvw_loop(
 
     // If ant1 associated with starting row is nan
     // initial values have not yet been assigned. Do so.
-    if(std::isnan(antenna_uvw_ref(chunk,ant1,0)))
+    if(std::isnan(antenna_uvw_ref(chunk,ant1,u)))
     {
         // Choose first antenna value as the origin
         antenna_uvw_ref(chunk,ant1,u) = 0.0;
@@ -74,7 +74,7 @@ void _antenna_uvw_loop(
 
         if(ant1_found && ant2_found)
         {
-            // We 've already computed antenna coordinates
+            // We've already computed antenna coordinates
             // for this baseline, ignore it
         }
         else if(!ant1_found && !ant2_found)
@@ -109,7 +109,7 @@ py::array_t<FT, flags> antenna_uvw(
     py::array_t<FT, flags> uvw,
     py::array_t<IT, flags> antenna1,
     py::array_t<IT, flags> antenna2,
-    py::array_t<IT, flags> time_chunks,
+    py::array_t<IT, flags> chunks,
     IT nr_of_antenna)
 {
     py::gil_scoped_release release;
@@ -126,23 +126,23 @@ py::array_t<FT, flags> antenna_uvw(
     if(nr_of_antenna < 1)
         { throw std::invalid_argument("nr_of_antenna < 1"); }
 
-    IT ntime = time_chunks.size();
-
     // Create numpy array holding the antenna coordinates
-    py::array_t<FT, flags> antenna_uvw({int(ntime), int(nr_of_antenna), 3});
+    py::array_t<FT, flags> antenna_uvw({int(chunks.size()), int(nr_of_antenna), 3});
+
+    auto chunks_ref = chunks.unchecked();
 
     // nan everything in the array
     for(IT i=0; i< antenna_uvw.size(); ++i)
         { antenna_uvw.mutable_data()[i] = std::numeric_limits<FT>::quiet_NaN(); }
 
-    // Find antenna UVW coordinates for each time chunk
-    for(IT t=0, start=0; t<ntime; start += *time_chunks.data(t), ++t)
+    // Find antenna UVW coordinates for each chunk
+    for(IT c=0, start=0; c<chunks_ref.size(); start += chunks_ref(c), ++c)
     {
-        IT length = *time_chunks.data(t);
-
         // Loop twice
-        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, t, start, start+length);
-        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, t, start, start+length);
+        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw,
+                            c, start, start+chunks_ref(c));
+        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw,
+                            c, start, start+chunks_ref(c));
     }
 
     return antenna_uvw;
