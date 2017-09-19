@@ -29,6 +29,7 @@ void _antenna_uvw_loop(
     py::array_t<FT, flags> & antenna_uvw,
     IT chunk, IT start, IT end)
 {
+    // Do unchecked bounds access of array data
     auto uvw_ref = uvw.unchecked();
     auto antenna1_ref = antenna1.unchecked();
     auto antenna2_ref = antenna2.unchecked();
@@ -110,9 +111,19 @@ py::array_t<FT, flags> antenna_uvw(
     py::array_t<IT, flags> antenna1,
     py::array_t<IT, flags> antenna2,
     py::array_t<IT, flags> chunks,
-    IT nr_of_antenna)
+    py::kwargs kwargs)
 {
+    if(!kwargs.contains("nr_of_antenna"))
+        { throw std::invalid_argument("antenna_uvw keyword argument"
+                                    "'nr_of_antenna' not set"); }
+
+    int nr_of_antenna = kwargs["nr_of_antenna"].cast<IT>();
+
+    // Drop the GIL
     py::gil_scoped_release release;
+
+    // Do some shape checking
+    int nr_of_uvw = uvw.shape(1);
 
     if(antenna1.ndim() != 1)
         { throw std::invalid_argument("antenna1 shape should be (nrow,)");}
@@ -120,14 +131,14 @@ py::array_t<FT, flags> antenna_uvw(
     if(antenna2.ndim() != 1)
         { throw std::invalid_argument("antenna2 shape should be (nrow,)");}
 
-    if(uvw.ndim() != 2 || uvw.shape(1) != 3)
+    if(uvw.ndim() != 2 || nr_of_uvw != 3)
         { throw std::invalid_argument("uvw shape should be (nrow, 3)");}
 
     if(nr_of_antenna < 1)
         { throw std::invalid_argument("nr_of_antenna < 1"); }
 
     // Create numpy array holding the antenna coordinates
-    py::array_t<FT, flags> antenna_uvw({int(chunks.size()), int(nr_of_antenna), 3});
+    py::array_t<FT, flags> antenna_uvw({int(chunks.size()), int(nr_of_antenna), nr_of_uvw});
 
     auto chunks_ref = chunks.unchecked();
 
@@ -136,7 +147,7 @@ py::array_t<FT, flags> antenna_uvw(
         { antenna_uvw.mutable_data()[i] = std::numeric_limits<FT>::quiet_NaN(); }
 
     // Find antenna UVW coordinates for each chunk
-    for(IT c=0, start=0; c<chunks_ref.size(); start += chunks_ref(c), ++c)
+    for(IT c=0, start=0; c<chunks.size(); start += chunks_ref(c), ++c)
     {
         // Loop twice
         _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw,
@@ -152,7 +163,7 @@ PYBIND11_MODULE(dataset_mod, m) {
     m.doc() = "auto-compiled c++ extension";
 
     m.def("antenna_uvw", &antenna_uvw<float, std::int32_t>, py::return_value_policy::move);
-    m.def("antenna_uvw", &antenna_uvw<float, std::int32_t>, py::return_value_policy::move);
-    m.def("antenna_uvw", &antenna_uvw<double, std::int64_t>, py::return_value_policy::move);
+    m.def("antenna_uvw", &antenna_uvw<float, std::int64_t>, py::return_value_policy::move);
+    m.def("antenna_uvw", &antenna_uvw<double, std::int32_t>, py::return_value_policy::move);
     m.def("antenna_uvw", &antenna_uvw<double, std::int64_t>, py::return_value_policy::move);
 }
