@@ -5,9 +5,9 @@ import cppimport
 import six
 import numpy as np
 
-dsmod = cppimport.imp("dataset_mod")
+dsmod = cppimport.imp("montblanc.ext.dataset_mod")
 
-class TestDatasetmod(unittest.TestCase):
+class TestDatasetMod(unittest.TestCase):
     def test_uvw_antenna(self):
         na = 17
         ntime = 1
