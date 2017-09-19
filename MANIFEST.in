@@ -1,5 +1,6 @@
 include setup.cfg
 include versioneer.py
+include montblanc/ext/*.cpp
 include montblanc/_version.py
 include montblanc/include/montblanc/*.cuh
 include montblanc/impl/rime/tensorflow/rime_ops/*.cpp
