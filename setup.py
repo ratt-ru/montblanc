@@ -122,21 +122,6 @@ def readme():
     with open('README.rst') as f:
         return f.read()
 
-def include_pkg_dirs():
-    """
-    Recursively provide package_data directories for
-    directories in montblanc/include.
-    """
-    mb_inc_path = pjoin("montblanc", "include")
-    l = len("montblanc") + len(os.sep)
-    exclude = set(['docs', '.git', '.svn'])
-
-    return [pjoin(path, d, '*.*')[l:] for path, dirs, files
-                    in os.walk(mb_inc_path, topdown=True)
-                    for d in dirs if d not in exclude]
-
-
-
 install_requires = [
     'attrdict >= 2.0.0',
     'attrs >= 16.3.0',
@@ -215,6 +200,5 @@ setup(name='montblanc',
     license='GPL2',
     install_requires=install_requires,
     packages=find_packages(),
-    package_data={'montblanc': include_pkg_dirs()},
     include_package_data=True,
     zip_safe=False)
