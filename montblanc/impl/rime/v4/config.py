@@ -181,14 +181,14 @@ A = [
 
     ary_dict('E_beam', ('beam_lw', 'beam_mh', 'beam_nud', 'npol'), 'ct',
         classifiers=frozenset([Classifier.E_BEAM_INPUT]),
-        default=lambda s, ary: (np.array([1,0,0,0])[np.newaxis,np.newaxis,:] if ary.shape[3] == 4 
+        default=lambda s, ary: (np.array([1,0,0,1])[np.newaxis,np.newaxis,:] if ary.shape[3] == 4 
             else np.array([1])[np.newaxis,np.newaxis,:]),
         test=lambda slvr, ary: rary(ary)),
 
     # Direction-Independent Effects
     ary_dict('G_term', ('ntime', 'na', 'nchan', 'npol'), 'ct',
         classifiers=frozenset([Classifier.COHERENCIES_INPUT]),
-        default=lambda s, ary: (np.array([1,0,0,0])[np.newaxis,np.newaxis,:] if ary.shape[3] == 4 
+        default=lambda s, ary: (np.array([1,0,0,1])[np.newaxis,np.newaxis,:] if ary.shape[3] == 4 
             else np.array([1])[np.newaxis,np.newaxis,:]),
         test=lambda slvr, ary: rary(ary)),
 

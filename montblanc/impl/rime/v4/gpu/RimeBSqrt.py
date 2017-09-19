@@ -169,7 +169,7 @@ void rime_jones1_B_sqrt_impl(
 
     // Read in the stokes parameter,
     // multiplying it by the power term
-    typename Tr::ft pol = stokes[i]*power;
+    typename Tr::ft pol = 2.*stokes[i]*power;    // include both the equal terms XX and YY
 
     // Write out the square root of the brightness
     i = (SRC*NTIME + TIME)*NPOLCHAN + POLCHAN;
