@@ -159,11 +159,67 @@ py::array_t<FT, flags> antenna_uvw(
     return antenna_uvw;
 }
 
+auto constexpr antenna_uvw_docstring = R"doc(
+    Computes per-antenna UVW coordinates from baseline `uvw`,
+    `antenna1` and `antenna2` coordinates logically grouped
+    into chunks of baselines per unique timestep.
+
+    The example below illustrates two baseline groupings
+    of size 6 and 5, respectively.
+
+    .. code-block:: python
+
+        uvw = ...
+        ant1 = np.array([0, 0, 0, 1, 1, 2, 0, 0, 0, 1, 1], dtype=np.int32)
+        ant2 = np.array([1, 2, 3, 2, 3, 3, 1, 2, 3, 1, 2], dtype=np.int32)
+        chunks = np.array([6, 5], dtype=np.int32)
+
+        ant_uv = antenna_uvw(uvw, ant1, ant2, chunks, nr_of_antenna=4)
+
+    The first antenna of the first baseline of a chunk is chosen as the origin
+    of the antenna coordinate system, while the second antenna is set to the
+    negative of the baseline UVW coordinate. Subsequent antenna UVW coordinates
+    are iteratively derived from the first two coordinates. Thus,
+    the baseline indices need not be properly ordered.
+
+    If it is not possible to derive coordinates for an antenna, it's coordinate
+    will be set to nan.
+
+    Notes
+    -----
+    The indexing and chunking arrays must use the same integral types:
+    :code:`np.int32` or :code:`np.int64`.
+
+    Parameters
+    ----------
+    uvw : np.ndarray
+        Baseline UVW coordinates of shape (row, 3)
+    antenna1 : np.ndarray
+        Baseline first antenna of shape (row,)
+    antenna2 : np.ndarray
+        Baseline second antenna of shape (row,)
+    chunks : np.ndarray
+        Number of baselines per unique timestep with shape (utime,)
+        :code:`np.sum(chunks) == row` should hold.
+    nr_of_antenna : int
+        Total number of antenna in the solution.
+
+    Returns
+    -------
+    np.ndarray
+        Antenna UVW coordinates of shape (utime, nr_of_antenna, 3)
+
+)doc";
+
 PYBIND11_MODULE(dataset_mod, m) {
     m.doc() = "auto-compiled c++ extension";
 
-    m.def("antenna_uvw", &antenna_uvw<float, std::int32_t>, py::return_value_policy::move);
-    m.def("antenna_uvw", &antenna_uvw<float, std::int64_t>, py::return_value_policy::move);
-    m.def("antenna_uvw", &antenna_uvw<double, std::int32_t>, py::return_value_policy::move);
-    m.def("antenna_uvw", &antenna_uvw<double, std::int64_t>, py::return_value_policy::move);
+    m.def("antenna_uvw", &antenna_uvw<float, std::int32_t>,
+        py::return_value_policy::move, antenna_uvw_docstring);
+    m.def("antenna_uvw", &antenna_uvw<float, std::int64_t>,
+        py::return_value_policy::move, antenna_uvw_docstring);
+    m.def("antenna_uvw", &antenna_uvw<double, std::int32_t>,
+        py::return_value_policy::move, antenna_uvw_docstring);
+    m.def("antenna_uvw", &antenna_uvw<double, std::int64_t>,
+        py::return_value_policy::move, antenna_uvw_docstring);
 }
