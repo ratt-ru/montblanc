@@ -165,7 +165,7 @@ else:
     install_requires += [
         'astropy >= 1.3.0',
         'cerberus >= 1.1',
-        'cppimport >= 17.7.24',
+        'cppimport >= 17.9.18',
         'numpy >= 1.11.3',
         'numexpr >= 2.6.1',
         'pybind11 >= 2.2.0',
