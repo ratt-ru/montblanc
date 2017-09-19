@@ -25,14 +25,6 @@ from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
 from montblanc.version import __version__
 
-def get_montblanc_path():
-    """ Return the current path in which montblanc is installed """
-    import montblanc
-    return os.path.dirname(inspect.getfile(montblanc))
-
-def get_include_path():
-    return os.path.join(get_montblanc_path(), 'include')
-
 log = setup_logging()
 
 # This solution for constants based on
