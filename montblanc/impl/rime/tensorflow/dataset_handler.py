@@ -9,8 +9,7 @@ import numpy as np
 import cppimport
 import xarray as xr
 
-dsmod = cppimport.imp("dataset_mod")
-
+dsmod = cppimport.imp('montblanc.ext.dataset_mod')
 
 _lru = boltons.cacheutils.LRU(max_size=16)
 
