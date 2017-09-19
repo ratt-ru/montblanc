@@ -1,8 +1,12 @@
+import itertools
 import os
 
 import montblanc
+from xarray_ms import xds_from_ms, xds_from_table
+
 
 import boltons.cacheutils
+import dask
 import dask.array as da
 import six
 import numpy as np
@@ -23,13 +27,15 @@ def default_antenna1(ds, schema):
     """ Default antenna 1 """
     ap = default_base_ant_pairs(ds.dims['antenna'],
                                 ds.attrs['auto_correlations'])
-    return da.tile(ap[0], ds.dims['utime'])
+    return da.from_array(np.tile(ap[0], ds.dims['utime']),
+                            chunks=ds.attrs['row_chunks'])
 
 def default_antenna2(ds, schema):
     """ Default antenna 2 """
     ap = default_base_ant_pairs(ds.dims['antenna'],
                                 ds.attrs['auto_correlations'])
-    return da.tile(ap[1], ds.dims['utime'])
+    return da.from_array(np.tile(ap[1], ds.dims['utime']),
+                            chunks=ds.attrs['row_chunks'])
 
 def default_time_unique(ds, schema):
     """ Default unique time """
@@ -57,7 +63,8 @@ def default_time(ds, schema):
     unique_times = default_time_unique(ds, ds.attrs['schema']['time_unique'])
     time_chunks = default_time_chunks(ds, ds.attrs['schema']['time_chunks'])
 
-    return da.concatenate([da.full(tc, ut, chunks=tc) for ut, tc in zip(unique_times, time_chunks)])
+    time = np.concatenate([np.full(tc, ut) for ut, tc in zip(unique_times, time_chunks)])
+    return da.from_array(time, chunks=ds.attrs['row_chunks'])
 
 def default_frequency(ds, schema):
     return da.linspace(8.56e9, 2*8.56e9, schema['rshape'][0],
@@ -114,7 +121,7 @@ schema = {
     },
 
     "weight": {
-        "shape": ("row", "chan", "corr"),
+        "shape": ("row", "corr"),
         "dtype": np.float32,
         "default": lambda ds, as_: da.ones(shape=as_["rshape"],
                                             dtype=as_["dtype"],
@@ -138,7 +145,13 @@ def default_schema():
     return schema
 
 def default_dataset(**kwargs):
+    """
+    Creates a default montblanc :class:`xarray.Dataset`
 
+    Returns
+    -------
+    `xarray.Dataset`
+    """
     dims = kwargs.copy()
 
     # Force these
@@ -158,16 +171,19 @@ def default_dataset(**kwargs):
     # Get and sort the default schema
     schema = default_schema()
     sorted_schema = sorted(schema.items())
+    row_chunks = 10000
 
     # Fill in chunks and real shape
     for array_name, array_schema in sorted_schema:
-        array_schema['chunks'] = tuple(10000 if s == 'rows' else dims.get(s,s)
+        array_schema['chunks'] = tuple(row_chunks if s == 'rows' else dims.get(s,s)
                                             for s in array_schema['shape'])
         array_schema['rshape'] = tuple(dims.get(s, s) for s in array_schema['shape'])
 
 
     coords = { k: np.arange(dims[k]) for k in dims.keys() }
-    attrs = { 'schema' : schema, 'auto_correlations': False }
+    attrs = { 'schema' : schema,
+                'auto_correlations': False,
+                'row_chunks': row_chunks }
 
     # Create an empty dataset, but with coordinates set
     ds = xr.Dataset(None, coords=coords, attrs=attrs)
@@ -184,10 +200,140 @@ def default_dataset(**kwargs):
 
         ds[array_name] = xr.DataArray(array, coords=acoords, dims=array_schema['shape'])
 
-    return ds
+    return ds.chunk({"row": 10000})
 
-def montblanc_dataset(xms):
-    pass
+from pprint import pformat
+
+def create_antenna_uvw(xds):
+    """
+    Adds `antenna_uvw` coordinates to the give :class:`xarray.Dataset`.
+
+    Returns
+    -------
+    :class:`xarray.Dataset`
+        `xds` with `antenna_uvw` assigned.
+    """
+    from operator import getitem
+    from functools import partial
+
+    row_groups = xds.row_groups.values
+    utime_groups = xds.utime_groups.values
+
+    token = dask.base.tokenize(xds.uvw, xds.antenna1, xds.antenna2,
+                            xds.time_chunks, xds.row_groups, xds.utime_groups)
+    name = "-".join(("create_antenna_uvw", token))
+    p_ant_uvw = partial(dsmod.antenna_uvw, nr_of_antenna=xds.dims["antenna"])
+
+    def _chunk_iter(chunks):
+        start = 0
+        for size in chunks:
+            end = start + size
+            yield slice(start, end)
+            start = end
+
+    it = itertools.izip(_chunk_iter(xds.row_groups.values),
+                        _chunk_iter(xds.utime_groups.values))
+
+    dsk = { (name, i, 0, 0): (p_ant_uvw,
+                                (getitem, xds.uvw, rs),
+                                (getitem, xds.antenna1, rs),
+                                (getitem, xds.antenna2, rs),
+                                (getitem, xds.time_chunks, uts))
+
+                for i, (rs, uts) in enumerate(it) }
+
+    chunks = (tuple(utime_groups), (xds.dims["antenna"],), (xds.dims["(u,v,w)"],))
+    dask_array = da.Array(dsk, name, chunks, xds.uvw.dtype)
+    dims = ("utime", "antenna", "(u,v,w)")
+    return xds.assign(antenna_uvw=xr.DataArray(dask_array, dims=dims))
+
+def dataset_from_ms(ms):
+    """
+    Creates an xarray dataset from the given Measurement Set
+
+    Returns
+    -------
+    `xarray.Dataset`
+        Dataset with MS columns as arrays
+    """
+    xds = xds_from_ms(ms)
+    xads = xds_from_table("::".join((ms, "ANTENNA")), table_schema="ANTENNA")
+    xspwds = xds_from_table("::".join((ms, "SPECTRAL_WINDOW")), table_schema="SPECTRAL_WINDOW")
+    xds = xds.assign(antenna_position=xads.rename({"rows" : "antenna"}).drop('msrows').position,
+                    frequency=xspwds.rename({"rows":"spw", "chans" : "chan"}).drop('msrows').chan_freq[0])
+    return xds
+
+def group_rows(xds):
+    """
+    Adds `row_groups` and `utime_groups` to the :class:`xarray.Dataset`
+
+    Returns
+    -------
+    `xarray.Dataset`
+    """
+    row_groups = [0]
+    utime_groups = [0]
+    rows = 0
+    utimes = 0
+
+    for chunk in xds.time_chunks.values:
+        next_ = rows + chunk
+
+        if next_ > 100000:
+            row_groups.append(rows)
+            utime_groups.append(utimes)
+            rows = chunk
+            utimes = 1
+        else:
+            rows += chunk
+            utimes += 1
+
+    if rows > 0:
+        row_groups.append(rows)
+        utime_groups.append(utimes)
+
+    return xds.assign(row_groups=xr.DataArray(row_groups[1:], dims=["groups"]),
+                    utime_groups=xr.DataArray(utime_groups[1:], dims=["groups"]))
+
+def montblanc_dataset(xds):
+    """
+    Massages an :class:`xarray.Dataset` produced by `xarray-ms` into
+    a dataset expected by montblanc.
+
+    Returns
+    -------
+    `xarray.Dataset`
+    """
+    mds = group_rows(xds)
+    mds = create_antenna_uvw(mds)
+
+    # Verify schema
+    for k, v in six.iteritems(default_schema()):
+        dims = mds[k].dims
+        if not dims == v["shape"]:
+            raise ValueError("Array '%s' dimensions '%s' does not "
+                            "match schema shape '%s'" % (k, dims, v["shape"]))
+
+    return mds
 
 if __name__ == "__main__":
-    print default_dataset()
+    xds = default_dataset()
+    print xds
+
+    ms = "~/data/D147-LO-NOIFS-NOPOL-4M5S.MS"
+
+    renames = {'rows': 'row',
+                'chans' : 'chan',
+                'pols': 'pol',
+                'corrs' : 'corr'}
+
+    xds = dataset_from_ms(ms).rename(renames)
+    mds = montblanc_dataset(xds)
+    print mds.antenna_uvw
+
+    ant_uvw = mds.antenna_uvw.values
+    ant1 = mds.antenna1.values
+    ant2 = mds.antenna2.values
+    print mds
+
+    print ant_uvw
