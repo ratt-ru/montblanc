@@ -16,11 +16,16 @@ auto gauss_shape_shape_function = [](InferenceContext* c) {
     DimensionHandle d;
 
     // Get input shapes
-    ShapeHandle uvw = c->input(0);
-    ShapeHandle antenna1 = c->input(1);
-    ShapeHandle antenna2 = c->input(2);
-    ShapeHandle frequency = c->input(3);
-    ShapeHandle params = c->input(4);
+    ShapeHandle time_index = c->input(0);
+    ShapeHandle uvw = c->input(1);
+    ShapeHandle antenna1 = c->input(2);
+    ShapeHandle antenna2 = c->input(3);
+    ShapeHandle frequency = c->input(4);
+    ShapeHandle params = c->input(5);
+
+    // time_index should be shape (nrows,)
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(time_index, 1, &input),
+        "time_index shape must be [nrows] but is " + c->DebugString(time_index));
 
     // uvw should be shape (ntime, na, 3)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(uvw, 3, &input),
@@ -28,12 +33,12 @@ auto gauss_shape_shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(uvw, 2), 3, &d),
         "uvw shape must be [ntime, na, 3] but is " + c->DebugString(uvw));
 
-    // antenna1 should be shape (ntime, nbl)
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna1, 2, &input),
-        "antenna1 shape must be [ntime, nbl] but is " + c->DebugString(antenna1));
-    // antenna2 should be shape (ntime, nbl)
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna2, 2, &input),
-        "antenna2 shape must be [ntime, nbl] but is " + c->DebugString(antenna2));
+    // antenna1 should be shape (nrow,)
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna1, 1, &input),
+        "antenna1 shape must be [nrow] but is " + c->DebugString(antenna1));
+    // antenna2 should be shape (nrow,)
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna2, 1, &input),
+        "antenna2 shape must be [nrow] but is " + c->DebugString(antenna2));
 
     // frequency should be shape (nchan,)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(frequency, 1, &input),
@@ -60,6 +65,7 @@ auto gauss_shape_shape_function = [](InferenceContext* c) {
 
 
 REGISTER_OP("GaussShape")
+    .Input("time_index: int32")
     .Input("uvw: FT")
     .Input("antenna1: int32")
     .Input("antenna2: int32")

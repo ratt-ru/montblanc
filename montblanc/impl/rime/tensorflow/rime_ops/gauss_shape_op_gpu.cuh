@@ -41,6 +41,7 @@ template <> struct LaunchTraits<double>
 // CUDA kernel outline
 template <typename Traits>
 __global__ void rime_gauss_shape(
+    const int * time_index,
     const typename Traits::uvw_type * uvw,
     const typename Traits::antenna_type * antenna1,
     const typename Traits::antenna_type * antenna2,
@@ -48,17 +49,16 @@ __global__ void rime_gauss_shape(
     const typename Traits::gauss_param_type * gauss_params,
     typename Traits::gauss_shape_type * gauss_shape,
     const typename Traits::FT gauss_scale,
-    int ngsrc, int ntime, int nbl, int na, int nchan)
+    int ngsrc, int nrow, int na, int nchan)
 {
     int chan = blockIdx.x*blockDim.x + threadIdx.x;
-    int bl = blockIdx.y*blockDim.y + threadIdx.y;
-    int time = blockIdx.z*blockDim.z + threadIdx.z;
+    int row = blockIdx.y*blockDim.y + threadIdx.y;
 
     using FT = typename Traits::FT;
     using LTr = LaunchTraits<FT>;
     using Po = montblanc::kernel_policies<FT>;
 
-    if(time >= ntime || bl >= nbl || chan >= nchan)
+    if(row >= nrow || chan >= nchan)
         { return; }
 
     __shared__ struct {
@@ -72,11 +72,12 @@ __global__ void rime_gauss_shape(
     FT & w = shared.uvw[threadIdx.z][threadIdx.y].z;
 
     // Retrieve antenna pairs for the current baseline
-    int i = time*nbl + bl;
-    int ant1 = antenna1[i];
-    int ant2 = antenna2[i];
+    int ant1 = antenna1[row];
+    int ant2 = antenna2[row];
+    int time = time_index[row];
+    int i;
 
-    // UVW coordinates vary by baseline and time, but not channel
+    // UVW coordinates vary by baseline, but not channel
     if(threadIdx.x == 0)
     {
         // UVW, calculated from u_pq = u_p - u_q
@@ -90,8 +91,8 @@ __global__ void rime_gauss_shape(
         w -= ant1_uvw.z;
     }
 
-    // Wavelength varies by channel, but not baseline and time
-    if(threadIdx.y == 0 && threadIdx.z == 0)
+    // Wavelength varies by channel, but not baseline
+    if(threadIdx.y == 0)
         { shared.scaled_freq[threadIdx.x] = gauss_scale*frequency[chan]; }
 
     __syncthreads();
@@ -108,7 +109,7 @@ __global__ void rime_gauss_shape(
         FT v1 = u*el + v*em;
         v1 *= shared.scaled_freq[threadIdx.x];
 
-        i = ((gsrc*ntime + time)*nbl + bl)*nchan + chan;
+        i = (gsrc*nrow + row)*nchan + chan;
         gauss_shape[i] = Po::exp(-(u1*u1 + v1*v1));
     }
 }
@@ -125,19 +126,19 @@ public:
     {
         namespace tf = tensorflow;
 
-        const tf::Tensor & in_uvw = context->input(0);
-        const tf::Tensor & in_antenna1 = context->input(1);
-        const tf::Tensor & in_antenna2 = context->input(2);
-        const tf::Tensor & in_frequency = context->input(3);
-        const tf::Tensor & in_gauss_params = context->input(4);
+        const tf::Tensor & in_time_index = context->input(0);
+        const tf::Tensor & in_uvw = context->input(1);
+        const tf::Tensor & in_antenna1 = context->input(2);
+        const tf::Tensor & in_antenna2 = context->input(3);
+        const tf::Tensor & in_frequency = context->input(4);
+        const tf::Tensor & in_gauss_params = context->input(5);
 
-        int ntime = in_uvw.dim_size(0);
         int na = in_uvw.dim_size(1);
-        int nbl = in_antenna1.dim_size(1);
+        int nrow = in_antenna1.dim_size(0);
         int nchan = in_frequency.dim_size(0);
         int ngsrc = in_gauss_params.dim_size(1);
 
-        tf::TensorShape gauss_shape_shape{ngsrc, ntime, nbl, nchan};
+        tf::TensorShape gauss_shape_shape{ngsrc, nrow, nchan};
 
         // Allocate an output tensor
         tf::Tensor * gauss_shape_ptr = nullptr;
@@ -149,12 +150,14 @@ public:
 
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
-            nchan, nbl, ntime);
+            nchan, nrow, 1);
         dim3 grid(montblanc::grid_from_thread_block(
-            block, nchan, nbl, ntime));
+            block, nchan, nrow, 1));
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
+        auto time_index = reinterpret_cast<const int *>(
+            in_time_index.flat<int>().data());
         auto uvw = reinterpret_cast<const typename Tr::uvw_type *>(
             in_uvw.flat<FT>().data());
         auto antenna1 = reinterpret_cast<const typename Tr::antenna_type *>(
@@ -169,10 +172,10 @@ public:
             gauss_shape_ptr->flat<FT>().data());
 
         rime_gauss_shape<Tr><<<grid, block, 0, stream>>>(
-            uvw, antenna1, antenna2,
+            time_index, uvw, antenna1, antenna2,
             frequency, gauss_params, gauss_shape,
             montblanc::constants<FT>::gauss_scale,
-            ngsrc, ntime, nbl, na, nchan);
+            ngsrc, nrow, na, nchan);
     }
 };
 

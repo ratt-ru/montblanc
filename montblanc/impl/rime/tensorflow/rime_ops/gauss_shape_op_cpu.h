@@ -29,31 +29,31 @@ public:
     {
         namespace tf = tensorflow;
 
-        const tf::Tensor & in_uvw = context->input(0);
-        const tf::Tensor & in_antenna1 = context->input(1);
-        const tf::Tensor & in_antenna2 = context->input(2);
-        const tf::Tensor & in_frequency = context->input(3);
-        const tf::Tensor & in_gauss_params = context->input(4);
+        const tf::Tensor & in_time_index = context->input(0);
+        const tf::Tensor & in_uvw = context->input(1);
+        const tf::Tensor & in_antenna1 = context->input(2);
+        const tf::Tensor & in_antenna2 = context->input(3);
+        const tf::Tensor & in_frequency = context->input(4);
+        const tf::Tensor & in_gauss_params = context->input(5);
 
-        int ntime = in_uvw.dim_size(0);
-        int na = in_uvw.dim_size(1);
-        int nbl = in_antenna1.dim_size(1);
+        int nrow = in_antenna1.dim_size(0);
         int nchan = in_frequency.dim_size(0);
         int ngsrc = in_gauss_params.dim_size(1);
 
-        tf::TensorShape gauss_shape_shape{ngsrc,ntime,nbl,nchan};
+        tf::TensorShape gauss_shape_shape{ngsrc,nrow,nchan};
 
         // Allocate an output tensor
         tf::Tensor * gauss_shape_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
             0, gauss_shape_shape, &gauss_shape_ptr));
 
+        auto time_index = in_time_index.tensor<int, 1>();
         auto uvw = in_uvw.tensor<FT, 3>();
-        auto antenna1 = in_antenna1.tensor<int, 2>();
-        auto antenna2 = in_antenna2.tensor<int, 2>();
+        auto antenna1 = in_antenna1.tensor<int, 1>();
+        auto antenna2 = in_antenna2.tensor<int, 1>();
         auto frequency = in_frequency.tensor<FT, 1>();
         auto gauss_params = in_gauss_params.tensor<FT, 2>();
-        auto gauss_shape = gauss_shape_ptr->tensor<FT, 4>();
+        auto gauss_shape = gauss_shape_ptr->tensor<FT, 3>();
 
         #pragma omp parallel
         for(int gsrc=0; gsrc < ngsrc; ++gsrc)
@@ -62,31 +62,29 @@ public:
             auto em = gauss_params(1,gsrc);
             auto eR = gauss_params(2,gsrc);
 
-            #pragma omp for collapse(2)
-            for(int time=0; time < ntime; ++time)
+            #pragma omp parallel for
+            for(int row=0; row < nrow; ++row)
             {
-                for(int bl=0; bl < nbl; ++bl)
+                // Antenna pairs for this baseline
+                int ant1 = antenna1(row);
+                int ant2 = antenna2(row);
+                int time = time_index(row);
+
+                // UVW coordinates for this baseline
+                FT u = uvw(time,ant2,0) - uvw(time,ant1,0);
+                FT v = uvw(time,ant2,1) - uvw(time,ant1,1);
+
+                for(int chan=0; chan < nchan; ++chan)
                 {
-                    // Antenna pairs for this baseline
-                    int ant1 = antenna1(time,bl);
-                    int ant2 = antenna2(time,bl);
+                    FT scaled_freq = montblanc::constants<FT>::gauss_scale*frequency(chan);
 
-                    // UVW coordinates for this baseline
-                    FT u = uvw(time,ant2,0) - uvw(time,ant1,0);
-                    FT v = uvw(time,ant2,1) - uvw(time,ant1,1);
+                    FT u1 = u*em - v*el;
+                    u1 *= scaled_freq*eR;
 
-                    for(int chan=0; chan < nchan; ++chan)
-                    {
-                        FT scaled_freq = montblanc::constants<FT>::gauss_scale*frequency(chan);
+                    FT v1 = u*el + v*em;
+                    v1 *= scaled_freq;
 
-                        FT u1 = u*em - v*el;
-                        u1 *= scaled_freq*eR;
-
-                        FT v1 = u*el + v*em;
-                        v1 *= scaled_freq;
-
-                        gauss_shape(gsrc,time,bl,chan) = std::exp(-(u1*u1 + v1*v1));
-                    }
+                    gauss_shape(gsrc,row,chan) = std::exp(-(u1*u1 + v1*v1));
                 }
             }
         }
