@@ -13,7 +13,7 @@ class TestSumCoherencies(unittest.TestCase):
         self.rime = load_tf_lib()
 
         # Load the custom operation library
-        #self.rime = tf.load_op_library('rime.so')
+        # self.rime = tf.load_op_library('rime.so')
         # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
         self.gpu_devs = [d.name for d in device_lib.list_local_devices()
                                 if d.device_type == 'GPU']
@@ -36,22 +36,26 @@ class TestSumCoherencies(unittest.TestCase):
         rf = lambda *a, **kw: np.random.random(*a, **kw).astype(FT)
         rc = lambda *a, **kw: rf(*a, **kw) + 1j*rf(*a, **kw).astype(CT)
 
+        from montblanc.impl.rime.tensorflow.rime_ops.op_test_utils import random_baselines
+
         nsrc, ntime, na, nchan = 10, 15, 7, 16
         nbl = na*(na-1)//2
 
-        np_ant1, np_ant2 = map(lambda x: np.int32(x), np.triu_indices(na, 1))
-        np_ant1, np_ant2 = (np.tile(np_ant1, ntime).reshape(ntime, nbl),
-            np.tile(np_ant2, ntime).reshape(ntime,nbl))
-        np_shape = rf(size=(nsrc, ntime, nbl, nchan))
+        chunks = np.random.random_integers(int(3.*nbl/4.), nbl, ntime)
+        nrow = np.sum(chunks)
+
+        _, np_ant1, np_ant2, np_time_index = random_baselines(chunks, na)
+
+        np_shape = rf(size=(nsrc, nrow, nchan))
         np_ant_jones = rc(size=(nsrc, ntime, na, nchan, 4))
         np_sgn_brightness = np.random.randint(0, 3, size=(nsrc, ntime), dtype=np.int8) - 1
-        np_base_coherencies =  rc(size=(ntime, nbl, nchan, 4))
+        np_base_coherencies = rc(size=(nrow, nchan, 4))
 
         # Argument list
-        np_args = [np_ant1, np_ant2, np_shape, np_ant_jones,
+        np_args = [np_time_index, np_ant1, np_ant2, np_shape, np_ant_jones,
             np_sgn_brightness, np_base_coherencies]
         # Argument string name list
-        arg_names = ['antenna1', 'antenna2', 'shape', 'ant_jones',
+        arg_names = ['time_index', 'antenna1', 'antenna2', 'shape', 'ant_jones',
             'sgn_brightness', 'base_coherencies']
         # Constructor tensorflow variables
         tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]

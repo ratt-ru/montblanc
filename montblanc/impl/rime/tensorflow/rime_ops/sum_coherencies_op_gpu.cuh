@@ -40,6 +40,7 @@ template <> struct LaunchTraits<double>
 // CUDA kernel outline
 template <typename Traits>
 __global__ void rime_sum_coherencies(
+    const int * time_index,
     const typename Traits::antenna_type * antenna1,
     const typename Traits::antenna_type * antenna2,
     const typename Traits::FT * shape,
@@ -47,40 +48,39 @@ __global__ void rime_sum_coherencies(
     const typename Traits::sgn_brightness_type * sgn_brightness,
     const typename Traits::vis_type * base_coherencies,
     typename Traits::vis_type * coherencies,
-    int nsrc, int ntime, int nbl, int na, int nchan, int npolchan)
+    int nsrc, int ntime, int nrow, int na, int nchan, int npolchan)
 {
     // Shared memory usage unnecesssary, but demonstrates use of
     // constant Trait members to create kernel shared memory.
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
     using LTr = LaunchTraits<FT>;
-    //__shared__ FT buffer[LTr::BLOCKDIMX];
 
     int polchan = blockIdx.x*blockDim.x + threadIdx.x;
     int chan = polchan >> 2;
-    int bl = blockIdx.y*blockDim.y + threadIdx.y;
-    int time = blockIdx.z*blockDim.z + threadIdx.z;
+    int row = blockIdx.y*blockDim.y + threadIdx.y;
 
-    if(time >= ntime || bl >= nbl || polchan >= npolchan)
+    if(row >= nrow || polchan >= npolchan)
         { return; }
 
     // Antenna indices for the baseline
-    int i = time*nbl + bl;
-    int ant1 = antenna1[i];
-    int ant2 = antenna2[i];
+    int ant1 = antenna1[row];
+    int ant2 = antenna2[row];
+    int time = time_index[row];
 
     // Load in model visibilities
-    i = (time*nbl + bl)*npolchan + polchan;
+    int i = row*npolchan + polchan;
     CT coherency = base_coherencies[i];
 
     // Sum over visibilities
     for(int src=0; src < nsrc; ++src)
     {
+        // Load in shape value
+        i = (src*nrow + row)*nchan + chan;
+        FT shape_ = shape[i];
+
         int base = src*ntime + time;
 
-        // Load in shape value
-        i = (base*nbl + bl)*nchan + chan;
-        FT shape_ = shape[i];
         // Load in antenna 1 jones
         i = (base*na + ant1)*npolchan + polchan;
         CT J1 = ant_jones[i];
@@ -106,7 +106,7 @@ __global__ void rime_sum_coherencies(
         coherency.y += J1.y;
     }
 
-    i = (time*nbl + bl)*npolchan + polchan;
+    i = row*npolchan + polchan;
     // Write out the polarisation
     coherencies[i] = coherency;
 }
@@ -123,17 +123,18 @@ public:
     {
         namespace tf = tensorflow;
 
-        const tf::Tensor & in_antenna1 = context->input(0);
-        const tf::Tensor & in_antenna2 = context->input(1);
-        const tf::Tensor & in_shape = context->input(2);
-        const tf::Tensor & in_ant_jones = context->input(3);
-        const tf::Tensor & in_sgn_brightness = context->input(4);
-        const tf::Tensor & in_base_coherencies = context->input(5);
+        const tf::Tensor & in_time_index = context->input(0);
+        const tf::Tensor & in_antenna1 = context->input(1);
+        const tf::Tensor & in_antenna2 = context->input(2);
+        const tf::Tensor & in_shape = context->input(3);
+        const tf::Tensor & in_ant_jones = context->input(4);
+        const tf::Tensor & in_sgn_brightness = context->input(5);
+        const tf::Tensor & in_base_coherencies = context->input(6);
 
+        int nrow = in_time_index.dim_size(0);
         int nsrc = in_shape.dim_size(0);
-        int ntime = in_shape.dim_size(1);
-        int nbl = in_shape.dim_size(2);
-        int nchan = in_shape.dim_size(3);
+        int nchan = in_shape.dim_size(2);
+        int ntime = in_ant_jones.dim_size(1);
         int na = in_ant_jones.dim_size(2);
         int npol = in_ant_jones.dim_size(4);
         int npolchan = nchan*npol;
@@ -141,7 +142,7 @@ public:
         // Allocate an output tensor
         tf::Tensor * coherencies_ptr = nullptr;
         tf::TensorShape coherencies_shape = tf::TensorShape({
-            ntime, nbl, nchan, npol });
+            nrow, nchan, npol });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, coherencies_shape, &coherencies_ptr));
 
@@ -149,6 +150,8 @@ public:
         using Tr = montblanc::kernel_traits<FT>;
         using LTr = LaunchTraits<FT>;
 
+        auto time_index = reinterpret_cast<const int *>(
+            in_time_index.flat<int>().data());
         auto antenna1 = reinterpret_cast<const typename Tr::antenna_type *>(
             in_antenna1.flat<int>().data());
         auto antenna2 = reinterpret_cast<const typename Tr::antenna_type *>(
@@ -167,18 +170,18 @@ public:
         // Set up our CUDA thread block and grid
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
-            npolchan, nbl, ntime);
+            npolchan, nrow, 1);
         dim3 grid(montblanc::grid_from_thread_block(
-            block, npolchan, nbl, ntime));
+            block, npolchan, nrow, 1));
 
         // Get the GPU device
         const auto & device = context->eigen_device<GPUDevice>();
 
         // Call the rime_sum_coherencies CUDA kernel
         rime_sum_coherencies<Tr><<<grid, block, 0, device.stream()>>>(
-            antenna1, antenna2, shape, ant_jones, sgn_brightness,
-            base_coherencies, coherencies,
-            nsrc, ntime, nbl, na, nchan, npolchan);
+            time_index, antenna1, antenna2, shape, ant_jones,
+            sgn_brightness, base_coherencies, coherencies,
+            nsrc, ntime, nrow, na, nchan, npolchan);
     }
 };
 
