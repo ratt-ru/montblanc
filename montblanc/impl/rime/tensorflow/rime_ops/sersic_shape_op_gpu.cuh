@@ -41,6 +41,7 @@ template <> struct LaunchTraits<double>
 // CUDA kernel outline
 template <typename Traits>
 __global__ void rime_sersic_shape(
+    const int * time_index,
     const typename Traits::uvw_type * uvw,
     const typename Traits::antenna_type * antenna1,
     const typename Traits::antenna_type * antenna2,
@@ -48,11 +49,10 @@ __global__ void rime_sersic_shape(
     const typename Traits::sersic_param_type * sersic_params,
     typename Traits::sersic_shape_type * sersic_shape,
     const typename Traits::FT two_pi_over_c,
-    int nssrc, int ntime, int nbl, int na, int nchan)
+    int nssrc, int ntime, int nrows, int na, int nchan)
 {
     int chan = blockIdx.x*blockDim.x + threadIdx.x;
-    int bl = blockIdx.y*blockDim.y + threadIdx.y;
-    int time = blockIdx.z*blockDim.z + threadIdx.z;
+    int row = blockIdx.y*blockDim.y + threadIdx.y;
 
     using FT = typename Traits::FT;
     using LTr = LaunchTraits<FT>;
@@ -60,7 +60,7 @@ __global__ void rime_sersic_shape(
 
     constexpr FT one = FT(1.0);
 
-    if(time >= ntime || bl >= nbl || chan >= nchan)
+    if(row >= nrows || chan >= nchan)
         { return; }
 
     __shared__ struct {
@@ -68,15 +68,17 @@ __global__ void rime_sersic_shape(
         typename Traits::frequency_type scaled_freq[LTr::BLOCKDIMX];
     } shared;
 
+    int i;
+
     // Reference u, v and w in shared memory for this thread
     FT & u = shared.uvw[threadIdx.z][threadIdx.y].x;
     FT & v = shared.uvw[threadIdx.z][threadIdx.y].y;
     FT & w = shared.uvw[threadIdx.z][threadIdx.y].z;
 
     // Retrieve antenna pairs for the current baseline
-    int i = time*nbl + bl;
-    int ant1 = antenna1[i];
-    int ant2 = antenna2[i];
+    int ant1 = antenna1[row];
+    int ant2 = antenna2[row];
+    int time = time_index[row];
 
     // UVW coordinates vary by baseline and time, but not channel
     if(threadIdx.x == 0)
@@ -115,7 +117,7 @@ __global__ void rime_sersic_shape(
 
         FT sersic_factor = one + u1*u1+v1*v1;
 
-        i = ((ssrc*ntime + time)*nbl + bl)*nchan + chan;
+        i = (ssrc*nrows + row)*nchan + chan;
         sersic_shape[i] = one / (ss*Po::sqrt(sersic_factor));
     }
 }
@@ -131,20 +133,21 @@ public:
     void Compute(tensorflow::OpKernelContext * context) override
     {
         namespace tf = tensorflow;
+        const tf::Tensor & in_time_index = context->input(0);
+        const tf::Tensor & in_uvw = context->input(1);
+        const tf::Tensor & in_antenna1 = context->input(2);
+        const tf::Tensor & in_antenna2 = context->input(3);
+        const tf::Tensor & in_frequency = context->input(4);
+        const tf::Tensor & in_sersic_params = context->input(5);
 
-        const tf::Tensor & in_uvw = context->input(0);
-        const tf::Tensor & in_antenna1 = context->input(1);
-        const tf::Tensor & in_antenna2 = context->input(2);
-        const tf::Tensor & in_frequency = context->input(3);
-        const tf::Tensor & in_sersic_params = context->input(4);
-
+        int nrows = in_time_index.dim_size(0);
         int ntime = in_uvw.dim_size(0);
         int na = in_uvw.dim_size(1);
         int nbl = in_antenna1.dim_size(1);
         int nchan = in_frequency.dim_size(0);
         int nssrc = in_sersic_params.dim_size(1);
 
-        tf::TensorShape sersic_shape_shape{nssrc, ntime, nbl, nchan};
+        tf::TensorShape sersic_shape_shape{nssrc, nrows, nchan};
 
         // Allocate an output tensor
         tf::Tensor * sersic_shape_ptr = nullptr;
@@ -156,12 +159,14 @@ public:
 
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
-            nchan, nbl, ntime);
+            nchan, nrows, 1);
         dim3 grid(montblanc::grid_from_thread_block(
-            block, nchan, nbl, ntime));
+            block, nchan, nrows, 1));
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
+        auto time_index = reinterpret_cast<const int *>(
+            in_time_index.flat<int>().data());
         auto uvw = reinterpret_cast<const typename Tr::uvw_type *>(
             in_uvw.flat<FT>().data());
         auto antenna1 = reinterpret_cast<const typename Tr::antenna_type *>(
@@ -176,10 +181,10 @@ public:
             sersic_shape_ptr->flat<FT>().data());
 
         rime_sersic_shape<Tr><<<grid, block, 0, stream>>>(
-            uvw, antenna1, antenna2,
+            time_index, uvw, antenna1, antenna2,
             frequency, sersic_params, sersic_shape,
             montblanc::constants<FT>::two_pi_over_c,
-            nssrc, ntime, nbl, na, nchan);
+            nssrc, ntime, nrows, na, nchan);
     }
 };
 
