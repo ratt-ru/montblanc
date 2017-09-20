@@ -15,93 +15,100 @@ auto shape_function = [](InferenceContext* c) {
     ShapeHandle input;
     DimensionHandle d;
 
+    // TODO. Check shape and dimension sizes for 'time_index'
+    ShapeHandle in_time_index = c->input(0);
+    // Assert 'time_index' number of dimensions
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_time_index, 1, &input),
+        "antenna1 must have shape [nrow] but is " +
+        c->DebugString(in_time_index));
+
+
     // TODO. Check shape and dimension sizes for 'antenna1'
-    ShapeHandle in_antenna1 = c->input(0);
+    ShapeHandle in_antenna1 = c->input(1);
     // Assert 'antenna1' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_antenna1, 2, &input),
-        "antenna1 must have shape [ntime, nbl] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_antenna1, 1, &input),
+        "antenna1 must have shape [nrow] but is " +
         c->DebugString(in_antenna1));
 
     // TODO. Check shape and dimension sizes for 'antenna2'
-    ShapeHandle in_antenna2 = c->input(1);
+    ShapeHandle in_antenna2 = c->input(2);
     // Assert 'antenna2' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_antenna2, 2, &input),
-        "antenna2 must have shape [ntime, nbl] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_antenna2, 1, &input),
+        "antenna2 must have shape [nrow] but is " +
         c->DebugString(in_antenna2));
 
     // TODO. Check shape and dimension sizes for 'direction_independent_effects'
-    ShapeHandle in_direction_independent_effects = c->input(2);
+    ShapeHandle in_die = c->input(3);
     // Assert 'direction_independent_effects' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_direction_independent_effects, 4, &input),
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_die, 4, &input),
         "direction_independent_effects must have shape [ntime, na, nchan, 4] but is " +
-        c->DebugString(in_direction_independent_effects));
+        c->DebugString(in_die));
     // Assert 'direction_independent_effects' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_direction_independent_effects, 3), 4, &d),
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_die, 3), 4, &d),
         "direction_independent_effects must have shape [ntime, na, nchan, 4] but is " +
-        c->DebugString(in_direction_independent_effects));
+        c->DebugString(in_die));
 
     // TODO. Check shape and dimension sizes for 'flag'
-    ShapeHandle in_flag = c->input(3);
+    ShapeHandle in_flag = c->input(4);
     // Assert 'flag' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_flag, 4, &input),
-        "flag must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_flag, 3, &input),
+        "flag must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_flag));
     // Assert 'flag' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_flag, 3), 4, &d),
-        "flag must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_flag, 2), 4, &d),
+        "flag must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_flag));
 
     // TODO. Check shape and dimension sizes for 'weight'
-    ShapeHandle in_weight = c->input(4);
+    ShapeHandle in_weight = c->input(5);
     // Assert 'weight' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_weight, 4, &input),
-        "weight must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_weight, 3, &input),
+        "weight must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_weight));
     // Assert 'weight' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_weight, 3), 4, &d),
-        "weight must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_weight, 2), 4, &d),
+        "weight must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_weight));
 
     // TODO. Check shape and dimension sizes for 'base_vis'
-    ShapeHandle in_base_vis = c->input(5);
+    ShapeHandle in_base_vis = c->input(6);
     // Assert 'base_vis' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_base_vis, 4, &input),
-        "base_vis must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_base_vis, 3, &input),
+        "base_vis must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_base_vis));
     // Assert 'base_vis' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_base_vis, 3), 4, &d),
-        "base_vis must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_base_vis, 2), 4, &d),
+        "base_vis must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_base_vis));
 
 
     // TODO. Check shape and dimension sizes for 'model_vis'
-    ShapeHandle in_model_vis = c->input(6);
+    ShapeHandle in_model_vis = c->input(7);
     // Assert 'model_vis' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_model_vis, 4, &input),
-        "model_vis must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_model_vis, 3, &input),
+        "model_vis must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_model_vis));
     // Assert 'model_vis' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_model_vis, 3), 4, &d),
-        "model_vis must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_model_vis, 2), 4, &d),
+        "model_vis must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_model_vis));
 
     // TODO. Check shape and dimension sizes for 'observed_vis'
-    ShapeHandle in_observed_vis = c->input(7);
+    ShapeHandle in_observed_vis = c->input(8);
     // Assert 'observed_vis' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_observed_vis, 4, &input),
-        "observed_vis must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_observed_vis, 3, &input),
+        "observed_vis must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_observed_vis));
     // Assert 'observed_vis' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_observed_vis, 3), 4, &d),
-        "observed_vis must have shape [ntime, nbl, nchan, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_observed_vis, 2), 4, &d),
+        "observed_vis must have shape [nrow, nchan, 4] but is " +
         c->DebugString(in_observed_vis));
 
     // Final visibilities have same shape as input visibilities
     ShapeHandle out_final_vis = c->MakeShape({
         c->Dim(in_model_vis, 0),
         c->Dim(in_model_vis, 1),
-        c->Dim(in_model_vis, 2),
-        c->Dim(in_model_vis, 3) });
+        c->Dim(in_model_vis, 2) });
 
     ShapeHandle out_chi_squared = c->MakeShape({  });
 
@@ -116,6 +123,7 @@ auto shape_function = [](InferenceContext* c) {
 
 // Register the PostProcessVisibilities operator.
 REGISTER_OP("PostProcessVisibilities")
+    .Input("time_index: int32")
     .Input("antenna1: int32")
     .Input("antenna2: int32")
     .Input("direction_independent_effects: CT")

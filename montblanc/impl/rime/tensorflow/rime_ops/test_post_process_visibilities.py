@@ -35,29 +35,33 @@ class TestPostProcessVisibilities(unittest.TestCase):
         """ Implementation of the PostProcessVisibilities operator test """
 
         ntime, nbl, na, nchan = 100, 21, 7, 16
+        chunks = np.random.random_integers(int(3.*nbl/4.), nbl, ntime)
+        nrow = np.sum(chunks)
 
         rf = lambda *a, **kw: np.random.random(*a, **kw).astype(FT)
         rc = lambda *a, **kw: rf(*a, **kw) + 1j*rf(*a, **kw).astype(CT)
 
+        from montblanc.impl.rime.tensorflow.rime_ops.op_test_utils import random_baselines
+
+        _, antenna1, antenna2, time_index = random_baselines(chunks, na)
+
         # Create input variables
-        antenna1 = np.random.randint(low=0, high=na,
-            size=[ntime, nbl]).astype(np.int32)
-        antenna2 = np.random.randint(low=0, high=na,
-            size=[ntime, nbl]).astype(np.int32)
         direction_independent_effects = rc(size=[ntime, na, nchan, 4])
         flag = np.random.randint(low=0, high=2,
-            size=[ntime, nbl, nchan, 4]).astype(np.uint8)
-        weight = rf(size=[ntime, nbl, nchan, 4])
-        base_vis = rc(size=[ntime, nbl, nchan, 4])
-        model_vis = rc(size=[ntime, nbl, nchan, 4])
-        observed_vis = rc(size=[ntime, nbl, nchan, 4])
+            size=[nrow, nchan, 4]).astype(np.uint8)
+        weight = rf(size=[nrow, nchan, 4])
+        base_vis = rc(size=[nrow, nchan, 4])
+        model_vis = rc(size=[nrow, nchan, 4])
+        observed_vis = rc(size=[nrow, nchan, 4])
 
         # Argument list
-        np_args = [antenna1, antenna2, direction_independent_effects, flag, weight,
+        np_args = [time_index, antenna1, antenna2,
+            direction_independent_effects, flag, weight,
             base_vis, model_vis, observed_vis]
         # Argument string name list
-        arg_names = ['antenna1', 'antenna2', 'direction_independent_effects',
-            'flag', 'weight', 'base_vis', 'model_vis', 'observed_vis']
+        arg_names = ['time_index', 'antenna1', 'antenna2',
+            'direction_independent_effects', 'flag', 'weight',
+            'base_vis', 'model_vis', 'observed_vis']
         # Constructor tensorflow variables
         tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
