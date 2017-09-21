@@ -316,6 +316,7 @@ def group_rows(xds):
     return xds.assign(row_groups=xr.DataArray(row_groups[1:], dims=["groups"]),
                     utime_groups=xr.DataArray(utime_groups[1:], dims=["groups"]))
 
+
 def montblanc_dataset(xds):
     """
     Massages an :class:`xarray.Dataset` produced by `xarray-ms` into
