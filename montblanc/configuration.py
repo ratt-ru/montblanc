@@ -34,19 +34,20 @@ def config_validator():
             'type': 'string',
             'allowed': ['CPU', 'GPU'],
             'default': 'GPU',
-            '__description__': "Device to use by default." },
+            '__description__': "Default compute device." },
 
         'dtype': {
             'type': 'string',
             'allowed': ['float', 'double'],
             'default': 'double',
-            '__description__': "Floating Point precision of solution" },
+            '__description__': "Floating Point precision of "
+                                "inputs and solutions." },
 
         'auto_correlations': {
             'type': 'boolean',
             'default': False,
             '__description__': "Take auto-correlations into account "
-                               "when number of baselines "
+                               "when computing number of baselines "
                                "from number of antenna." },
 
         'polarisation_type': {
@@ -54,14 +55,15 @@ def config_validator():
             'allowed': ['linear', 'circular'],
             'default': 'linear',
             '__description__': "Type of polarisation. "
-                               "Can be 'linear' or 'circular'." },
+                               "Should be 'linear' or 'circular'." },
 
         'mem_budget': {
             'type': 'integer',
             'min': 1024,
             'default': 1024*1024*1024,
             '__description__': "Memory budget for solving a single "
-                               "tile of the problem on a CPU/GPU." },
+                               "tile of the problem on a CPU/GPU "
+                               "in bytes." },
 
         'source_batch_size': {
             'type': 'integer',
