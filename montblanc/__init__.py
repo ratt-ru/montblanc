@@ -71,11 +71,8 @@ def rime_solver_cfg(**kwargs):
     -------
     A SolverConfiguration object.
     """
-
-    import textwrap
-    from functools import partial
-
-    from configuration import load_config, config_validator
+    from configuration import (load_config, config_validator,
+        raise_validator_errors)
 
     def _merge_copy(d1, d2):
         return { k: _merge_copy(d1[k], d2[k]) if k in d1
@@ -91,53 +88,10 @@ def rime_solver_cfg(**kwargs):
         cfg = load_config(cfg_file)
         slvr_cfg = _merge_copy(cfg, kwargs)
 
-    def _path_str(path, name=None):
-        """ String of the document/schema path. `cfg["foo"]["bar"]` """
-        L = [name] if name is not None else []
-        L.extend('["%s"]' % p for p in path)
-        return "".join(L)
-
-    def _path_leaf(path, dicts):
-        """ Dictionary Leaf of the schema/document given the path """
-        for p in path:
-            dicts = dicts[p]
-
-        return dicts
-
-    wrap = partial(textwrap.wrap, initial_indent=' '*4,
-                                subsequent_indent=' '*8)
-
+    # Validate the configuration, raising any errors
     validator = config_validator()
-
-    # Handle configuration errors
-    if not validator.validate(slvr_cfg):
-        msg = ["There were configuration errors:"]
-
-        for e in validator._errors:
-            schema_leaf = _path_leaf(e.document_path, validator.schema)
-            doc_str = _path_str(e.document_path, "cfg")
-
-            msg.append("Invalid configuration option %s == '%s'." % (doc_str, e.value))
-
-            try:
-                otype = schema_leaf["type"]
-                msg.extend(wrap("Type must be '%s'." % otype))
-            except KeyError:
-                pass
-
-            try:
-                allowed = schema_leaf["allowed"]
-                msg.extend(wrap("Allowed values are '%s'." % allowed))
-            except KeyError:
-                pass
-
-            try:
-                description = schema_leaf["__description__"]
-                msg.extend(wrap("Description: %s" % description))
-            except KeyError:
-                pass
-
-        raise ValueError("\n".join(msg))
+    validator.validate(slvr_cfg)
+    raise_validator_errors(validator)
 
     return validator.document
 
