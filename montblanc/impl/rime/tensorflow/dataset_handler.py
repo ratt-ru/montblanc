@@ -206,7 +206,7 @@ from pprint import pformat
 
 def create_antenna_uvw(xds):
     """
-    Adds `antenna_uvw` coordinates to the give :class:`xarray.Dataset`.
+    Adds `antenna_uvw` coordinates to the given :class:`xarray.Dataset`.
 
     Returns
     -------
@@ -246,6 +246,27 @@ def create_antenna_uvw(xds):
     dask_array = da.Array(dsk, name, chunks, xds.uvw.dtype)
     dims = ("utime", "antenna", "(u,v,w)")
     return xds.assign(antenna_uvw=xr.DataArray(dask_array, dims=dims))
+
+def create_time_index(xds):
+    """
+    Adds the `time_index` array specifying the unique time index
+    associated with row to the given :class:`xarray.Dataset`.
+
+
+    Returns
+    -------
+    :class:`xarray.Dataset`
+        `xds` with `time_index` assigned.
+    """
+    time_chunks = xds.time_chunks.values
+    tindices = np.empty(time_chunks.sum(), np.int32)
+    start = 0
+
+    for i, c in enumerate(time_chunks):
+        tindices[start:start+c] = i
+        start += c
+
+    return xds.assign(time_index=xr.DataArray(tindices, dims=('row',)))
 
 def dataset_from_ms(ms):
     """
@@ -306,6 +327,8 @@ def montblanc_dataset(xds):
     """
     mds = group_rows(xds)
     mds = create_antenna_uvw(mds)
+    mds = create_time_index(mds)
+
 
     # Verify schema
     for k, v in six.iteritems(default_schema()):
@@ -317,8 +340,7 @@ def montblanc_dataset(xds):
     return mds
 
 if __name__ == "__main__":
-    xds = default_dataset()
-    print xds
+    xds = montblanc_dataset(default_dataset())
 
     ms = "~/data/D147-LO-NOIFS-NOPOL-4M5S.MS"
 
