@@ -333,10 +333,10 @@ void sersic_chi_squared_gradient_impl(
       __syncthreads();
       //atomic addition to avoid concurrent access in the device memory (contribution for a single particle)
       // 3 different threads writes each a different component to avoid serialisation
-      if (threadIdx.x < 3 && threadIdx.y == 0 && threadIdx.z == 0)
+      if (threadIdx.x == 0 && threadIdx.y < 3 && threadIdx.z == 0)
       {
-          i = SRC - SRC_START + threadIdx.x*DEXT(nssrc);
-          atomicAdd(&(X2_grad[i]), shared.X2_grad_part[threadIdx.x]);
+          i = SRC - SRC_START + threadIdx.y*DEXT(nssrc);
+          atomicAdd(&(X2_grad[i]), shared.X2_grad_part[threadIdx.y]);
       }
     }
   
