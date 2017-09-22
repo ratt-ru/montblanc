@@ -96,6 +96,11 @@ schema = {
         "default": default_time_chunks,
     },
 
+    "model_data": {
+        "shape": ("row", "chan", "corr"),
+        "dtype": np.complex128,
+    },
+
     "uvw": {
         "shape": ("row", "(u,v,w)"),
         "dtype": np.float64,
@@ -203,8 +208,6 @@ def default_dataset(**kwargs):
 
     return ds.chunk({"row": 10000})
 
-from pprint import pformat
-
 def create_antenna_uvw(xds):
     """
     Adds `antenna_uvw` coordinates to the given :class:`xarray.Dataset`.
@@ -217,11 +220,11 @@ def create_antenna_uvw(xds):
     from operator import getitem
     from functools import partial
 
-    row_groups = xds.row_groups.values
-    utime_groups = xds.utime_groups.values
+    row_groups = xds.chunks['row']
+    utime_groups = xds.chunks['utime']
 
     token = dask.base.tokenize(xds.uvw, xds.antenna1, xds.antenna2,
-                            xds.time_chunks, xds.row_groups, xds.utime_groups)
+                            xds.time_chunks, row_groups, utime_groups)
     name = "-".join(("create_antenna_uvw", token))
     p_ant_uvw = partial(dsmod.antenna_uvw, nr_of_antenna=xds.dims["antenna"])
 
@@ -232,8 +235,8 @@ def create_antenna_uvw(xds):
             yield slice(start, end)
             start = end
 
-    it = itertools.izip(_chunk_iter(xds.row_groups.values),
-                        _chunk_iter(xds.utime_groups.values))
+    it = itertools.izip(_chunk_iter(row_groups),
+                        _chunk_iter(utime_groups))
 
     dsk = { (name, i, 0, 0): (p_ant_uvw,
                                 (getitem, xds.uvw, rs),
@@ -285,13 +288,11 @@ def dataset_from_ms(ms):
                     frequency=xspwds.rename({"rows":"spw", "chans" : "chan"}).drop('msrows').chan_freq[0])
     return xds
 
-def group_rows(xds, max_group_size=100000):
+def group_row_chunks(xds, max_group_size=100000):
     """
-    Adds `row_groups` and `utime_groups` to the :class:`xarray.Dataset`
-
     Returns
     -------
-    `xarray.Dataset`
+    dict
     """
     row_groups = [0]
     utime_groups = [0]
@@ -314,9 +315,7 @@ def group_rows(xds, max_group_size=100000):
         row_groups.append(rows)
         utime_groups.append(utimes)
 
-    return xds.assign(row_groups=xr.DataArray(row_groups[1:], dims=["group"]),
-                    utime_groups=xr.DataArray(utime_groups[1:], dims=["group"]))
-
+    return { 'utime': tuple(utime_groups[1:]), 'row': tuple(row_groups[1:]) }
 
 def montblanc_dataset(xds):
     """
@@ -327,7 +326,11 @@ def montblanc_dataset(xds):
     -------
     `xarray.Dataset`
     """
-    mds = create_time_index(xds)
+
+    schema = default_schema()
+    required_arrays = set(schema.keys())
+    mds = xds.drop(set(xds.data_vars.keys()).difference(required_arrays))
+    mds = create_antenna_uvw(mds)
 
     # Verify schema
     for k, v in six.iteritems(default_schema()):
@@ -382,6 +385,10 @@ def budget(xds, mem_budget, reduce_fn):
     return applied_reductions
 
 def _uniq_log2_range(start, size, div):
+    """
+    Produce unique integers in the start, start+size range
+    with a log2 distribution
+    """
     start = np.log2(start)
     size = np.log2(size)
     int_values = np.int32(np.logspace(start, size, div, base=2)[:-1])
@@ -389,11 +396,12 @@ def _uniq_log2_range(start, size, div):
     return np.flipud(np.unique(int_values))
 
 def _reduction():
+    """ Default reduction """
     utimes = _uniq_log2_range(1, mds.dims['utime'], 50)
 
     for utime in utimes:
-        yield [('utime', utime), ('row', mds.time_chunks[:utime].values.sum())]
-
+        rows = mds.time_chunks[:utime].values.sum()
+        yield [('utime', utime), ('row', rows)]
 
 if __name__ == "__main__":
     from pprint import pprint
@@ -401,22 +409,52 @@ if __name__ == "__main__":
     print xds
     ms = "~/data/D147-LO-NOIFS-NOPOL-4M5S.MS"
 
-    renames = {'rows': 'row',
-                'chans' : 'chan',
+    renames = { 'rows': 'row',
+                'chans': 'chan',
                 'pols': 'pol',
-                'corrs' : 'corr'}
+                'corrs': 'corr'}
 
     xds = dataset_from_ms(ms).rename(renames)
-    mds = montblanc_dataset(xds)
+    mds = create_time_index(xds)
+    print mds.dims['utime']
+    print mds
 
     ar = budget(mds, 5*1024*1024*1024, _reduction)
-
     pprint(ar)
-
-    mds = group_rows(mds, max_group_size=ar.get('row'))
+    chunks = group_row_chunks(mds, max_group_size=ar['row'])
+    mds = mds.chunk(chunks)
+    mds = montblanc_dataset(mds)
     mds = create_antenna_uvw(mds)
-    print mds.antenna_uvw
+
+    # Test antenna_uvw are properly computed. Do not delete!
+    print mds.antenna_uvw.compute()
+
+    pprint(dict(mds.chunks))
+    pprint(mds.antenna_uvw.chunks)
+
+    def _plort(ant_j, data, lm):
+        print ant_j.shape, data.shape, lm.shape
+        return data
+
+    ashape =('utime', 'antenna', 'corr')
+    shape = tuple(mds.dims[s] for s in ashape)
+    chunks = tuple(mds.chunks[s] for s in ashape)
+
+    # Create antenna jones
+    mds = mds.assign(ant_jones=xr.DataArray(da.zeros(shape, chunks=chunks, dtype=np.float64), dims=ashape))
+    mds = mds.assign(point_lm=xr.DataArray(da.zeros((10,2), chunks=((2,2,2,4),2), dtype=np.float64), dims=('point', '(l,m)')))
 
     print mds
-    print mds.row_groups.values
-    print mds.utime_groups.values
+
+    A = da.core.map_blocks(_plort,
+        mds.model_data.data,
+        mds.ant_jones.data,
+        mds.point_lm,
+        chunks=mds.model_data.chunks,
+        dtype=mds.model_data.dtype)
+
+    pprint(A.dask.dicts[A.name])
+    pprint(mds.point_lm.data.chunks)
+
+    print A.shape
+    print A.compute().shape
