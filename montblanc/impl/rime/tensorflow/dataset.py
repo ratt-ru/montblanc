@@ -1,5 +1,6 @@
 import itertools
 import os
+import sys
 
 import montblanc
 from xarray_ms import xds_from_ms, xds_from_table
@@ -284,7 +285,7 @@ def dataset_from_ms(ms):
                     frequency=xspwds.rename({"rows":"spw", "chans" : "chan"}).drop('msrows').chan_freq[0])
     return xds
 
-def group_rows(xds):
+def group_rows(xds, max_group_size=100000):
     """
     Adds `row_groups` and `utime_groups` to the :class:`xarray.Dataset`
 
@@ -300,7 +301,7 @@ def group_rows(xds):
     for chunk in xds.time_chunks.values:
         next_ = rows + chunk
 
-        if next_ > 100000:
+        if next_ > max_group_size:
             row_groups.append(rows)
             utime_groups.append(utimes)
             rows = chunk
@@ -313,8 +314,8 @@ def group_rows(xds):
         row_groups.append(rows)
         utime_groups.append(utimes)
 
-    return xds.assign(row_groups=xr.DataArray(row_groups[1:], dims=["groups"]),
-                    utime_groups=xr.DataArray(utime_groups[1:], dims=["groups"]))
+    return xds.assign(row_groups=xr.DataArray(row_groups[1:], dims=["group"]),
+                    utime_groups=xr.DataArray(utime_groups[1:], dims=["group"]))
 
 
 def montblanc_dataset(xds):
@@ -326,10 +327,7 @@ def montblanc_dataset(xds):
     -------
     `xarray.Dataset`
     """
-    mds = group_rows(xds)
-    mds = create_antenna_uvw(mds)
-    mds = create_time_index(mds)
-
+    mds = create_time_index(xds)
 
     # Verify schema
     for k, v in six.iteritems(default_schema()):
@@ -340,9 +338,67 @@ def montblanc_dataset(xds):
 
     return mds
 
-if __name__ == "__main__":
-    xds = montblanc_dataset(default_dataset())
+def budget(xds, mem_budget, reduce_fn):
+    """
+    Reduce `xds` dimensions using reductions
+    obtained from generator `reduce_fn` until
+    :code:`xds.nbytes <= mem_budget`.
 
+    Parameters
+    ----------
+    xds : :class:`array.Dataset`
+        xarray dataset
+    mem_budget : int
+        Number of bytes defining the memory budget
+    reduce_fn : callable
+        Generator yielding a lists of dimension reduction tuples.
+        For example:
+
+        .. code-block:: python
+
+            def red_gen():
+                yield [('utime', 100), ('row', 10000)]
+                yield [('utime', 50), ('row', 1000)]
+                yield [('utime', 20), ('row', 100)]
+
+    Returns
+    -------
+    dict
+        A {dim: size} mapping of dimension reductions that
+        fit the sliced dataset into the memory budget.
+    """
+    bytes_required = xds.nbytes
+    applied_reductions = {}
+    mds = xds
+
+    for reduction in reduce_fn():
+        if bytes_required > mem_budget:
+            mds = mds.isel(**{ dim: slice(0, size) for dim, size in reduction })
+            applied_reductions.update({ dim: size for dim, size in reduction })
+            bytes_required = mds.nbytes
+        else:
+            break
+
+    return applied_reductions
+
+def _uniq_log2_range(start, size, div):
+    start = np.log2(start)
+    size = np.log2(size)
+    int_values = np.int32(np.logspace(start, size, div, base=2)[:-1])
+
+    return np.flipud(np.unique(int_values))
+
+def _reduction():
+    utimes = _uniq_log2_range(1, mds.dims['utime'], 50)
+
+    for utime in utimes:
+        yield [('utime', utime), ('row', mds.time_chunks[:utime].values.sum())]
+
+
+if __name__ == "__main__":
+    from pprint import pprint
+    xds = montblanc_dataset(default_dataset())
+    print xds
     ms = "~/data/D147-LO-NOIFS-NOPOL-4M5S.MS"
 
     renames = {'rows': 'row',
@@ -352,11 +408,15 @@ if __name__ == "__main__":
 
     xds = dataset_from_ms(ms).rename(renames)
     mds = montblanc_dataset(xds)
+
+    ar = budget(mds, 5*1024*1024*1024, _reduction)
+
+    pprint(ar)
+
+    mds = group_rows(mds, max_group_size=ar.get('row'))
+    mds = create_antenna_uvw(mds)
     print mds.antenna_uvw
 
-    ant_uvw = mds.antenna_uvw.values
-    ant1 = mds.antenna1.values
-    ant2 = mds.antenna2.values
     print mds
-
-    print ant_uvw
+    print mds.row_groups.values
+    print mds.utime_groups.values
