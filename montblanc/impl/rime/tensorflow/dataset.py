@@ -73,6 +73,75 @@ def default_frequency(ds, schema):
     return da.linspace(8.56e9, 2*8.56e9, schema['rshape'][0],
                                     chunks=schema['chunks'][0])
 
+def scratch_schema():
+    return {
+        "bsqrt": {
+            "shape": ("source", "utime", "chan", "pol"),
+            "dtype": np.complex128,
+        },
+        "complex_phase": {
+            "shape": ("source", "utime", "antenna", "chan"),
+            "dtype": np.complex128,
+        },
+        "ejones": {
+            "shape": ("source", "utime", "antenna", "chan", "pol"),
+            "dtype": np.complex128,
+        },
+        "antenna_jones": {
+            "shape": ("source", "utime", "antenna", "chan", "pol"),
+            "dtype": np.complex128,
+        },
+        "sgn_brightness": {
+            "shape": ("source", "utime"),
+            "dtype": np.int8,
+        },
+        "source_shape": {
+            "shape": ("source", "row", "chan"),
+            "dtype": np.float64,
+        },
+        "chi_sqrd_terms": {
+            "shape": ("row", "chan"),
+            "dtype": np.float64,
+        }
+    }
+
+def source_schema():
+    return {
+        "point_lm": {
+            "shape": ("point", "(l,m)"),
+            "dtype": np.float64,
+        },
+        "point_stokes": {
+            "shape": ("point", "utime", "(I,Q,U,V)"),
+            "dtype": np.float64,
+        },
+        "gaussian_lm": {
+            "shape": ("gaussian", "(l,m)"),
+            "dtype": np.float64,
+        },
+        "gaussian_stokes": {
+            "shape": ("gaussian", "utime", "(I,Q,U,V)"),
+            "dtype": np.float64,
+        },
+        "gaussian_shape_params": {
+            "shape": ("gaussian", "(lproj,mproj,theta)"),
+            "dtype": np.float64,
+        },
+        "sersic_lm": {
+            "shape": ("sersic", "(l,m)"),
+            "dtype": np.float64,
+        },
+        "sersic_stokes": {
+            "shape": ("sersic", "utime", "(I,Q,U,V)"),
+            "dtype": np.float64,
+        },
+        "sersic_shape_params": {
+            "shape": ("sersic", "(s1,s2,theta)"),
+            "dtype": np.float64,
+        },
+
+    }
+
 def default_schema():
     return {
         "time" : {
@@ -173,8 +242,19 @@ def default_dataset(**kwargs):
     bl = ants*(ants-1)//2
     dims.setdefault("row", utime*bl)
 
+    dims.setdefault("point", 10)
+    dims.setdefault("gaussian", 0)
+    dims.setdefault("sersic", 0)
+    dims.setdefault("source", sum(dims[k] for k in ("point", "gaussian", "sersic")))
+
+    # Force these
+    dims['(l,m)'] = 2
+    dims['(lproj,mproj,theta)'] = 3
+    dims['(s1,s2,theta)'] = 3
+    dims['(I,Q,U,V)'] = 4
+
     # Get and sort the default schema
-    schema = default_schema()
+    schema = toolz.merge(default_schema(), source_schema(), scratch_schema())
     sorted_schema = sorted(schema.items())
     row_chunks = 10000
 
