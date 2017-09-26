@@ -8,11 +8,12 @@ from xarray_ms import xds_from_ms, xds_from_table
 
 
 import boltons.cacheutils
+import cppimport
 import dask
 import dask.array as da
-import six
 import numpy as np
-import cppimport
+import six
+import toolz
 import xarray as xr
 
 dsmod = cppimport.imp('montblanc.ext.dataset_mod')
