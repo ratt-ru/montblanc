@@ -426,7 +426,6 @@ if __name__ == "__main__":
     chunks = group_row_chunks(mds, max_group_size=ar['row'])
     mds = mds.chunk(chunks)
     mds = montblanc_dataset(mds)
-    mds = create_antenna_uvw(mds)
 
     # Test antenna_uvw are properly computed. Do not delete!
     print mds.antenna_uvw.compute()
