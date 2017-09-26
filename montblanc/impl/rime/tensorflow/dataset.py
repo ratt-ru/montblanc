@@ -1,3 +1,4 @@
+import collections
 import itertools
 import os
 import sys
@@ -432,29 +433,71 @@ if __name__ == "__main__":
     pprint(dict(mds.chunks))
     pprint(mds.antenna_uvw.chunks)
 
-    def _plort(ant_j, data, lm):
-        print ant_j.shape, data.shape, lm.shape
-        return data
-
-    ashape =('utime', 'antenna', 'corr')
-    shape = tuple(mds.dims[s] for s in ashape)
-    chunks = tuple(mds.chunks[s] for s in ashape)
-
-    # Create antenna jones
-    mds = mds.assign(ant_jones=xr.DataArray(da.zeros(shape, chunks=chunks, dtype=np.float64), dims=ashape))
+    # Create a point source array
     mds = mds.assign(point_lm=xr.DataArray(da.zeros((10,2), chunks=((2,2,2,4),2), dtype=np.float64), dims=('point', '(l,m)')))
 
-    print mds
+    def _mod_dims(dims):
+        """
+        Convert "utime" dims to "row" dims.
+        After chunking, the number of "row" and "utime" blocks
+        should be exactly the same for each array, even though
+        their sizes will differ. We do this so that :meth:`dask.array.top`
+        will match the blocks of these dimensions together
+        """
+        return tuple("row" if d == "utime" else d for d in dims)
 
-    A = da.core.map_blocks(_plort,
-        mds.model_data.data,
-        mds.ant_jones.data,
-        mds.point_lm,
-        chunks=mds.model_data.chunks,
-        dtype=mds.model_data.dtype)
+    name_dims = [v for var in mds.data_vars.values()
+                    for v in (var.data.name, _mod_dims(var.dims))]
+    names = [var.data.name for var in mds.data_vars.values()]
+    arg_names = [var.name for var in mds.data_vars.values()]
+    numblocks = {var.data.name: var.data.numblocks for var in mds.data_vars.values()}
 
-    pprint(A.dask.dicts[A.name])
-    pprint(mds.point_lm.data.chunks)
+    def _plort(*args):
+        """ Predict function. Just pass through `model_data` for now """
+        kw = {n: a for n, a in zip(arg_names, args)}
 
-    print A.shape
+        def _argshape(arg):
+            """ Get shapes depending on type """
+            if isinstance(arg, np.ndarray):
+                return arg.shape
+            elif isinstance(args, list):
+                return [v.shape for v in arg]
+            elif isinstance(args, tuple):
+                return tuple(v.shape for v in arg)
+            else:
+                raise ValueError("Can't infer shape for type '%s'" % type(arg))
+
+        shapes = {n: _argshape(a) for n, a in kw.items()}
+
+        pprint(shapes)
+        return kw['model_data']
+
+    # Create a name for this function, constructed from lesser names
+    dsk_name = '-'.join(("plort9000", dask.base.tokenize(*names)))
+    dsk = da.core.top(_plort, dsk_name, mds.model_data.dims,
+                            *name_dims, numblocks=numblocks)
+
+    def _flatten_singletons(D):
+        """ Recursively simplify tuples and lists of length 1 """
+
+        # lists and tuples should remain lists and tuples
+        if isinstance(D, list):
+            return (_flatten_singletons(D[0]) if len(D) == 1
+                    else [_flatten_singletons(v) for v in D])
+        elif isinstance(D, tuple):
+            return (_flatten_singletons(D[0]) if len(D) == 1
+                    else tuple(_flatten_singletons(v) for v in D))
+        elif isinstance(D, collections.Mapping):
+            return { k: _flatten_singletons(v) for k, v in D.items() }
+        else:
+            return D
+
+    dsk = _flatten_singletons(dsk)
+
+    for n in mds.data_vars.keys():
+        dsk.update(getattr(mds, n).data.dask)
+
+    A = da.Array(dsk, dsk_name, chunks=mds.model_data.data.chunks, dtype=mds.model_data.dtype)
+
+    print A
     print A.compute().shape
