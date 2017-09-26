@@ -332,7 +332,11 @@ def montblanc_dataset(xds):
 
     # Verify schema
     for k, v in six.iteritems(default_schema()):
-        dims = mds[k].dims
+        try:
+            dims = mds[k].dims
+        except KeyError:
+            raise KeyError("'%s' array is not present in montblanc dataset" % k)
+
         if not dims == v["shape"]:
             raise ValueError("Array '%s' dimensions '%s' does not "
                             "match schema shape '%s'" % (k, dims, v["shape"]))
