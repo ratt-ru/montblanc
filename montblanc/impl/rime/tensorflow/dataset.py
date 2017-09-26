@@ -72,84 +72,81 @@ def default_frequency(ds, schema):
     return da.linspace(8.56e9, 2*8.56e9, schema['rshape'][0],
                                     chunks=schema['chunks'][0])
 
-schema = {
-    "time" : {
-        "shape": ("row",),
-        "dtype": np.float64,
-        "default": default_time,
-    },
-
-    "time_unique": {
-        "shape": ("utime",),
-        "dtype": np.float64,
-        "default": default_time_unique,
-    },
-
-    "time_offsets" : {
-        "shape": ("utime",),
-        "dtype": np.int32,
-        "default": default_time_offset,
-    },
-
-    "time_chunks" : {
-        "shape": ("utime",),
-        "dtype": np.int32,
-        "default": default_time_chunks,
-    },
-
-    "model_data": {
-        "shape": ("row", "chan", "corr"),
-        "dtype": np.complex128,
-    },
-
-    "uvw": {
-        "shape": ("row", "(u,v,w)"),
-        "dtype": np.float64,
-    },
-
-    "antenna1" : {
-        "shape": ("row",),
-        "dtype": np.int32,
-        "default": default_antenna1,
-    },
-
-    "antenna2" : {
-        "shape": ("row",),
-        "dtype": np.int32,
-        "default": default_antenna2,
-    },
-
-    "flag": {
-        "shape": ("row", "chan", "corr"),
-        "dtype": np.bool,
-        "default": lambda ds, as_: da.full(as_["rshape"], False,
-                                            dtype=as_["dtype"],
-                                            chunks=as_["chunks"])
-    },
-
-    "weight": {
-        "shape": ("row", "corr"),
-        "dtype": np.float32,
-        "default": lambda ds, as_: da.ones(shape=as_["rshape"],
-                                            dtype=as_["dtype"],
-                                            chunks=as_["chunks"])
-    },
-
-    "frequency": {
-        "shape": ("chan",),
-        "dtype": np.float64,
-        "default": default_frequency,
-    },
-
-    "antenna_position": {
-        "shape": ("antenna", "(x,y,z)"),
-        "dtype": np.float64,
-    },
-}
-
 def default_schema():
-    global schema
-    return schema
+    return {
+        "time" : {
+            "shape": ("row",),
+            "dtype": np.float64,
+            "default": default_time,
+        },
+
+        "time_unique": {
+            "shape": ("utime",),
+            "dtype": np.float64,
+            "default": default_time_unique,
+        },
+
+        "time_offsets" : {
+            "shape": ("utime",),
+            "dtype": np.int32,
+            "default": default_time_offset,
+        },
+
+        "time_chunks" : {
+            "shape": ("utime",),
+            "dtype": np.int32,
+            "default": default_time_chunks,
+        },
+
+        "model_data": {
+            "shape": ("row", "chan", "corr"),
+            "dtype": np.complex128,
+        },
+
+        "uvw": {
+            "shape": ("row", "(u,v,w)"),
+            "dtype": np.float64,
+        },
+
+        "antenna1" : {
+            "shape": ("row",),
+            "dtype": np.int32,
+            "default": default_antenna1,
+        },
+
+        "antenna2" : {
+            "shape": ("row",),
+            "dtype": np.int32,
+            "default": default_antenna2,
+        },
+
+        "flag": {
+            "shape": ("row", "chan", "corr"),
+            "dtype": np.bool,
+            "default": lambda ds, as_: da.full(as_["rshape"], False,
+                                                dtype=as_["dtype"],
+                                                chunks=as_["chunks"])
+        },
+
+        "weight": {
+            "shape": ("row", "corr"),
+            "dtype": np.float32,
+            "default": lambda ds, as_: da.ones(shape=as_["rshape"],
+                                                dtype=as_["dtype"],
+                                                chunks=as_["chunks"])
+        },
+
+        "frequency": {
+            "shape": ("chan",),
+            "dtype": np.float64,
+            "default": default_frequency,
+        },
+
+        "antenna_position": {
+            "shape": ("antenna", "(x,y,z)"),
+            "dtype": np.float64,
+        },
+    }
 
 def default_dataset(**kwargs):
     """
