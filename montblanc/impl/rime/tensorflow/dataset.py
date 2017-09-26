@@ -341,7 +341,7 @@ def montblanc_dataset(xds):
             raise ValueError("Array '%s' dimensions '%s' does not "
                             "match schema shape '%s'" % (k, dims, v["shape"]))
 
-    return mds
+    return mds.drop("uvw")
 
 def budget(xds, mem_budget, reduce_fn):
     """
