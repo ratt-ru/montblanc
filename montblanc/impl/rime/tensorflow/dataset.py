@@ -3,24 +3,23 @@ import itertools
 import os
 import sys
 
-import montblanc
-from xarray_ms import xds_from_ms, xds_from_table
-
-
 import boltons.cacheutils
 import cppimport
 import dask
 import dask.array as da
 import numpy as np
 import six
-import toolz
+try:
+    import cytoolz as toolz
+except ImportError:
+    import toolz
 import xarray as xr
+from xarray_ms import xds_from_ms, xds_from_table
+
+import montblanc
 
 dsmod = cppimport.imp('montblanc.ext.dataset_mod')
 
-_lru = boltons.cacheutils.LRU(max_size=16)
-
-@boltons.cacheutils.cachedmethod(_lru)
 def default_base_ant_pairs(antenna, auto_correlations=False):
     """ Compute base antenna pairs """
     k = 0 if auto_correlations == True else 1
@@ -31,14 +30,14 @@ def default_antenna1(ds, schema):
     ap = default_base_ant_pairs(ds.dims['antenna'],
                                 ds.attrs['auto_correlations'])
     return da.from_array(np.tile(ap[0], ds.dims['utime']),
-                            chunks=ds.attrs['row_chunks'])
+                            chunks=ds.chunks['row'])
 
 def default_antenna2(ds, schema):
     """ Default antenna 2 """
     ap = default_base_ant_pairs(ds.dims['antenna'],
                                 ds.attrs['auto_correlations'])
     return da.from_array(np.tile(ap[1], ds.dims['utime']),
-                            chunks=ds.attrs['row_chunks'])
+                            chunks=ds.chunks['row'])
 
 def default_time_unique(ds, schema):
     """ Default unique time """
@@ -67,7 +66,7 @@ def default_time(ds, schema):
     time_chunks = default_time_chunks(ds, ds.attrs['schema']['time_chunks'])
 
     time = np.concatenate([np.full(tc, ut) for ut, tc in zip(unique_times, time_chunks)])
-    return da.from_array(time, chunks=ds.attrs['row_chunks'])
+    return da.from_array(time, chunks=ds.chunks['row'])
 
 def default_frequency(ds, schema):
     return da.linspace(8.56e9, 2*8.56e9, schema['rshape'][0],
@@ -218,74 +217,119 @@ def default_schema():
         },
     }
 
-def default_dataset(**kwargs):
+def default_dim_sizes():
+    """ Returns a dictionary of default dimension sizes """
+    ds = {
+        '(I,Q,U,V)': 4,
+        '(x,y,z)': 3,
+        '(u,v,w)': 3,
+        'utime': 100,
+        'chan': 64,
+        'corr': 4,
+        'pol': 4,
+        'antenna': 7,
+        'spw': 1,
+    }
+
+    nbl = ds['antenna']*(ds['antenna']-1)//2
+    ds.update({'row': ds['utime']*nbl })
+
+    ds.update({
+        'point': 1,
+        'gaussian': 1,
+        'sersic': 1,
+        '(l,m)': 2,
+        '(lproj,mproj,theta)': 3,
+        '(s1,s2,theta)': 3,
+    })
+
+    return ds
+
+
+def input_schema():
+    """ Montblanc input schemas """
+    return toolz.merge(default_schema(), source_schema())
+
+def default_dataset(xds=None):
     """
-    Creates a default montblanc :class:`xarray.Dataset`
+    Creates a default montblanc :class:`xarray.Dataset`.(
+        If `xds` is supplied, missing arrays will be filled in
+        with default values.
+
+        Parameters
+        ----------
+        xds (optional): :class:`xarray.Dataset`
 
     Returns
     -------
-    `xarray.Dataset`
+    :class:`xarray.Dataset`
     """
-    dims = kwargs.copy()
 
-    # Force these
-    dims['(x,y,z)'] = 3
-    dims['(u,v,w)'] = 3
+    dims = default_dim_sizes()
+    in_schema = toolz.merge(default_schema(), source_schema())
 
-    utime = dims.setdefault("utime", 100)
-    dims.setdefault("chan", 64)
-    dims.setdefault("corr", 4)
-    dims.setdefault("pol", 4)
-    ants = dims.setdefault("antenna", 7)
-    dims.setdefault("spw", 1)
+    if xds is None:
+        # Create coordinates for each dimension
+        coords = { k: np.arange(dims[k]) for k in dims.keys() }
+        # Create a dummy array with shape ('row',) so that there is
+        # a chunking strategy along this dimension. Needed for most default
+        # methods
+        arrays = { "__dummy__" : xr.DataArray(da.ones(shape=dims['row'],
+                                                        chunks=10000,
+                                                        dtype=np.float64),
+                                                dims=["row"]) }
+        xds = xr.Dataset(arrays, coords=coords)
+    else:
+        # Create coordinates for default dimensions
+        # not present on the dataset
+        coords = { k: np.arange(dims[k]) for k in dims.keys()
+                                        if k not in xds.dims }
 
-    bl = ants*(ants-1)//2
-    dims.setdefault("row", utime*bl)
+        # Update dimension dictionary with dataset dimensions
+        dims.update(xds.dims)
 
-    dims.setdefault("point", 10)
-    dims.setdefault("gaussian", 0)
-    dims.setdefault("sersic", 0)
-    dims.setdefault("source", sum(dims[k] for k in ("point", "gaussian", "sersic")))
+        # Assign coordinates
+        xds.assign_coords(**coords)
 
-    # Force these
-    dims['(l,m)'] = 2
-    dims['(lproj,mproj,theta)'] = 3
-    dims['(s1,s2,theta)'] = 3
-    dims['(I,Q,U,V)'] = 4
+    default_attrs = { 'schema': in_schema,
+                       'auto_correlations': False }
 
-    # Get and sort the default schema
-    schema = toolz.merge(default_schema(), source_schema(), scratch_schema())
-    sorted_schema = sorted(schema.items())
-    row_chunks = 10000
+    default_attrs.update(xds.attrs)
+    xds.attrs.update(default_attrs)
 
-    # Fill in chunks and real shape
-    for array_name, array_schema in sorted_schema:
-        array_schema['chunks'] = tuple(row_chunks if s == 'rows' else dims.get(s,s)
-                                            for s in array_schema['shape'])
-        array_schema['rshape'] = tuple(dims.get(s, s) for s in array_schema['shape'])
+    arrays = xds.data_vars.keys()
+    missing_arrays = set(in_schema).difference(arrays)
 
+    chunks = xds.chunks
 
-    coords = { k: np.arange(dims[k]) for k in dims.keys() }
-    attrs = { 'schema' : schema,
-                'auto_correlations': False,
-                'row_chunks': row_chunks }
+    # Create reified shape and chunks on missing array schemas
+    for n in missing_arrays:
+        schema = in_schema[n]
+        sshape = schema["shape"]
+        schema["rshape"] = rshape = tuple(dims.get(d, d) for d in sshape)
+        schema["chunks"] = tuple(chunks.get(d, r) for d, r in zip(sshape, rshape))
 
-    # Create an empty dataset, but with coordinates set
-    ds = xr.Dataset(None, coords=coords, attrs=attrs)
+    def _default_zeros(ds, schema):
+        """ Return a dask array of zeroes """
+        return da.zeros(shape=schema['rshape'],
+                       chunks=schema['chunks'],
+                        dtype=schema['dtype'])
 
-    # Create Dataset arrays
-    for array_name, array_schema in sorted_schema:
-        acoords = { k: coords[k] for k in array_schema['shape']}
-        default = lambda ds, as_: da.zeros(shape=array_schema['rshape'],
-                                            dtype=as_['dtype'],
-                                            chunks=as_['chunks'])
-        default = array_schema.get('default', default)
+    def _create_array(array):
+        """ Create array """
+        schema = in_schema[array]
+        default = schema.get('default', _default_zeros)
+        return xr.DataArray(default(xds, schema), dims=schema['shape'])
 
-        array = default(ds, array_schema)
+    missing_arrays = { n: _create_array(n) for n in missing_arrays }
 
-        ds[array_name] = xr.DataArray(array, coords=acoords, dims=array_schema['shape'])
+    xds = xds.assign(**missing_arrays)
 
-    return ds.chunk({"row": 10000})
+    # Drop dummy array if present
+    if "__dummy__" in xds:
+        xds = xds.drop("__dummy__")
+
+    return xds
 
 def create_antenna_uvw(xds):
     """
@@ -367,11 +411,86 @@ def dataset_from_ms(ms):
                     frequency=xspwds.rename({"rows":"spw", "chans" : "chan"}).drop('msrows').chan_freq[0])
     return xds
 
+def merge_dataset(iterable):
+    """
+    Merge datasets. Dataset dimensions and coordinates must match.
+    Later datasets have precedence.
+
+    Parameters
+    ----------
+    iterable : :class:`xarray.Dataset` or iterable of :class:`xarray.Dataset`
+        Datasets to merge
+
+    Returns
+    -------
+    :class:`xarray.Dataset`
+        Merged dataset
+
+    """
+    if not isinstance(iterable, collections.Sequence):
+        iterable = [iterable]
+
+    # Construct lists of sizes and coordinates for each dimension
+    dims = collections.defaultdict(list)
+    coords = collections.defaultdict(list)
+
+    for i, ds in enumerate(iterable):
+        for dim, size in ds.dims.iteritems():
+            # Record dataset index
+            dims[dim].append(DimensionInfo(i, size))
+
+        for dim, coord in ds.coords.iteritems():
+            coords[dim].append(DimensionInfo(i, coord.values))
+
+    # Sanity check dimension matches on all datasets
+    for name, dim_sizes in dims.iteritems():
+        if not all(dim_sizes[0].info == ds.info for ds in dim_sizes[1:]):
+            msg_str = ','.join(['(dataset=%d,%s=%d)' % (ds.index, name, ds.info)
+                                                            for ds in dim_sizes])
+
+            raise ValueError("Conflicting dataset dimension sizes for "
+                            "dimension '{n}'. '{ds}'".format(n=name, ds=msg_str))
+
+    # Sanity check dimension coordinates matches on all datasets
+    for name, coord in coords.iteritems():
+        compare = [(coord[0].info == co.info).all() for co in coord]
+        if not all(compare):
+            msg_str = ','.join(["(dataset %d '%s' coords match 0: %s)" % (co.index, name, c)
+                                            for co, c in zip(dim_sizes, compare)])
+
+            raise ValueError("Conflicting dataset coordinates for "
+                            "dimension '{n}'. {m}".format(n=name, m=msg_str))
+
+    # Create dict of data variables for merged datsets
+    # Last dataset has precedence
+    data_vars = { k: v for ds in iterable
+                    for k, v in ds.data_vars.items() }
+
+    # Merge attributes
+    attrs = toolz.merge(ds.attrs for ds in iterable)
+
+    return xr.Dataset(data_vars, attrs=attrs)
+
+
 def group_row_chunks(xds, max_group_size=100000):
     """
+    Return a dictionary of unique time and row groups.
+    Groups are formed by accumulating chunks in the
+    `time_chunks` array attached to `xds` until `max_group_size`
+    is reached.
+
+    Parameters
+    ----------
+    xds : :class:`xarray.Dataset`
+        Dataset with `time_chunks` member
+    max_group_size (optional) : integer
+        Maximum group size
+
     Returns
     -------
     dict
+        { 'utime': (time_group_1, ..., time_group_n),
+          'row': (row_group_1, ..., row_group_n) }
     """
     row_groups = [0]
     utime_groups = [0]
@@ -396,7 +515,7 @@ def group_row_chunks(xds, max_group_size=100000):
 
     return { 'utime': tuple(utime_groups[1:]), 'row': tuple(row_groups[1:]) }
 
-def montblanc_dataset(xds):
+def montblanc_dataset(xds=None):
     """
     Massages an :class:`xarray.Dataset` produced by `xarray-ms` into
     a dataset expected by montblanc.
@@ -405,22 +524,14 @@ def montblanc_dataset(xds):
     -------
     `xarray.Dataset`
     """
+    if xds is None:
+        return default_dataset().drop("uvw")
 
-    schema = default_schema()
+    schema = input_schema()
     required_arrays = set(schema.keys())
     mds = xds.drop(set(xds.data_vars.keys()).difference(required_arrays))
+    mds = default_dataset(mds)
     mds = create_antenna_uvw(mds)
-
-    # Verify schema
-    for k, v in six.iteritems(default_schema()):
-        try:
-            dims = mds[k].dims
-        except KeyError:
-            raise KeyError("'%s' array is not present in montblanc dataset" % k)
-
-        if not dims == v["shape"]:
-            raise ValueError("Array '%s' dimensions '%s' does not "
-                            "match schema shape '%s'" % (k, dims, v["shape"]))
 
     return mds.drop("uvw")
 
@@ -488,8 +599,9 @@ def _reduction():
 
 if __name__ == "__main__":
     from pprint import pprint
-    xds = montblanc_dataset(default_dataset())
+    xds = montblanc_dataset()
     print xds
+
     ms = "~/data/D147-LO-NOIFS-NOPOL-4M5S.MS"
 
     renames = { 'rows': 'row',
@@ -513,9 +625,6 @@ if __name__ == "__main__":
 
     pprint(dict(mds.chunks))
     pprint(mds.antenna_uvw.chunks)
-
-    # Create a point source array
-    mds = mds.assign(point_lm=xr.DataArray(da.zeros((10,2), chunks=((2,2,2,4),2), dtype=np.float64), dims=('point', '(l,m)')))
 
     def _mod_dims(dims):
         """
