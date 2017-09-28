@@ -75,29 +75,35 @@ def default_frequency(ds, schema):
 def scratch_schema():
     return {
         "bsqrt": {
-            "shape": ("source", "utime", "chan", "pol"),
+            "shape": ("source", "utime", "chan", "corr"),
             "dtype": np.complex128,
         },
+
         "complex_phase": {
             "shape": ("source", "utime", "antenna", "chan"),
             "dtype": np.complex128,
         },
+
         "ejones": {
-            "shape": ("source", "utime", "antenna", "chan", "pol"),
+            "shape": ("source", "utime", "antenna", "chan", "corr"),
             "dtype": np.complex128,
         },
+
         "antenna_jones": {
-            "shape": ("source", "utime", "antenna", "chan", "pol"),
+            "shape": ("source", "utime", "antenna", "chan", "corr"),
             "dtype": np.complex128,
         },
+
         "sgn_brightness": {
             "shape": ("source", "utime"),
             "dtype": np.int8,
         },
+
         "source_shape": {
             "shape": ("source", "row", "chan"),
             "dtype": np.float64,
         },
+
         "chi_sqrd_terms": {
             "shape": ("row", "chan"),
             "dtype": np.float64,
