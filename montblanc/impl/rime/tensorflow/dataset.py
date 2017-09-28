@@ -73,19 +73,29 @@ def default_frequency(ds, schema):
     return da.linspace(8.56e9, 2*8.56e9, schema['rshape'][0],
                                     chunks=schema['chunks'][0])
 
+def is_power_of_2(n):
+    return n != 0 and ((n & (n-1)) == 0)
+
 def identity_on_dim(ds, schema, dim):
     """ Return identity matrix on specified dimension """
     rshape = schema['rshape']
     shape = schema['shape']
 
-    # Create index to introduce new dimensions for broadcasting
     dim_idx = shape.index(dim)
-    assert rshape[dim_idx] == 4, "Only handling four '%s'" % dim
+    dim_size = rshape[dim_idx]
+
+    # Require a power of 2
+    if not is_power_of_2(dim_size):
+        raise ValueError("Dimension '%s' of size '%d' must be a power of 2 "
+                        "for broadcasting the identity" % (dim, dim_size))
+
+    # Create index to introduce new dimensions for broadcasting
     it = six.moves.range(len(shape))
     idx = tuple(slice(None) if i == dim_idx else None for i in it)
 
     # Broadcast identity matrix and rechunk
-    identity = np.array([1, 0, 0, 1], dtype=schema['dtype'])[idx]
+    identity = [1] if dim_size == 1 else [1] + [0]*(dim_size-2) + [1]
+    identity = np.array(identity, dtype=schema['dtype'])[idx]
     return da.broadcast_to(identity, rshape).rechunk(schema['chunks'])
 
 def scratch_schema():
