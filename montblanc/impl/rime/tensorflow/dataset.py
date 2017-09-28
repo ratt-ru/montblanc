@@ -1,4 +1,5 @@
 import collections
+from functools import partial
 import itertools
 import os
 import sys
@@ -71,6 +72,21 @@ def default_time(ds, schema):
 def default_frequency(ds, schema):
     return da.linspace(8.56e9, 2*8.56e9, schema['rshape'][0],
                                     chunks=schema['chunks'][0])
+
+def identity_on_dim(ds, schema, dim):
+    """ Return identity matrix on specified dimension """
+    rshape = schema['rshape']
+    shape = schema['shape']
+
+    # Create index to introduce new dimensions for broadcasting
+    dim_idx = shape.index(dim)
+    assert rshape[dim_idx] == 4, "Only handling four '%s'" % dim
+    it = six.moves.range(len(shape))
+    idx = tuple(slice(None) if i == dim_idx else None for i in it)
+
+    # Broadcast identity matrix and rechunk
+    identity = np.array([1, 0, 0, 1], dtype=schema['dtype'])[idx]
+    return da.broadcast_to(identity, rshape).rechunk(schema['chunks'])
 
 def scratch_schema():
     return {
@@ -217,8 +233,31 @@ def default_schema():
             "default": default_frequency,
         },
 
+        "parallactic_angles": {
+            "shape": ("utime", "antenna"),
+            "dtype": np.float64,
+        },
+
         "antenna_position": {
             "shape": ("antenna", "(x,y,z)"),
+            "dtype": np.float64,
+        },
+
+        "direction_independent_effects": {
+            "shape": ("utime", "antenna", "chan", "corr"),
+            "dtype": np.complex128,
+            "default": partial(identity_on_dim, dim="corr")
+        },
+
+        # E beam cube
+        "ebeam_cube": {
+            "shape": ("beam_lw", "beam_mh", "beam_nud", "corr"),
+            "dtype": np.complex128,
+            "default": partial(identity_on_dim, dim="corr")
+        },
+
+        "beam_freq_map": {
+            "shape": ("beam_nud",),
             "dtype": np.float64,
         },
     }
@@ -237,9 +276,11 @@ def default_dim_sizes():
         'spw': 1,
     }
 
+    # Derive row from baselines and unique times
     nbl = ds['antenna']*(ds['antenna']-1)//2
     ds.update({'row': ds['utime']*nbl })
 
+    # Source dimensions
     ds.update({
         'point': 1,
         'gaussian': 1,
@@ -247,6 +288,13 @@ def default_dim_sizes():
         '(l,m)': 2,
         '(lproj,mproj,theta)': 3,
         '(s1,s2,theta)': 3,
+    })
+
+    # Beam dimensions
+    ds.update({
+        'beam_lw': 10,
+        'beam_mh': 10,
+        'beam_nud': 10,
     })
 
     return ds
