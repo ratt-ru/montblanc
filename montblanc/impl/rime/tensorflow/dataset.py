@@ -142,12 +142,29 @@ def source_schema():
             "dims": ("point", "(l,m)"),
             "dtype": np.float64,
         },
+        "point_ref_freq": {
+            "dims" : ("point",),
+            "dtype": np.float64,
+        },
+        "point_alpha": {
+            "dims": ("point", "utime", "(I,Q,U,V)"),
+            "dtype": np.float64,
+        },
         "point_stokes": {
             "dims": ("point", "utime", "(I,Q,U,V)"),
             "dtype": np.float64,
         },
+
         "gaussian_lm": {
             "dims": ("gaussian", "(l,m)"),
+            "dtype": np.float64,
+        },
+        "gaussian_ref_freq": {
+            "dims": ("gaussian",),
+            "dtype": np.float64,
+        },
+        "gaussian_alpha": {
+            "dims": ("gaussian", "utime", "(I,Q,U,V)"),
             "dtype": np.float64,
         },
         "gaussian_stokes": {
@@ -158,12 +175,21 @@ def source_schema():
             "dims": ("gaussian", "(lproj,mproj,theta)"),
             "dtype": np.float64,
         },
+
         "sersic_lm": {
             "dims": ("sersic", "(l,m)"),
             "dtype": np.float64,
         },
+        "sersic_alpha": {
+            "dims": ("sersic", "utime", "(I,Q,U,V)"),
+            "dtype": np.float64,
+        },
         "sersic_stokes": {
             "dims": ("sersic", "utime", "(I,Q,U,V)"),
+            "dtype": np.float64,
+        },
+        "sersic_ref_freq": {
+            "dims": ("sersic",),
             "dtype": np.float64,
         },
         "sersic_shape_params": {
@@ -260,10 +286,25 @@ def default_schema():
         },
 
         # E beam cube
-        "ebeam_cube": {
+        "ebeam": {
             "dims": ("beam_lw", "beam_mh", "beam_nud", "corr"),
             "dtype": np.complex128,
             "default": partial(identity_on_dim, dim="corr")
+        },
+
+        "pointing_errors": {
+            "dims": ("utime", "antenna", "chan", "(l,m)"),
+            "dtype": np.float64,
+        },
+
+        "antenna_scaling": {
+            "dims": ("antenna", "chan", "(l,m)"),
+            "dtype": np.float64,
+        },
+
+        "beam_extents": {
+            "dims": ("ll,lm,lf,ul,um,uf)"),
+            "dtype": np.float64,
         },
 
         "beam_freq_map": {
