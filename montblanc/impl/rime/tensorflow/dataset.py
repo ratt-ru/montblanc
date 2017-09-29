@@ -63,11 +63,56 @@ def default_time_chunks(ds, schema):
 
 def default_time(ds, schema):
     """ Default time """
-    unique_times = default_time_unique(ds, ds.attrs['schema']['time_unique'])
-    time_chunks = default_time_chunks(ds, ds.attrs['schema']['time_chunks'])
 
-    time = np.concatenate([np.full(tc, ut) for ut, tc in zip(unique_times, time_chunks)])
+    # Try get time_unique off the dataset first
+    # otherwise generate from scratch
+    try:
+        time_unique = ds.time_unique
+    except AttributeError:
+        time_unique_schema = ds.attrs['schema']['time_unique']
+        time_unique = default_time_unique(ds, time_unique_schema)
+    else:
+        time_unique = time_unique.values
+
+    # Try get time_chunks off the dataset first
+    # otherwise generate from scratch
+    try:
+        time_chunks = ds.time_chunks
+    except AttributeError:
+        time_chunk_schema = ds.attrs['schema']['time_chunks']
+        time_chunks = default_time_chunks(ds, time_chunk_schema)
+    else:
+        time_chunks = time_chunks.values
+
+    # Must agree
+    if not len(time_chunks) == len(time_unique):
+        raise ValueError("Number of time chunks '%d' "
+                        "and unique timestamps '%d' "
+                        "do not agree" % (len(time_chunks), len(time_unique)))
+
+    time = np.concatenate([np.full(tc, ut) for ut, tc
+                        in zip(time_unique, time_chunks)])
     return da.from_array(time, chunks=ds.chunks['row'])
+
+def default_time_index(ds, schema):
+    # Try get time_chunks off the dataset first
+    # otherwise generate from scratch
+    try:
+        time_chunks = ds.time_chunks
+    except AttributeError:
+        time_chunk_schema = ds.attrs['schema']['time_chunks']
+        time_chunks = default_time_chunks(ds, time_chunk_schema)
+    else:
+        time_chunks = time_chunks.values
+
+    tindices = np.empty(time_chunks.sum(), np.int32)
+    start = 0
+
+    for i, c in enumerate(time_chunks):
+        tindices[start:start+c] = i
+        start += c
+
+    return da.from_array(time_index, chunks=ds.chunks['row'])
 
 def default_frequency(ds, schema):
     return da.linspace(8.56e9, 2*8.56e9, schema["shape"][0],
@@ -205,6 +250,12 @@ def default_schema():
             "dims": ("row",),
             "dtype": np.float64,
             "default": default_time,
+        },
+
+        "time_index": {
+            "dims": ("row",),
+            "dtype": np.int32,
+            "default": default_time_index,
         },
 
         "time_unique": {
@@ -491,27 +542,6 @@ def create_antenna_uvw(xds):
     dims = ("utime", "antenna", "(u,v,w)")
     return xds.assign(antenna_uvw=xr.DataArray(dask_array, dims=dims))
 
-def create_time_index(xds):
-    """
-    Adds the `time_index` array specifying the unique time index
-    associated with row to the given :class:`xarray.Dataset`.
-
-
-    Returns
-    -------
-    :class:`xarray.Dataset`
-        `xds` with `time_index` assigned.
-    """
-    time_chunks = xds.time_chunks.values
-    tindices = np.empty(time_chunks.sum(), np.int32)
-    start = 0
-
-    for i, c in enumerate(time_chunks):
-        tindices[start:start+c] = i
-        start += c
-
-    return xds.assign(time_index=xr.DataArray(tindices, dims=('row',)))
-
 def dataset_from_ms(ms):
     """
     Creates an xarray dataset from the given Measurement Set
@@ -727,9 +757,6 @@ if __name__ == "__main__":
                 'corrs': 'corr'}
 
     xds = dataset_from_ms(ms).rename(renames)
-    mds = create_time_index(xds)
-    print mds.dims['utime']
-    print mds
 
     ar = budget(mds, 5*1024*1024*1024, _reduction)
     pprint(ar)
