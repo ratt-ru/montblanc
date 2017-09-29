@@ -31,14 +31,14 @@ def default_antenna1(ds, schema):
     ap = default_base_ant_pairs(ds.dims['antenna'],
                                 ds.attrs['auto_correlations'])
     return da.from_array(np.tile(ap[0], ds.dims['utime']),
-                            chunks=ds.chunks['row'])
+                            chunks=schema['chunks'])
 
 def default_antenna2(ds, schema):
     """ Default antenna 2 """
     ap = default_base_ant_pairs(ds.dims['antenna'],
                                 ds.attrs['auto_correlations'])
     return da.from_array(np.tile(ap[1], ds.dims['utime']),
-                            chunks=ds.chunks['row'])
+                            chunks=schema['chunks'])
 
 def default_time_unique(ds, schema):
     """ Default unique time """
@@ -92,7 +92,7 @@ def default_time(ds, schema):
 
     time = np.concatenate([np.full(tc, ut) for ut, tc
                         in zip(time_unique, time_chunks)])
-    return da.from_array(time, chunks=ds.chunks['row'])
+    return da.from_array(time, chunks=schema['chunks'])
 
 def default_time_index(ds, schema):
     # Try get time_chunks off the dataset first
@@ -112,7 +112,7 @@ def default_time_index(ds, schema):
         tindices[start:start+c] = i
         start += c
 
-    return da.from_array(time_index, chunks=ds.chunks['row'])
+    return da.from_array(tindices, chunks=schema['chunks'])
 
 def default_frequency(ds, schema):
     return da.linspace(8.56e9, 2*8.56e9, schema["shape"][0],
@@ -300,15 +300,15 @@ def default_schema():
 
         "flag": {
             "dims": ("row", "chan", "corr"),
-            "dtype": np.bool,
-            "default": lambda ds, as_: da.full(as_["shape"], False,
+            "dtype": np.uint8,
+            "default": lambda ds, as_: da.full(as_["shape"], 0,
                                                 dtype=as_["dtype"],
                                                 chunks=as_["chunks"])
         },
 
         "weight": {
             "dims": ("row", "corr"),
-            "dtype": np.float32,
+            "dtype": np.float64,
             "default": lambda ds, as_: da.ones(shape=as_["shape"],
                                                 dtype=as_["dtype"],
                                                 chunks=as_["chunks"])
@@ -354,7 +354,7 @@ def default_schema():
         },
 
         "beam_extents": {
-            "dims": ("ll,lm,lf,ul,um,uf)"),
+            "dims": ("(ll,lm,lf,ul,um,uf)",),
             "dtype": np.float64,
         },
 
@@ -414,6 +414,7 @@ def default_dim_sizes():
         'beam_lw': 10,
         'beam_mh': 10,
         'beam_nud': 10,
+        '(ll,lm,lf,ul,um,uf)': 6,
     })
 
     return ds
@@ -736,12 +737,12 @@ def _uniq_log2_range(start, size, div):
 
     return np.flipud(np.unique(int_values))
 
-def _reduction():
+def _reduction(xds):
     """ Default reduction """
-    utimes = _uniq_log2_range(1, mds.dims['utime'], 50)
+    utimes = _uniq_log2_range(1, xds.dims['utime'], 50)
 
     for utime in utimes:
-        rows = mds.time_chunks[:utime].values.sum()
+        rows = xds.time_chunks[:utime].values.sum()
         yield [('utime', utime), ('row', rows)]
 
 if __name__ == "__main__":
@@ -758,11 +759,11 @@ if __name__ == "__main__":
 
     xds = dataset_from_ms(ms).rename(renames)
 
-    ar = budget(mds, 5*1024*1024*1024, _reduction)
+    ar = budget(xds, 5*1024*1024*1024, partial(_reduction, xds))
     pprint(ar)
-    chunks = group_row_chunks(mds, max_group_size=ar['row'])
-    mds = mds.chunk(chunks)
-    mds = montblanc_dataset(mds)
+    chunks = group_row_chunks(xds, max_group_size=ar['row'])
+    xds = xds.chunk(chunks)
+    mds = montblanc_dataset(xds)
 
     # Test antenna_uvw are properly computed. Do not delete!
     print mds.antenna_uvw.compute()
