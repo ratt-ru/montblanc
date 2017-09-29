@@ -43,7 +43,7 @@ def default_antenna2(ds, schema):
 def default_time_unique(ds, schema):
     """ Default unique time """
     return np.linspace(4.865965e+09, 4.865985e+09,
-                        schema['rshape'][0])
+                        schema["shape"][0])
 
 def default_time_offset(ds, schema):
     """ Default time offset """
@@ -59,7 +59,7 @@ def default_time_chunks(ds, schema):
 
     bl = row // utime
     assert utime*bl == row
-    return np.full(schema['rshape'], bl)
+    return np.full(schema["shape"], bl)
 
 def default_time(ds, schema):
     """ Default time """
@@ -70,16 +70,16 @@ def default_time(ds, schema):
     return da.from_array(time, chunks=ds.chunks['row'])
 
 def default_frequency(ds, schema):
-    return da.linspace(8.56e9, 2*8.56e9, schema['rshape'][0],
-                                    chunks=schema['chunks'][0])
+    return da.linspace(8.56e9, 2*8.56e9, schema["shape"][0],
+                                    chunks=schema["chunks"][0])
 
 def is_power_of_2(n):
     return n != 0 and ((n & (n-1)) == 0)
 
 def identity_on_dim(ds, schema, dim):
     """ Return identity matrix on specified dimension """
-    rshape = schema['rshape']
-    shape = schema['shape']
+    rshape = schema["shape"]
+    shape = schema["dims"]
 
     dim_idx = shape.index(dim)
     dim_size = rshape[dim_idx]
@@ -95,43 +95,43 @@ def identity_on_dim(ds, schema, dim):
 
     # Broadcast identity matrix and rechunk
     identity = [1] if dim_size == 1 else [1] + [0]*(dim_size-2) + [1]
-    identity = np.array(identity, dtype=schema['dtype'])[idx]
-    return da.broadcast_to(identity, rshape).rechunk(schema['chunks'])
+    identity = np.array(identity, dtype=schema["dtype"])[idx]
+    return da.broadcast_to(identity, rshape).rechunk(schema["chunks"])
 
 def scratch_schema():
     return {
         "bsqrt": {
-            "shape": ("source", "utime", "chan", "corr"),
+            "dims": ("source", "utime", "chan", "corr"),
             "dtype": np.complex128,
         },
 
         "complex_phase": {
-            "shape": ("source", "utime", "antenna", "chan"),
+            "dims": ("source", "utime", "antenna", "chan"),
             "dtype": np.complex128,
         },
 
         "ejones": {
-            "shape": ("source", "utime", "antenna", "chan", "corr"),
+            "dims": ("source", "utime", "antenna", "chan", "corr"),
             "dtype": np.complex128,
         },
 
         "antenna_jones": {
-            "shape": ("source", "utime", "antenna", "chan", "corr"),
+            "dims": ("source", "utime", "antenna", "chan", "corr"),
             "dtype": np.complex128,
         },
 
         "sgn_brightness": {
-            "shape": ("source", "utime"),
+            "dims": ("source", "utime"),
             "dtype": np.int8,
         },
 
         "source_shape": {
-            "shape": ("source", "row", "chan"),
+            "dims": ("source", "row", "chan"),
             "dtype": np.float64,
         },
 
         "chi_sqrd_terms": {
-            "shape": ("row", "chan"),
+            "dims": ("row", "chan"),
             "dtype": np.float64,
         }
     }
@@ -139,35 +139,35 @@ def scratch_schema():
 def source_schema():
     return {
         "point_lm": {
-            "shape": ("point", "(l,m)"),
+            "dims": ("point", "(l,m)"),
             "dtype": np.float64,
         },
         "point_stokes": {
-            "shape": ("point", "utime", "(I,Q,U,V)"),
+            "dims": ("point", "utime", "(I,Q,U,V)"),
             "dtype": np.float64,
         },
         "gaussian_lm": {
-            "shape": ("gaussian", "(l,m)"),
+            "dims": ("gaussian", "(l,m)"),
             "dtype": np.float64,
         },
         "gaussian_stokes": {
-            "shape": ("gaussian", "utime", "(I,Q,U,V)"),
+            "dims": ("gaussian", "utime", "(I,Q,U,V)"),
             "dtype": np.float64,
         },
         "gaussian_shape_params": {
-            "shape": ("gaussian", "(lproj,mproj,theta)"),
+            "dims": ("gaussian", "(lproj,mproj,theta)"),
             "dtype": np.float64,
         },
         "sersic_lm": {
-            "shape": ("sersic", "(l,m)"),
+            "dims": ("sersic", "(l,m)"),
             "dtype": np.float64,
         },
         "sersic_stokes": {
-            "shape": ("sersic", "utime", "(I,Q,U,V)"),
+            "dims": ("sersic", "utime", "(I,Q,U,V)"),
             "dtype": np.float64,
         },
         "sersic_shape_params": {
-            "shape": ("sersic", "(s1,s2,theta)"),
+            "dims": ("sersic", "(s1,s2,theta)"),
             "dtype": np.float64,
         },
 
@@ -176,98 +176,115 @@ def source_schema():
 def default_schema():
     return {
         "time" : {
-            "shape": ("row",),
+            "dims": ("row",),
             "dtype": np.float64,
             "default": default_time,
         },
 
         "time_unique": {
-            "shape": ("utime",),
+            "dims": ("utime",),
             "dtype": np.float64,
             "default": default_time_unique,
         },
 
         "time_offsets" : {
-            "shape": ("utime",),
+            "dims": ("utime",),
             "dtype": np.int32,
             "default": default_time_offset,
         },
 
         "time_chunks" : {
-            "shape": ("utime",),
+            "dims": ("utime",),
             "dtype": np.int32,
             "default": default_time_chunks,
         },
 
         "model_data": {
-            "shape": ("row", "chan", "corr"),
+            "dims": ("row", "chan", "corr"),
             "dtype": np.complex128,
         },
 
         "uvw": {
-            "shape": ("row", "(u,v,w)"),
+            "dims": ("row", "(u,v,w)"),
             "dtype": np.float64,
         },
 
         "antenna1" : {
-            "shape": ("row",),
+            "dims": ("row",),
             "dtype": np.int32,
             "default": default_antenna1,
         },
 
         "antenna2" : {
-            "shape": ("row",),
+            "dims": ("row",),
             "dtype": np.int32,
             "default": default_antenna2,
         },
 
         "flag": {
-            "shape": ("row", "chan", "corr"),
+            "dims": ("row", "chan", "corr"),
             "dtype": np.bool,
-            "default": lambda ds, as_: da.full(as_["rshape"], False,
+            "default": lambda ds, as_: da.full(as_["shape"], False,
                                                 dtype=as_["dtype"],
                                                 chunks=as_["chunks"])
         },
 
         "weight": {
-            "shape": ("row", "corr"),
+            "dims": ("row", "corr"),
             "dtype": np.float32,
-            "default": lambda ds, as_: da.ones(shape=as_["rshape"],
+            "default": lambda ds, as_: da.ones(shape=as_["shape"],
                                                 dtype=as_["dtype"],
                                                 chunks=as_["chunks"])
         },
 
         "frequency": {
-            "shape": ("chan",),
+            "dims": ("chan",),
             "dtype": np.float64,
             "default": default_frequency,
         },
 
         "parallactic_angles": {
-            "shape": ("utime", "antenna"),
+            "dims": ("utime", "antenna"),
             "dtype": np.float64,
         },
 
         "antenna_position": {
-            "shape": ("antenna", "(x,y,z)"),
+            "dims": ("antenna", "(x,y,z)"),
             "dtype": np.float64,
         },
 
         "direction_independent_effects": {
-            "shape": ("utime", "antenna", "chan", "corr"),
+            "dims": ("utime", "antenna", "chan", "corr"),
             "dtype": np.complex128,
             "default": partial(identity_on_dim, dim="corr")
         },
 
         # E beam cube
         "ebeam_cube": {
-            "shape": ("beam_lw", "beam_mh", "beam_nud", "corr"),
+            "dims": ("beam_lw", "beam_mh", "beam_nud", "corr"),
             "dtype": np.complex128,
             "default": partial(identity_on_dim, dim="corr")
         },
 
         "beam_freq_map": {
-            "shape": ("beam_nud",),
+            "dims": ("beam_nud",),
+            "dtype": np.float64,
+        },
+    }
+
+def input_schema():
+    """ Montblanc input schemas """
+    return toolz.merge(default_schema(), source_schema())
+
+def output_schema():
+    """ Montblanc output schemas """
+    return {
+        "model_vis": {
+            "dims": ('row', 'chan', 'corr'),
+            "dtype": np.complex128,
+        },
+        "chi_squared": {
+            "dims": (),
             "dtype": np.float64,
         },
     }
@@ -308,11 +325,6 @@ def default_dim_sizes():
     })
 
     return ds
-
-
-def input_schema():
-    """ Montblanc input schemas """
-    return toolz.merge(default_schema(), source_schema())
 
 def default_dataset(xds=None):
     """
@@ -369,21 +381,21 @@ def default_dataset(xds=None):
     # Create reified shape and chunks on missing array schemas
     for n in missing_arrays:
         schema = in_schema[n]
-        sshape = schema["shape"]
-        schema["rshape"] = rshape = tuple(dims.get(d, d) for d in sshape)
+        sshape = schema["dims"]
+        schema["shape"] = rshape = tuple(dims.get(d, d) for d in sshape)
         schema["chunks"] = tuple(chunks.get(d, r) for d, r in zip(sshape, rshape))
 
     def _default_zeros(ds, schema):
         """ Return a dask array of zeroes """
-        return da.zeros(shape=schema['rshape'],
-                       chunks=schema['chunks'],
-                        dtype=schema['dtype'])
+        return da.zeros(shape=schema["shape"],
+                       chunks=schema["chunks"],
+                        dtype=schema["dtype"])
 
     def _create_array(array):
         """ Create array """
         schema = in_schema[array]
         default = schema.get('default', _default_zeros)
-        return xr.DataArray(default(xds, schema), dims=schema['shape'])
+        return xr.DataArray(default(xds, schema), dims=schema["dims"])
 
     missing_arrays = { n: _create_array(n) for n in missing_arrays }
 
@@ -690,6 +702,27 @@ if __name__ == "__main__":
     pprint(dict(mds.chunks))
     pprint(mds.antenna_uvw.chunks)
 
+    arg_names = [var.name for var in mds.data_vars.values()]
+
+    def _plort(*args):
+        """ Predict function. Just pass through `model_data` for now """
+        def _argshape(arg):
+            """ Get shapes depending on type """
+            if isinstance(arg, np.ndarray):
+                return arg.shape
+            elif isinstance(arg, collections.Mapping):
+                return {k: _argshape(v) for k, v in six.iteritems(arg)}
+            elif isinstance(args, list):
+                return [_argshape(v) for v in arg]
+            elif isinstance(args, tuple):
+                return tuple(_argshape(v) for v in arg)
+            else:
+                raise ValueError("Can't infer shape for type '%s'" % type(arg))
+
+        kw = {n: a for n, a in zip(arg_names, args)}
+        pprint(_argshape(kw))
+        return kw['model_data']
+
     def _mod_dims(dims):
         """
         Convert "utime" dims to "row" dims.
@@ -703,28 +736,7 @@ if __name__ == "__main__":
     name_dims = [v for var in mds.data_vars.values()
                     for v in (var.data.name, _mod_dims(var.dims))]
     names = [var.data.name for var in mds.data_vars.values()]
-    arg_names = [var.name for var in mds.data_vars.values()]
     numblocks = {var.data.name: var.data.numblocks for var in mds.data_vars.values()}
-
-    def _plort(*args):
-        """ Predict function. Just pass through `model_data` for now """
-        kw = {n: a for n, a in zip(arg_names, args)}
-
-        def _argshape(arg):
-            """ Get shapes depending on type """
-            if isinstance(arg, np.ndarray):
-                return arg.shape
-            elif isinstance(args, list):
-                return [v.shape for v in arg]
-            elif isinstance(args, tuple):
-                return tuple(v.shape for v in arg)
-            else:
-                raise ValueError("Can't infer shape for type '%s'" % type(arg))
-
-        shapes = {n: _argshape(a) for n, a in kw.items()}
-
-        pprint(shapes)
-        return kw['model_data']
 
     # Create a name for this function, constructed from lesser names
     dsk_name = '-'.join(("plort9000", dask.base.tokenize(*names)))
