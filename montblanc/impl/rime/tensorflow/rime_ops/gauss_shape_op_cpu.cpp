@@ -50,11 +50,10 @@ auto gauss_shape_shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(params, 0), 3, &d),
         "params shape must be [3, ngsrc] but is " + c->DebugString(params));
 
-    // Gauss shape output is (ngsrc, ntime, nbl, nchan)
+    // Gauss shape output is (ngsrc, nrow, nchan)
     ShapeHandle output = c->MakeShape({
         c->Dim(params, 1),
         c->Dim(antenna1, 0),
-        c->Dim(antenna2, 1),
         c->Dim(frequency, 0)});
 
     // Set the output shape

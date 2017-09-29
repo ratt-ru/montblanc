@@ -53,7 +53,6 @@ auto sersic_shape_shape_function = [](InferenceContext* c) {
     ShapeHandle output = c->MakeShape({
         c->Dim(params, 1),
         c->Dim(antenna1, 0),
-        c->Dim(antenna2, 1),
         c->Dim(frequency, 0)});
 
     // Set the output shape
