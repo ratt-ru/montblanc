@@ -6,13 +6,13 @@ from tensorflow.python.ops import data_flow_ops
 from queue_wrapper import _get_queue_types
 
 class StagingAreaWrapper(object):
-    def __init__(self, name, fed_arrays, data_sources, shared_name=None, ordered=False):
+    def __init__(self, name, fed_arrays, array_schemas, shared_name=None, ordered=False):
         self._name = name
         self._fed_arrays = fed_arrays
-        self._data_sources = data_sources
+        self._array_schemas = array_schemas
 
         # Infer types of the given fed_arrays
-        self._dtypes = _get_queue_types(fed_arrays, data_sources)
+        self._dtypes = [array_schemas[n]["dtype"] for n in fed_arrays]
 
         # Create placeholders for the fed arrays
         self._placeholders = placeholders = [tf.placeholder(dt,
