@@ -755,15 +755,25 @@ def budget(xds, mem_budget, reduce_fn):
         A {dim: size} mapping of dimension reductions that
         fit the sliced dataset into the memory budget.
     """
-    bytes_required = xds.nbytes
+    ds_dims = dict(xds.dims)
+    array_details = {n: (a.dims, a.dtype) for n, a in xds.data_vars.items() }
+
     applied_reductions = {}
-    mds = xds
+
+    def get_bytes(dims, arrays):
+        """ Get number of bytes in the dataset """
+        return sum(np.product(tuple(dims[d] for d in a[0]))*a[1].itemsize
+                                                for a in arrays.values())
+
+    bytes_required = get_bytes(ds_dims, array_details)
 
     for reduction in reduce_fn():
         if bytes_required > mem_budget:
-            mds = mds.isel(**{ dim: slice(0, size) for dim, size in reduction })
-            applied_reductions.update({ dim: size for dim, size in reduction })
-            bytes_required = mds.nbytes
+            for dim, size in reduction:
+                ds_dims[dim] = size
+                applied_reductions[dim] = size
+
+            bytes_required = get_bytes(ds_dims, array_details)
         else:
             break
 
@@ -806,6 +816,8 @@ if __name__ == "__main__":
     # Test antenna_uvw are properly computed. Do not delete!
     print mds.antenna_uvw.compute()
 
+    ar = budget(mds, 1024*1024*1024, partial(_reduction, mds))
+    pprint(ar)
     pprint(dict(mds.chunks))
     pprint(mds.antenna_uvw.chunks)
 
