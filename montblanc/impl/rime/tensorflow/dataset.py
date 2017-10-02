@@ -504,6 +504,18 @@ def create_antenna_uvw(xds):
     """
     Adds `antenna_uvw` coordinates to the given :class:`xarray.Dataset`.
 
+    Parameters
+    ----------
+    xds : :class:`xarray.Dataset`
+        base Dataset.
+
+    Notes
+    -----
+    This methods **depends** on the `row` and `utime` chunking in `xds`
+    being correct. Put as simply as possible, the consecutive unique
+    timestamps referenced by chunks in the `utime` dimension must be
+    associated with consecutive chunks in the `row` dimension.
+
     Returns
     -------
     :class:`xarray.Dataset`
@@ -512,33 +524,51 @@ def create_antenna_uvw(xds):
     from operator import getitem
     from functools import partial
 
-    row_groups = xds.chunks['row']
-    utime_groups = xds.chunks['utime']
-
-    token = dask.base.tokenize(xds.uvw, xds.antenna1, xds.antenna2,
-                            xds.time_chunks, row_groups, utime_groups)
-    name = "-".join(("create_antenna_uvw", token))
-    p_ant_uvw = partial(dsmod.antenna_uvw, nr_of_antenna=xds.dims["antenna"])
-
     def _chunk_iter(chunks):
+        """ Return dimension slices given a list of chunks """
         start = 0
         for size in chunks:
             end = start + size
             yield slice(start, end)
             start = end
 
-    it = itertools.izip(_chunk_iter(row_groups),
-                        _chunk_iter(utime_groups))
+    chunks = xds.chunks
+    utime_groups = chunks['utime']
+    row_groups = chunks['row']
+    time_chunks = xds.time_chunks
 
-    dsk = { (name, i, 0, 0): (p_ant_uvw,
+    token = dask.base.tokenize(xds.uvw, xds.antenna1, xds.antenna2,
+                            xds.time_chunks, row_groups, utime_groups)
+    name = "-".join(("create_antenna_uvw", token))
+    p_ant_uvw = partial(dsmod.antenna_uvw, nr_of_antenna=xds.dims["antenna"])
+
+    it = itertools.izip(_chunk_iter(row_groups), _chunk_iter(utime_groups))
+    dsk = {}
+
+    # Create the dask graph
+    for i, (rs, uts) in enumerate(it):
+        dsk[(name, i, 0, 0)] = (p_ant_uvw,
                                 (getitem, xds.uvw, rs),
                                 (getitem, xds.antenna1, rs),
                                 (getitem, xds.antenna2, rs),
                                 (getitem, xds.time_chunks, uts))
 
-                for i, (rs, uts) in enumerate(it) }
+        # Sanity check
+        if not np.sum(time_chunks[uts]) == rs.stop - rs.start:
+            sum_chunks = np.sum(time_chunks[uts])
+            raise ValueError("Sum of time_chunks[%d:%d] '%d' "
+                            "does not match the number of rows '%d' "
+                            "in the row[%d:%d]" %
+                                (uts.start, uts.stop, sum_chunks,
+                                rs.stop-rs.start,
+                                rs.start, rs.stop))
 
-    chunks = (tuple(utime_groups), (xds.dims["antenna"],), (xds.dims["(u,v,w)"],))
+    # Chunks for 'utime', 'antenna' and 'uvw' dimensions
+    chunks = (tuple(utime_groups),
+                (xds.dims["antenna"],),
+                (xds.dims["(u,v,w)"],))
+
+    # Create dask array and assign it to the dataset
     dask_array = da.Array(dsk, name, chunks, xds.uvw.dtype)
     dims = ("utime", "antenna", "(u,v,w)")
     return xds.assign(antenna_uvw=xr.DataArray(dask_array, dims=dims))
@@ -654,7 +684,7 @@ def group_row_chunks(xds, max_group_size=100000):
             rows = chunk
             utimes = 1
         else:
-            rows += chunk
+            rows = next_
             utimes += 1
 
     if rows > 0:
@@ -677,14 +707,24 @@ def montblanc_dataset(xds=None):
 
     schema = input_schema()
     required_arrays = set(schema.keys())
-    # Derive antenna UVW coordinates
-    mds = create_antenna_uvw(xds)
-    # Drop any superfluous arrays
-    mds = mds.drop(set(mds.data_vars.keys()).difference(required_arrays))
     # Fill in any default arrays
-    mds = default_dataset(mds)
+    mds = default_dataset(xds)
 
-    return mds
+    # At this point, our row chunking strategy is whatever
+    # came out of the original dataset. This will certainly
+    # cause breakages in create_antenna_uvw
+    # because rows need to be grouped together
+    # per-unique timestep. Perform this chunking operation now.
+    max_row = max(mds.chunks['row'])
+    chunks = group_row_chunks(mds, max_group_size=max_row)
+    mds = mds.chunk(chunks)
+
+    # Derive antenna UVW coordinates.
+    # This depends on above chunking strategy
+    mds = create_antenna_uvw(mds)
+
+    # Drop any superfluous arrays and return
+    return mds.drop(set(mds.data_vars.keys()).difference(required_arrays))
 
 def budget(xds, mem_budget, reduce_fn):
     """
@@ -694,7 +734,7 @@ def budget(xds, mem_budget, reduce_fn):
 
     Parameters
     ----------
-    xds : :class:`array.Dataset`
+    xds : :class:`xarray.Dataset`
         xarray dataset
     mem_budget : int
         Number of bytes defining the memory budget
@@ -761,11 +801,6 @@ if __name__ == "__main__":
                 'corrs': 'corr'}
 
     xds = dataset_from_ms(ms).rename(renames)
-
-    ar = budget(xds, 5*1024*1024*1024, partial(_reduction, xds))
-    pprint(ar)
-    chunks = group_row_chunks(xds, max_group_size=ar['row'])
-    xds = xds.chunk(chunks)
     mds = montblanc_dataset(xds)
 
     # Test antenna_uvw are properly computed. Do not delete!
