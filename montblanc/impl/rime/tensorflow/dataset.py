@@ -281,8 +281,8 @@ def default_schema():
             "dtype": np.complex128,
         },
 
-        "uvw": {
-            "dims": ("row", "(u,v,w)"),
+        "antenna_uvw": {
+            "dims": ("utime", "antenna", "(u,v,w)"),
             "dtype": np.float64,
         },
 
@@ -673,15 +673,18 @@ def montblanc_dataset(xds=None):
     `xarray.Dataset`
     """
     if xds is None:
-        return default_dataset().drop("uvw")
+        return default_dataset()
 
     schema = input_schema()
     required_arrays = set(schema.keys())
-    mds = xds.drop(set(xds.data_vars.keys()).difference(required_arrays))
+    # Derive antenna UVW coordinates
+    mds = create_antenna_uvw(xds)
+    # Drop any superfluous arrays
+    mds = mds.drop(set(mds.data_vars.keys()).difference(required_arrays))
+    # Fill in any default arrays
     mds = default_dataset(mds)
-    mds = create_antenna_uvw(mds)
 
-    return mds.drop("uvw")
+    return mds
 
 def budget(xds, mem_budget, reduce_fn):
     """
