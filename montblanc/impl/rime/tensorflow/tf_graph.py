@@ -275,7 +275,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         ntime, nrow, nchan, npol = [model_vis_shape[i] for i in range(4)]
 
         # Infer float and complex type
-        FT, CT = D.uvw.dtype, D.model_data.dtype
+        FT, CT = D.antenna_uvw.dtype, D.model_data.dtype
 
         # Compute sine and cosine of parallactic angles
         pa_sin, pa_cos = rime.parallactic_angle_sin_cos(D.parallactic_angles)
@@ -291,7 +291,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         """
 
         # Compute the complex phase
-        cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
+        cplx_phase = rime.phase(lm, D.antenna_uvw, D.frequency, CT=CT)
 
         # Check for nans/infs in the complex phase
         phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
@@ -369,7 +369,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
 
         ant_jones, sgn_brightness = antenna_jones(S.gaussian_lm,
             S.gaussian_stokes, S.gaussian_alpha, S.gaussian_ref_freq)
-        gauss_shape = rime.gauss_shape(D.time_index, D.uvw,
+        gauss_shape = rime.gauss_shape(D.time_index, D.antenna_uvw,
             D.antenna1, D.antenna2,
             D.frequency, S.gaussian_shape_params)
         coherencies = rime.sum_coherencies(D.time_index,
@@ -385,7 +385,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
 
         ant_jones, sgn_brightness = antenna_jones(S.sersic_lm,
             S.sersic_stokes, S.sersic_alpha, S.sersic_ref_freq)
-        sersic_shape = rime.sersic_shape(D.time_index, D.uvw,
+        sersic_shape = rime.sersic_shape(D.time_index, D.antenna_uvw,
             D.antenna1, D.antenna2,
             D.frequency, S.sersic_shape_params)
         coherencies = rime.sum_coherencies(D.time_index,
