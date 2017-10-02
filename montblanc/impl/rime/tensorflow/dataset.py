@@ -18,6 +18,7 @@ import xarray as xr
 from xarray_ms import xds_from_ms, xds_from_table
 
 import montblanc
+from montblanc.src_types import source_types
 
 dsmod = cppimport.imp('montblanc.ext.dataset_mod')
 
@@ -407,9 +408,9 @@ def default_dim_sizes():
 
     # Source dimensions
     ds.update({
-        'point': 1,
-        'gaussian': 1,
-        'sersic': 1,
+        'point': 1000,
+        'gaussian': 1000,
+        'sersic': 1000,
         '(l,m)': 2,
         '(lproj,mproj,theta)': 3,
         '(s1,s2,theta)': 3,
@@ -809,8 +810,18 @@ def _uniq_log2_range(start, size, div):
 
 def _reduction(xds):
     """ Default reduction """
-    utimes = _uniq_log2_range(1, xds.dims['utime'], 50)
+    dims = xds.dims
 
+    utimes = _uniq_log2_range(1, dims['utime'], 50)
+
+    st = source_types()
+    sources = max(dims[s] for s in st)
+
+    # Try reducing to 50 sources first (of each type)
+    if sources > 50:
+        yield [(s, 50) for s in st]
+
+    # Then reduce in row and unique time
     for utime in utimes:
         rows = xds.time_chunks[:utime].values.sum()
         yield [('utime', utime), ('row', rows)]
