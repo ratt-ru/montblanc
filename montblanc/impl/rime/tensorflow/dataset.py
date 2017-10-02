@@ -143,43 +143,6 @@ def identity_on_dim(ds, schema, dim):
     identity = np.array(identity, dtype=schema["dtype"])[idx]
     return da.broadcast_to(identity, rshape).rechunk(schema["chunks"])
 
-def scratch_schema():
-    return {
-        "bsqrt": {
-            "dims": ("source", "utime", "chan", "corr"),
-            "dtype": np.complex128,
-        },
-
-        "complex_phase": {
-            "dims": ("source", "utime", "antenna", "chan"),
-            "dtype": np.complex128,
-        },
-
-        "ejones": {
-            "dims": ("source", "utime", "antenna", "chan", "corr"),
-            "dtype": np.complex128,
-        },
-
-        "antenna_jones": {
-            "dims": ("source", "utime", "antenna", "chan", "corr"),
-            "dtype": np.complex128,
-        },
-
-        "sgn_brightness": {
-            "dims": ("source", "utime"),
-            "dtype": np.int8,
-        },
-
-        "source_shape": {
-            "dims": ("source", "row", "chan"),
-            "dtype": np.float64,
-        },
-
-        "chi_sqrd_terms": {
-            "dims": ("row", "chan"),
-            "dtype": np.float64,
-        }
-    }
 
 def source_schema():
     return {
@@ -367,6 +330,49 @@ def default_schema():
 def input_schema():
     """ Montblanc input schemas """
     return toolz.merge(default_schema(), source_schema())
+
+def scratch_schema():
+    """ Intermediate outputs produced by tensorflow operators """
+    return {
+        # TODO(sjperkins) "point" dimension used to specify number of
+        # sources in general, so meaning applies to "gaussians" and
+        # "sersics" too. This will be confusing at some point and
+        # "should be changed".
+        "bsqrt": {
+            "dims": ("point", "utime", "chan", "corr"),
+            "dtype": np.complex128,
+        },
+
+        "complex_phase": {
+            "dims": ("point", "utime", "antenna", "chan"),
+            "dtype": np.complex128,
+        },
+
+        "ejones": {
+            "dims": ("point", "utime", "antenna", "chan", "corr"),
+            "dtype": np.complex128,
+        },
+
+        "antenna_jones": {
+            "dims": ("point", "utime", "antenna", "chan", "corr"),
+            "dtype": np.complex128,
+        },
+
+        "sgn_brightness": {
+            "dims": ("point", "utime"),
+            "dtype": np.int8,
+        },
+
+        "source_shape": {
+            "dims": ("point", "row", "chan"),
+            "dtype": np.float64,
+        },
+
+        "chi_sqrd_terms": {
+            "dims": ("row", "chan"),
+            "dtype": np.float64,
+        }
+    }
 
 def output_schema():
     """ Montblanc output schemas """
@@ -726,16 +732,20 @@ def montblanc_dataset(xds=None):
     # Drop any superfluous arrays and return
     return mds.drop(set(mds.data_vars.keys()).difference(required_arrays))
 
-def budget(xds, mem_budget, reduce_fn):
+def budget(schemas, dims, mem_budget, reduce_fn):
     """
-    Reduce `xds` dimensions using reductions
-    obtained from generator `reduce_fn` until
-    :code:`xds.nbytes <= mem_budget`.
+    Reduce dimension values in `dims` according to
+    strategy specified in generator `reduce_fn`
+    until arrays in `schemas` fit within specified `mem_budget`.
 
     Parameters
     ----------
-    xds : :class:`xarray.Dataset`
-        xarray dataset
+    schemas : dict or sequence of dict
+        Dictionary of array schemas, of the form
+        :code:`{name : {"dtype": dtype, "dims": (d1,d2,...,dn)}}`
+    dims : dict
+        Dimension size mapping, of the form
+        :code:`{"d1": i, "d2": j, ..., "dn": k}
     mem_budget : int
         Number of bytes defining the memory budget
     reduce_fn : callable
@@ -752,11 +762,18 @@ def budget(xds, mem_budget, reduce_fn):
     Returns
     -------
     dict
-        A {dim: size} mapping of dimension reductions that
-        fit the sliced dataset into the memory budget.
+        A :code:`{dim: size}` mapping of
+        dimension reductions that fit the
+        schema within the memory budget.
     """
-    ds_dims = dict(xds.dims)
-    array_details = {n: (a.dims, a.dtype) for n, a in xds.data_vars.items() }
+
+    # Promote to list
+    if not isinstance(schemas, (tuple, list)):
+        schemas = [schemas]
+
+    array_details = {n: (a['dims'], np.dtype(a['dtype']))
+                                for schema in schemas
+                                for n, a in schema.items() }
 
     applied_reductions = {}
 
@@ -765,15 +782,15 @@ def budget(xds, mem_budget, reduce_fn):
         return sum(np.product(tuple(dims[d] for d in a[0]))*a[1].itemsize
                                                 for a in arrays.values())
 
-    bytes_required = get_bytes(ds_dims, array_details)
+    bytes_required = get_bytes(dims, array_details)
 
     for reduction in reduce_fn():
         if bytes_required > mem_budget:
             for dim, size in reduction:
-                ds_dims[dim] = size
+                dims[dim] = size
                 applied_reductions[dim] = size
 
-            bytes_required = get_bytes(ds_dims, array_details)
+            bytes_required = get_bytes(dims, array_details)
         else:
             break
 
@@ -816,10 +833,12 @@ if __name__ == "__main__":
     # Test antenna_uvw are properly computed. Do not delete!
     print mds.antenna_uvw.compute()
 
-    ar = budget(mds, 1024*1024*1024, partial(_reduction, mds))
+    # Rechunk according to memory budget
+    ar = budget([input_schema(), scratch_schema(), output_schema()],
+        dict(mds.dims),
+        1024*1024*1024, partial(_reduction, mds))
     pprint(ar)
-    pprint(dict(mds.chunks))
-    pprint(mds.antenna_uvw.chunks)
+    mds = mds.chunk(ar)
 
     arg_names = [var.name for var in mds.data_vars.values()]
 
