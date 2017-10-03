@@ -240,7 +240,7 @@ def default_schema():
             "default": default_time_chunks,
         },
 
-        "model_data": {
+        "data": {
             "dims": ("row", "chan", "corr"),
             "dtype": np.complex128,
         },
@@ -821,7 +821,7 @@ def _reduction(xds):
     if sources > 50:
         yield [(s, 50) for s in st]
 
-    # Then reduce in row and unique time
+    # Then reduce in row and unique times
     for utime in utimes:
         rows = xds.time_chunks[:utime].values.sum()
         yield [('utime', utime), ('row', rows)]
@@ -854,7 +854,7 @@ if __name__ == "__main__":
     arg_names = [var.name for var in mds.data_vars.values()]
 
     def _plort(*args):
-        """ Predict function. Just pass through `model_data` for now """
+        """ Predict function. Just pass through `data` for now """
         def _argshape(arg):
             """ Get shapes depending on type """
             if isinstance(arg, np.ndarray):
@@ -870,7 +870,7 @@ if __name__ == "__main__":
 
         kw = {n: a for n, a in zip(arg_names, args)}
         pprint(_argshape(kw))
-        return kw['model_data']
+        return kw['data']
 
     def _mod_dims(dims):
         """
@@ -889,7 +889,7 @@ if __name__ == "__main__":
 
     # Create a name for this function, constructed from lesser names
     dsk_name = '-'.join(("plort9000", dask.base.tokenize(*names)))
-    dsk = da.core.top(_plort, dsk_name, mds.model_data.dims,
+    dsk = da.core.top(_plort, dsk_name, mds.data.dims,
                             *name_dims, numblocks=numblocks)
 
     def _flatten_singletons(D):
@@ -912,7 +912,7 @@ if __name__ == "__main__":
     for n in mds.data_vars.keys():
         dsk.update(getattr(mds, n).data.dask)
 
-    A = da.Array(dsk, dsk_name, chunks=mds.model_data.data.chunks, dtype=mds.model_data.dtype)
+    A = da.Array(dsk, dsk_name, chunks=mds.data.data.chunks, dtype=mds.data.dtype)
 
     print A
     print A.compute().shape

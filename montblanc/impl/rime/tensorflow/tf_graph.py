@@ -271,11 +271,11 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     # Infer chunk dimensions
     with tf.device(device):
         # Infer chunk dimensions
-        model_vis_shape = tf.shape(D.model_data)
+        model_vis_shape = tf.shape(D.data)
         ntime, nrow, nchan, npol = [model_vis_shape[i] for i in range(4)]
 
         # Infer float and complex type
-        FT, CT = D.antenna_uvw.dtype, D.model_data.dtype
+        FT, CT = D.antenna_uvw.dtype, D.data.dtype
 
         # Compute sine and cosine of parallactic angles
         pa_sin, pa_cos = rime.parallactic_angle_sin_cos(D.parallactic_angles)
@@ -416,7 +416,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         model_vis, chi_squared = rime.post_process_visibilities(
             D.time_index, D.antenna1, D.antenna2,
             D.direction_independent_effects, D.flag,
-            D.weight, D.model_data, summed_coherencies, D.model_data)
+            D.weight, D.data, summed_coherencies, D.data)
 
         # Stage output in the compute output staging area
         stage_output = local_compute.output.put(key,
