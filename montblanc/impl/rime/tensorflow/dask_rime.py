@@ -9,7 +9,37 @@ except ImportError:
     import toolz
 import six
 
-from dataset import input_schema
+from montblanc.impl.rime.tensorflow.dataset import input_schema, output_schema
+from montblanc.impl.rime.tensorflow.tf_session_cache import session_cache
+
+def _create_tf_session(cfg_hash, cfg):
+    """ Create a tensorflow session """
+    import tensorflow as tf
+    from tf_graph import (_construct_tensorflow_staging_areas,
+                        _construct_tensorflow_expression)
+
+    devices = ['/cpu:0']
+
+    with tf.Graph().as_default() as graph:
+        feed_data = _construct_tensorflow_staging_areas(
+            input_schema(),
+            output_schema(),
+            ('utime', 'row'),
+            devices)
+
+        expr = _construct_tensorflow_expression(feed_data,
+                                                cfg,
+                                                devices[0],
+                                                0)
+
+        init_op = tf.global_variables_initializer()
+
+    session = tf.Session("", graph=graph)
+    session.run(init_op)
+    #return graph, init_op, expr, feed_data
+
+    return session
+
 
 class Rime(object):
     def __init__(self, **kwargs):
@@ -22,6 +52,8 @@ class Rime(object):
 
     def set_config(self, cfg):
         """
+        Sets the configuration for this object.
+
         Parameters
         ----------
         cfg : string or file or :class:`collections.Mappping`
@@ -29,7 +61,6 @@ class Rime(object):
             1. If a string it will treated as a filename
             2. If a file, config will be loaded from it in YAML format
             3. If a dictionary
-
         """
 
         # Treat strings as filenames to be opened
@@ -61,7 +92,21 @@ class Rime(object):
         else:
             raise ValueError("'cfg' is not a dictionary")
 
+        def _freeze(cfg):
+            """
+            Make `cfg` immutable. `dict` -> `frozenset`
+            and `list` to `tuple`
+            """
+            if isinstance(cfg, collections.Mapping):
+                return frozenset({k: _freeze(v) for k, v
+                                        in six.iteritems(cfg)}.items())
+            elif isinstance(cfg, (tuple, list)):
+                return tuple(_freeze(v) for v in cfg)
+            else:
+                return cfg
+
         self._cfg = cfg
+        self._cfg_hash = hash(_freeze(cfg))
 
     def __call__(self, mds):
         """
@@ -115,12 +160,24 @@ class Rime(object):
         # in _rime.
         input_names = inputs.keys()
 
+        # Curry _create_tf_session with our config for use in _rime
+        # We do this because cfg, as a dict, is not hashable and so is
+        # consequently unsuitable for passing to `session_cache().open`.
+        # However, we do want to create new sessions whenever the
+        # configuration hash changes.
+        mk_tf_sess = lambda cfg_hash: _create_tf_session(cfg_hash, self._cfg)
+
         def _rime(*args, **kwargs):
             """ Compute chunks of the RIME """
+            cfg_hash = kwargs.pop('cfg_hash')
 
             # TODO(sjperkins): This just passes data straight through
             # Plug tensorflow code in here.
             inputs = {k: v for k, v in zip(input_names, args)}
+
+            with session_cache().open(mk_tf_sess, cfg_hash) as S:
+                pass
+
             return inputs['data']
 
         # Use dask names ask tokenize inputs
@@ -138,7 +195,8 @@ class Rime(object):
                         top_name,           # Output name
                         mds.data.dims,      # Output dimensions
                         *top_args,          # Input names and Dimensions
-                        numblocks=top_numblocks)
+                        numblocks=top_numblocks,
+                        cfg_hash=self._cfg_hash)
 
         # Flatten tuples/list of length 1 and
         # add dask graphs of associated inputs
@@ -157,6 +215,14 @@ class TestDaskRime(unittest.TestCase):
         from dataset import default_dataset
 
         mds = default_dataset()
+
+        dims = mds.dims
+        rows_per_utime = dims['row'] // dims['utime']
+        utime = dims['utime'] // 10
+        row = utime*rows_per_utime
+
+
+        mds = mds.chunk({'utime':utime, 'row': row})
 
         rime = Rime()
 
