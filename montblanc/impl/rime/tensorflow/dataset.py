@@ -31,8 +31,7 @@ def default_antenna1(ds, schema):
     """ Default antenna 1 """
     ap = default_base_ant_pairs(ds.dims['antenna'],
                                 ds.attrs['auto_correlations'])
-    return da.from_array(np.tile(ap[0], ds.dims['utime']),
-                            chunks=schema['chunks'])
+    return da.tile(ap[0], ds.dims['utime']).rechunk(schema['chunks'])
 
 def default_antenna2(ds, schema):
     """ Default antenna 2 """
@@ -43,8 +42,9 @@ def default_antenna2(ds, schema):
 
 def default_time_unique(ds, schema):
     """ Default unique time """
-    return np.linspace(4.865965e+09, 4.865985e+09,
-                        schema["shape"][0])
+    return da.linspace(4.865965e+09, 4.865985e+09,
+                        schema["shape"][0],
+                        chunks=schema["chunks"][0])
 
 def default_time_offset(ds, schema):
     """ Default time offset """
@@ -52,7 +52,7 @@ def default_time_offset(ds, schema):
 
     bl = row // utime
     assert utime*bl == row
-    return np.arange(utime)*bl
+    return da.arange(utime,chunks=schema["chunks"])*bl
 
 def default_time_chunks(ds, schema):
     """ Default time chunks """
@@ -60,7 +60,7 @@ def default_time_chunks(ds, schema):
 
     bl = row // utime
     assert utime*bl == row
-    return np.full(schema["shape"], bl)
+    return da.full(schema["shape"], bl, chunks=schema["chunks"])
 
 def default_time(ds, schema):
     """ Default time """
@@ -71,7 +71,7 @@ def default_time(ds, schema):
         time_unique = ds.time_unique
     except AttributeError:
         time_unique_schema = ds.attrs['schema']['time_unique']
-        time_unique = default_time_unique(ds, time_unique_schema)
+        time_unique = default_time_unique(ds, time_unique_schema).compute()
     else:
         time_unique = time_unique.values
 
@@ -81,7 +81,7 @@ def default_time(ds, schema):
         time_chunks = ds.time_chunks
     except AttributeError:
         time_chunk_schema = ds.attrs['schema']['time_chunks']
-        time_chunks = default_time_chunks(ds, time_chunk_schema)
+        time_chunks = default_time_chunks(ds, time_chunk_schema).compute()
     else:
         time_chunks = time_chunks.values
 
@@ -102,7 +102,7 @@ def default_time_index(ds, schema):
         time_chunks = ds.time_chunks
     except AttributeError:
         time_chunk_schema = ds.attrs['schema']['time_chunks']
-        time_chunks = default_time_chunks(ds, time_chunk_schema)
+        time_chunks = default_time_chunks(ds, time_chunk_schema).compute()
     else:
         time_chunks = time_chunks.values
 
