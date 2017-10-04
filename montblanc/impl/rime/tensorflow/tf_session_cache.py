@@ -51,7 +51,7 @@ class TensorflowSessionCache(object):
 
 __TF_SESSION_CACHE = TensorflowSessionCache()
 
-def session_cache():
+def tf_session_cache():
     global __TF_SESSION_CACHE
     return __TF_SESSION_CACHE
 

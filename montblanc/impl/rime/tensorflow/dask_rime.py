@@ -10,7 +10,7 @@ except ImportError:
 import six
 
 from montblanc.impl.rime.tensorflow.dataset import input_schema, output_schema
-from montblanc.impl.rime.tensorflow.tf_session_cache import session_cache
+from montblanc.impl.rime.tensorflow.tf_session_cache import tf_session_cache
 
 def _create_tf_session(cfg_hash, cfg):
     """ Create a tensorflow session """
@@ -162,7 +162,7 @@ class Rime(object):
 
         # Curry _create_tf_session with our config for use in _rime
         # We do this because cfg, as a dict, is not hashable and so is
-        # consequently unsuitable for passing to `session_cache().open`.
+        # consequently unsuitable for passing to `tf_session_cache().open`.
         # However, we do want to create new sessions whenever the
         # configuration hash changes.
         mk_tf_sess = lambda cfg_hash: _create_tf_session(cfg_hash, self._cfg)
@@ -175,7 +175,7 @@ class Rime(object):
             # Plug tensorflow code in here.
             inputs = {k: v for k, v in zip(input_names, args)}
 
-            with session_cache().open(mk_tf_sess, cfg_hash) as S:
+            with tf_session_cache().open(mk_tf_sess, cfg_hash) as S:
                 pass
 
             return inputs['data']

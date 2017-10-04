@@ -2,7 +2,7 @@ import unittest
 
 import tensorflow as tf
 
-from montblanc.impl.rime.tensorflow.tf_session_cache import session_cache
+from montblanc.impl.rime.tensorflow.tf_session_cache import tf_session_cache
 from montblanc.impl.rime.tensorflow.tf_graph import (
                         _construct_tensorflow_staging_areas,
                         _construct_tensorflow_expression)
@@ -27,25 +27,25 @@ def _create_tensorflow_graph():
     return graph, init_op, expr, feed_data
 
 class TestTensorflowSessionCache(unittest.TestCase):
-    def test_session_cache(self):
+    def test_tf_session_cache(self):
         graph, init_op, expr, feed_data = _create_tensorflow_graph()
 
-        with session_cache().open(tf.Session, "", graph=graph) as S:
+        with tf_session_cache().open(tf.Session, "", graph=graph) as S:
             S.run(init_op)
 
-        self.assertTrue(session_cache().size() == 1)
+        self.assertTrue(tf_session_cache().size() == 1)
 
-        with session_cache().open(tf.Session, "", graph=graph) as S:
+        with tf_session_cache().open(tf.Session, "", graph=graph) as S:
             S.run(init_op)
 
-        self.assertTrue(session_cache().size() == 1)
+        self.assertTrue(tf_session_cache().size() == 1)
 
         graph, init_op, expr, feed_data = _create_tensorflow_graph()
 
-        with session_cache().open(tf.Session, "", graph=graph) as S:
+        with tf_session_cache().open(tf.Session, "", graph=graph) as S:
             S.run(init_op)
 
-        self.assertTrue(session_cache().size() == 2)
+        self.assertTrue(tf_session_cache().size() == 2)
 
 if __name__ == "__main__":
     unittest.main()
