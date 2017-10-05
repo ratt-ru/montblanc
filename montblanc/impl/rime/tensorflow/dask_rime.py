@@ -9,37 +9,51 @@ except ImportError:
     import toolz
 import six
 
-from montblanc.impl.rime.tensorflow.dataset import input_schema, output_schema
+from montblanc.impl.rime.tensorflow.dataset import input_schema
 from montblanc.impl.rime.tensorflow.tf_session_cache import tf_session_cache
 
-def _create_tf_session(cfg_hash, cfg):
+def _setup_tensorflow(cfg_hash, cfg):
     """ Create a tensorflow session """
-    import tensorflow as tf
-    from tf_graph import (_construct_tensorflow_staging_areas,
-                        _construct_tensorflow_expression)
+    class TensorflowSetup(object):
+        """ Encapsulates tensorflow session and other objects """
+        def __init__(self, cfg):
+            import tensorflow as tf
+            from montblanc.impl.rime.tensorflow.tf_graph import (
+                                _construct_tensorflow_staging_areas,
+                                _construct_tensorflow_expression)
+            from montblanc.impl.rime.tensorflow.dataset import (
+                                input_schema,
+                                output_schema)
 
-    devices = ['/cpu:0']
+            devices = ['/cpu:0']
 
-    with tf.Graph().as_default() as graph:
-        feed_data = _construct_tensorflow_staging_areas(
-            input_schema(),
-            output_schema(),
-            ('utime', 'row'),
-            devices)
+            with tf.Graph().as_default() as graph:
+                feed_data = _construct_tensorflow_staging_areas(
+                    input_schema(), output_schema(),
+                    ('utime', 'row'), devices)
 
-        expr = _construct_tensorflow_expression(feed_data,
-                                                cfg,
-                                                devices[0],
-                                                0)
+                expr = _construct_tensorflow_expression(feed_data,
+                    cfg, devices[0], 0)
 
-        init_op = tf.global_variables_initializer()
+                init_op = tf.global_variables_initializer()
 
-    session = tf.Session("", graph=graph)
-    session.run(init_op)
-    #return graph, init_op, expr, feed_data
+            self.feed_data = feed_data
+            self.init_op = init_op
+            self.expr = expr
+            self.graph = graph
+            self.session = session = tf.Session("", graph=graph)
+            session.run(init_op)
 
-    return session
+        def close(self):
+            self.session.close()
 
+        def __enter__(self):
+            return self
+
+        def __exit__(self, etype, evalue, etraceback):
+            self.close()
+
+    return TensorflowSetup(cfg)
 
 class Rime(object):
     def __init__(self, **kwargs):
@@ -160,12 +174,12 @@ class Rime(object):
         # in _rime.
         input_names = inputs.keys()
 
-        # Curry _create_tf_session with our config for use in _rime
+        # Curry _setup_tensorflow with our config for use in _rime
         # We do this because cfg, as a dict, is not hashable and so is
         # consequently unsuitable for passing to `tf_session_cache().open`.
         # However, we do want to create new sessions whenever the
         # configuration hash changes.
-        mk_tf_sess = lambda cfg_hash: _create_tf_session(cfg_hash, self._cfg)
+        setup_tf = lambda cfg_hash: _setup_tensorflow(cfg_hash, self._cfg)
 
         def _rime(*args, **kwargs):
             """ Compute chunks of the RIME """
@@ -175,7 +189,7 @@ class Rime(object):
             # Plug tensorflow code in here.
             inputs = {k: v for k, v in zip(input_names, args)}
 
-            with tf_session_cache().open(mk_tf_sess, cfg_hash) as S:
+            with tf_session_cache().open(setup_tf, cfg_hash) as S:
                 pass
 
             return inputs['data']
@@ -232,7 +246,7 @@ class TestDaskRime(unittest.TestCase):
         self.assertTrue(da.all(model_vis == mds.data).compute())
         self.assertTrue(tf_session_cache().size() == 1)
 
-        # Now modify the configuraiton and check that
+        # Now modify the configuration and check that
         # two sessions have been created
         rime.set_config({'polarisation_type': 'circular'})
         model_vis = rime(mds).compute()
