@@ -18,8 +18,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-import threading
 import unittest
+
+try:
+    from dask.utils import SerializableLock as Lock
+except ImportError:
+    from threading import Lock
 
 import six
 
@@ -27,7 +31,7 @@ class KeyPool(object):
     """ Pool of reusable integer keys """
     def __init__(self):
         self._keys = []
-        self._lock = threading.Lock()
+        self._lock = Lock()
         self._last_key = 0
 
     def get(self, nkeys):
