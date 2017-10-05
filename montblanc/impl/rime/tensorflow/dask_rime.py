@@ -216,19 +216,27 @@ class TestDaskRime(unittest.TestCase):
 
         mds = default_dataset()
 
+        # Chunk so that multiple threads are employed
         dims = mds.dims
         rows_per_utime = dims['row'] // dims['utime']
         utime = dims['utime'] // 10
         row = utime*rows_per_utime
 
-
         mds = mds.chunk({'utime':utime, 'row': row})
 
         rime = Rime()
+        rime.set_config({'polarisation_type': 'linear'})
 
         model_vis = rime(mds).compute()
         self.assertTrue(model_vis.shape == mds.data.shape)
         self.assertTrue(da.all(model_vis == mds.data).compute())
+        self.assertTrue(tf_session_cache().size() == 1)
+
+        # Now modify the configuraiton and check that
+        # two sessions have been created
+        rime.set_config({'polarisation_type': 'circular'})
+        model_vis = rime(mds).compute()
+        self.assertTrue(tf_session_cache().size() == 2)
 
 if __name__ == "__main__":
     unittest.main()
