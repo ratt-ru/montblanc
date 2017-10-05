@@ -156,7 +156,7 @@ def source_schema():
             "dtype": np.float64,
         },
         "point_alpha": {
-            "dims": ("point", "utime", "(I,Q,U,V)"),
+            "dims": ("point", "utime"),
             "dtype": np.float64,
         },
         "point_stokes": {
@@ -173,7 +173,7 @@ def source_schema():
             "dtype": np.float64,
         },
         "gaussian_alpha": {
-            "dims": ("gaussian", "utime", "(I,Q,U,V)"),
+            "dims": ("gaussian", "utime"),
             "dtype": np.float64,
         },
         "gaussian_stokes": {
@@ -190,7 +190,7 @@ def source_schema():
             "dtype": np.float64,
         },
         "sersic_alpha": {
-            "dims": ("sersic", "utime", "(I,Q,U,V)"),
+            "dims": ("sersic", "utime"),
             "dtype": np.float64,
         },
         "sersic_stokes": {
