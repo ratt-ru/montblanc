@@ -208,7 +208,6 @@ def _construct_tensorflow_staging_areas(in_schema, out_schema,
 def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     """ Constructs a tensorflow expression for computing the RIME """
     zero = tf.constant(0)
-    src_count = zero
 
     local_cpu = feed_data.local_cpu
     local_compute = feed_data.local_compute
