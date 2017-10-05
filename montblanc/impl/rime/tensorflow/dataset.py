@@ -181,7 +181,7 @@ def source_schema():
             "dtype": np.float64,
         },
         "gaussian_shape_params": {
-            "dims": ("gaussian", "(lproj,mproj,theta)"),
+            "dims": ("(lproj,mproj,theta)", "gaussian"),
             "dtype": np.float64,
         },
 
@@ -202,7 +202,7 @@ def source_schema():
             "dtype": np.float64,
         },
         "sersic_shape_params": {
-            "dims": ("sersic", "(s1,s2,theta)"),
+            "dims": ("(s1,s2,theta)", "sersic"),
             "dtype": np.float64,
         },
 
