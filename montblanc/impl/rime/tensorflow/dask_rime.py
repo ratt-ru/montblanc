@@ -24,6 +24,7 @@ def _setup_tensorflow(cfg_hash, cfg):
             from montblanc.impl.rime.tensorflow.dataset import (
                                 input_schema,
                                 output_schema)
+            from montblanc.impl.rime.tensorflow.key_pool import KeyPool
 
             devices = ['/cpu:0']
 
@@ -32,16 +33,18 @@ def _setup_tensorflow(cfg_hash, cfg):
                     input_schema(), output_schema(),
                     ('utime', 'row'), devices)
 
-                expr = _construct_tensorflow_expression(feed_data,
-                    cfg, devices[0], 0)
+                exprs = [_construct_tensorflow_expression(feed_data,
+                                                        cfg, dev, i)
+                                    for i, dev in enumerate(devices)]
 
                 init_op = tf.global_variables_initializer()
 
             self.feed_data = feed_data
             self.init_op = init_op
-            self.expr = expr
+            self.exprs = exprs
             self.graph = graph
             self.session = session = tf.Session("", graph=graph)
+            self.key_pool = KeyPool()
             session.run(init_op)
 
         def close(self):
@@ -182,16 +185,109 @@ class Rime(object):
         setup_tf = lambda cfg_hash: _setup_tensorflow(cfg_hash, self._cfg)
 
         def _rime(*args, **kwargs):
+            import numpy as np
             """ Compute chunks of the RIME """
             cfg_hash = kwargs.pop('cfg_hash')
 
-            # TODO(sjperkins): This just passes data straight through
-            # Plug tensorflow code in here.
+            # Associated input names with arguments
             inputs = {k: v for k, v in zip(input_names, args)}
 
-            with tf_session_cache().open(setup_tf, cfg_hash) as S:
-                pass
+            # Normalise time_index for this chunk
+            # TODO(sjperkins) probably OK since time_index is consecutive
+            inputs["time_index"] -= inputs["time_index"].min()
 
+            with tf_session_cache().open(setup_tf, cfg_hash) as S:
+                session = S.session
+                local_cpu = S.feed_data.local_cpu
+                feed_internal = local_cpu.feed_internal
+                feed_once = local_cpu.feed_once
+                feed_many = local_cpu.feed_many
+                feed_sources = S.feed_data.local_cpu.sources
+                exprs = S.exprs
+                key_pool = S.key_pool
+
+                def _source_keys_and_feed_fn(k, sa):
+                    """ Returns (keys, feed function) for given source staging area """
+
+                    # arrays in the staging area to feed
+                    arrays = { n: (inputs[n], ph) for n, ph
+                                        in zip(sa.fed_arrays, sa.placeholders) }
+                    # Get the actual arrays
+                    data = [t[0] for t in arrays.values()]
+
+                    if not all(type(data[0]) == type(d) for d in data):
+                        raise ValueError("Type mismatch in arrays "
+                                         "supplied for {}".format(k))
+
+                    # Handle single ndarray case
+                    if isinstance(data[0], np.ndarray):
+                        #print("Handling numpy arrays for {}".format(k))
+                        if data[0].nbytes == 0:
+                            #print("{} is zero-length, ignoring".format(k))
+                            return [], lambda: None
+
+                        keys = key_pool.get(1)
+                        feed_dict = {ph: d for n, (d, ph) in arrays.items()}
+                        feed_dict[sa.put_key_ph] = keys[0]
+                        from functools import partial
+                        fn = partial(session.run, sa.put_op, feed_dict=feed_dict)
+                        return keys, fn
+
+                    # Handle multiple ndarrays in a list case
+                    elif isinstance(data[0], list):
+                        #print("Handling list of size {} for {}".format(len(data[0]), k))
+                        keys = key_pool.get(len(data[0]))
+
+                        def fn():
+                            for i, k in enumerate(keys):
+                                feed_dict = { ph: d[i] for n, (d, ph) in arrays.items() }
+                                feed_dict[sa.put_key_ph] = k
+                                session.run(sa.put_op, feed_dict=feed_dict)
+
+                        return keys, fn
+
+                    raise ValueError("Unhandled case {}".format(type(data[0])))
+
+                src_keys_and_fn = { "%s_keys" % k : _source_keys_and_feed_fn(k, sa)
+                                        for k, sa in feed_sources.items() }
+
+                feed_once_key = key_pool.get(1)
+                feed_dict = { ph: inputs[n] for n, ph in
+                    zip(feed_once.fed_arrays, feed_once.placeholders) }
+                feed_dict[feed_once.put_key_ph] = feed_once_key[0]
+                session.run(feed_once.put_op, feed_dict=feed_dict)
+
+                feed_many_key = key_pool.get(1)
+                feed_dict = { ph: inputs[n] for n, ph in
+                    zip(feed_many.fed_arrays, feed_many.placeholders) }
+                feed_dict[feed_many.put_key_ph] = feed_many_key[0]
+                session.run(feed_many.put_op, feed_dict=feed_dict)
+
+                feed_dict = { ph: src_keys_and_fn[n][0] for n, ph in
+                    zip(feed_internal.fed_arrays, feed_internal.placeholders) }
+                feed_dict[feed_internal.put_key_ph] = feed_many_key[0]
+                session.run(feed_internal.put_op, feed_dict=feed_dict)
+
+                # Now feed the source arrays
+                for k, fn in src_keys_and_fn.values():
+                    fn()
+
+                feed_dict = { local_cpu.feed_once_key: feed_once_key[0],
+                              local_cpu.feed_many_key: feed_many_key[0] }
+                session.run([exprs[0].stage_feed_once,
+                            exprs[0].stage_feed_many,
+                            exprs[0].stage_source_data,
+                            exprs[0].stage_output,
+                            exprs[0].stage_cpu_output],
+                                feed_dict=feed_dict)
+
+                # Release all keys
+                key_pool.release(feed_once_key)
+                key_pool.release(feed_many_key)
+                key_pool.release(toolz.concat(toolz.pluck(0, src_keys_and_fn.values())))
+
+            # TODO(sjperkins): This just passes data straight through
+            # Plug tensorflow result in here.
             return inputs['data']
 
         # Use dask names ask tokenize inputs
@@ -226,17 +322,14 @@ import unittest
 
 class TestDaskRime(unittest.TestCase):
     def test_rime(self):
-        from dataset import default_dataset
+        dask.set_options(get=dask.get)
 
-        mds = default_dataset()
+        from dataset import default_dataset, group_row_chunks
 
         # Chunk so that multiple threads are employed
-        dims = mds.dims
-        rows_per_utime = dims['row'] // dims['utime']
-        utime = dims['utime'] // 10
-        row = utime*rows_per_utime
-
-        mds = mds.chunk({'utime':utime, 'row': row})
+        mds = default_dataset()
+        chunks = group_row_chunks(mds, mds.dims['row'] // 10)
+        mds = mds.chunk(chunks)
 
         rime = Rime()
         rime.set_config({'polarisation_type': 'linear'})

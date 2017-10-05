@@ -408,9 +408,9 @@ def default_dim_sizes():
 
     # Source dimensions
     ds.update({
-        'point': 1000,
-        'gaussian': 1000,
-        'sersic': 1000,
+        'point': 10,
+        'gaussian': 0,
+        'sersic': 0,
         '(l,m)': 2,
         '(lproj,mproj,theta)': 3,
         '(s1,s2,theta)': 3,
