@@ -224,15 +224,15 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
                                     name="compute_feed_once_put")
 
     # Feed Many Staging Area
-    key, data = local_cpu.feed_many.get(local_cpu.feed_many_key,
+    feed_many_key, data = local_cpu.feed_many.get(local_cpu.feed_many_key,
                                         name="cpu_feed_many_get")
-    stage_feed_many = local_compute.feed_many[dev_id].put(key, data,
+    stage_feed_many = local_compute.feed_many[dev_id].put(feed_many_key, data,
                                                   name="compute_feed_many_put")
 
     # Pull RIME inputs out of the feed many staging_area
     # for the relevant device, adding the feed once
     # inputs to the dictionary
-    key, D = local_compute.feed_many[dev_id].get_to_attrdict(local_cpu.feed_many_key,
+    feed_many_key, D = local_compute.feed_many[dev_id].get_to_attrdict(local_cpu.feed_many_key,
                                                   name="compute_feed_many_get")
     D.update(local_compute.feed_once[dev_id].peek(local_cpu.feed_once_key,
                                                   name="compute_feed_once_peek"))
@@ -418,13 +418,13 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
             D.weight, D.data, summed_coherencies, D.data)
 
         # Stage output in the compute output staging area
-        stage_output = local_compute.output.put(key,
+        stage_output = local_compute.output.put(feed_many_key,
                             { 'model_vis': model_vis,
                              'chi_squared': chi_squared })
 
     # Create ops for shifting output from compute staging area
     # to CPU staging area
-    out_key, out_data = local_compute.output.get(key)
+    out_key, out_data = local_compute.output.get(feed_many_key)
     stage_cpu_output = local_cpu.output.put(out_key, out_data)
 
     ComputeNodes = attr.make_class("ComputeNodes", ["stage_feed_many",
