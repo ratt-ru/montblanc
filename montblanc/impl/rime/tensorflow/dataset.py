@@ -271,7 +271,7 @@ def default_schema():
         },
 
         "weight": {
-            "dims": ("row", "corr"),
+            "dims": ("row", "chan", "corr"),
             "dtype": np.float64,
             "default": lambda ds, as_: da.ones(shape=as_["shape"],
                                                 dtype=as_["dtype"],
@@ -714,8 +714,22 @@ def montblanc_dataset(xds=None):
 
     schema = input_schema()
     required_arrays = set(schema.keys())
+
+    # Assign weight_spectrum to weight, if available
+    if "weight_spectrum" in xds:
+        mds = xds.assign(weight=xds.weight_spectrum)
+    # Otherwise broadcast weight up to weight spectrum dimensionality
+    elif "weight" in xds:
+        dims = xds.dims
+        chunks = xds.chunks
+        weight_dims = schema['weight']['dims']
+        shape = tuple(dims[d] for d in weight_dims)
+        chunks = tuple(chunks[d] for d in weight_dims)
+        weight = da.broadcast_to(xds.weight.data, shape).rechunk(chunks)
+        mds = xds.assign(weight=xr.DataArray(weight, dims=weight_dims))
+
     # Fill in any default arrays
-    mds = default_dataset(xds)
+    mds = default_dataset(mds)
 
     # At this point, our row chunking strategy is whatever
     # came out of the original dataset. This will certainly
