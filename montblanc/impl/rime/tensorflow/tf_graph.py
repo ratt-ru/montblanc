@@ -272,7 +272,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     with tf.device(device):
         # Infer chunk dimensions
         model_vis_shape = tf.shape(D.data)
-        ntime, nrow, nchan, npol = [model_vis_shape[i] for i in range(4)]
+        nrow, nchan, npol = [model_vis_shape[i] for i in range(3)]
 
         # Infer float and complex type
         FT, CT = D.antenna_uvw.dtype, D.data.dtype
