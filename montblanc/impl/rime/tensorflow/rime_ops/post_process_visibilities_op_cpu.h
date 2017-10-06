@@ -49,7 +49,7 @@ public:
         const auto & in_observed_vis = context->input(8);
 
         int nrow = in_model_vis.dim_size(0);
-        int nchan = in_model_vis.dim_size(2);
+        int nchan = in_model_vis.dim_size(1);
         int npol = in_model_vis.dim_size(2);
 
         // Allocate output tensors

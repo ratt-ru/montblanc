@@ -148,7 +148,7 @@ public:
         int ntime = in_die.dim_size(0);
         int na = in_die.dim_size(1);
         int nrow = in_model_vis.dim_size(0);
-        int nchan = in_model_vis.dim_size(2);
+        int nchan = in_model_vis.dim_size(1);
         int npol = in_model_vis.dim_size(2);
         int npolchan = npol*nchan;
 
