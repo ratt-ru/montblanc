@@ -274,12 +274,7 @@ class Rime(object):
 
                 feed_dict = { local_cpu.feed_once_key: feed_once_key[0],
                               local_cpu.feed_many_key: feed_many_key[0] }
-                session.run([exprs[0].stage_feed_once,
-                            exprs[0].stage_feed_many,
-                            exprs[0].stage_source_data,
-                            exprs[0].stage_output,
-                            exprs[0].stage_cpu_output],
-                                feed_dict=feed_dict)
+                vis = session.run(exprs[0].model_vis, feed_dict=feed_dict)
 
                 # Release all keys
                 key_pool.release(feed_once_key)
@@ -288,7 +283,7 @@ class Rime(object):
 
             # TODO(sjperkins): This just passes data straight through
             # Plug tensorflow result in here.
-            return inputs['data']
+            return vis
 
         # Use dask names ask tokenize inputs
         tokenize_args = [v.data.name for k, v in inputs.items()]
@@ -322,7 +317,7 @@ import unittest
 
 class TestDaskRime(unittest.TestCase):
     def test_rime(self):
-        dask.set_options(get=dask.get)
+        dask.set_options(get=dask.threaded.get)
 
         from dataset import default_dataset, group_row_chunks
 
@@ -332,16 +327,15 @@ class TestDaskRime(unittest.TestCase):
         mds = mds.chunk(chunks)
 
         rime = Rime()
-        rime.set_config({'polarisation_type': 'linear'})
+        rime.set_config({'polarisation_type': 'linear', 'mem_budget': 10*1024*1024})
 
         model_vis = rime(mds).compute()
         self.assertTrue(model_vis.shape == mds.data.shape)
-        self.assertTrue(da.all(model_vis == mds.data).compute())
         self.assertTrue(tf_session_cache().size() == 1)
 
         # Now modify the configuration and check that
         # two sessions have been created
-        rime.set_config({'polarisation_type': 'circular'})
+        rime.set_config({'polarisation_type': 'circular', 'mem_budget': 10*1024*1024})
         model_vis = rime(mds).compute()
         self.assertTrue(tf_session_cache().size() == 2)
 
