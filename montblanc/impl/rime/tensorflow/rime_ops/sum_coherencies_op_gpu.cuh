@@ -134,7 +134,6 @@ public:
         int nrow = in_time_index.dim_size(0);
         int nsrc = in_shape.dim_size(0);
         int nchan = in_shape.dim_size(2);
-        int ntime = in_ant_jones.dim_size(1);
         int na = in_ant_jones.dim_size(2);
         int npol = in_ant_jones.dim_size(4);
         int npolchan = nchan*npol;
