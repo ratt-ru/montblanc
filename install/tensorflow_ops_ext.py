@@ -94,6 +94,9 @@ def create_tensorflow_extension(nvcc_settings, device_info):
     # Header dependencies
     depends = glob.glob(os.path.join(source_path, '*.h'))
 
+    debug_opt = '-g0'
+    optimise_opt = '-O2'
+
     # Include directories
     include_dirs = [os.path.join('montblanc', 'include'), source_path]
     include_dirs += [tf.sysconfig.get_include()]
@@ -101,7 +104,7 @@ def create_tensorflow_extension(nvcc_settings, device_info):
     # Libraries
     library_dirs = []
     libraries = []
-    extra_link_args = ['-fPIC', '-fopenmp', '-g0']
+    extra_link_args = ['-fPIC', '-fopenmp', debug_opt]
 
     # Macros
     define_macros = [
@@ -112,7 +115,7 @@ def create_tensorflow_extension(nvcc_settings, device_info):
     # Common flags
     flags = ['-std=c++11']
 
-    gcc_flags = flags + ['-g0', '-fPIC', '-fopenmp', '-O2']
+    gcc_flags = flags + [debug_opt, '-fPIC', '-fopenmp', optimise_opt]
     gcc_flags += ['-march=native', '-mtune=native']
     nvcc_flags = flags + []
 
