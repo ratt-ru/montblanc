@@ -155,9 +155,14 @@ def one_jansky_stokes(ds, schema, dim):
     repeat = dim_size-1
     repeat = 0 if repeat < 0 else repeat
 
-    stokes = [1] + [0]*repeat
-
+    stokes = np.array([1] + [0]*repeat, dtype=schema["dtype"])
     return da.broadcast_to(stokes, shape).rechunk(schema["chunks"])
+
+def default_gaussian(ds, schema):
+    gauss_shape = np.array([[0],[0],[1]], dtype=schema["dtype"])
+    return da.broadcast_to(gauss_shape, schema["shape"]).rechunk(schema["chunks"])
+
+default_sersic = default_gaussian
 
 def source_schema():
     return {
@@ -199,6 +204,7 @@ def source_schema():
         "gaussian_shape_params": {
             "dims": ("(lproj,mproj,theta)", "gaussian"),
             "dtype": np.float64,
+            "default": default_gaussian,
         },
 
         "sersic_lm": {
@@ -221,6 +227,7 @@ def source_schema():
         "sersic_shape_params": {
             "dims": ("(s1,s2,theta)", "sersic"),
             "dtype": np.float64,
+            "default": default_sersic,
         },
 
     }
