@@ -144,6 +144,20 @@ def identity_on_dim(ds, schema, dim):
     identity = np.array(identity, dtype=schema["dtype"])[idx]
     return da.broadcast_to(identity, rshape).rechunk(schema["chunks"])
 
+def one_jansky_stokes(ds, schema, dim):
+    """ Return one jansky stokes on the specified dimension """
+    dims = schema["dims"]
+    shape = schema["shape"]
+
+    dim_idx = dims.index(dim)
+    dim_size = shape[dim_idx]
+
+    repeat = dim_size-1
+    repeat = 0 if repeat < 0 else repeat
+
+    stokes = [1] + [0]*repeat
+
+    return da.broadcast_to(stokes, shape).rechunk(schema["chunks"])
 
 def source_schema():
     return {
@@ -162,6 +176,7 @@ def source_schema():
         "point_stokes": {
             "dims": ("point", "utime", "(I,Q,U,V)"),
             "dtype": np.float64,
+            "default": partial(one_jansky_stokes, dim="(I,Q,U,V)"),
         },
 
         "gaussian_lm": {
@@ -179,6 +194,7 @@ def source_schema():
         "gaussian_stokes": {
             "dims": ("gaussian", "utime", "(I,Q,U,V)"),
             "dtype": np.float64,
+            "default": partial(one_jansky_stokes, dim="(I,Q,U,V)"),
         },
         "gaussian_shape_params": {
             "dims": ("(lproj,mproj,theta)", "gaussian"),
@@ -196,6 +212,7 @@ def source_schema():
         "sersic_stokes": {
             "dims": ("sersic", "utime", "(I,Q,U,V)"),
             "dtype": np.float64,
+            "default": partial(one_jansky_stokes, dim="(I,Q,U,V)"),
         },
         "sersic_ref_freq": {
             "dims": ("sersic",),
