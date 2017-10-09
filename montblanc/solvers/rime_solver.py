@@ -21,11 +21,6 @@
 import numpy as np
 import types
 
-try:
-    from inspect import signature
-except ImportError:
-    from funcsigs import signature
-
 import montblanc
 from hypercube import HyperCube
 
