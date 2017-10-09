@@ -254,10 +254,10 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
 
         def body(chunk):
             key, data = local_cpu.sources[src_type].get(keys[chunk],
-                                            name="cpu_%s_get" % src_type)
+                                        name="cpu_%s_get" % src_type)
 
             feed_src_chunk = local_compute.sources[dev_id][src_type].put(key, data,
-                                                      name="compute_%s_put" % src_type)
+                                        name="compute_%s_put" % src_type)
 
             with tf.control_dependencies([feed_src_chunk]):
                 return [chunk + 1]
@@ -286,7 +286,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         """
         Compute the jones terms for each antenna.
 
-        lm, stokes and alpha are the source variables.
+        `lm`, `stokes`, `alpha` and `ref_freq` are the source variables.
         """
 
         # Compute the complex phase
@@ -323,7 +323,12 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
             pa_sin, pa_cos,
             D.beam_extents, D.beam_freq_map, D.ebeam)
 
-        deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag]
+        ejones_msg = ("Invalid beam values")
+
+        ejones_real = tf.check_numerics(tf.real(ejones), ejones_msg)
+        ejones_imag = tf.check_numerics(tf.imag(ejones), ejones_msg)
+
+        deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag, ejones_real, ejones_imag]
         deps = [] # Do nothing for now
 
         # Combine the brightness square root, complex phase,
@@ -333,15 +338,19 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
                                                     feed_rotation, ejones, FT=FT)
             return antenna_jones, sgn_brightness
 
+    npoint_chunks = tf.shape(I.point_keys)[0]
+    ngaussian_chunks = tf.shape(I.gaussian_keys)[0]
+    nsersic_chunks = tf.shape(I.sersic_keys)[0]
+
     # While loop condition for each point source type
     def point_cond(coherencies, chunk):
-        return tf.less(chunk, tf.shape(I.point_keys)[0])
+        return tf.less(chunk, npoint_chunks)
 
     def gaussian_cond(coherencies, chunk):
-        return tf.less(chunk, tf.shape(I.gaussian_keys)[0])
+        return tf.less(chunk, ngaussian_chunks)
 
     def sersic_cond(coherencies, chunk):
-        return tf.less(chunk, tf.shape(I.sersic_keys)[0])
+        return tf.less(chunk, nsersic_chunks)
 
     # While loop bodies
     def point_body(coherencies, chunk):
