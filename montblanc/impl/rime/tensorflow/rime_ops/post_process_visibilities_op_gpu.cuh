@@ -79,12 +79,12 @@ __global__ void rime_post_process_visibilities(
 
     // Load in model, observed visibilities, flags and weights
     int i = row*npolchan + polchan;
-    CT base_vis = in_base_vis[row];
-    CT model_vis = in_model_vis[row];
-    CT diff_vis = in_observed_vis[row];
-    FT weight = in_weight[row];
+    CT base_vis = in_base_vis[i];
+    CT model_vis = in_model_vis[i];
+    CT diff_vis = in_observed_vis[i];
+    FT weight = in_weight[i];
     // Flag multiplier used to zero flagged visibility points
-    FT flag_mul = FT(in_flag[row] == 0);
+    FT flag_mul = FT(in_flag[i] == 0);
 
     // Multiply the visibility by antenna 1's g term
     i = (time*na + ant1)*npolchan + polchan;
