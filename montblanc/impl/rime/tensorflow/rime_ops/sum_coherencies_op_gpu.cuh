@@ -132,6 +132,7 @@ public:
         const tf::Tensor & in_base_coherencies = context->input(6);
 
         int nrow = in_time_index.dim_size(0);
+        int ntime = in_ant_jones.dim_size(1);
         int nsrc = in_shape.dim_size(0);
         int nchan = in_shape.dim_size(2);
         int na = in_ant_jones.dim_size(2);
