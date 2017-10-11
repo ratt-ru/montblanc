@@ -491,6 +491,15 @@ A = [
             "models, for example. However, they are zeroed by default."
             "In the context of output, these are the RIME model visibilities "),
 
+    # Chi-squared
+    array_dict('chi_squared', (1,), 'ft',
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: np.zeros(c.shape, c.dtype),
+        tags    = "output",
+        description = "Chi-squared value associated with a tile "
+            "of model and observed visibilities. These can be summed "
+            "to produce a chi-squared for the entire problem."),
+
     # Result arrays
     array_dict('bsqrt', ('nsrc', 'ntime', 'nchan', 'npol'), 'ct',
         tags="temporary"),
