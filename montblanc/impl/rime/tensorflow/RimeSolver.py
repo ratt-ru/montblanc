@@ -876,7 +876,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     #======================================
 
     local.output = create_staging_area_wrapper('output',
-        ['descriptor', 'model_vis'], dfs)
+        ['descriptor', 'model_vis', 'chi_squared'], dfs)
 
     #=================================================
     # Create tensorflow variables which are
@@ -1089,7 +1089,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
             D.weight, D.model_vis, summed_coherencies, D.observed_vis)
 
     # Create enstaging_area operation
-    put_op = LSA.output.put_from_list([D.descriptor, model_vis])
+    put_op = LSA.output.put_from_list([D.descriptor, model_vis, chi_squared])
 
     # Return descriptor and enstaging_area operation
     return D.descriptor, put_op
