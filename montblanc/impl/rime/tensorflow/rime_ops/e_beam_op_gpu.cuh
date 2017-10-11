@@ -56,8 +56,8 @@ public:
 typedef Eigen::GpuDevice GPUDevice;
 
 // Limit the BEAM_NUD dimension we're prepared to handle
-// Mostly because of the second index beam
-// frequency mapping in shared memory
+// Mostly because of the beam frequency mapping index
+// in shared memory
 constexpr std::size_t BEAM_NUD_LIMIT = 128;
 
 // Get the current polarisation from the thread ID
@@ -77,6 +77,15 @@ void find_freq_bounds(int & lower, int & upper,
 {
     using FT = typename Traits::FT;
 
+    // OK these names and their usage are going to be confusing
+    // Technically this function does an upper bound search,
+    // the result of which is stored in the lower *variable*,
+    // to save on registers.
+
+    // This is different from the meaning of the lower and
+    // upper bounds specified in the *arguments*.
+    // So, at the end of this function,
+    // upper is set to lower and lower is set to upper-1.
     lower = 0;
     upper = beam_nud-1;
 
@@ -92,7 +101,9 @@ void find_freq_bounds(int & lower, int & upper,
             { lower = i + 1; }
     }
 
-    upper = lower;
+    // Lower contains our upper bound result
+    // Clamp it to at least 1
+    upper = Policies::max(1, lower);
     lower = upper - 1;
 }
 
@@ -436,6 +447,12 @@ public:
         dim3 blocks(LTr::block_size(npolchan, na, ntime));
         dim3 grid(montblanc::grid_from_thread_block(
             blocks, npolchan, na, ntime));
+
+        // Check that there are enough threads in the thread block
+        // to properly load the beam frequency map into shared memory.
+        OP_REQUIRES(context, blocks.x*blocks.y*blocks.z >= beam_nud,
+            tf::errors::InvalidArgument("Not enough thread blocks to load "
+                                                    "the beam frequency map"));
 
         // Cast to the cuda types expected by the kernel
         auto lm = reinterpret_cast<
