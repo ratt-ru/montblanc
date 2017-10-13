@@ -1308,13 +1308,13 @@ def _setup_hypercube(cube, slvr_cfg):
     mbu.register_default_dimensions(cube, slvr_cfg)
 
     # Configure the dimensions of the beam cube
-    cube.register_dimension('beam_lw', 10,
+    cube.register_dimension('beam_lw', 2,
                             description='E Beam cube l width')
 
-    cube.register_dimension('beam_mh', 10,
+    cube.register_dimension('beam_mh', 2,
                             description='E Beam cube m height')
 
-    cube.register_dimension('beam_nud', 10,
+    cube.register_dimension('beam_nud', 2,
                             description='E Beam cube nu depth')
 
     # =========================================
