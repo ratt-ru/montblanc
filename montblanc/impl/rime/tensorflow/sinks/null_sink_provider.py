@@ -34,5 +34,12 @@ class NullSinkProvider(SinkProvider):
         montblanc.log.info("Received '{n}[{sl}]"
             .format(n=context.name, sl=slice_str))
 
+    def chi_squared(self, context):
+        array_schema = context.array(context.name)
+        slices = context.slice_index(*array_schema.shape)
+        slice_str = ','.join('%s:%s' % (s.start, s.stop) for s in slices)
+        montblanc.log.info("Received '{n}[{sl}]"
+            .format(n=context.name, sl=slice_str))
+
     def __str__(self):
         return self.__class__.__name__
