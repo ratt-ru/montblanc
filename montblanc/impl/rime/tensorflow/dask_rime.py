@@ -274,9 +274,10 @@ class Rime(object):
 
                 feed_dict = { local_cpu.feed_once_key: feed_once_key[0],
                               local_cpu.feed_many_key: feed_many_key[0] }
-                session.run([exprs[0].stage_feed_once,
+                _,_,_,vis,_,_ = session.run([exprs[0].stage_feed_once,
                             exprs[0].stage_feed_many,
                             exprs[0].stage_source_data,
+                            exprs[0].model_vis,
                             exprs[0].stage_output,
                             exprs[0].stage_cpu_output],
                                 feed_dict=feed_dict)
@@ -288,7 +289,7 @@ class Rime(object):
 
             # TODO(sjperkins): This just passes data straight through
             # Plug tensorflow result in here.
-            return inputs['data']
+            return vis
 
         # Use dask names ask tokenize inputs
         tokenize_args = [v.data.name for k, v in inputs.items()]
