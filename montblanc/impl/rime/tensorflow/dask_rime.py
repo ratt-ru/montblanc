@@ -43,7 +43,8 @@ def _setup_tensorflow(cfg_hash, cfg):
             self.init_op = init_op
             self.exprs = exprs
             self.graph = graph
-            self.session = session = tf.Session("", graph=graph)
+            config = tf.ConfigProto()
+            self.session = session = tf.Session("", config=config, graph=graph)
             self.key_pool = KeyPool()
             session.run(init_op)
 
