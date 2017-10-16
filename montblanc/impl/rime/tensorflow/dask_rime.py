@@ -337,7 +337,6 @@ class TestDaskRime(unittest.TestCase):
 
         model_vis = rime(mds).compute()
         self.assertTrue(model_vis.shape == mds.data.shape)
-        self.assertTrue(da.all(model_vis == mds.data).compute())
         self.assertTrue(tf_session_cache().size() == 1)
 
         # Now modify the configuration and check that
