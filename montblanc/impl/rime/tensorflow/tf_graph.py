@@ -1,8 +1,13 @@
+
 import collections
 
 import attr
 from attrdict import AttrDict
 import numpy as np
+try:
+    import cytoolz as toolz
+except ImportError:
+    import toolz
 import six
 import tensorflow as tf
 
@@ -207,8 +212,6 @@ def _construct_tensorflow_staging_areas(in_schema, out_schema,
 
 def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     """ Constructs a tensorflow expression for computing the RIME """
-    zero = tf.constant(0)
-
     local_cpu = feed_data.local_cpu
     local_compute = feed_data.local_compute
 
@@ -217,34 +220,44 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     # Create ops for copying from the CPU to compute staging areas
 
     # Feed Once Staging Area
-    data = local_cpu.feed_once.peek(local_cpu.feed_once_key,
+    _, data = local_cpu.feed_once.get(local_cpu.feed_once_key,
                                     name="cpu_feed_once_peek")
     stage_feed_once = local_compute.feed_once[dev_id].put(
                                     local_cpu.feed_once_key, data,
                                     name="compute_feed_once_put")
 
+    with tf.control_dependencies([stage_feed_once]):
+#    with tf.control_dependencies([]):
+        feed_once_key, feed_once_data =  local_compute.feed_once[dev_id].get(
+                                    local_cpu.feed_once_key,
+                                    name="compute_feed_once_peek")
+
     # Feed Many Staging Area
     feed_many_key, data = local_cpu.feed_many.get(local_cpu.feed_many_key,
-                                        name="cpu_feed_many_get")
+                                    name="cpu_feed_many_get")
     stage_feed_many = local_compute.feed_many[dev_id].put(feed_many_key, data,
-                                                  name="compute_feed_many_put")
+                                    name="compute_feed_many_put")
 
     # Pull RIME inputs out of the feed many staging_area
-    # for the relevant device, adding the feed once
-    # inputs to the dictionary
-    feed_many_key, D = local_compute.feed_many[dev_id].get_to_attrdict(local_cpu.feed_many_key,
-                                                  name="compute_feed_many_get")
-    D.update(local_compute.feed_once[dev_id].peek(local_cpu.feed_once_key,
-                                                  name="compute_feed_once_peek"))
+    # for the relevant device
+    with tf.control_dependencies([stage_feed_many]):
+#    with tf.control_dependencies([]):
+            feed_many_key, feed_many_data = local_compute.feed_many[dev_id].get(
+                                    local_cpu.feed_many_key,
+                                    name="compute_feed_many_get")
+
+    # Dictionary of inputs merged from feed once and feed many
+    D = AttrDict(toolz.merge(feed_once_data, feed_many_data))
 
     # Get internal data for this computation
     _, I = local_cpu.feed_internal.get_to_attrdict(local_cpu.feed_many_key,
-                                                name="compute_feed_internal_key")
+                                    name="compute_feed_internal_key")
 
     stage_source_loops = []
 
     for src_type in source_var_types().keys():
-        keys = getattr(I, "%s_keys" % src_type)
+        key_attr = "%s_keys" % src_type
+        keys = getattr(I, key_attr)
 
         # How many chunks should be fed?
         nsrc_chunks = tf.cast(tf.shape(keys)[0], tf.int64)
@@ -256,16 +269,30 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
             key, data = local_cpu.sources[src_type].get(keys[chunk],
                                         name="cpu_%s_get" % src_type)
 
-            feed_src_chunk = local_compute.sources[dev_id][src_type].put(key, data,
+            feed_src_chunk = local_compute.sources[dev_id][src_type].put(
+                                        key, data,
                                         name="compute_%s_put" % src_type)
 
+            # Create a dependency on the  put operation
             with tf.control_dependencies([feed_src_chunk]):
                 return [chunk + 1]
 
-        loop = tf.while_loop(cond, body, [tf.constant(0,dtype=tf.int64)])
+        # Depend on the previous while loop, if it exists
+        try:
+            deps = [stage_source_loops[-1]]
+        except IndexError:
+            deps= []
+
+#        with tf.control_dependencies([]):
+        with tf.control_dependencies(deps):
+            loop = tf.while_loop(cond, body, [tf.constant(0,dtype=tf.int64)],
+                                 parallel_iterations=1)
+
         stage_source_loops.append(loop)
 
-    stage_source_data = tf.group(*stage_source_loops)
+ #   with tf.control_dependencies([]):
+    with tf.control_dependencies([D.values()[0]]):
+        stage_source_data = tf.group(*stage_source_loops)
 
     # Infer chunk dimensions
     with tf.device(device):
@@ -356,7 +383,11 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     def point_body(coherencies, chunk):
         """ Accumulate visiblities for point source batch """
         point_sources = local_compute.sources[dev_id]['point']
-        _, S = point_sources.get_to_attrdict(I.point_keys[chunk])
+
+        with tf.device('/cpu:0'):
+            C = I.point_keys[chunk]
+
+        _, S = point_sources.get_to_attrdict(C, name="point_get")
 
         # Get source count for this chunk
         nsrc = tf.shape(S.point_lm)[0]
@@ -373,7 +404,11 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     def gaussian_body(coherencies, chunk):
         """ Accumulate coherencies for gaussian source batch """
         gaussian_sources = local_compute.sources[dev_id]['gaussian']
-        _, S = gaussian_sources.get_to_attrdict(I.gaussian_keys[chunk])
+
+        with tf.device('/cpu:0'):
+            C = I.gaussian_keys[chunk]
+
+        _, S = gaussian_sources.get_to_attrdict(C, name="gauss_get")
 
         ant_jones, sgn_brightness = antenna_jones(S.gaussian_lm,
             S.gaussian_stokes, S.gaussian_alpha, S.gaussian_ref_freq)
@@ -389,7 +424,11 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     def sersic_body(coherencies, chunk):
         """ Accumulate coherencies for sersic source batch """
         sersic_sources = local_compute.sources[dev_id]['sersic']
-        _, S = sersic_sources.get_to_attrdict(I.sersic_keys[chunk])
+
+        with tf.device('/cpu:0'):
+            C = I.sersic_keys[chunk]
+
+        _, S = sersic_sources.get_to_attrdict(C, name="sersic_get")
 
         ant_jones, sgn_brightness = antenna_jones(S.sersic_lm,
             S.sersic_stokes, S.sersic_alpha, S.sersic_ref_freq)
@@ -403,7 +442,8 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         return coherencies, chunk + 1
 
     with tf.device(device):
-        base_coherencies = tf.zeros(shape=[nrow,nchan,npol], dtype=CT)
+        zero = tf.constant(0, dtype=tf.int32)
+        base_coherencies = tf.zeros_like(D.data, optimize=True)
 
         # Evaluate point sources
         summed_coherencies, point_chunks = tf.while_loop(point_cond,
@@ -433,21 +473,24 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
 
     # Create ops for shifting output from compute staging area
     # to CPU staging area
-    out_key, out_data = local_compute.output.get(feed_many_key)
-    stage_cpu_output = local_cpu.output.put(out_key, out_data)
+    with tf.control_dependencies([stage_output]):
+        out_key, out_data = local_compute.output.get(feed_many_key)
+        stage_cpu_output = local_cpu.output.put(out_key, out_data)
 
     ComputeNodes = attr.make_class("ComputeNodes", ["stage_feed_many",
                                                     "stage_feed_once",
                                                     "stage_source_data",
                                                     "stage_output",
-                                                    "stage_cpu_output"])
+                                                    "stage_cpu_output",
+                                                    "model_vis"])
 
     # Return Compute operations
     return ComputeNodes(stage_feed_many,
                         stage_feed_once,
                         stage_source_data,
                         stage_output,
-                        stage_cpu_output)
+                        stage_cpu_output,
+                        model_vis)
 
 import unittest
 
