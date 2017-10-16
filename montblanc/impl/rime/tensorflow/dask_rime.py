@@ -195,7 +195,7 @@ class Rime(object):
 
             # Normalise time_index for this chunk
             # TODO(sjperkins) probably OK since time_index is consecutive
-            inputs["time_index"] -= inputs["time_index"].min()
+            inputs["time_index"] = inputs["time_index"] - inputs["time_index"].min()
 
             with tf_session_cache().open(setup_tf, cfg_hash) as S:
                 session = S.session
