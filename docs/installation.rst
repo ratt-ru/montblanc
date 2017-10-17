@@ -73,7 +73,10 @@ Pre-requisites
 
    Otherwise, casacore and the measures tables will need to be manually installed.
 
-- Check that the python-casacore_ and casacore_ dependencies are installed.
+- .. _check_dependencies:
+
+  Check that the python-casacore_ and
+  casacore_ _`dependencies are installed`.
   By default python-casacore_ builds from pip and therefore from source.
   To succeed, library dependencies such as ``libboost-python`` must be installed beforehand.
   Additionally, python-casacore depends on casacore.
@@ -167,8 +170,10 @@ Possible Issues
        $ pip install -e .
 
 -  `python-casacore`_ is
-   specified as a dependency in setup.py. If installation fails here, you will
-   need to manually install it and point it at your casacore libraries.
+   specified as a dependency in setup.py. If installation fails here:
+
+    1. Check that the `python-casacore dependencies <check_dependencies_>`_ are installed.
+    2. You will need to manually install it and point it at your casacore libraries.
 
 .. _cuda: https://developer.nvidia.com/cuda-downloads
 .. _cudnn: https://developer.nvidia.com/cudnn
