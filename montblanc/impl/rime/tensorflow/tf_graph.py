@@ -477,12 +477,16 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         out_key, out_data = local_compute.output.get(feed_many_key)
         stage_cpu_output = local_cpu.output.put(out_key, out_data)
 
+    with tf.control_dependencies([stage_cpu_output]):
+        _, output_data = local_cpu.output.get(out_key)
+
     ComputeNodes = attr.make_class("ComputeNodes", ["stage_feed_many",
                                                     "stage_feed_once",
                                                     "stage_source_data",
                                                     "stage_output",
                                                     "stage_cpu_output",
-                                                    "model_vis"])
+                                                    "model_vis",
+                                                    "chi_squared"])
 
     # Return Compute operations
     return ComputeNodes(stage_feed_many,
@@ -490,7 +494,8 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
                         stage_source_data,
                         stage_output,
                         stage_cpu_output,
-                        model_vis)
+                        output_data['model_vis'],
+                        output_data['chi_squared'])
 
 import unittest
 

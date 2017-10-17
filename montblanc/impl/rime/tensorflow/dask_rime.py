@@ -274,12 +274,13 @@ class Rime(object):
 
                 feed_dict = { local_cpu.feed_once_key: feed_once_key[0],
                               local_cpu.feed_many_key: feed_many_key[0] }
-                _,_,_,vis,_,_ = session.run([exprs[0].stage_feed_once,
+                _,_,_,_,_,vis, X2 = session.run([exprs[0].stage_feed_once,
                             exprs[0].stage_feed_many,
                             exprs[0].stage_source_data,
-                            exprs[0].model_vis,
                             exprs[0].stage_output,
-                            exprs[0].stage_cpu_output],
+                            exprs[0].stage_cpu_output,
+                            exprs[0].model_vis,
+                            exprs[0].chi_squared],
                                 feed_dict=feed_dict)
 
                 # Release all keys
