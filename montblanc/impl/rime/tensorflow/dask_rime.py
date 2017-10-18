@@ -142,31 +142,6 @@ class Rime(object):
         :class:`dask.array.Array`
             Dask array of model visibilities.
         """
-        def _mod_dims(dims):
-            """
-            Convert "utime" dims to "row" dims.
-            After chunking, the number of "row" and "utime" blocks
-            should be exactly the same for each array, even though
-            their sizes will differ. We do this so that :meth:`dask.array.top`
-            will match the blocks of these dimensions together
-            """
-            return tuple("row" if d == "utime" else d for d in dims)
-
-        def _flatten_singletons(D):
-            """ Recursively simplify tuples and lists of length 1 """
-
-            # lists and tuples should remain lists and tuples
-            if isinstance(D, list):
-                return (_flatten_singletons(D[0]) if len(D) == 1
-                        else [_flatten_singletons(v) for v in D])
-            elif isinstance(D, tuple):
-                return (_flatten_singletons(D[0]) if len(D) == 1
-                        else tuple(_flatten_singletons(v) for v in D))
-            elif isinstance(D, collections.Mapping):
-                return { k: _flatten_singletons(v) for k, v in D.items() }
-            else:
-                return D
-
         in_schema = input_schema()
         # Extract input variables from the dataset
         inputs = { k: v for k, v in mds.data_vars.items()
@@ -291,6 +266,31 @@ class Rime(object):
             # TODO(sjperkins): This just passes data straight through
             # Plug tensorflow result in here.
             return vis
+
+        def _mod_dims(dims):
+            """
+            Convert "utime" dims to "row" dims.
+            After chunking, the number of "row" and "utime" blocks
+            should be exactly the same for each array, even though
+            their sizes will differ. We do this so that :meth:`dask.array.top`
+            will match the blocks of these dimensions together
+            """
+            return tuple("row" if d == "utime" else d for d in dims)
+
+        def _flatten_singletons(D):
+            """ Recursively simplify tuples and lists of length 1 """
+
+            # lists and tuples should remain lists and tuples
+            if isinstance(D, list):
+                return (_flatten_singletons(D[0]) if len(D) == 1
+                        else [_flatten_singletons(v) for v in D])
+            elif isinstance(D, tuple):
+                return (_flatten_singletons(D[0]) if len(D) == 1
+                        else tuple(_flatten_singletons(v) for v in D))
+            elif isinstance(D, collections.Mapping):
+                return { k: _flatten_singletons(v) for k, v in D.items() }
+            else:
+                return D
 
         # Use dask names as tokenize inputs
         tokenize_args = [v.data.name if isinstance(v, da.Array) else v for k, v in inputs.items()]
