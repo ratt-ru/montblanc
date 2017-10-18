@@ -292,8 +292,8 @@ class Rime(object):
             # Plug tensorflow result in here.
             return vis
 
-        # Use dask names ask tokenize inputs
-        tokenize_args = [v.data.name for k, v in inputs.items()]
+        # Use dask names as tokenize inputs
+        tokenize_args = [v.data.name if isinstance(v, da.Array) else v for k, v in inputs.items()]
         top_name = '-'.join(("rime", dask.base.tokenize(*tokenize_args)))
         # Create tuple of flattened (name, dim) pairs
         top_args = [v for var in inputs.values()
