@@ -615,7 +615,13 @@ def dataset_from_ms(ms):
     `xarray.Dataset`
         Dataset with MS columns as arrays
     """
-    xds = xds_from_ms(ms)
+
+    renames = { 'rows': 'row',
+                'chans': 'chan',
+                'pols': 'pol',
+                'corrs': 'corr'}
+
+    xds = xds_from_ms(ms).rename(renames)
     xads = xds_from_table("::".join((ms, "ANTENNA")), table_schema="ANTENNA")
     xspwds = xds_from_table("::".join((ms, "SPECTRAL_WINDOW")), table_schema="SPECTRAL_WINDOW")
     xds = xds.assign(antenna_position=xads.rename({"rows" : "antenna"}).drop('msrows').position,
@@ -871,14 +877,7 @@ if __name__ == "__main__":
     xds = montblanc_dataset()
     print xds
 
-    ms = "~/data/D147-LO-NOIFS-NOPOL-4M5S.MS"
-
-    renames = { 'rows': 'row',
-                'chans': 'chan',
-                'pols': 'pol',
-                'corrs': 'corr'}
-
-    xds = dataset_from_ms(ms).rename(renames)
+    xds = dataset_from_ms("~/data/D147-LO-NOIFS-NOPOL-4M5S.MS")
     mds = montblanc_dataset(xds)
 
     # Test antenna_uvw are properly computed. Do not delete!
