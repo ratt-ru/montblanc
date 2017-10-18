@@ -843,6 +843,52 @@ def budget(schemas, dims, mem_budget, reduce_fn):
 
     return applied_reductions
 
+def rechunk_to_budget(mds, mem_budget, reduce_fn=None):
+    """
+    Rechunk `mds` dataset so that the memory required to
+    solve a tile of the RIME fits within `mem_budget`.
+
+    This function calls :func:`budget` internally.
+
+    Note that this tile might be substantially larger than
+    the same tile on the dataset as it incorporates temporary
+    output arrays.
+
+    A custom `reduce_fn` function can be supplied.
+
+    Parameters
+    ----------
+    mds : :class:`xarray.Dataset`
+        Dataset to rechunk
+    mem_budget : integer
+        Memory budget in bytes required to **solve
+        the RIME**.
+    reduce_fn (optional) : callable
+        A reduction function, as documented in :func:`budget`
+
+    Returns
+    -------
+    :class:`xarray.Dataset`
+        A Dataset chunked so that a dataset tile
+        required to solve the RIME fits within specified
+        memory_budget `mem_budget`.
+
+    """
+    if reduce_fn is None:
+        reduce_fn = _reduction
+
+    dims = mds.dims
+
+    ar = budget([input_schema(), scratch_schema(), output_schema()],
+                dict(dims), mem_budget, partial(reduce_fn, mds))
+
+    max_rows = ar.get('row', max(mds.antenna1.data.chunks[0]))
+    grc = group_row_chunks(mds, max_rows)
+    ar = { k: da.core.normalize_chunks(v, (dims[k],))[0]
+                                for k, v in ar.items() }
+    ar.update(grc)
+    return mds.chunk(ar)
+
 def _uniq_log2_range(start, size, div):
     """
     Produce unique integers in the start, start+size range
@@ -883,10 +929,5 @@ if __name__ == "__main__":
     # Test antenna_uvw are properly computed. Do not delete!
     print mds.antenna_uvw.compute()
 
-    # Rechunk according to memory budget
-    ar = budget([input_schema(), scratch_schema(), output_schema()],
-        dict(mds.dims),
-        2*1024*1024*1024, partial(_reduction, mds))
-    pprint(ar)
-    mds = mds.chunk(ar)
+    mds = rechunk_to_budget(mds, 2*1024*1024*1024, _reduction)
 
