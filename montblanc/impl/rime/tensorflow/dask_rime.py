@@ -169,7 +169,21 @@ class Rime(object):
 
             # Normalise time_index for this chunk
             # TODO(sjperkins) probably OK since time_index is consecutive
-            inputs["time_index"] = inputs["time_index"] - inputs["time_index"].min()
+            tindex = inputs["time_index"]
+            inputs["time_index"] = tindex - tindex.min()
+
+            # Sanity check time indices as these can be
+            # a major cause of segmentation faults.
+            utime = inputs["antenna_uvw"].shape[0]
+            if not np.all(inputs["time_index"] < utime):
+                utimes = np.unique(inputs["time_index"])
+                raise ValueError("One of the unique indexes '%s' "
+                                "in time_index is greater or equal "
+                                "to the number of unique times '%s' "
+                                "for this particular chunk. "
+                                "Unique time and row chunks must agree. "
+                                "See :func:`group_row_chunks`."
+                                    % (utimes, utime))
 
             with tf_session_cache().open(setup_tf, cfg_hash) as S:
                 session = S.session
