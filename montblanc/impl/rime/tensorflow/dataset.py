@@ -757,7 +757,7 @@ def montblanc_dataset(xds=None):
         weight_dims = schema['weight']['dims']
         shape = tuple(dims[d] for d in weight_dims)
         chunks = tuple(chunks[d] for d in weight_dims)
-        weight = da.broadcast_to(xds.weight.data, shape).rechunk(chunks)
+        weight = da.broadcast_to(xds.weight.data[:,None,:], shape).rechunk(chunks)
         mds = xds.assign(weight=xr.DataArray(weight, dims=weight_dims))
 
     # Fill in any default arrays
