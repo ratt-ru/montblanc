@@ -140,7 +140,11 @@ def get_point_sources(nsrc):
 def get_gaussian_sources(nsrc):
     c, s, a, r= get_point_sources(nsrc)
     gauss_shape = np.empty(shape=(3, nsrc), dtype=np.float64)
-    gauss_shape[:] = rf(size=gauss_shape.shape)
+    # Small emaj + emin creates visibilities of larger magnitude
+    gauss_shape[0,:] = rf(size=gauss_shape[0,:].shape)*1e-5
+    gauss_shape[1,:] = rf(size=gauss_shape[1,:].shape)*1e-5
+    # theta
+    gauss_shape[2,:] = rf(size=gauss_shape[2,:].shape)*np.pi
     return c, s, a, r, gauss_shape
 
 npsrc, ngsrc = 5, 5
@@ -223,6 +227,7 @@ cmd_list = ['python',
 import montblanc
 
 import dask
+import dask.array as da
 import xarray as xr
 from xarray_ms import xds_to_table
 from pprint import pprint
@@ -241,11 +246,8 @@ def proj_gauss_shape(gauss_shape):
 
     return A
 
-#dask.set_options(get=dask.get)
-
+# Create initial dataset from measurement set
 mds = montblanc.dataset_from_ms(msfile)
-
-uvw = mds.uvw
 
 # Broadcast stokes and alpha up to the time dimensions
 utime = mds.dims['utime']
@@ -256,26 +258,25 @@ g_alpha = np.broadcast_to(g_alpha[:,None], (ngsrc, utime))
 g_shape = proj_gauss_shape(g_shape)
 
 mds = mds.assign(**{
+    # NEED TO SET BASE VISIBILITIES TO ZERO
+    'data': xr.DataArray(da.zeros_like(mds.data.data), dims=["row", "chans", "corr"]),
+    # Set point source arrays
     'point_lm': xr.DataArray(pt_lm, dims=["point", "(l,m)"]),
     'point_stokes': xr.DataArray(pt_stokes, dims=["point", "utime", "(I,Q,U,V)"]),
     'point_alpha': xr.DataArray(pt_alpha, dims=["point", "utime"]),
     'point_ref_freq': xr.DataArray(pt_ref_freq, dims=["point"]),
     'gaussian_lm': xr.DataArray(g_lm, dims=["gaussian", "(l,m)"]),
+    # Set gaussian source arrays
     'gaussian_stokes': xr.DataArray(g_stokes, dims=["gaussian", "utime", "(I,Q,U,V)"]),
     'gaussian_alpha': xr.DataArray(g_alpha, dims=["gaussian", "utime"]),
     'gaussian_ref_freq': xr.DataArray(g_ref_freq, dims=["gaussian"]),
     'gaussian_shape_params': xr.DataArray(g_shape, dims=["(lproj,mproj,theta)", "gaussian"]),
     })
-pprint(mds)
 
+# Convert to a montblanc compatibile dataset
 mds = montblanc.montblanc_dataset(mds)
+# Fit chunks of the dataset into memory
 mds = montblanc.rechunk_to_budget(mds, 256*1024**2)
-
-pprint(mds)
-
-pprint(mds.point_lm.values)
-pprint(mds.gaussian_lm.values)
-pprint(mds.antenna_uvw.values)
 
 # Create model visibility dask array
 rime = montblanc.Rime(cfg={'dtype':'double'})
@@ -286,8 +287,6 @@ mds = mds.assign(**{mb_vis_column.lower() : xr.DataArray(model_vis, dims=mds.dat
 
 # Create expression for writing model visibilities back the CASA MS
 model_vis_write = xds_to_table(mds, mb_vis_column)
-
-print "MONTBLANC VIS COLUMN", mb_vis_column
 
 # Evaluate the expression
 model_vis_write.compute()
