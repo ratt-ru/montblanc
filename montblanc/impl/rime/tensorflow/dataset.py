@@ -340,6 +340,9 @@ def default_schema():
         "antenna_scaling": {
             "dims": ("antenna", "chan", "(l,m)"),
             "dtype": np.float64,
+            "default": lambda ds, as_: da.ones(shape=as_["shape"],
+                                                dtype=as_["dtype"],
+                                                chunks=as_["chunks"])
         },
 
         "beam_extents": {
