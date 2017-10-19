@@ -34,7 +34,7 @@ tigger_sky_file = os.path.join(meq_dir, 'sky_model.txt')
 pol_type = 'linear'
 
 # Directory in which we expect our beams to be located
-beam_on = 1
+beam_on = 0
 beam_dir = os.path.join(data_dir, 'beams')
 beam_file_prefix = 'beam'
 base_beam_file = os.path.join(beam_dir, beam_file_prefix)
