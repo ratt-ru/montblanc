@@ -8,6 +8,7 @@ import boltons.cacheutils
 import cppimport
 import dask
 import dask.array as da
+from dask.array.core import getter
 import numpy as np
 import six
 try:
@@ -554,7 +555,6 @@ def create_antenna_uvw(xds):
     :class:`xarray.Dataset`
         `xds` with `antenna_uvw` assigned.
     """
-    from operator import getitem
     from functools import partial
 
     def _chunk_iter(chunks):
@@ -575,16 +575,22 @@ def create_antenna_uvw(xds):
     name = "-".join(("create_antenna_uvw", token))
     p_ant_uvw = partial(dsmod.antenna_uvw, nr_of_antenna=xds.dims["antenna"])
 
+    def p_ant_uvw(*args, **kwargs):
+        print [a.dtype for a in args]
+        r = dsmod.antenna_uvw(*args, nr_of_antenna=np.int32(xds.dims["antenna"]))
+        print "p_ant_uvw.dtype=", r.dtype, [a.dtype for a in args]
+        return r
+
     it = itertools.izip(_chunk_iter(row_groups), _chunk_iter(utime_groups))
     dsk = {}
 
     # Create the dask graph
     for i, (rs, uts) in enumerate(it):
         dsk[(name, i, 0, 0)] = (p_ant_uvw,
-                                (getitem, xds.uvw, rs),
-                                (getitem, xds.antenna1, rs),
-                                (getitem, xds.antenna2, rs),
-                                (getitem, xds.time_chunks, uts))
+                                (getter, xds.uvw, rs),
+                                (getter, xds.antenna1, rs),
+                                (getter, xds.antenna2, rs),
+                                (getter, xds.time_chunks, uts))
 
         # Sanity check
         if not np.sum(time_chunks[uts]) == rs.stop - rs.start:
