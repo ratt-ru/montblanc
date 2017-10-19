@@ -222,110 +222,88 @@ cmd_list = ['python',
 
 import montblanc
 
-from montblanc.impl.rime.tensorflow.ms import MeasurementSetManager
-from montblanc.impl.rime.tensorflow.sources import (SourceProvider,
-    MSSourceProvider,
-    FitsBeamSourceProvider,
-    CachedSourceProvider)
+import dask
+import xarray as xr
+from xarray_ms import xds_to_table
+from pprint import pprint
 
-from montblanc.impl.rime.tensorflow.sinks import MSSinkProvider
+def proj_gauss_shape(gauss_shape):
+    """ Convert from (emaj, emin, theta) to (lproj, mproj, ratio) """
+    emaj = gauss_shape[0]
+    emin = gauss_shape[1]
+    pa = gauss_shape[2]
 
-class RadioSourceProvider(SourceProvider):
-    def name(self):
-        return "RadioSourceProvider"
+    A = np.empty_like(gauss_shape)
+    A[0,:] = emaj * np.sin(pa)
+    A[1,:] = emaj * np.cos(pa)
+    emaj[emaj == 0.0] = 1.0
+    A[2,:] = emin / emaj
 
-    def point_lm(self, context):
-        lp, up = context.dim_extents('npsrc')
-        return pt_lm[lp:up, :]
+    return A
 
-    def point_stokes(self, context):
-        (lp, up), (lt, ut) = context.dim_extents('npsrc', 'ntime')
-        return np.tile(pt_stokes[lp:up, np.newaxis, :], [1, ut-lt, 1])
+#dask.set_options(get=dask.get)
 
-    def point_alpha(self, context):
-        (lp, up), (lt, ut) = context.dim_extents('npsrc', 'ntime')
-        return np.tile(pt_alpha[lp:up, np.newaxis], [1, ut-lt])
+mds = montblanc.dataset_from_ms(msfile)
 
-    def point_ref_freq(self, context):
-        (lp, up) = context.dim_extents('npsrc')
-        return pt_ref_freq[lp:up]
+uvw = mds.uvw
 
-    def gaussian_lm(self, context):
-        lg, ug = context.dim_extents('ngsrc')
-        return g_lm[lg:ug, :]
+# Broadcast stokes and alpha up to the time dimensions
+utime = mds.dims['utime']
+pt_stokes = np.broadcast_to(pt_stokes[:,None,:], (npsrc, utime, 4))
+pt_alpha = np.broadcast_to(pt_alpha[:,None], (npsrc, utime))
+g_stokes = np.broadcast_to(g_stokes[:,None,:], (ngsrc, utime, 4))
+g_alpha = np.broadcast_to(g_alpha[:,None], (ngsrc, utime))
+g_shape = proj_gauss_shape(g_shape)
 
-    def gaussian_stokes(self, context):
-        (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
-        return np.tile(g_stokes[lg:ug, np.newaxis, :], [1, ut-lt, 1])
+mds = mds.assign(**{
+    'point_lm': xr.DataArray(pt_lm, dims=["point", "(l,m)"]),
+    'point_stokes': xr.DataArray(pt_stokes, dims=["point", "utime", "(I,Q,U,V)"]),
+    'point_alpha': xr.DataArray(pt_alpha, dims=["point", "utime"]),
+    'point_ref_freq': xr.DataArray(pt_ref_freq, dims=["point"]),
+    'gaussian_lm': xr.DataArray(g_lm, dims=["gaussian", "(l,m)"]),
+    'gaussian_stokes': xr.DataArray(g_stokes, dims=["gaussian", "utime", "(I,Q,U,V)"]),
+    'gaussian_alpha': xr.DataArray(g_alpha, dims=["gaussian", "utime"]),
+    'gaussian_ref_freq': xr.DataArray(g_ref_freq, dims=["gaussian"]),
+    'gaussian_shape_params': xr.DataArray(g_shape, dims=["(lproj,mproj,theta)", "gaussian"]),
+    })
+pprint(mds)
 
-    def gaussian_alpha(self, context):
-        (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
-        return np.tile(g_alpha[lg:ug, np.newaxis], [1, ut-lt])
+mds = montblanc.montblanc_dataset(mds)
+mds = montblanc.rechunk_to_budget(mds, 256*1024**2)
 
-    def gaussian_ref_freq(self, context):
-        (lg, ug) = context.dim_extents('ngsrc')
-        return g_ref_freq[lg:ug]
+pprint(mds)
 
-    def gaussian_shape(self, context):
-        (lg, ug) = context.dim_extents('ngsrc')
-        gauss_shape = g_shape[:,lg:ug]
-        emaj = gauss_shape[0]
-        emin = gauss_shape[1]
-        pa = gauss_shape[2]
+pprint(mds.point_lm.values)
+pprint(mds.gaussian_lm.values)
+pprint(mds.antenna_uvw.values)
 
-        gauss = np.empty(context.shape, dtype=context.dtype)
+# Create model visibility dask array
+rime = montblanc.Rime(cfg={'dtype':'double'})
+model_vis = rime(mds)
 
-        gauss[0,:] = emaj * np.sin(pa)
-        gauss[1,:] = emaj * np.cos(pa)
-        emaj[emaj == 0.0] = 1.0
-        gauss[2,:] = emin / emaj
+# Assign model visibilities to the dataset
+mds = mds.assign(**{mb_vis_column.lower() : xr.DataArray(model_vis, dims=mds.data.dims)})
 
-        return gauss
+# Create expression for writing model visibilities back the CASA MS
+model_vis_write = xds_to_table(mds, mb_vis_column)
 
-    def updated_dimensions(self):
-        return [('npsrc', pt_lm.shape[0]), ('ngsrc', g_lm.shape[0])]
+print "MONTBLANC VIS COLUMN", mb_vis_column
 
-slvr_cfg = montblanc.rime_solver_cfg(
-    mem_budget=1024*1024*1024,
-    data_source='default',
-    dtype='double' if dtype == np.float64 else 'float',
-    polarisation_type=pol_type,
-    auto_correlations=False,
-    version='tf')
+# Evaluate the expression
+model_vis_write.compute()
 
-slvr = montblanc.rime_solver(slvr_cfg)
-
-ms_mgr = MeasurementSetManager(msfile, slvr_cfg)
-
-source_providers = []
-source_providers.append(MSSourceProvider(ms_mgr))
-
-if beam_on == 1:
-    beam_prov = FitsBeamSourceProvider(beam_file_pattern,
-        l_axis=l_axis, m_axis='Y')
-    source_providers.append(beam_prov)
-
-source_providers.append(RadioSourceProvider())
-cache_prov = CachedSourceProvider(source_providers)
-source_providers = [cache_prov]
-
-sink_providers = [MSSinkProvider(ms_mgr, mb_vis_column)]
-slvr.solve(source_providers=source_providers,
-    sink_providers=sink_providers)
-
-import time
-time.sleep(1)
-
-for obj in source_providers + sink_providers + [ms_mgr]:
-    obj.close()
+# Clear the xarray_ms file cache to close everything
+from xarray_ms.file_cache import __clear_file_cache
+__clear_file_cache()
 
 # Call the meqtrees simulation script, dumping visibilities into MODEL_DATA
 subprocess.call(cmd_list)
 
 # Compare MeqTree and Montblanc visibilities
 with pt.table(msfile, ack=False, readonly=True) as MS:
-    ntime, nbl, nchan = slvr.hypercube.dim_global_size('ntime', 'nbl', 'nchan')
-    shape = (ntime, nbl, nchan, 4)
+    dims = mds.dims
+    nrow, nchan = (dims[d] for d in ('row', 'chan'))
+    shape = (nrow, nchan, 4)
     meq_vis = MS.getcol(meq_vis_column).reshape(shape)
     mb_vis = MS.getcol(mb_vis_column).reshape(shape)
 

@@ -575,12 +575,6 @@ def create_antenna_uvw(xds):
     name = "-".join(("create_antenna_uvw", token))
     p_ant_uvw = partial(dsmod.antenna_uvw, nr_of_antenna=xds.dims["antenna"])
 
-    def p_ant_uvw(*args, **kwargs):
-        print [a.dtype for a in args]
-        r = dsmod.antenna_uvw(*args, nr_of_antenna=np.int32(xds.dims["antenna"]))
-        print "p_ant_uvw.dtype=", r.dtype, [a.dtype for a in args]
-        return r
-
     it = itertools.izip(_chunk_iter(row_groups), _chunk_iter(utime_groups))
     dsk = {}
 
