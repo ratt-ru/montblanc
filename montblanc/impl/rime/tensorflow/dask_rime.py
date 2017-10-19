@@ -2,6 +2,7 @@ import collections
 
 import dask
 import dask.array as da
+import numpy as np
 try:
     import cytoolz as toolz
 except ImportError:
@@ -329,10 +330,11 @@ class Rime(object):
         dsk = toolz.merge(_flatten_singletons(dsk),
                         *(v.data.dask for v in inputs.values()))
 
+        dtype = np.complex64 if self._cfg['dtype'] == 'float' else np.complex128
 
         return da.Array(dsk, top_name,
                         chunks=mds.data.data.chunks,
-                        dtype=mds.data.dtype)
+                        dtype=dtype)
 
 import unittest
 
