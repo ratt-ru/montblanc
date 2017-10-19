@@ -585,8 +585,11 @@ def create_antenna_uvw(xds):
     for i, (rs, uts) in enumerate(it):
         dsk[(name, i, 0, 0)] = (p_ant_uvw,
                                 (getter, xds.uvw, rs),
-                                (getter, xds.antenna1, rs),
+                                # TODO(sjperkins). This corrects conjugation
+                                # output visibilities. Fix antenna_uvw to
+                                # take antenna1 + antenna2
                                 (getter, xds.antenna2, rs),
+                                (getter, xds.antenna1, rs),
                                 (getter, xds.time_chunks, uts))
 
         # Sanity check
