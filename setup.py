@@ -21,6 +21,7 @@
 import json
 import logging
 import os
+from os.path import join as pjoin
 import sys
 
 #==============
@@ -30,7 +31,7 @@ import sys
 from install.install_log import log
 
 mb_path = 'montblanc'
-mb_inc_path = os.path.join(mb_path, 'include')
+mb_inc_path = pjoin(mb_path, 'include')
 
 #===================
 # Detect readthedocs
@@ -142,9 +143,22 @@ def include_pkg_dirs():
             # OK, so everything starts with 'montblanc/'
             # Take everything after that ('include...') and
             # append a '/*.*' to it
-            pkg_dirs.append(os.path.join(root[l:], d, '*.*'))
+            pkg_dirs.append(pjoin(root[l:], d, '*.*'))
 
     return pkg_dirs
+
+
+def include_pkg_dirs():
+    mb_inc_path = pjoin("montblanc", "include")
+    l = len("montblanc") + len(os.sep)
+
+    exclude = set(['docs', '.git', '.svn'])
+
+    return [pjoin(path, d, '*.*')[l:] for path, dirs, files
+                    in os.walk(mb_inc_path, topdown=True)
+                    for d in dirs if d not in exclude]
+
+
 
 install_requires = [
     'attrdict >= 2.0.0',
@@ -167,10 +181,11 @@ if on_rtd:
 else:
     # Add binary/C extension type packages
     install_requires += [
-        'astropy >= 1.3.0',
+        'astropy >= 2.0.2',
+        'cppimport >= 17.7.24',
         'cerberus >= 1.1',
         'numpy >= 1.11.3',
-        'numexpr >= 2.6.1',
+        'pybind11 >= 2.2.0',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
         "{} >= 1.3.0".format(tensorflow_package),
@@ -196,7 +211,7 @@ log.info('install_requires={}'.format(install_requires))
 from install.versioning import maintain_version
 
 setup(name='montblanc',
-    version=maintain_version(os.path.join('montblanc', 'version.py')),
+    version=maintain_version(pjoin('montblanc', 'version.py')),
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',
@@ -217,6 +232,5 @@ setup(name='montblanc',
     license='GPL2',
     install_requires=install_requires,
     packages=find_packages(),
-    package_data={'montblanc': include_pkg_dirs()},
-    include_package_data=True,
+    package_data={'montblanc': include_pkg_dirs() + [pjoin("util", "*.cpp")] },
     zip_safe=False)
