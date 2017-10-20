@@ -280,8 +280,10 @@ class Rime(object):
                 key_pool.release(feed_many_key)
                 key_pool.release(toolz.concat(toolz.pluck(0, src_keys_and_fn.values())))
 
-            # Triple nested X2 required to produce same nesting level as model vis values
-            return vis, np.array(X2, ndmin=3, copy=False)
+            # Nest the chi-squared to same level as visibilities
+            # This is because they'll have the same structure/number of dimensions
+            # but not the same shape
+            return vis, np.array(X2, ndmin=vis.ndim, copy=False)
 
         def _mod_dims(dims):
             """
