@@ -1,5 +1,6 @@
 import argparse
 
+import dask
 import dask.array as da
 import montblanc
 
@@ -15,19 +16,15 @@ args = create_parser().parse_args()
 mds = montblanc.dataset_from_ms(args.ms)
 mds = montblanc.montblanc_dataset(mds)
 # Rechunk the dataset so that a tile of the problem fits within 1GB
-mds = montblanc.rechunk_to_budget(mds, 1024*1024*1024)
+mds = montblanc.rechunk_to_budget(mds, 128*1024*1024)
 
 # Create a rime solver
-rime = montblanc.Rime()
+rime = montblanc.Rime(cfg={'dtype':'double'})
 
 # Get a dask expression for the model visibilities, given the input dataset
-model_vis = rime(mds)
-
-# Print the dask array
-print model_vis
-
-# Dask expression for summing model visibilities
-vis_sum = model_vis.sum()
+mds = mds.assign(data=mds.corrected_data)
+mds = mds.persist()
+model_vis, chi_squared = rime(mds)
 
 # Evaluate the expression
-print vis_sum.compute()
+print dask.compute(model_vis, chi_squared)

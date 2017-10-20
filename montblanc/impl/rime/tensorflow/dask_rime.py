@@ -2,6 +2,8 @@ import collections
 
 import dask
 import dask.array as da
+from dask.array.core import getter
+from dask.base import tokenize
 import numpy as np
 try:
     import cytoolz as toolz
@@ -278,9 +280,8 @@ class Rime(object):
                 key_pool.release(feed_many_key)
                 key_pool.release(toolz.concat(toolz.pluck(0, src_keys_and_fn.values())))
 
-            # TODO(sjperkins): This just passes data straight through
-            # Plug tensorflow result in here.
-            return vis
+            # Triple nested X2 required to produce same nesting level as model vis values
+            return vis, np.array(X2, ndmin=3, copy=False)
 
         def _mod_dims(dims):
             """
@@ -309,7 +310,8 @@ class Rime(object):
 
         # Use dask names as tokenize inputs
         tokenize_args = [v.data.name if isinstance(v, da.Array) else v for k, v in inputs.items()]
-        top_name = '-'.join(("rime", dask.base.tokenize(*tokenize_args)))
+        token = tokenize(*tokenize_args)
+        top_name = '-'.join(("rime", token))
         # Create tuple of flattened (name, dim) pairs
         top_args = [v for var in inputs.values()
                       for v in (var.data.name, _mod_dims(var.dims))]
@@ -325,16 +327,42 @@ class Rime(object):
                         numblocks=top_numblocks,
                         cfg_hash=self._cfg_hash)
 
-        # Flatten tuples/list of length 1 and
-        # add dask graphs of associated inputs
-        dsk = toolz.merge(_flatten_singletons(dsk),
-                        *(v.data.dask for v in inputs.values()))
+        # Flatten any length one tuples and lists
+        dsk = _flatten_singletons(dsk)
 
-        dtype = np.complex64 if self._cfg['dtype'] == 'float' else np.complex128
+        keys = dsk.keys()
 
-        return da.Array(dsk, top_name,
-                        chunks=mds.data.data.chunks,
-                        dtype=dtype)
+        mv_name = '-'.join(("model-vis", token))
+        x2_name = '-'.join(("chi-squared", token))
+
+        mv_dsk = _flatten_singletons({ (mv_name,) + k[1:]: (getter, k, 0) for k in keys })
+        x2_dsk = _flatten_singletons({ (x2_name,) + k[1:]: (getter, k, 1) for k in keys })
+
+        # Now add all graph dependencies of associated inputs
+        dsk = toolz.merge(dsk, *(v.data.dask for v in inputs.values()))
+
+        # Infer output data types
+        if self._cfg['dtype'] == 'float':
+            x2_dtype = np.float32
+            mv_dtype = np.complex64
+        elif self._cfg['dtype'] == 'double':
+            x2_dtype = np.float64
+            mv_dtype = np.complex128
+        else:
+            raise ValueError("Invalid dtype")
+
+        # Construct the model visibility array
+        mv_array = da.Array(toolz.merge(mv_dsk, dsk), mv_name,
+                        chunks=mds.data.data.chunks, dtype=mv_dtype)
+
+        # Each chi squared sums model visibilities to 1 value
+        x2_chunks = tuple(tuple(1 for d in tup) for tup in  mds.data.data.chunks)
+
+        # Construct he chi-squared array
+        x2_array = da.Array(toolz.merge(x2_dsk, dsk), x2_name,
+                        chunks=x2_chunks, dtype=x2_dtype)
+
+        return mv_array, x2_array
 
 import unittest
 
