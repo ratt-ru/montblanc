@@ -787,6 +787,7 @@ def montblanc_dataset(xds=None):
     # This depends on above chunking strategy
     mds = create_antenna_uvw(mds)
 
+    return mds
     # Drop any superfluous arrays and return
     return mds.drop(set(mds.data_vars.keys()).difference(required_arrays))
 
