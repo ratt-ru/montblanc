@@ -443,7 +443,7 @@ def default_dim_sizes():
 
     # Source dimensions
     ds.update({
-        'point': 10,
+        'point': 1,
         'gaussian': 0,
         'sersic': 0,
         '(l,m)': 2,
