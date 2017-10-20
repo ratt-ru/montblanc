@@ -258,8 +258,6 @@ g_alpha = np.broadcast_to(g_alpha[:,None], (ngsrc, utime))
 g_shape = proj_gauss_shape(g_shape)
 
 mds = mds.assign(**{
-    # NEED TO SET BASE VISIBILITIES TO ZERO
-    'data': xr.DataArray(da.zeros_like(mds.data.data), dims=["row", "chans", "corr"]),
     # Set point source arrays
     'point_lm': xr.DataArray(pt_lm, dims=["point", "(l,m)"]),
     'point_stokes': xr.DataArray(pt_stokes, dims=["point", "utime", "(I,Q,U,V)"]),
@@ -280,7 +278,7 @@ mds = montblanc.rechunk_to_budget(mds, 256*1024**2)
 
 # Create model visibility dask array
 rime = montblanc.Rime(cfg={'dtype':'double'})
-model_vis = rime(mds)
+model_vis, chi_squared = rime(mds)
 
 # Assign model visibilities to the dataset
 mds = mds.assign(**{mb_vis_column.lower() : xr.DataArray(model_vis, dims=mds.data.dims)})
