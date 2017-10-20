@@ -464,7 +464,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
         model_vis, chi_squared = rime.post_process_visibilities(
             D.time_index, D.antenna1, D.antenna2,
             D.direction_independent_effects, D.flag,
-            D.weight, D.data, summed_coherencies, D.data)
+            D.weight, D.base_vis, summed_coherencies, D.data)
 
         # Stage output in the compute output staging area
         stage_output = local_compute.output.put(feed_many_key,

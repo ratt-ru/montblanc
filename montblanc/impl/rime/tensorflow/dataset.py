@@ -265,6 +265,11 @@ def default_schema():
             "default": default_time_chunks,
         },
 
+        "base_vis": {
+            "dims": ("row", "chan", "corr"),
+            "dtype": np.complex128,
+        },
+
         "data": {
             "dims": ("row", "chan", "corr"),
             "dtype": np.complex128,
