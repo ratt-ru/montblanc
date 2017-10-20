@@ -28,7 +28,12 @@ def _setup_tensorflow(cfg_hash, cfg):
                                 output_schema)
             from montblanc.impl.rime.tensorflow.key_pool import KeyPool
 
-            devices = ['/cpu:0']
+            if cfg['device_type'] == 'GPU':
+                devices = ['/gpu:0']
+            elif cfg['device_type'] == 'CPU':
+                devices = ['/cpu:0']
+            else:
+                raise ValueError("Invalid device")
 
             with tf.Graph().as_default() as graph:
                 feed_data = _construct_tensorflow_staging_areas(
