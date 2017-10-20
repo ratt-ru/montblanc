@@ -66,11 +66,11 @@ class Rime(object):
         try:
             cfg = kwargs.pop('cfg')
         except KeyError:
-            self.set_config({})
+            self.set_options({})
         else:
-            self.set_config(cfg)
+            self.set_options(cfg)
 
-    def set_config(self, cfg):
+    def set_options(self, cfg):
         """
         Sets the configuration for this object.
 
@@ -127,6 +127,13 @@ class Rime(object):
 
         self._cfg = cfg
         self._cfg_hash = hash(_freeze(cfg))
+        # Curry _setup_tensorflow with our config for use in _rime
+        # We do this because cfg, as a dict, is not hashable and so is
+        # consequently unsuitable for passing to `tf_session_cache().open`.
+        # However, we do want to create new sessions whenever the
+        # configuration hash changes.
+        self._setup_tf = lambda cfg_hash: _setup_tensorflow(cfg_hash, self._cfg)
+
 
     def __call__(self, mds):
         """
@@ -155,13 +162,6 @@ class Rime(object):
         # in _rime.
         input_names = inputs.keys()
 
-        # Curry _setup_tensorflow with our config for use in _rime
-        # We do this because cfg, as a dict, is not hashable and so is
-        # consequently unsuitable for passing to `tf_session_cache().open`.
-        # However, we do want to create new sessions whenever the
-        # configuration hash changes.
-        setup_tf = lambda cfg_hash: _setup_tensorflow(cfg_hash, self._cfg)
-
         def _rime(*args, **kwargs):
             import numpy as np
             """ Compute chunks of the RIME """
@@ -188,7 +188,7 @@ class Rime(object):
                                 "See :func:`group_row_chunks`."
                                     % (utimes, utime))
 
-            with tf_session_cache().open(setup_tf, cfg_hash) as S:
+            with tf_session_cache().open(self._setup_tf, cfg_hash) as S:
                 session = S.session
                 local_cpu = S.feed_data.local_cpu
                 feed_internal = local_cpu.feed_internal
@@ -360,7 +360,7 @@ class Rime(object):
         # Each chi squared sums model visibilities to 1 value
         x2_chunks = tuple(tuple(1 for d in tup) for tup in  mds.data.data.chunks)
 
-        # Construct the chi-squared value
+        # Construct the chi-squared array
         x2_array = da.Array(toolz.merge(x2_dsk, dsk), x2_name,
                         chunks=x2_chunks, dtype=x2_dtype).sum()
 
@@ -380,16 +380,16 @@ class TestDaskRime(unittest.TestCase):
         mds = mds.chunk(chunks)
 
         rime = Rime()
-        rime.set_config({'polarisation_type': 'linear'})
+        rime.set_options({'polarisation_type': 'linear'})
 
-        model_vis = rime(mds).compute()
+        model_vis, chi_squared = (a.compute() for a in rime(mds))
         self.assertTrue(model_vis.shape == mds.data.shape)
         self.assertTrue(tf_session_cache().size() == 1)
 
         # Now modify the configuration and check that
         # two sessions have been created
-        rime.set_config({'polarisation_type': 'circular'})
-        model_vis = rime(mds).compute()
+        rime.set_options({'polarisation_type': 'circular'})
+        model_vis, chi_squared = (a.compute() for a in rime(mds))
         self.assertTrue(tf_session_cache().size() == 2)
 
 if __name__ == "__main__":
