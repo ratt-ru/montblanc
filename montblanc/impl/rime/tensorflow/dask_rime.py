@@ -360,9 +360,9 @@ class Rime(object):
         # Each chi squared sums model visibilities to 1 value
         x2_chunks = tuple(tuple(1 for d in tup) for tup in  mds.data.data.chunks)
 
-        # Construct he chi-squared array
+        # Construct the chi-squared value
         x2_array = da.Array(toolz.merge(x2_dsk, dsk), x2_name,
-                        chunks=x2_chunks, dtype=x2_dtype)
+                        chunks=x2_chunks, dtype=x2_dtype).sum()
 
         return mv_array, x2_array
 
