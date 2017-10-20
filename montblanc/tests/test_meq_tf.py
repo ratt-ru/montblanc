@@ -257,24 +257,34 @@ g_stokes = np.broadcast_to(g_stokes[:,None,:], (ngsrc, utime, 4))
 g_alpha = np.broadcast_to(g_alpha[:,None], (ngsrc, utime))
 g_shape = proj_gauss_shape(g_shape)
 
-mds = mds.assign(**{
-    # Set point source arrays
-    'point_lm': xr.DataArray(pt_lm, dims=["point", "(l,m)"]),
-    'point_stokes': xr.DataArray(pt_stokes, dims=["point", "utime", "(I,Q,U,V)"]),
-    'point_alpha': xr.DataArray(pt_alpha, dims=["point", "utime"]),
-    'point_ref_freq': xr.DataArray(pt_ref_freq, dims=["point"]),
-    'gaussian_lm': xr.DataArray(g_lm, dims=["gaussian", "(l,m)"]),
-    # Set gaussian source arrays
-    'gaussian_stokes': xr.DataArray(g_stokes, dims=["gaussian", "utime", "(I,Q,U,V)"]),
-    'gaussian_alpha': xr.DataArray(g_alpha, dims=["gaussian", "utime"]),
-    'gaussian_ref_freq': xr.DataArray(g_ref_freq, dims=["gaussian"]),
-    'gaussian_shape_params': xr.DataArray(g_shape, dims=["(lproj,mproj,theta)", "gaussian"]),
-    })
 
 # Convert to a montblanc compatibile dataset
 mds = montblanc.montblanc_dataset(mds)
 # Fit chunks of the dataset into memory
 mds = montblanc.rechunk_to_budget(mds, 256*1024**2)
+
+# Get current dimension chunking strategy
+c = mds.chunks
+
+# Create dictionary assigning DataArrays to variables. They are chunked according
+# to the current dataset chunking strategy, thereby converting any numpy arrays to dask arrays
+assign = {
+    # Set point source arrays
+    'point_lm': xr.DataArray(pt_lm, dims=["point", "(l,m)"]).chunk(c["point"], c["(l,m)"]),
+    'point_stokes': xr.DataArray(pt_stokes, dims=["point", "utime", "(I,Q,U,V)"]).chunk(c["point"], c["utime"], c["(I,Q,U,V)"]),
+    'point_alpha': xr.DataArray(pt_alpha, dims=["point", "utime"]).chunk(c["point"], c["utime"]),
+    'point_ref_freq': xr.DataArray(pt_ref_freq, dims=["point"]).chunk(c["point"]),
+    # Set gaussian source arrays
+    'gaussian_lm': xr.DataArray(g_lm, dims=["gaussian", "(l,m)"]).chunk(c["gaussian"], c["(l,m)"]),
+    'gaussian_stokes': xr.DataArray(g_stokes, dims=["gaussian", "utime", "(I,Q,U,V)"]).chunk(c["gaussian"], c["utime"], c["(I,Q,U,V)"]),
+    'gaussian_alpha': xr.DataArray(g_alpha, dims=["gaussian", "utime"]).chunk(c["gaussian"], c["utime"]),
+    'gaussian_ref_freq': xr.DataArray(g_ref_freq, dims=["gaussian"]).chunk(c["gaussian"]),
+    'gaussian_shape_params': xr.DataArray(g_shape, dims=["(lproj,mproj,theta)", "gaussian"]).chunk(c["(lproj,mproj,theta)"], c["gaussian"]),
+    }
+
+# Drop the arrays we wish to assign (so that no dimension size conflicts occur)
+# and then assign them
+mds = mds.drop(assign.keys()).assign(**assign)
 
 # Create model visibility dask array
 rime = montblanc.Rime(cfg={'dtype':'double'})
