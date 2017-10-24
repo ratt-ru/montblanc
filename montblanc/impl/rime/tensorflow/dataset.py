@@ -423,8 +423,9 @@ def output_schema():
         },
     }
 
-def default_dim_sizes():
+def default_dim_sizes(dims=None):
     """ Returns a dictionary of default dimension sizes """
+
     ds = {
         '(I,Q,U,V)': 4,
         '(x,y,z)': 3,
@@ -459,24 +460,30 @@ def default_dim_sizes():
         '(ll,lm,lf,ul,um,uf)': 6,
     })
 
+    if dims is not None:
+        ds.update(dims)
+
     return ds
 
-def default_dataset(xds=None):
+def default_dataset(xds=None, dims=None):
     """
-    Creates a default montblanc :class:`xarray.Dataset`.(
-        If `xds` is supplied, missing arrays will be filled in
-        with default values.
+    Creates a default montblanc :class:`xarray.Dataset`.
+    If `xds` is supplied, missing arrays will be filled in
+    with default values.
 
-        Parameters
-        ----------
-        xds (optional): :class:`xarray.Dataset`
+    Parameters
+    ----------
+    xds (optional) : :class:`xarray.Dataset`
+    dims (optional) : dict
+        Dictionary of dimensions
 
     Returns
     -------
     :class:`xarray.Dataset`
     """
 
-    dims = default_dim_sizes()
+    dims = default_dim_sizes(dims)
+
     in_schema = toolz.merge(default_schema(), source_schema())
 
     if xds is None:
