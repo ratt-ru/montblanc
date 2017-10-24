@@ -19,6 +19,11 @@ def create_parser():
                                     help="Number of timesteps")
     parser.add_argument("-na", "--antenna", type=int, required=False, default=64,
                                     help="Number of antenna")
+    parser.add_argument("-np", "--point", type=int, required=False, default=100,
+                                    help="Number of point sources")
+    parser.add_argument("-ng", "--gaussian", type=int, required=False, default=0,
+                                    help="Number of gaussian sources")
+
     parser.add_argument("-i", "--iterations", type=int, required=False, default=10,
                                     help="Number of timing iterations")
     return parser
@@ -53,6 +58,8 @@ dims = {
     'utime': args.timesteps,
     'antenna': args.antenna,
     'row': args.timesteps*args.antenna*(args.antenna-1)//2,
+    'point': args.point,
+    'gaussian': args.gaussian,
 }
 
 # Chunk so that multiple threads/processes/workers are employed
