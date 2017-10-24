@@ -18,7 +18,11 @@ class TensorflowSessionCache(object):
 
     @contextmanager
     def open(self, myopen, *args, **kwargs):
-        key = (myopen,) + (args,) + (frozenset(kwargs.items()),)
+        # TODO(sjperkins). Use myopen callable as a unique identifier in the cache key
+        # This fails in the distributed case at present as the same callable will have
+        # a different ID in the same graph on the same worker.
+        #key = (myopen,) + (args,) + (frozenset(kwargs.items()),)
+        key = (args,) + (frozenset(kwargs.items()),)
         with self.lock:
             try:
                 session = self.cache[key]
