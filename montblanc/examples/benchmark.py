@@ -1,5 +1,6 @@
 import argparse
 import logging
+import time
 
 import dask
 
@@ -18,6 +19,8 @@ def create_parser():
                                     help="Number of timesteps")
     parser.add_argument("-na", "--antenna", type=int, required=False, default=64,
                                     help="Number of antenna")
+    parser.add_argument("-i", "--iterations", type=int, required=False, default=10,
+                                    help="Number of timing iterations")
     return parser
 
 args = create_parser().parse_args()
@@ -54,12 +57,30 @@ dims = {
 
 # Chunk so that multiple threads/processes/workers are employed
 mds = default_dataset(dims=dims)
-print "Size %.3fGB" % (mds.nbytes / (1024.**3))
 mds = rechunk_to_budget(mds, args.budget)
+logging.info("Input data size %.3fGB" % (mds.nbytes / (1024.**3)))
+logging.info(mds)
 
 rime = Rime()
 rime.set_options({'polarisation_type': 'linear', 'device_type':'CPU'})
 
 model_vis, chi_squared = rime(mds)
 
-print chi_squared.compute()
+iterations = 10
+total_time = 0.0
+
+for i in range(args.iterations):
+    start = time.clock()
+    logging.info("Iteration '%d' started at '%.3f'" % (i, start))
+
+    X2 = chi_squared.compute()
+
+    end = time.clock()
+    logging.info("Iteration '%d' completed at '%.3f'" % (i, end))
+
+    elapsed = end - start
+    logging.info("Iteration '%d' computed chi-squared '%.3f' in '%.3f' seconds" % (i, X2, elapsed))
+
+    total_time += elapsed
+
+logging.info("Average time '%.3f'" % (total_time / args.iterations))
