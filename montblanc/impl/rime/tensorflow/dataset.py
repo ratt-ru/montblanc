@@ -351,7 +351,9 @@ def default_schema():
         "beam_extents": {
             "dims": ("(ll,lm,lf,ul,um,uf)",),
             "dtype": np.float64,
-            "default": lambda ds, as_: np.array([0,0,0,1,1,1], dtype=as_["dtype"])
+            "default": lambda ds, as_: da.from_array(
+                np.array([0,0,0,1,1,1], dtype=as_["dtype"]),
+                chunks=as_["chunks"])
         },
 
         "beam_freq_map": {
