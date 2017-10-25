@@ -91,9 +91,8 @@ def default_time(ds, schema):
                         "and unique timestamps '%d' "
                         "do not agree" % (len(time_chunks), len(time_unique)))
 
-    time = np.concatenate([np.full(tc, ut) for ut, tc
-                        in zip(time_unique, time_chunks)])
-    return da.from_array(time, chunks=schema['chunks'])
+    return da.concatenate([da.full(tc, ut, dtype=schema['dtype'], chunks=tc) for ut, tc
+                        in zip(time_unique, time_chunks)]).rechunk(schema['chunks'])
 
 def default_time_index(ds, schema):
     # Try get time_chunks off the dataset first
@@ -106,14 +105,14 @@ def default_time_index(ds, schema):
     else:
         time_chunks = time_chunks.values
 
-    tindices = np.empty(time_chunks.sum(), np.int32)
+    time_index_chunks = []
     start = 0
 
     for i, c in enumerate(time_chunks):
-        tindices[start:start+c] = i
+        time_index_chunks.append(da.full(c, i, dtype=schema['dtype'], chunks=c))
         start += c
 
-    return da.from_array(tindices, chunks=schema['chunks'])
+    return da.concatenate(time_index_chunks).rechunk(schema['chunks'])
 
 def default_frequency(ds, schema):
     return da.linspace(8.56e9, 2*8.56e9, schema["shape"][0],
