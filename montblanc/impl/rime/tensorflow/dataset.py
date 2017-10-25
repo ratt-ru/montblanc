@@ -38,8 +38,7 @@ def default_antenna2(ds, schema):
     """ Default antenna 2 """
     ap = default_base_ant_pairs(ds.dims['antenna'],
                                 ds.attrs['auto_correlations'])
-    return da.from_array(np.tile(ap[1], ds.dims['utime']),
-                            chunks=schema['chunks'])
+    return da.tile(ap[1], ds.dims['utime']).rechunk(schema['chunks'])
 
 def default_time_unique(ds, schema):
     """ Default unique time """
