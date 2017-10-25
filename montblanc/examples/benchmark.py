@@ -77,12 +77,12 @@ iterations = 10
 total_time = 0.0
 
 for i in range(args.iterations):
-    start = time.clock()
+    start = time.time()
     logging.info("Iteration '%d' started at '%.3f'" % (i, start))
 
     X2 = chi_squared.compute()
 
-    end = time.clock()
+    end = time.time()
     logging.info("Iteration '%d' completed at '%.3f'" % (i, end))
 
     elapsed = end - start
