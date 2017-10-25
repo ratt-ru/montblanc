@@ -98,12 +98,14 @@ def create_tensorflow_extension(nvcc_settings, device_info):
     optimise_opt = '-O2'
 
     # Include directories
+    tf_inc = tf.sysconfig.get_include()
     include_dirs = [os.path.join('montblanc', 'include'), source_path]
-    include_dirs += [tf.sysconfig.get_include()]
+    include_dirs += [tf_inc, os.path.join(tf_inc, "external", "nsync", "public")]
 
     # Libraries
-    library_dirs = []
-    libraries = []
+    tf_lib = tf.sysconfig.get_lib()
+    library_dirs = [tf_lib]
+    libraries = ["tensorflow_framework"]
     extra_link_args = ['-fPIC', '-fopenmp', debug_opt]
 
     # Macros
