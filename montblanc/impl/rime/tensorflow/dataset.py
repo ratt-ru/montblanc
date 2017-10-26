@@ -466,6 +466,21 @@ def default_dim_sizes(dims=None):
 
     return ds
 
+
+# Default chunk sizes
+__chunks = {
+    'row': 1000,
+    'point': 50,
+    'gaussian': 50,
+    'sersic': 50,
+}
+
+def _update_default_chunks(chunks):
+    __chunks.update(chunks)
+
+def default_chunks():
+    return __chunks
+
 def default_dataset(xds=None, dims=None):
     """
     Creates a default montblanc :class:`xarray.Dataset`.
@@ -488,15 +503,41 @@ def default_dataset(xds=None, dims=None):
     in_schema = toolz.merge(default_schema(), source_schema())
 
     if xds is None:
+        chunks = default_chunks()
+
         # Create coordinates for each dimension
         coords = { k: np.arange(dims[k]) for k in dims.keys() }
-        # Create a dummy array with shape ('row',) so that there is
-        # a chunking strategy along this dimension. Needed for most default
-        # methods
-        arrays = { "__dummy__" : xr.DataArray(da.ones(shape=dims['row'],
-                                                        chunks=10000,
+
+        # row and utime chunks need to align, handle this here
+        bl = dims['row'] // dims['utime']
+        assert bl*dims['utime'] == dims['row']
+        time_chunks = np.full(dims['utime'], bl, dtype=in_schema['time_chunks']['dtype'])
+        chunks.update(group_row_chunks(time_chunks, chunks['row']))
+
+        # Create dummy arrays to force chunking strategies
+        arrays = {
+            "__dummy__row" : xr.DataArray(da.ones(shape=dims['row'],
+                                                        chunks=chunks['row'],
                                                         dtype=np.float64),
-                                                dims=["row"]) }
+                                                dims=["row"]),
+            "__dummy__utime" : xr.DataArray(da.ones(shape=dims['utime'],
+                                                        chunks=chunks['utime'],
+                                                        dtype=np.float64),
+                                                dims=["utime"]),
+            "__dummy__point" : xr.DataArray(da.ones(shape=dims['point'],
+                                                        chunks=50,
+                                                        dtype=np.float64),
+                                                dims=["point"]),
+            "__dummy__gaussian" : xr.DataArray(da.ones(shape=dims['gaussian'],
+                                                        chunks=50,
+                                                        dtype=np.float64),
+                                                dims=["gaussian"]),
+            "__dummy__sersic" : xr.DataArray(da.ones(shape=dims['sersic'],
+                                                        chunks=50,
+                                                        dtype=np.float64),
+                                                dims=["sersic"]),
+         }
+
         xds = xr.Dataset(arrays, coords=coords)
     else:
         # Create coordinates for default dimensions
@@ -545,8 +586,10 @@ def default_dataset(xds=None, dims=None):
     xds = xds.assign(**missing_arrays)
 
     # Drop dummy array if present
-    if "__dummy__" in xds:
-        xds = xds.drop("__dummy__")
+    drops = [k for k in xds.data_vars.keys() if k.startswith("__dummy__")]
+
+    if len(drops) > 0:
+        xds = xds.drop(drops)
 
     return xds
 
@@ -787,9 +830,9 @@ def montblanc_dataset(xds=None):
     # cause breakages in create_antenna_uvw
     # because rows need to be grouped together
     # per-unique timestep. Perform this chunking operation now.
-    max_row = max(mds.chunks['row'])
-    chunks = group_row_chunks(mds.time_chunks.values, max_group_size=max_row)
-    mds = mds.chunk(chunks)
+    # max_row = max(mds.chunks['row'])
+    # chunks = group_row_chunks(mds.time_chunks.values, max_group_size=max_row)
+    # mds = mds.chunk(chunks)
 
     # Derive antenna UVW coordinates.
     # This depends on above chunking strategy
