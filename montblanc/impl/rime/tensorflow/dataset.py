@@ -441,6 +441,7 @@ def default_dim_sizes(dims=None):
     # Derive row from baselines and unique times
     nbl = ds['antenna']*(ds['antenna']-1)//2
     ds.update({'row': ds['utime']*nbl })
+    ds.update({'nbl': nbl })
 
     # Source dimensions
     ds.update({
@@ -707,17 +708,17 @@ def merge_dataset(iterable):
     return xr.Dataset(data_vars, attrs=attrs)
 
 
-def group_row_chunks(xds, max_group_size=100000):
+def group_row_chunks(time_chunks, max_group_size=100000):
     """
     Return a dictionary of unique time and row groups.
     Groups are formed by accumulating chunks in the
-    `time_chunks` array attached to `xds` until `max_group_size`
+    `time_chunks` array  until `max_group_size`
     is reached.
 
     Parameters
     ----------
-    xds : :class:`xarray.Dataset`
-        Dataset with `time_chunks` member
+    time_chunks : :class:`np.ndarray`
+        Array of time chunks
     max_group_size (optional) : integer
         Maximum group size
 
@@ -732,7 +733,7 @@ def group_row_chunks(xds, max_group_size=100000):
     rows = 0
     utimes = 0
 
-    for chunk in xds.time_chunks.values:
+    for chunk in time_chunks:
         next_ = rows + chunk
 
         if next_ > max_group_size:
@@ -787,7 +788,7 @@ def montblanc_dataset(xds=None):
     # because rows need to be grouped together
     # per-unique timestep. Perform this chunking operation now.
     max_row = max(mds.chunks['row'])
-    chunks = group_row_chunks(mds, max_group_size=max_row)
+    chunks = group_row_chunks(mds.time_chunks.values, max_group_size=max_row)
     mds = mds.chunk(chunks)
 
     # Derive antenna UVW coordinates.
@@ -902,7 +903,7 @@ def rechunk_to_budget(mds, mem_budget, reduce_fn=None):
                 dict(dims), mem_budget, partial(reduce_fn, mds))
 
     max_rows = ar.get('row', max(mds.antenna1.data.chunks[0]))
-    grc = group_row_chunks(mds, max_rows)
+    grc = group_row_chunks(mds.time_chunks.values, max_rows)
     ar = { k: da.core.normalize_chunks(v, (dims[k],))[0]
                                 for k, v in ar.items() }
     ar.update(grc)
