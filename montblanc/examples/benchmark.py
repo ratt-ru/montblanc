@@ -19,6 +19,8 @@ def create_parser():
                                     help="Number of timesteps")
     parser.add_argument("-na", "--antenna", type=int, required=False, default=64,
                                     help="Number of antenna")
+    parser.add_argument("-nc", "--channels", type=int, required=False, default=64,
+                                    help="Number of channels")
     parser.add_argument("-np", "--point", type=int, required=False, default=100,
                                     help="Number of point sources")
     parser.add_argument("-ng", "--gaussian", type=int, required=False, default=0,
@@ -50,21 +52,34 @@ def set_scheduler(args):
 
 set_scheduler(args)
 
-from montblanc.impl.rime.tensorflow.dataset import default_dataset, group_row_chunks, rechunk_to_budget
+from montblanc.impl.rime.tensorflow.dataset import (default_dataset,
+                                                rechunk_to_budget,
+                                                default_chunks,
+                                                _update_default_chunks)
 from montblanc.impl.rime.tensorflow.dask_rime import Rime
 
 # Set up problem default dimensions
 dims = {
     'utime': args.timesteps,
     'antenna': args.antenna,
+    'chan': args.channels,
     'row': args.timesteps*args.antenna*(args.antenna-1)//2,
     'point': args.point,
     'gaussian': args.gaussian,
 }
 
+# Override default dimension chunking strategy
+_update_default_chunks({
+    'row': 1000,
+    'point': 50,
+    'gaussian': 50,
+    'sersic': 50,
+})
+
 # Chunk so that multiple threads/processes/workers are employed
 mds = default_dataset(dims=dims)
-mds = rechunk_to_budget(mds, args.budget)
+#mds = rechunk_to_budget(mds, args.budget)
+
 logging.info("Input data size %.3fGB" % (mds.nbytes / (1024.**3)))
 logging.info(mds)
 
