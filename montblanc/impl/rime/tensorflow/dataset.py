@@ -751,18 +751,18 @@ def merge_dataset(iterable):
     return xr.Dataset(data_vars, attrs=attrs)
 
 
-def group_row_chunks(time_chunks, max_group_size=100000):
+def group_row_chunks(time_chunks, max_row_chunk=100000):
     """
     Return a dictionary of unique time and row groups.
     Groups are formed by accumulating chunks in the
-    `time_chunks` array  until `max_group_size`
+    `time_chunks` array  until `max_row_chunk`
     is reached.
 
     Parameters
     ----------
     time_chunks : :class:`np.ndarray`
         Array of time chunks
-    max_group_size (optional) : integer
+    max_row_chunk (optional) : integer
         Maximum group size
 
     Returns
@@ -776,10 +776,14 @@ def group_row_chunks(time_chunks, max_group_size=100000):
     rows = 0
     utimes = 0
 
-    for chunk in time_chunks:
+    for i, chunk in enumerate(time_chunks):
         next_ = rows + chunk
 
-        if next_ > max_group_size:
+        if next_ > max_row_chunk:
+            if rows == 0:
+                raise ValueError("Time chunk '%d' of size '%d' was too large "
+                                "too fit into the max_row_chunk of '%d'. "
+                                "Try increasing max_row_chunk." % (i, chunk, max_row_chunk))
             row_groups.append(rows)
             utime_groups.append(utimes)
             rows = chunk
@@ -831,7 +835,7 @@ def montblanc_dataset(xds=None):
     # because rows need to be grouped together
     # per-unique timestep. Perform this chunking operation now.
     # max_row = max(mds.chunks['row'])
-    # chunks = group_row_chunks(mds.time_chunks.values, max_group_size=max_row)
+    # chunks = group_row_chunks(mds.time_chunks.values, max_row_chunk=max_row)
     # mds = mds.chunk(chunks)
 
     # Derive antenna UVW coordinates.
