@@ -10,9 +10,10 @@ def create_parser():
     """ Create script argument parser """
     parser = argparse.ArgumentParser()
     parser.add_argument("scheduler", type=str, default="threaded",
-                                    help="'threaded', 'multiprocessing', "
-                                        "or distributed scheduler adddress "
-                                        " 'tcp://202.192.33.166:8786'")
+                                    help="'threaded', 'multiprocessing' or"
+                                        "in the distributed case either "
+                                        "the scheduler address  'tcp://202.192.33.166:8786' "
+                                        "or scheduler file containing the address '/tmp/scheduler.json'")
     parser.add_argument("-b", "--budget", type=int, required=False, default=2*1024**3,
                                     help="Memory budget for solving a portion of the RIME")
     parser.add_argument("-nt", "--timesteps", type=int, required=False, default=1000,
@@ -43,10 +44,18 @@ def set_scheduler(args):
     else:
         import distributed
 
-        logging.info("Using distributed scheduler with address '{}'".format(args.scheduler))
-        client = distributed.Client(args.scheduler)
-        client.restart()
+        if args.scheduler.startswith('tcp'):
+            address = args.scheduler
+        else:
+            import json
+
+            with open(args.scheduler, 'r') as f:
+                address = json.load(f)['address']
+
+        logging.info("Using distributed scheduler with address '{}'".format(address))
+        client = distributed.Client(address)
         dask.set_options(get=client.get)
+        client.restart()
 
 set_scheduler(args)
 
