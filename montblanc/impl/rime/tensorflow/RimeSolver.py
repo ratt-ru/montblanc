@@ -713,8 +713,9 @@ class RimeSolver(MontblancTensorflowSolver):
         except (KeyboardInterrupt, SystemExit) as e:
             montblanc.log.exception('Solving interrupted')
             raise
-        except:
+        except Exception:
             montblanc.log.exception('Solving exception')
+            raise
         else:
             if self._should_trace:
                 self._run_metadata.write(self._iterations)
