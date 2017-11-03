@@ -43,7 +43,7 @@ Pre-requisites
       $ export LD_LIBRARY_PATH=$CUDNN_HOME/lib64:$LD_LIBRARY_PATH
 
       # Latest NVIDIA drivers
-      $ export LD_LIBRARY_PATH=/usr/lib/nvidia-384:$LD_LIBRARY_PATH
+      $ export LD_LIBRARY_PATH=/usr/lib/nvidia-375:$LD_LIBRARY_PATH
 
   If the installer cannot find CUDA it will only install the `CPU version of tensorflow <tensorflow-cpu_>`_
   and only **compile multi-threaded CPU operators**.
