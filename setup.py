@@ -173,7 +173,7 @@ else:
         'numexpr >= 2.6.1',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
-        "{} >= 1.3.0".format(tensorflow_package),
+        "{} == 1.4.0".format(tensorflow_package),
     ]
 
     from install.tensorflow_ops_ext import (BuildCommand,
