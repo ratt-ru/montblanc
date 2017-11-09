@@ -23,7 +23,6 @@ import os
 
 from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
-from montblanc.version import __version__
 
 def get_montblanc_path():
     """ Return the current path in which montblanc is installed """
@@ -114,3 +113,7 @@ def rime_solver(slvr_cfg):
     import montblanc.factory
 
     return montblanc.factory.rime_solver(slvr_cfg)
+
+from ._version import get_versions
+__version__ = get_versions()['version']
+del get_versions
