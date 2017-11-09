@@ -39,6 +39,8 @@ mb_inc_path = pjoin(mb_path, 'include')
 
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
+import versioneer
+
 #=================
 # Setup setuptools
 #=================
@@ -173,10 +175,8 @@ else:
 
 log.info('install_requires={}'.format(install_requires))
 
-from install.versioning import maintain_version
-
 setup(name='montblanc',
-    version=maintain_version(pjoin('montblanc', 'version.py')),
+    version=versioneer.get_version(),
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',
@@ -191,7 +191,7 @@ setup(name='montblanc',
     ],
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
-    cmdclass=cmdclass,
+    cmdclass=versioneer.get_cmdclass(cmdclass),
     ext_modules=ext_modules,
     options=ext_options,
     license='GPL2',

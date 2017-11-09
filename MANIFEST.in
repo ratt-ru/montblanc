@@ -1,2 +1,4 @@
+include versioneer.py
+include montblanc/_version.py
 graft montblanc/include/
 include montblanc/ext/*.cpp
