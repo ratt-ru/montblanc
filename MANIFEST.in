@@ -1,3 +1,10 @@
 include ez_setup.py
 include versioneer.py
 include montblanc/_version.py
+include montblanc/include/montblanc/*.cuh
+include montblanc/impl/rime/tensorflow/rime_ops/*.cpp
+include montblanc/impl/rime/tensorflow/rime_ops/*.cpp
+include montblanc/impl/rime/tensorflow/rime_ops/*.cu
+include montblanc/impl/rime/tensorflow/rime_ops/*.cuh
+include montblanc/impl/rime/tensorflow/rime_ops/*.h
+include montblanc/impl/rime/tensorflow/rime_ops/*.hpp
