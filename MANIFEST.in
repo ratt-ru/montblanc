@@ -1,4 +1,3 @@
-include ez_setup.py
 include versioneer.py
 include montblanc/_version.py
 include montblanc/include/montblanc/*.cuh
