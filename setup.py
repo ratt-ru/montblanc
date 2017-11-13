@@ -40,12 +40,9 @@ on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 import versioneer
 
-#=================
-# Setup setuptools
-#=================
-
-import ez_setup
-ez_setup.use_setuptools()
+#===================
+# setuptools imports
+#===================
 
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
@@ -173,7 +170,7 @@ else:
         'cerberus >= 1.1',
         'numpy >= 1.11.3',
         'numexpr >= 2.6.1',
-        'python-casacore >= 2.1.2',
+        'python-casacore == 2.1.2',
         'ruamel.yaml >= 0.15.22',
         "{} == 1.4.0".format(tensorflow_package),
     ]
