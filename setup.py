@@ -41,12 +41,9 @@ on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 import versioneer
 
-#=================
-# Setup setuptools
-#=================
-
-import ez_setup
-ez_setup.use_setuptools()
+#===================
+# setuptools imports
+#===================
 
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
