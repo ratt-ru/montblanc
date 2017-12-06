@@ -102,7 +102,7 @@ def config_validator():
         'device_type': {
             'type': 'string',
             'allowed': ['CPU', 'GPU'],
-            'default': 'GPU',
+            'default': 'CPU',
             '__description__': "Default compute device." },
 
         'dtype': {
