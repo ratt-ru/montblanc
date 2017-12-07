@@ -1276,6 +1276,10 @@ def _apply_source_provider_dim_updates(cube, source_providers, budget_dims):
         # Defer to existing any existing budgeted extent sizes
         # Otherwise take the global_size
         extent_size = budget_dims.get(name, global_size)
+
+        # Take the global_size if extent_size was previously zero!
+        extent_size = global_size if extent_size == 0 else extent_size
+
         # Clamp extent size to global size
         if extent_size > global_size:
             extent_size = global_size
