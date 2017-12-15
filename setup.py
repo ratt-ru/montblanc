@@ -170,7 +170,7 @@ else:
         'cerberus >= 1.1',
         'numpy >= 1.11.3',
         'numexpr >= 2.6.1',
-        'python-casacore == 2.1.2',
+        'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
         "{} == 1.4.0".format(tensorflow_package),
     ]
