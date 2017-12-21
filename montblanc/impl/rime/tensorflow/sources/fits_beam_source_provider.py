@@ -186,10 +186,17 @@ def _create_filenames(filename_schema, feed_type):
     template = FitsFilenameTemplate(filename_schema)
 
     def _re_im_filenames(corr, template):
-        return tuple(template.substitute(
-            corr=corr.lower(), CORR=corr.upper(),
-            reim=ri.lower(), REIM=ri.upper())
-                for ri in REIM)
+        try:
+            return tuple(template.substitute(
+                corr=corr.lower(), CORR=corr.upper(),
+                reim=ri.lower(), REIM=ri.upper())
+                    for ri in REIM)
+        except KeyError:
+            raise ValueError("Invalid filename schema '%s'. "
+                            "FITS Beam filename schemas "
+                            "must follow forms such as "
+                            "'beam_$(corr)_$(reim).fits' or "
+                            "'beam_$(CORR)_$(REIM).fits." % filename_schema)
 
     if feed_type == 'linear':
         CORRELATIONS = LINEAR_CORRELATIONS
