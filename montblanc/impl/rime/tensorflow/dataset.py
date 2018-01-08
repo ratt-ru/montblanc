@@ -251,12 +251,6 @@ def default_schema():
             "default": default_time_unique,
         },
 
-        "time_offsets" : {
-            "dims": ("utime",),
-            "dtype": np.int32,
-            "default": default_time_offset,
-        },
-
         "time_chunks" : {
             "dims": ("utime",),
             "dtype": np.int32,
