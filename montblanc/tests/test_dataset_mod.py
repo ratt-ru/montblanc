@@ -22,13 +22,13 @@ class TestDatasetMod(unittest.TestCase):
             ant_uvw = np.random.random(size=(ntime,na,3)).astype(np.float64)
             ant_uvw[0,0,:] = 0
 
-            time_chunks = np.array([ant1.size], dtype=ant1.dtype)
+            time_vrow_chunks = np.array([ant1.size], dtype=ant1.dtype)
 
             # Compute per-baseline UVW coordinates.
             bl_uvw =  (ant_uvw[:,ant1,:] - ant_uvw[:,ant2,:]).reshape(-1, 3)
 
             # Now recover the per-antenna and per-baseline UVW coordinates.
-            rant_uvw = dsmod.antenna_uvw(bl_uvw, ant1, ant2, time_chunks, nr_of_antenna=na)
+            rant_uvw = dsmod.antenna_uvw(bl_uvw, ant1, ant2, time_vrow_chunks, nr_of_antenna=na)
             rbl_uvw = rant_uvw[:,ant1,:] - rant_uvw[:,ant2,:]
 
             if not np.allclose(rbl_uvw, bl_uvw):
@@ -86,14 +86,14 @@ class TestDatasetMod(unittest.TestCase):
                 bl_uvw.append(ant_uvw[a1,:] - ant_uvw[a2,:])
 
             # Produced concatenated antenna and baseline uvw arrays
-            time_chunks = np.array([a.size for a in ant1], dtype=ant1[0].dtype)
+            time_vrow_chunks = np.array([a.size for a in ant1], dtype=ant1[0].dtype)
             cant1 = np.concatenate(ant1)
             cant2 = np.concatenate(ant2)
             cbl_uvw = np.concatenate(bl_uvw)
 
             # Now recover the per-antenna and per-baseline UVW coordinates
             # for the ntime chunks
-            rant_uvw = dsmod.antenna_uvw(cbl_uvw, cant1, cant2, time_chunks, nr_of_antenna=na)
+            rant_uvw = dsmod.antenna_uvw(cbl_uvw, cant1, cant2, time_vrow_chunks, nr_of_antenna=na)
 
             # Reconstruct the baseline UVW coordinates for each chunk
             rbl_uvw = np.concatenate([rant_uvw[t,a1,:] - rant_uvw[t,a2,:]

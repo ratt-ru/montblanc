@@ -54,7 +54,7 @@ def default_time_offset(ds, schema):
     assert utime*bl == vrow
     return da.arange(utime,chunks=schema["chunks"])*bl
 
-def default_time_chunks(ds, schema):
+def default_time_vrow_chunks(ds, schema):
     """ Default time chunks """
     vrow, utime = (ds.dims[k] for k in ('vrow', 'utime'))
 
@@ -75,40 +75,40 @@ def default_time(ds, schema):
     else:
         time_unique = time_unique.values
 
-    # Try get time_chunks off the dataset first
+    # Try get time_vrow_chunks off the dataset first
     # otherwise generate from scratch
     try:
-        time_chunks = ds.time_chunks
+        time_vrow_chunks = ds.time_vrow_chunks
     except AttributeError:
-        time_chunk_schema = ds.attrs['schema']['time_chunks']
-        time_chunks = default_time_chunks(ds, time_chunk_schema).compute()
+        time_chunk_schema = ds.attrs['schema']['time_vrow_chunks']
+        time_vrow_chunks = default_time_vrow_chunks(ds, time_chunk_schema).compute()
     else:
-        time_chunks = time_chunks.values
+        time_vrow_chunks = time_vrow_chunks.values
 
     # Must agree
-    if not len(time_chunks) == len(time_unique):
+    if not len(time_vrow_chunks) == len(time_unique):
         raise ValueError("Number of time chunks '%d' "
                         "and unique timestamps '%d' "
-                        "do not agree" % (len(time_chunks), len(time_unique)))
+                        "do not agree" % (len(time_vrow_chunks), len(time_unique)))
 
     return da.concatenate([da.full(tc, ut, dtype=schema['dtype'], chunks=tc) for ut, tc
-                        in zip(time_unique, time_chunks)]).rechunk(schema['chunks'])
+                        in zip(time_unique, time_vrow_chunks)]).rechunk(schema['chunks'])
 
 def default_time_index(ds, schema):
-    # Try get time_chunks off the dataset first
+    # Try get time_vrow_chunks off the dataset first
     # otherwise generate from scratch
     try:
-        time_chunks = ds.time_chunks
+        time_vrow_chunks = ds.time_vrow_chunks
     except AttributeError:
-        time_chunk_schema = ds.attrs['schema']['time_chunks']
-        time_chunks = default_time_chunks(ds, time_chunk_schema).compute()
+        time_chunk_schema = ds.attrs['schema']['time_vrow_chunks']
+        time_vrow_chunks = default_time_vrow_chunks(ds, time_chunk_schema).compute()
     else:
-        time_chunks = time_chunks.values
+        time_vrow_chunks = time_vrow_chunks.values
 
     time_index_chunks = []
     start = 0
 
-    for i, c in enumerate(time_chunks):
+    for i, c in enumerate(time_vrow_chunks):
         time_index_chunks.append(da.full(c, i, dtype=schema['dtype'], chunks=c))
         start += c
 
@@ -251,10 +251,10 @@ def default_schema():
             "default": default_time_unique,
         },
 
-        "time_chunks" : {
+        "time_vrow_chunks" : {
             "dims": ("utime",),
             "dtype": np.int32,
-            "default": default_time_chunks,
+            "default": default_time_vrow_chunks,
         },
 
         "base_vis": {
@@ -577,10 +577,10 @@ def create_antenna_uvw(xds):
     chunks = xds.chunks
     utime_groups = chunks['utime']
     vrow_groups = chunks['vrow']
-    time_chunks = xds.time_chunks
+    time_vrow_chunks = xds.time_vrow_chunks
 
     token = dask.base.tokenize(xds.uvw, xds.antenna1, xds.antenna2,
-                            xds.time_chunks, vrow_groups, utime_groups)
+                            xds.time_vrow_chunks, vrow_groups, utime_groups)
     name = "-".join(("create_antenna_uvw", token))
     p_ant_uvw = partial(dsmod.antenna_uvw, nr_of_antenna=xds.dims["antenna"])
 
@@ -596,12 +596,12 @@ def create_antenna_uvw(xds):
                                 # take antenna1 + antenna2
                                 (getter, xds.antenna2, rs),
                                 (getter, xds.antenna1, rs),
-                                (getter, xds.time_chunks, uts))
+                                (getter, xds.time_vrow_chunks, uts))
 
         # Sanity check
-        if not np.sum(time_chunks[uts]) == rs.stop - rs.start:
-            sum_chunks = np.sum(time_chunks[uts])
-            raise ValueError("Sum of time_chunks[%d:%d] '%d' "
+        if not np.sum(time_vrow_chunks[uts]) == rs.stop - rs.start:
+            sum_chunks = np.sum(time_vrow_chunks[uts])
+            raise ValueError("Sum of time_vrow_chunks[%d:%d] '%d' "
                             "does not match the number of vrows '%d' "
                             "in the vrow[%d:%d]" %
                                 (uts.start, uts.stop, sum_chunks,
@@ -705,13 +705,13 @@ def group_vrow_chunks(xds, max_group_size=100000):
     """
     Return a dictionary of unique time and vrow groups.
     Groups are formed by accumulating chunks in the
-    `time_chunks` array attached to `xds` until `max_group_size`
+    `time_vrow_chunks` array attached to `xds` until `max_group_size`
     is reached.
 
     Parameters
     ----------
     xds : :class:`xarray.Dataset`
-        Dataset with `time_chunks` member
+        Dataset with `time_vrow_chunks` member
     max_group_size (optional) : integer
         Maximum group size
 
@@ -726,7 +726,7 @@ def group_vrow_chunks(xds, max_group_size=100000):
     vrows = 0
     utimes = 0
 
-    for chunk in xds.time_chunks.values:
+    for chunk in xds.time_vrow_chunks.values:
         next_ = vrows + chunk
 
         if next_ > max_group_size:
@@ -928,7 +928,7 @@ def _reduction(xds):
 
     # Then reduce in vrow and unique times
     for utime in utimes:
-        vrows = xds.time_chunks[:utime].values.sum()
+        vrows = xds.time_vrow_chunks[:utime].values.sum()
         yield [('utime', utime), ('vrow', vrows)]
 
 if __name__ == "__main__":
