@@ -48,14 +48,14 @@ public:
         const auto & in_model_vis = context->input(7);
         const auto & in_observed_vis = context->input(8);
 
-        int nrow = in_model_vis.dim_size(0);
+        int nvrow = in_model_vis.dim_size(0);
         int nchan = in_model_vis.dim_size(1);
         int npol = in_model_vis.dim_size(2);
 
         // Allocate output tensors
         // Allocate space for output tensor 'final_vis'
         tf::Tensor * final_vis_ptr = nullptr;
-        tf::TensorShape final_vis_shape = tf::TensorShape({ nrow, nchan, npol });
+        tf::TensorShape final_vis_shape = tf::TensorShape({ nvrow, nchan, npol });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, final_vis_shape, &final_vis_ptr));
         // Allocate space for output tensor 'chi_squared'
@@ -83,19 +83,19 @@ public:
         FT chi_squared_ = FT(0);
 
         #pragma omp parallel for reduction(+:chi_squared_)
-        for(int row=0; row < nrow; ++row)
+        for(int vrow=0; vrow < nvrow; ++vrow)
         {
-            int ant1 = antenna1(row);
-            int ant2 = antenna2(row);
-            int time = time_index(row);
+            int ant1 = antenna1(vrow);
+            int ant2 = antenna2(vrow);
+            int time = time_index(vrow);
 
             for(int chan=0; chan < nchan; ++chan)
             {
                 // Load in current model visibilities
-                CT mv0 = model_vis(row, chan, 0);
-                CT mv1 = model_vis(row, chan, 1);
-                CT mv2 = model_vis(row, chan, 2);
-                CT mv3 = model_vis(row, chan, 3);
+                CT mv0 = model_vis(vrow, chan, 0);
+                CT mv1 = model_vis(vrow, chan, 1);
+                CT mv2 = model_vis(vrow, chan, 2);
+                CT mv3 = model_vis(vrow, chan, 3);
 
                 // Reference direction_independent_effects for antenna 1
                 const CT & a0 = direction_independent_effects(time, ant1, chan, 0);
@@ -122,33 +122,33 @@ public:
                 mv3 = r2*b1 + r3*b3;
 
                 // Add base visibilities
-                mv0 += base_vis(row, chan, 0);
-                mv1 += base_vis(row, chan, 1);
-                mv2 += base_vis(row, chan, 2);
-                mv3 += base_vis(row, chan, 3);
+                mv0 += base_vis(vrow, chan, 0);
+                mv1 += base_vis(vrow, chan, 1);
+                mv2 += base_vis(vrow, chan, 2);
+                mv3 += base_vis(vrow, chan, 3);
 
                 // Flags
-                bool f0 = flag(row, chan, 0) > 0;
-                bool f1 = flag(row, chan, 1) > 0;
-                bool f2 = flag(row, chan, 2) > 0;
-                bool f3 = flag(row, chan, 3) > 0;
+                bool f0 = flag(vrow, chan, 0) > 0;
+                bool f1 = flag(vrow, chan, 1) > 0;
+                bool f2 = flag(vrow, chan, 2) > 0;
+                bool f3 = flag(vrow, chan, 3) > 0;
 
                 // Write out model visibilities, zeroed if flagged
-                final_vis(row, chan, 0) = f0 ? CT(0) : mv0;
-                final_vis(row, chan, 1) = f1 ? CT(0) : mv1;
-                final_vis(row, chan, 2) = f2 ? CT(0) : mv2;
-                final_vis(row, chan, 3) = f3 ? CT(0) : mv3;
+                final_vis(vrow, chan, 0) = f0 ? CT(0) : mv0;
+                final_vis(vrow, chan, 1) = f1 ? CT(0) : mv1;
+                final_vis(vrow, chan, 2) = f2 ? CT(0) : mv2;
+                final_vis(vrow, chan, 3) = f3 ? CT(0) : mv3;
 
-                const CT & ov0 = observed_vis(row, chan, 0);
-                const CT & ov1 = observed_vis(row, chan, 1);
-                const CT & ov2 = observed_vis(row, chan, 2);
-                const CT & ov3 = observed_vis(row, chan, 3);
+                const CT & ov0 = observed_vis(vrow, chan, 0);
+                const CT & ov1 = observed_vis(vrow, chan, 1);
+                const CT & ov2 = observed_vis(vrow, chan, 2);
+                const CT & ov3 = observed_vis(vrow, chan, 3);
 
                 // Weights
-                const FT & w0 = weight(row, chan, 0);
-                const FT & w1 = weight(row, chan, 1);
-                const FT & w2 = weight(row, chan, 2);
-                const FT & w3 = weight(row, chan, 3);
+                const FT & w0 = weight(vrow, chan, 0);
+                const FT & w1 = weight(vrow, chan, 1);
+                const FT & w2 = weight(vrow, chan, 2);
+                const FT & w3 = weight(vrow, chan, 3);
 
                 // Compute chi squared
                 FT d0 = f0 ? FT(0) : chi_squared_term(mv0, ov0, w0);

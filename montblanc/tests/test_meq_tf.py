@@ -54,7 +54,7 @@ from montblanc.impl.rime.tensorflow.sources.fits_beam_source_provider import (
 
 # Zero the visibility data
 with pt.table(msfile, ack=False, readonly=False) as T:
-    shape = [T.nrows()] + T.getcoldesc('DATA')['shape'].tolist()
+    shape = [T.nvrows()] + T.getcoldesc('DATA')['shape'].tolist()
     T.putcol(mb_vis_column, np.zeros(shape, dtype=np.complex64))
     T.putcol(meq_vis_column, np.zeros(shape, dtype=np.complex64))
 
@@ -309,8 +309,8 @@ subprocess.call(cmd_list)
 # Compare MeqTree and Montblanc visibilities
 with pt.table(msfile, ack=False, readonly=True) as MS:
     dims = mds.dims
-    nrow, nchan = (dims[d] for d in ('row', 'chan'))
-    shape = (nrow, nchan, 4)
+    nvrow, nchan = (dims[d] for d in ('vrow', 'chan'))
+    shape = (nvrow, nchan, 4)
     meq_vis = MS.getcol(meq_vis_column).reshape(shape)
     mb_vis = MS.getcol(mb_vis_column).reshape(shape)
 

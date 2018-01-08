@@ -49,10 +49,10 @@ __global__ void rime_sersic_shape(
     const typename Traits::sersic_param_type * sersic_params,
     typename Traits::sersic_shape_type * sersic_shape,
     const typename Traits::FT two_pi_over_c,
-    int nssrc, int ntime, int nrows, int na, int nchan)
+    int nssrc, int ntime, int nvrows, int na, int nchan)
 {
     int chan = blockIdx.x*blockDim.x + threadIdx.x;
-    int row = blockIdx.y*blockDim.y + threadIdx.y;
+    int vrow = blockIdx.y*blockDim.y + threadIdx.y;
 
     using FT = typename Traits::FT;
     using LTr = LaunchTraits<FT>;
@@ -60,7 +60,7 @@ __global__ void rime_sersic_shape(
 
     constexpr FT one = FT(1.0);
 
-    if(row >= nrows || chan >= nchan)
+    if(vrow >= nvrows || chan >= nchan)
         { return; }
 
     __shared__ struct {
@@ -76,9 +76,9 @@ __global__ void rime_sersic_shape(
     FT & w = shared.uvw[threadIdx.z][threadIdx.y].z;
 
     // Retrieve antenna pairs for the current baseline
-    int ant1 = antenna1[row];
-    int ant2 = antenna2[row];
-    int time = time_index[row];
+    int ant1 = antenna1[vrow];
+    int ant2 = antenna2[vrow];
+    int time = time_index[vrow];
 
     // UVW coordinates vary by baseline and time, but not channel
     if(threadIdx.x == 0)
@@ -117,7 +117,7 @@ __global__ void rime_sersic_shape(
 
         FT sersic_factor = one + u1*u1+v1*v1;
 
-        i = (ssrc*nrows + row)*nchan + chan;
+        i = (ssrc*nvrows + vrow)*nchan + chan;
         sersic_shape[i] = one / (ss*Po::sqrt(sersic_factor));
     }
 }
@@ -140,14 +140,14 @@ public:
         const tf::Tensor & in_frequency = context->input(4);
         const tf::Tensor & in_sersic_params = context->input(5);
 
-        int nrows = in_time_index.dim_size(0);
+        int nvrows = in_time_index.dim_size(0);
         int ntime = in_uvw.dim_size(0);
         int na = in_uvw.dim_size(1);
         int nbl = in_antenna1.dim_size(1);
         int nchan = in_frequency.dim_size(0);
         int nssrc = in_sersic_params.dim_size(1);
 
-        tf::TensorShape sersic_shape_shape{nssrc, nrows, nchan};
+        tf::TensorShape sersic_shape_shape{nssrc, nvrows, nchan};
 
         // Allocate an output tensor
         tf::Tensor * sersic_shape_ptr = nullptr;
@@ -159,9 +159,9 @@ public:
 
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
-            nchan, nrows, 1);
+            nchan, nvrows, 1);
         dim3 grid(montblanc::grid_from_thread_block(
-            block, nchan, nrows, 1));
+            block, nchan, nvrows, 1));
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
@@ -184,7 +184,7 @@ public:
             time_index, uvw, antenna1, antenna2,
             frequency, sersic_params, sersic_shape,
             montblanc::constants<FT>::two_pi_over_c,
-            nssrc, ntime, nrows, na, nchan);
+            nssrc, ntime, nvrows, na, nchan);
     }
 };
 

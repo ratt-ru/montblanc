@@ -36,13 +36,13 @@ public:
         const tf::Tensor & in_frequency = context->input(4);
         const tf::Tensor & in_sersic_params = context->input(5);
 
-        int nrows = in_time_index.dim_size(0);
+        int nvrows = in_time_index.dim_size(0);
         int ntime = in_uvw.dim_size(0);
         int na = in_uvw.dim_size(1);
         int nchan = in_frequency.dim_size(0);
         int nssrc = in_sersic_params.dim_size(1);
 
-        tf::TensorShape sersic_shape_shape{nssrc,nrows,nchan};
+        tf::TensorShape sersic_shape_shape{nssrc,nvrows,nchan};
 
         // Allocate an output tensor
         tf::Tensor * sersic_shape_ptr = nullptr;
@@ -67,12 +67,12 @@ public:
             auto ss = sersic_params(2,ssrc);
 
             #pragma omp parallel for
-            for(int row=0; row < nrows; ++row)
+            for(int vrow=0; vrow < nvrows; ++vrow)
             {
                 // Antenna pairs for this baseline
-                int ant1 = antenna1(row);
-                int ant2 = antenna2(row);
-                int time = time_index(row);
+                int ant1 = antenna1(vrow);
+                int ant2 = antenna2(vrow);
+                int time = time_index(vrow);
 
                 // UVW coordinates for this baseline
                 FT u = uvw(time,ant2,0) - uvw(time,ant1,0);
@@ -93,7 +93,7 @@ public:
 
                     FT sersic_factor = one + u1*u1+v1*v1;
 
-                    sersic_shape(ssrc,row,chan) = one / (ss*std::sqrt(sersic_factor));
+                    sersic_shape(ssrc,vrow,chan) = one / (ss*std::sqrt(sersic_factor));
                 }
             }
         }

@@ -26,19 +26,19 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
 
     // time_index
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(time_index, 1, &input),
-        "time_index shape must be [nrows] but is " + c->DebugString(time_index));
+        "time_index shape must be [nvrows] but is " + c->DebugString(time_index));
 
     // antenna1
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna1, 1, &input),
-        "antenna1 shape must be [nrows] but is " + c->DebugString(antenna1));
+        "antenna1 shape must be [nvrows] but is " + c->DebugString(antenna1));
 
     // antenna2
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna2, 1, &input),
-        "antenna2 shape must be [nrows] but is " + c->DebugString(antenna2));
+        "antenna2 shape must be [nvrows] but is " + c->DebugString(antenna2));
 
     // shape
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(shape, 3, &input),
-        "shape shape must be [nsrc, nrows, nchan] but is " +
+        "shape shape must be [nsrc, nvrows, nchan] but is " +
         c->DebugString(shape));
 
     // ant_jones
@@ -53,10 +53,10 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
 
     // base_coherencies
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(base_coherencies, 3, &input),
-        "base_coherencies shape must be [nrows, nchan, 4] but is " +
+        "base_coherencies shape must be [nvrows, nchan, 4] but is " +
         c->DebugString(base_coherencies));
 
-    // Coherency output is (nrows, nchan, 4)
+    // Coherency output is (nvrows, nchan, 4)
     ShapeHandle coherencies = c->MakeShape({
         c->Dim(base_coherencies, 0),
         c->Dim(base_coherencies, 1),

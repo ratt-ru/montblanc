@@ -48,7 +48,7 @@ __global__ void rime_sum_coherencies(
     const typename Traits::sgn_brightness_type * sgn_brightness,
     const typename Traits::vis_type * base_coherencies,
     typename Traits::vis_type * coherencies,
-    int nsrc, int ntime, int nrow, int na, int nchan, int npolchan)
+    int nsrc, int ntime, int nvrow, int na, int nchan, int npolchan)
 {
     // Shared memory usage unnecesssary, but demonstrates use of
     // constant Trait members to create kernel shared memory.
@@ -58,25 +58,25 @@ __global__ void rime_sum_coherencies(
 
     int polchan = blockIdx.x*blockDim.x + threadIdx.x;
     int chan = polchan >> 2;
-    int row = blockIdx.y*blockDim.y + threadIdx.y;
+    int vrow = blockIdx.y*blockDim.y + threadIdx.y;
 
-    if(row >= nrow || polchan >= npolchan)
+    if(vrow >= nvrow || polchan >= npolchan)
         { return; }
 
     // Antenna indices for the baseline
-    int ant1 = antenna1[row];
-    int ant2 = antenna2[row];
-    int time = time_index[row];
+    int ant1 = antenna1[vrow];
+    int ant2 = antenna2[vrow];
+    int time = time_index[vrow];
 
     // Load in model visibilities
-    int i = row*npolchan + polchan;
+    int i = vrow*npolchan + polchan;
     CT coherency = base_coherencies[i];
 
     // Sum over visibilities
     for(int src=0; src < nsrc; ++src)
     {
         // Load in shape value
-        i = (src*nrow + row)*nchan + chan;
+        i = (src*nvrow + vrow)*nchan + chan;
         FT shape_ = shape[i];
 
         int base = src*ntime + time;
@@ -106,7 +106,7 @@ __global__ void rime_sum_coherencies(
         coherency.y += J1.y;
     }
 
-    i = row*npolchan + polchan;
+    i = vrow*npolchan + polchan;
     // Write out the polarisation
     coherencies[i] = coherency;
 }
@@ -131,7 +131,7 @@ public:
         const tf::Tensor & in_sgn_brightness = context->input(5);
         const tf::Tensor & in_base_coherencies = context->input(6);
 
-        int nrow = in_time_index.dim_size(0);
+        int nvrow = in_time_index.dim_size(0);
         int ntime = in_ant_jones.dim_size(1);
         int nsrc = in_shape.dim_size(0);
         int nchan = in_shape.dim_size(2);
@@ -142,7 +142,7 @@ public:
         // Allocate an output tensor
         tf::Tensor * coherencies_ptr = nullptr;
         tf::TensorShape coherencies_shape = tf::TensorShape({
-            nrow, nchan, npol });
+            nvrow, nchan, npol });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, coherencies_shape, &coherencies_ptr));
 
@@ -170,9 +170,9 @@ public:
         // Set up our CUDA thread block and grid
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
-            npolchan, nrow, 1);
+            npolchan, nvrow, 1);
         dim3 grid(montblanc::grid_from_thread_block(
-            block, npolchan, nrow, 1));
+            block, npolchan, nvrow, 1));
 
         // Get the GPU device
         const auto & device = context->eigen_device<GPUDevice>();
@@ -181,7 +181,7 @@ public:
         rime_sum_coherencies<Tr><<<grid, block, 0, device.stream()>>>(
             time_index, antenna1, antenna2, shape, ant_jones,
             sgn_brightness, base_coherencies, coherencies,
-            nsrc, ntime, nrow, na, nchan, npolchan);
+            nsrc, ntime, nvrow, na, nchan, npolchan);
     }
 };
 

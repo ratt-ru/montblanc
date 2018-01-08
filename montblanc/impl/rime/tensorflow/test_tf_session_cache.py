@@ -17,7 +17,7 @@ def _create_tensorflow_graph():
 
     with tf.Graph().as_default() as graph:
         feed_data = _construct_tensorflow_staging_areas(input_schema(),
-            output_schema(), ('utime', 'row'), devices)
+            output_schema(), ('utime', 'vrow'), devices)
 
         expr = _construct_tensorflow_expression(feed_data, slvr_cfg,
                                                         devices[0], 0)

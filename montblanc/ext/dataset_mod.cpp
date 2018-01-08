@@ -38,7 +38,7 @@ void _antenna_uvw_loop(
     IT ant1 = antenna1_ref(start);
     IT ant2 = antenna2_ref(start);
 
-    // If ant1 associated with starting row is nan
+    // If ant1 associated with starting vrow is nan
     // initial values have not yet been assigned. Do so.
     if(std::isnan(antenna_uvw_ref(chunk,ant1,u)))
     {
@@ -57,11 +57,11 @@ void _antenna_uvw_loop(
         }
     }
 
-    // Handle the rest of the rows
-    for(IT row=start+1; row < end; ++row)
+    // Handle the rest of the vrows
+    for(IT vrow=start+1; vrow < end; ++vrow)
     {
-        IT ant1 = antenna1_ref(row);
-        IT ant2 = antenna2_ref(row);
+        IT ant1 = antenna1_ref(vrow);
+        IT ant2 = antenna2_ref(vrow);
 
         // Reference each antenna's possibly discovered
         // UVW coordinate in the array
@@ -89,18 +89,18 @@ void _antenna_uvw_loop(
             // Infer antenna2's coordinate from antenna1
             //    u12 = u1 - u2
             // => u2 = u1 - u12
-            ant2_uvw[u] = ant1_uvw[u] - uvw_ref(row,u);
-            ant2_uvw[v] = ant1_uvw[v] - uvw_ref(row,v);
-            ant2_uvw[w] = ant1_uvw[w] - uvw_ref(row,w);
+            ant2_uvw[u] = ant1_uvw[u] - uvw_ref(vrow,u);
+            ant2_uvw[v] = ant1_uvw[v] - uvw_ref(vrow,v);
+            ant2_uvw[w] = ant1_uvw[w] - uvw_ref(vrow,w);
         }
         else if (!ant1_found && ant2_found)
         {
             // Infer antenna1's coordinate from antenna2
             //    u12 = u1 - u2
             // => u1 = u12 + u2
-            ant1_uvw[u] = uvw_ref(row,u) + ant2_uvw[u];
-            ant1_uvw[v] = uvw_ref(row,v) + ant2_uvw[v];
-            ant1_uvw[w] = uvw_ref(row,w) + ant2_uvw[w];
+            ant1_uvw[u] = uvw_ref(vrow,u) + ant2_uvw[u];
+            ant1_uvw[v] = uvw_ref(vrow,v) + ant2_uvw[v];
+            ant1_uvw[w] = uvw_ref(vrow,w) + ant2_uvw[w];
         }
     }
 }
@@ -126,13 +126,13 @@ py::array_t<FT, flags> antenna_uvw(
     int nr_of_uvw = uvw.shape(1);
 
     if(antenna1.ndim() != 1)
-        { throw std::invalid_argument("antenna1 shape should be (nrow,)");}
+        { throw std::invalid_argument("antenna1 shape should be (vrow,)");}
 
     if(antenna2.ndim() != 1)
-        { throw std::invalid_argument("antenna2 shape should be (nrow,)");}
+        { throw std::invalid_argument("antenna2 shape should be (vrow,)");}
 
     if(uvw.ndim() != 2 || nr_of_uvw != 3)
-        { throw std::invalid_argument("uvw shape should be (nrow, 3)");}
+        { throw std::invalid_argument("uvw shape should be (vrow, 3)");}
 
     if(nr_of_antenna < 1)
         { throw std::invalid_argument("nr_of_antenna < 1"); }
@@ -193,14 +193,14 @@ auto constexpr antenna_uvw_docstring = R"doc(
     Parameters
     ----------
     uvw : np.ndarray
-        Baseline UVW coordinates of shape (row, 3)
+        Baseline UVW coordinates of shape (vrow, 3)
     antenna1 : np.ndarray
-        Baseline first antenna of shape (row,)
+        Baseline first antenna of shape (vrow,)
     antenna2 : np.ndarray
-        Baseline second antenna of shape (row,)
+        Baseline second antenna of shape (vrow,)
     chunks : np.ndarray
         Number of baselines per unique timestep with shape (utime,)
-        :code:`np.sum(chunks) == row` should hold.
+        :code:`np.sum(chunks) == vrow` should hold.
     nr_of_antenna : int
         Total number of antenna in the solution.
 

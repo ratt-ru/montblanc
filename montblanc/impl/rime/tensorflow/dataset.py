@@ -48,18 +48,18 @@ def default_time_unique(ds, schema):
 
 def default_time_offset(ds, schema):
     """ Default time offset """
-    row, utime = (ds.dims[k] for k in ('row', 'utime'))
+    vrow, utime = (ds.dims[k] for k in ('vrow', 'utime'))
 
-    bl = row // utime
-    assert utime*bl == row
+    bl = vrow // utime
+    assert utime*bl == vrow
     return da.arange(utime,chunks=schema["chunks"])*bl
 
 def default_time_chunks(ds, schema):
     """ Default time chunks """
-    row, utime = (ds.dims[k] for k in ('row', 'utime'))
+    vrow, utime = (ds.dims[k] for k in ('vrow', 'utime'))
 
-    bl = row // utime
-    assert utime*bl == row
+    bl = vrow // utime
+    assert utime*bl == vrow
     return da.full(schema["shape"], bl, chunks=schema["chunks"])
 
 def default_time(ds, schema):
@@ -234,13 +234,13 @@ def source_schema():
 def default_schema():
     return {
         "time" : {
-            "dims": ("row",),
+            "dims": ("vrow",),
             "dtype": np.float64,
             "default": default_time,
         },
 
         "time_index": {
-            "dims": ("row",),
+            "dims": ("vrow",),
             "dtype": np.int32,
             "default": default_time_index,
         },
@@ -258,12 +258,12 @@ def default_schema():
         },
 
         "base_vis": {
-            "dims": ("row", "chan", "corr"),
+            "dims": ("vrow", "chan", "corr"),
             "dtype": np.complex128,
         },
 
         "data": {
-            "dims": ("row", "chan", "corr"),
+            "dims": ("vrow", "chan", "corr"),
             "dtype": np.complex128,
         },
 
@@ -273,19 +273,19 @@ def default_schema():
         },
 
         "antenna1" : {
-            "dims": ("row",),
+            "dims": ("vrow",),
             "dtype": np.int32,
             "default": default_antenna1,
         },
 
         "antenna2" : {
-            "dims": ("row",),
+            "dims": ("vrow",),
             "dtype": np.int32,
             "default": default_antenna2,
         },
 
         "flag": {
-            "dims": ("row", "chan", "corr"),
+            "dims": ("vrow", "chan", "corr"),
             "dtype": np.uint8,
             "default": lambda ds, as_: da.full(as_["shape"], 0,
                                                 dtype=as_["dtype"],
@@ -293,7 +293,7 @@ def default_schema():
         },
 
         "weight": {
-            "dims": ("row", "chan", "corr"),
+            "dims": ("vrow", "chan", "corr"),
             "dtype": np.float64,
             "default": lambda ds, as_: da.ones(shape=as_["shape"],
                                                 dtype=as_["dtype"],
@@ -394,12 +394,12 @@ def scratch_schema():
         },
 
         "source_shape": {
-            "dims": ("point", "row", "chan"),
+            "dims": ("point", "vrow", "chan"),
             "dtype": np.float64,
         },
 
         "chi_sqrd_terms": {
-            "dims": ("row", "chan"),
+            "dims": ("vrow", "chan"),
             "dtype": np.float64,
         }
     }
@@ -408,7 +408,7 @@ def output_schema():
     """ Montblanc output schemas """
     return {
         "model_vis": {
-            "dims": ('row', 'chan', 'corr'),
+            "dims": ('vrow', 'chan', 'corr'),
             "dtype": np.complex128,
         },
         "chi_squared": {
@@ -432,9 +432,9 @@ def default_dim_sizes(dims=None):
         'spw': 1,
     }
 
-    # Derive row from baselines and unique times
+    # Derive vrow from baselines and unique times
     nbl = ds['antenna']*(ds['antenna']-1)//2
-    ds.update({'row': ds['utime']*nbl })
+    ds.update({'vrow': ds['utime']*nbl })
 
     # Source dimensions
     ds.update({
@@ -483,13 +483,13 @@ def default_dataset(xds=None, dims=None):
     if xds is None:
         # Create coordinates for each dimension
         coords = { k: np.arange(dims[k]) for k in dims.keys() }
-        # Create a dummy array with shape ('row',) so that there is
+        # Create a dummy array with shape ('vrow',) so that there is
         # a chunking strategy along this dimension. Needed for most default
         # methods
-        arrays = { "__dummy__" : xr.DataArray(da.ones(shape=dims['row'],
+        arrays = { "__dummy__" : xr.DataArray(da.ones(shape=dims['vrow'],
                                                         chunks=10000,
                                                         dtype=np.float64),
-                                                dims=["row"]) }
+                                                dims=["vrow"]) }
         xds = xr.Dataset(arrays, coords=coords)
     else:
         # Create coordinates for default dimensions
@@ -554,10 +554,10 @@ def create_antenna_uvw(xds):
 
     Notes
     -----
-    This methods **depends** on the `row` and `utime` chunking in `xds`
+    This methods **depends** on the `vrow` and `utime` chunking in `xds`
     being correct. Put as simply as possible, the consecutive unique
     timestamps referenced by chunks in the `utime` dimension must be
-    associated with consecutive chunks in the `row` dimension.
+    associated with consecutive chunks in the `vrow` dimension.
 
     Returns
     -------
@@ -576,15 +576,15 @@ def create_antenna_uvw(xds):
 
     chunks = xds.chunks
     utime_groups = chunks['utime']
-    row_groups = chunks['row']
+    vrow_groups = chunks['vrow']
     time_chunks = xds.time_chunks
 
     token = dask.base.tokenize(xds.uvw, xds.antenna1, xds.antenna2,
-                            xds.time_chunks, row_groups, utime_groups)
+                            xds.time_chunks, vrow_groups, utime_groups)
     name = "-".join(("create_antenna_uvw", token))
     p_ant_uvw = partial(dsmod.antenna_uvw, nr_of_antenna=xds.dims["antenna"])
 
-    it = itertools.izip(_chunk_iter(row_groups), _chunk_iter(utime_groups))
+    it = itertools.izip(_chunk_iter(vrow_groups), _chunk_iter(utime_groups))
     dsk = {}
 
     # Create the dask graph
@@ -602,8 +602,8 @@ def create_antenna_uvw(xds):
         if not np.sum(time_chunks[uts]) == rs.stop - rs.start:
             sum_chunks = np.sum(time_chunks[uts])
             raise ValueError("Sum of time_chunks[%d:%d] '%d' "
-                            "does not match the number of rows '%d' "
-                            "in the row[%d:%d]" %
+                            "does not match the number of vrows '%d' "
+                            "in the vrow[%d:%d]" %
                                 (uts.start, uts.stop, sum_chunks,
                                 rs.stop-rs.start,
                                 rs.start, rs.stop))
@@ -628,7 +628,7 @@ def dataset_from_ms(ms):
         Dataset with MS columns as arrays
     """
 
-    renames = { 'rows': 'row',
+    renames = { 'vrows': 'vrow',
                 'chans': 'chan',
                 'pols': 'pol',
                 'corrs': 'corr'}
@@ -636,8 +636,8 @@ def dataset_from_ms(ms):
     xds = xds_from_ms(ms).rename(renames)
     xads = xds_from_table("::".join((ms, "ANTENNA")), table_schema="ANTENNA")
     xspwds = xds_from_table("::".join((ms, "SPECTRAL_WINDOW")), table_schema="SPECTRAL_WINDOW")
-    xds = xds.assign(antenna_position=xads.rename({"rows" : "antenna"}).drop('msrows').position,
-                    frequency=xspwds.rename({"rows":"spw", "chans" : "chan"}).drop('msrows').chan_freq[0])
+    xds = xds.assign(antenna_position=xads.rename({"vrows" : "antenna"}).drop('msrows').position,
+                    frequency=xspwds.rename({"vrows":"spw", "chans" : "chan"}).drop('msrows').chan_freq[0])
     return xds
 
 def merge_dataset(iterable):
@@ -701,9 +701,9 @@ def merge_dataset(iterable):
     return xr.Dataset(data_vars, attrs=attrs)
 
 
-def group_row_chunks(xds, max_group_size=100000):
+def group_vrow_chunks(xds, max_group_size=100000):
     """
-    Return a dictionary of unique time and row groups.
+    Return a dictionary of unique time and vrow groups.
     Groups are formed by accumulating chunks in the
     `time_chunks` array attached to `xds` until `max_group_size`
     is reached.
@@ -719,30 +719,30 @@ def group_row_chunks(xds, max_group_size=100000):
     -------
     dict
         { 'utime': (time_group_1, ..., time_group_n),
-          'row': (row_group_1, ..., row_group_n) }
+          'vrow': (vrow_group_1, ..., vrow_group_n) }
     """
-    row_groups = [0]
+    vrow_groups = [0]
     utime_groups = [0]
-    rows = 0
+    vrows = 0
     utimes = 0
 
     for chunk in xds.time_chunks.values:
-        next_ = rows + chunk
+        next_ = vrows + chunk
 
         if next_ > max_group_size:
-            row_groups.append(rows)
+            vrow_groups.append(vrows)
             utime_groups.append(utimes)
-            rows = chunk
+            vrows = chunk
             utimes = 1
         else:
-            rows = next_
+            vrows = next_
             utimes += 1
 
-    if rows > 0:
-        row_groups.append(rows)
+    if vrows > 0:
+        vrow_groups.append(vrows)
         utime_groups.append(utimes)
 
-    return { 'utime': tuple(utime_groups[1:]), 'row': tuple(row_groups[1:]) }
+    return { 'utime': tuple(utime_groups[1:]), 'vrow': tuple(vrow_groups[1:]) }
 
 def montblanc_dataset(xds=None):
     """
@@ -775,13 +775,13 @@ def montblanc_dataset(xds=None):
     # Fill in any default arrays
     mds = default_dataset(mds)
 
-    # At this point, our row chunking strategy is whatever
+    # At this point, our vrow chunking strategy is whatever
     # came out of the original dataset. This will certainly
     # cause breakages in create_antenna_uvw
-    # because rows need to be grouped together
+    # because vrows need to be grouped together
     # per-unique timestep. Perform this chunking operation now.
-    max_row = max(mds.chunks['row'])
-    chunks = group_row_chunks(mds, max_group_size=max_row)
+    max_vrow = max(mds.chunks['vrow'])
+    chunks = group_vrow_chunks(mds, max_group_size=max_vrow)
     mds = mds.chunk(chunks)
 
     # Derive antenna UVW coordinates.
@@ -815,9 +815,9 @@ def budget(schemas, dims, mem_budget, reduce_fn):
         .. code-block:: python
 
             def red_gen():
-                yield [('utime', 100), ('row', 10000)]
-                yield [('utime', 50), ('row', 1000)]
-                yield [('utime', 20), ('row', 100)]
+                yield [('utime', 100), ('vrow', 10000)]
+                yield [('utime', 50), ('vrow', 1000)]
+                yield [('utime', 20), ('vrow', 100)]
 
     Returns
     -------
@@ -895,8 +895,8 @@ def rechunk_to_budget(mds, mem_budget, reduce_fn=None):
     ar = budget([input_schema(), scratch_schema(), output_schema()],
                 dict(dims), mem_budget, partial(reduce_fn, mds))
 
-    max_rows = ar.get('row', max(mds.antenna1.data.chunks[0]))
-    grc = group_row_chunks(mds, max_rows)
+    max_vrows = ar.get('vrow', max(mds.antenna1.data.chunks[0]))
+    grc = group_vrow_chunks(mds, max_vrows)
     ar = { k: da.core.normalize_chunks(v, (dims[k],))[0]
                                 for k, v in ar.items() }
     ar.update(grc)
@@ -926,10 +926,10 @@ def _reduction(xds):
     if sources > 50:
         yield [(s, 50) for s in st]
 
-    # Then reduce in row and unique times
+    # Then reduce in vrow and unique times
     for utime in utimes:
-        rows = xds.time_chunks[:utime].values.sum()
-        yield [('utime', utime), ('row', rows)]
+        vrows = xds.time_chunks[:utime].values.sum()
+        yield [('utime', utime), ('vrow', vrows)]
 
 if __name__ == "__main__":
     from pprint import pprint

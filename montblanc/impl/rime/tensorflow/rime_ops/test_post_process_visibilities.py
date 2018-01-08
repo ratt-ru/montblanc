@@ -36,7 +36,7 @@ class TestPostProcessVisibilities(unittest.TestCase):
 
         ntime, nbl, na, nchan = 100, 21, 7, 16
         chunks = np.random.random_integers(int(3.*nbl/4.), nbl, ntime)
-        nrow = np.sum(chunks)
+        nvrow = np.sum(chunks)
 
         rf = lambda *a, **kw: np.random.random(*a, **kw).astype(FT)
         rc = lambda *a, **kw: rf(*a, **kw) + 1j*rf(*a, **kw).astype(CT)
@@ -48,11 +48,11 @@ class TestPostProcessVisibilities(unittest.TestCase):
         # Create input variables
         direction_independent_effects = rc(size=[ntime, na, nchan, 4])
         flag = np.random.randint(low=0, high=2,
-            size=[nrow, nchan, 4]).astype(np.uint8)
-        weight = rf(size=[nrow, nchan, 4])
-        base_vis = rc(size=[nrow, nchan, 4])
-        model_vis = rc(size=[nrow, nchan, 4])
-        observed_vis = rc(size=[nrow, nchan, 4])
+            size=[nvrow, nchan, 4]).astype(np.uint8)
+        weight = rf(size=[nvrow, nchan, 4])
+        base_vis = rc(size=[nvrow, nchan, 4])
+        model_vis = rc(size=[nvrow, nchan, 4])
+        observed_vis = rc(size=[nvrow, nchan, 4])
 
         # Argument list
         np_args = [time_index, antenna1, antenna2,

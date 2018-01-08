@@ -24,7 +24,7 @@ auto sersic_shape_shape_function = [](InferenceContext* c) {
     ShapeHandle params = c->input(5);
 
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(time_index, 1, &input),
-        "time_index shape must be [nrow] but is " + c->DebugString(time_index));
+        "time_index shape must be [nvrow] but is " + c->DebugString(time_index));
 
     // uvw should be shape (ntime, na, 3)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(uvw, 3, &input),
@@ -34,10 +34,10 @@ auto sersic_shape_shape_function = [](InferenceContext* c) {
 
     // antenna1 should be shape (ntime, nbl)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna1, 1, &input),
-        "antenna1 shape must be [nrow] but is " + c->DebugString(antenna1));
+        "antenna1 shape must be [nvrow] but is " + c->DebugString(antenna1));
     // antenna2 should be shape (ntime, nbl)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna2, 1, &input),
-        "antenna2 shape must be [nrow] but is " + c->DebugString(antenna2));
+        "antenna2 shape must be [nvrow] but is " + c->DebugString(antenna2));
 
     // frequency should be shape (nchan,)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(frequency, 1, &input),
@@ -49,7 +49,7 @@ auto sersic_shape_shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(params, 0), 3, &d),
         "params shape must be [3, nssrc] but is " + c->DebugString(params));
 
-    // Sersic shape output is (nssrc, nrow, nchan)
+    // Sersic shape output is (nssrc, nvrow, nchan)
     ShapeHandle output = c->MakeShape({
         c->Dim(params, 1),
         c->Dim(antenna1, 0),

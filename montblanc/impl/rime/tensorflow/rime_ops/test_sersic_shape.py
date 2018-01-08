@@ -46,7 +46,7 @@ class TestSersicShape(unittest.TestCase):
         from montblanc.impl.rime.tensorflow.rime_ops.op_test_utils import random_baselines
 
         chunks = np.random.random_integers(int(3.*nbl/4.), nbl, ntime)
-        nrow = np.sum(chunks)
+        nvrow = np.sum(chunks)
 
         np_uvw, np_ant1, np_ant2, np_time_index = random_baselines(chunks, na)
         np_ant_uvw = dsmod.antenna_uvw(np_uvw, np_ant1, np_ant2, chunks,

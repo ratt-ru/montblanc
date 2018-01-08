@@ -54,7 +54,7 @@ __global__ void rime_post_process_visibilities(
     const typename Traits::vis_type * in_observed_vis,
     typename Traits::vis_type * out_final_vis,
     typename Traits::FT * out_chi_squared_terms,
-    int ntime, int nrow, int na, int npolchan)
+    int ntime, int nvrow, int na, int npolchan)
 
 {
     // Simpler float and complex types
@@ -66,19 +66,19 @@ __global__ void rime_post_process_visibilities(
     using LTr = LaunchTraits<FT>;
 
     int polchan = blockIdx.x*blockDim.x + threadIdx.x;
-    int row = blockIdx.y*blockDim.y + threadIdx.y;
+    int vrow = blockIdx.y*blockDim.y + threadIdx.y;
 
     // Guard problem extents
-    if(row >= nrow || polchan >= npolchan)
+    if(vrow >= nvrow || polchan >= npolchan)
         { return; }
 
     // Antenna indices for the baseline
-    int ant1 = in_antenna1[row];
-    int ant2 = in_antenna2[row];
-    int time = in_time_index[row];
+    int ant1 = in_antenna1[vrow];
+    int ant2 = in_antenna2[vrow];
+    int time = in_time_index[vrow];
 
     // Load in model, observed visibilities, flags and weights
-    int i = row*npolchan + polchan;
+    int i = vrow*npolchan + polchan;
     CT base_vis = in_base_vis[i];
     CT model_vis = in_model_vis[i];
     CT diff_vis = in_observed_vis[i];
@@ -117,7 +117,7 @@ __global__ void rime_post_process_visibilities(
     model_vis.x *= flag_mul;
     model_vis.y *= flag_mul;
 
-    i = row*npolchan + polchan;
+    i = vrow*npolchan + polchan;
     out_final_vis[i] = model_vis;
     out_chi_squared_terms[i] = chi_squared_term;
 }
@@ -147,7 +147,7 @@ public:
 
         int ntime = in_die.dim_size(0);
         int na = in_die.dim_size(1);
-        int nrow = in_model_vis.dim_size(0);
+        int nvrow = in_model_vis.dim_size(0);
         int nchan = in_model_vis.dim_size(1);
         int npol = in_model_vis.dim_size(2);
         int npolchan = npol*nchan;
@@ -158,7 +158,7 @@ public:
         // Allocate space for output tensor 'final_vis'
         tf::Tensor * final_vis_ptr = nullptr;
         tf::TensorShape final_vis_shape = tf::TensorShape({
-            nrow, nchan, npol });
+            nvrow, nchan, npol });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, final_vis_shape, &final_vis_ptr));
 
@@ -204,7 +204,7 @@ public:
         // These will be reduced into chi_squared
         tf::Tensor chi_squared_terms;
         tf::TensorShape chi_squared_terms_shape = tf::TensorShape({
-            nrow, nchan, npol });
+            nvrow, nchan, npol });
         OP_REQUIRES_OK(context, context->allocate_temp(
             tf::DataTypeToEnum<FT>::value, chi_squared_terms_shape,
             &chi_squared_terms, gpu_allocator));
@@ -232,9 +232,9 @@ public:
         // Set up our CUDA thread block and grid
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
-            npolchan, nrow, 1);
+            npolchan, nvrow, 1);
         dim3 grid(montblanc::grid_from_thread_block(
-            block, npolchan, nrow, 1));
+            block, npolchan, nvrow, 1));
 
         // Call the rime_post_process_visibilities CUDA kernel
         rime_post_process_visibilities<Tr>
@@ -250,7 +250,7 @@ public:
                 fin_observed_vis,
                 fout_final_vis,
                 fout_chi_squared_terms,
-                ntime, nrow, na, npolchan);
+                ntime, nvrow, na, npolchan);
 
         // Perform a reduction on the chi squared terms
         tf::uint8 * temp_storage_ptr = temp_storage.flat<tf::uint8>().data();

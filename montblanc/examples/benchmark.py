@@ -59,14 +59,14 @@ def set_scheduler(args):
 
 set_scheduler(args)
 
-from montblanc.impl.rime.tensorflow.dataset import default_dataset, group_row_chunks, rechunk_to_budget
+from montblanc.impl.rime.tensorflow.dataset import default_dataset, group_vrow_chunks, rechunk_to_budget
 from montblanc.impl.rime.tensorflow.dask_rime import Rime
 
 # Set up problem default dimensions
 dims = {
     'utime': args.timesteps,
     'antenna': args.antenna,
-    'row': args.timesteps*args.antenna*(args.antenna-1)//2,
+    'vrow': args.timesteps*args.antenna*(args.antenna-1)//2,
     'point': args.point,
     'gaussian': args.gaussian,
 }

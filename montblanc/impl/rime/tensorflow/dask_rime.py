@@ -38,7 +38,7 @@ def _setup_tensorflow(cfg_hash, cfg):
             with tf.Graph().as_default() as graph:
                 feed_data = _construct_tensorflow_staging_areas(
                     input_schema(), output_schema(),
-                    ('utime', 'row'), devices)
+                    ('utime', 'vrow'), devices)
 
                 exprs = [_construct_tensorflow_expression(feed_data,
                                                         cfg, dev, i)
@@ -189,8 +189,8 @@ class Rime(object):
                                 "in time_index is greater or equal "
                                 "to the number of unique times '%s' "
                                 "for this particular chunk. "
-                                "Unique time and row chunks must agree. "
-                                "See :func:`group_row_chunks`."
+                                "Unique time and vrow chunks must agree. "
+                                "See :func:`group_vrow_chunks`."
                                     % (utimes, utime))
 
             with tf_session_cache().open(self._setup_tf, cfg_hash) as S:
@@ -292,13 +292,13 @@ class Rime(object):
 
         def _mod_dims(dims):
             """
-            Convert "utime" dims to "row" dims.
-            After chunking, the number of "row" and "utime" blocks
+            Convert "utime" dims to "vrow" dims.
+            After chunking, the number of "vrow" and "utime" blocks
             should be exactly the same for each array, even though
             their sizes will differ. We do this so that :meth:`dask.array.top`
             will match the blocks of these dimensions together
             """
-            return tuple("row" if d == "utime" else d for d in dims)
+            return tuple("vrow" if d == "utime" else d for d in dims)
 
         def _flatten_singletons(D):
             """ Recursively simplify tuples and lists of length 1 """
@@ -377,11 +377,11 @@ class TestDaskRime(unittest.TestCase):
     def test_rime(self):
         dask.set_options(get=dask.get)
 
-        from dataset import default_dataset, group_row_chunks
+        from dataset import default_dataset, group_vrow_chunks
 
         # Chunk so that multiple threads are employed
         mds = default_dataset()
-        chunks = group_row_chunks(mds, mds.dims['row'] // 10)
+        chunks = group_vrow_chunks(mds, mds.dims['vrow'] // 10)
         mds = mds.chunk(chunks)
 
         rime = Rime()

@@ -298,7 +298,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     with tf.device(device):
         # Infer chunk dimensions
         model_vis_shape = tf.shape(D.data)
-        nrow, nchan, npol = [model_vis_shape[i] for i in range(3)]
+        nvrow, nchan, npol = [model_vis_shape[i] for i in range(3)]
 
         # Infer float and complex type
         FT, CT = D.antenna_uvw.dtype, D.data.dtype
@@ -394,7 +394,7 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
 
         ant_jones, sgn_brightness = antenna_jones(S.point_lm,
             S.point_stokes, S.point_alpha, S.point_ref_freq)
-        shape = tf.ones(shape=[nsrc,nrow,nchan], dtype=FT)
+        shape = tf.ones(shape=[nsrc,nvrow,nchan], dtype=FT)
         coherencies = rime.sum_coherencies(D.time_index,
             D.antenna1, D.antenna2,
             shape, ant_jones, sgn_brightness, coherencies)
@@ -505,7 +505,7 @@ class TestPartition(unittest.TestCase):
         from pprint import pprint
 
         source_data_arrays, feed_many, feed_once = _partition(
-                                    ('utime', 'row'), input_schema())
+                                    ('utime', 'vrow'), input_schema())
 
     def test_construct_staging_areas(self):
         from dataset import input_schema, output_schema
@@ -513,7 +513,7 @@ class TestPartition(unittest.TestCase):
         devices = ['/cpu:0']
 
         _construct_tensorflow_staging_areas(input_schema(),
-            output_schema(), ('utime', 'row'), devices)
+            output_schema(), ('utime', 'vrow'), devices)
 
 
     def test_construct_tensorflow_expression(self):
@@ -523,7 +523,7 @@ class TestPartition(unittest.TestCase):
         slvr_cfg = {'polarisation_type': 'linear'}
 
         feed_data = _construct_tensorflow_staging_areas(input_schema(),
-            output_schema(), ('utime', 'row'), devices)
+            output_schema(), ('utime', 'vrow'), devices)
 
         expr = _construct_tensorflow_expression(feed_data, slvr_cfg,
                                                         devices[0], 0)

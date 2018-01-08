@@ -23,9 +23,9 @@ auto gauss_shape_shape_function = [](InferenceContext* c) {
     ShapeHandle frequency = c->input(4);
     ShapeHandle params = c->input(5);
 
-    // time_index should be shape (nrows,)
+    // time_index should be shape (nvrows,)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(time_index, 1, &input),
-        "time_index shape must be [nrows] but is " + c->DebugString(time_index));
+        "time_index shape must be [nvrows] but is " + c->DebugString(time_index));
 
     // uvw should be shape (ntime, na, 3)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(uvw, 3, &input),
@@ -33,12 +33,12 @@ auto gauss_shape_shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(uvw, 2), 3, &d),
         "uvw shape must be [ntime, na, 3] but is " + c->DebugString(uvw));
 
-    // antenna1 should be shape (nrow,)
+    // antenna1 should be shape (nvrow,)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna1, 1, &input),
-        "antenna1 shape must be [nrow] but is " + c->DebugString(antenna1));
-    // antenna2 should be shape (nrow,)
+        "antenna1 shape must be [nvrow] but is " + c->DebugString(antenna1));
+    // antenna2 should be shape (nvrow,)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna2, 1, &input),
-        "antenna2 shape must be [nrow] but is " + c->DebugString(antenna2));
+        "antenna2 shape must be [nvrow] but is " + c->DebugString(antenna2));
 
     // frequency should be shape (nchan,)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(frequency, 1, &input),
@@ -50,7 +50,7 @@ auto gauss_shape_shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(params, 0), 3, &d),
         "params shape must be [3, ngsrc] but is " + c->DebugString(params));
 
-    // Gauss shape output is (ngsrc, nrow, nchan)
+    // Gauss shape output is (ngsrc, nvrow, nchan)
     ShapeHandle output = c->MakeShape({
         c->Dim(params, 1),
         c->Dim(antenna1, 0),

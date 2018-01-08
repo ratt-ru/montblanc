@@ -36,11 +36,11 @@ public:
         const tf::Tensor & in_frequency = context->input(4);
         const tf::Tensor & in_gauss_params = context->input(5);
 
-        int nrow = in_antenna1.dim_size(0);
+        int nvrow = in_antenna1.dim_size(0);
         int nchan = in_frequency.dim_size(0);
         int ngsrc = in_gauss_params.dim_size(1);
 
-        tf::TensorShape gauss_shape_shape{ngsrc,nrow,nchan};
+        tf::TensorShape gauss_shape_shape{ngsrc,nvrow,nchan};
 
         // Allocate an output tensor
         tf::Tensor * gauss_shape_ptr = nullptr;
@@ -63,12 +63,12 @@ public:
             auto eR = gauss_params(2,gsrc);
 
             #pragma omp parallel for
-            for(int row=0; row < nrow; ++row)
+            for(int vrow=0; vrow < nvrow; ++vrow)
             {
                 // Antenna pairs for this baseline
-                int ant1 = antenna1(row);
-                int ant2 = antenna2(row);
-                int time = time_index(row);
+                int ant1 = antenna1(vrow);
+                int ant2 = antenna2(vrow);
+                int time = time_index(vrow);
 
                 // UVW coordinates for this baseline
                 FT u = uvw(time,ant2,0) - uvw(time,ant1,0);
@@ -84,7 +84,7 @@ public:
                     FT v1 = u*el + v*em;
                     v1 *= scaled_freq;
 
-                    gauss_shape(gsrc,row,chan) = std::exp(-(u1*u1 + v1*v1));
+                    gauss_shape(gsrc,vrow,chan) = std::exp(-(u1*u1 + v1*v1));
                 }
             }
         }

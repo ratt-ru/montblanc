@@ -4,12 +4,12 @@ def random_baselines(chunks, nr_of_antenna, auto_correlations=False):
     """
     Generates randomised `uvw`, coordinates, as well as
     `antenna1`, `antenna2` and `time_index` indices,
-    for the given list of rows per unique time (`chunks`).
+    for the given list of vrows per unique time (`chunks`).
 
     Parameters
     ----------
     chunks : tuple, list or np.ndarray
-        List of rows per unique time. Shape (utime,)
+        List of vrows per unique time. Shape (utime,)
     nr_of_antenna : int
         Number of antenna
     auto_correlations (optional) : {False, True}
@@ -45,13 +45,13 @@ def random_baselines(chunks, nr_of_antenna, auto_correlations=False):
     bl_uvw = ant_uvw[:,ant1] - ant_uvw[:,ant2]
     bl_index = np.arange(ant1.size)
 
-    def _chunk_baselines(ut, chunk_rows):
-        """ Returns baslines for a chunk at index `ut` with rows `chunk_rows` """
+    def _chunk_baselines(ut, chunk_vrows):
+        """ Returns baselines for a chunk at index `ut` with vrows `chunk_vrows` """
 
-        # Shuffle canonical baselines and take the first chunk_rows
+        # Shuffle canonical baselines and take the first chunk_vrows
         index = bl_index.copy()
         np.random.shuffle(index)
-        index = index[:chunk_rows]
+        index = index[:chunk_vrows]
 
         return (bl_uvw[ut,index], ant1[index], ant2[index],
                 np.full(index.size, ut, dtype=np.int32))

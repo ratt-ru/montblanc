@@ -42,14 +42,14 @@ class TestSumCoherencies(unittest.TestCase):
         nbl = na*(na-1)//2
 
         chunks = np.random.random_integers(int(3.*nbl/4.), nbl, ntime)
-        nrow = np.sum(chunks)
+        nvrow = np.sum(chunks)
 
         _, np_ant1, np_ant2, np_time_index = random_baselines(chunks, na)
 
-        np_shape = rf(size=(nsrc, nrow, nchan))
+        np_shape = rf(size=(nsrc, nvrow, nchan))
         np_ant_jones = rc(size=(nsrc, ntime, na, nchan, 4))
         np_sgn_brightness = np.random.randint(0, 3, size=(nsrc, ntime), dtype=np.int8) - 1
-        np_base_coherencies = rc(size=(nrow, nchan, 4))
+        np_base_coherencies = rc(size=(nvrow, nchan, 4))
 
         # Argument list
         np_args = [np_time_index, np_ant1, np_ant2, np_shape, np_ant_jones,

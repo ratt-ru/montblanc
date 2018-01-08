@@ -35,7 +35,7 @@ public:
         const tf::Tensor & in_sgn_brightness = context->input(5);
         const tf::Tensor & in_base_coherencies = context->input(6);
 
-        int nrow = in_time_index.dim_size(0);
+        int nvrow = in_time_index.dim_size(0);
         int nsrc = in_shape.dim_size(0);
         int nchan = in_shape.dim_size(2);
         int na = in_ant_jones.dim_size(2);
@@ -45,7 +45,7 @@ public:
         // Allocate an output tensor
         tf::Tensor * coherencies_ptr = nullptr;
         tf::TensorShape coherencies_shape = tf::TensorShape({
-            nrow, nchan, npol });
+            nvrow, nchan, npol });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, coherencies_shape, &coherencies_ptr));
 
@@ -59,20 +59,20 @@ public:
         auto coherencies = coherencies_ptr->tensor<CT, 3>();
 
         #pragma omp parallel for
-        for(int row=0; row<nrow; ++row)
+        for(int vrow=0; vrow<nvrow; ++vrow)
         {
             // Antenna pairs for this baseline
-            int ant1 = antenna1(row);
-            int ant2 = antenna2(row);
-            int time = time_index(row);
+            int ant1 = antenna1(vrow);
+            int ant2 = antenna2(vrow);
+            int time = time_index(vrow);
 
             for(int chan=0; chan<nchan; ++chan)
             {
                 // Load in the input model visibilities
-                CT s0 = base_coherencies(row, chan, 0);
-                CT s1 = base_coherencies(row, chan, 1);
-                CT s2 = base_coherencies(row, chan, 2);
-                CT s3 = base_coherencies(row, chan, 3);
+                CT s0 = base_coherencies(vrow, chan, 0);
+                CT s1 = base_coherencies(vrow, chan, 1);
+                CT s2 = base_coherencies(vrow, chan, 2);
+                CT s3 = base_coherencies(vrow, chan, 3);
 
                 for(int src=0; src<nsrc; ++src)
                 {
@@ -83,7 +83,7 @@ public:
                     const CT & a3 = ant_jones(src, time, ant1, chan, 3);
 
                     // Multiply shape value into antenna1 jones
-                    const FT & s = shape(src, row, chan);
+                    const FT & s = shape(src, vrow, chan);
 
                     // Conjugate transpose of antenna 2 jones with shape factor
                     CT b0 = std::conj(ant_jones(src, time, ant2, chan, 0)*s);
@@ -102,10 +102,10 @@ public:
                 }
 
                 // Output accumulated model visibilities
-                coherencies(row, chan, 0) = s0;
-                coherencies(row, chan, 1) = s1;
-                coherencies(row, chan, 2) = s2;
-                coherencies(row, chan, 3) = s3;
+                coherencies(vrow, chan, 0) = s0;
+                coherencies(vrow, chan, 1) = s1;
+                coherencies(vrow, chan, 2) = s2;
+                coherencies(vrow, chan, 3) = s3;
             }
         }
     }

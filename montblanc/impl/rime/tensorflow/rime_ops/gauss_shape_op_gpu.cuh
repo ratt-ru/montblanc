@@ -49,16 +49,16 @@ __global__ void rime_gauss_shape(
     const typename Traits::gauss_param_type * gauss_params,
     typename Traits::gauss_shape_type * gauss_shape,
     const typename Traits::FT gauss_scale,
-    int ngsrc, int nrow, int na, int nchan)
+    int ngsrc, int nvrow, int na, int nchan)
 {
     int chan = blockIdx.x*blockDim.x + threadIdx.x;
-    int row = blockIdx.y*blockDim.y + threadIdx.y;
+    int vrow = blockIdx.y*blockDim.y + threadIdx.y;
 
     using FT = typename Traits::FT;
     using LTr = LaunchTraits<FT>;
     using Po = montblanc::kernel_policies<FT>;
 
-    if(row >= nrow || chan >= nchan)
+    if(vrow >= nvrow || chan >= nchan)
         { return; }
 
     __shared__ struct {
@@ -72,9 +72,9 @@ __global__ void rime_gauss_shape(
     FT & w = shared.uvw[threadIdx.z][threadIdx.y].z;
 
     // Retrieve antenna pairs for the current baseline
-    int ant1 = antenna1[row];
-    int ant2 = antenna2[row];
-    int time = time_index[row];
+    int ant1 = antenna1[vrow];
+    int ant2 = antenna2[vrow];
+    int time = time_index[vrow];
     int i;
 
     // UVW coordinates vary by baseline, but not channel
@@ -109,7 +109,7 @@ __global__ void rime_gauss_shape(
         FT v1 = u*el + v*em;
         v1 *= shared.scaled_freq[threadIdx.x];
 
-        i = (gsrc*nrow + row)*nchan + chan;
+        i = (gsrc*nvrow + vrow)*nchan + chan;
         gauss_shape[i] = Po::exp(-(u1*u1 + v1*v1));
     }
 }
@@ -134,11 +134,11 @@ public:
         const tf::Tensor & in_gauss_params = context->input(5);
 
         int na = in_uvw.dim_size(1);
-        int nrow = in_antenna1.dim_size(0);
+        int nvrow = in_antenna1.dim_size(0);
         int nchan = in_frequency.dim_size(0);
         int ngsrc = in_gauss_params.dim_size(1);
 
-        tf::TensorShape gauss_shape_shape{ngsrc, nrow, nchan};
+        tf::TensorShape gauss_shape_shape{ngsrc, nvrow, nchan};
 
         // Allocate an output tensor
         tf::Tensor * gauss_shape_ptr = nullptr;
@@ -150,9 +150,9 @@ public:
 
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
-            nchan, nrow, 1);
+            nchan, nvrow, 1);
         dim3 grid(montblanc::grid_from_thread_block(
-            block, nchan, nrow, 1));
+            block, nchan, nvrow, 1));
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
@@ -175,7 +175,7 @@ public:
             time_index, uvw, antenna1, antenna2,
             frequency, gauss_params, gauss_shape,
             montblanc::constants<FT>::gauss_scale,
-            ngsrc, nrow, na, nchan);
+            ngsrc, nvrow, na, nchan);
     }
 };
 
