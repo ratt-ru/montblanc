@@ -300,7 +300,7 @@ def default_schema():
         "flag": {
             "dims": ("vrow", "chan", "corr"),
             "dtype": np.uint8,
-            "default": lambda ds, as_: da.full(as_["shape"], 0,
+            "default": lambda ds, as_: da.zeros(shape=as_["shape"],
                                                 dtype=as_["dtype"],
                                                 chunks=as_["chunks"])
         },
