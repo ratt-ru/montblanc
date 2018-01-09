@@ -62,6 +62,13 @@ def default_time_vrow_chunks(ds, schema):
     assert utime*bl == vrow
     return da.full(schema["shape"], bl, chunks=schema["chunks"])
 
+def default_time_arow_chunks(ds, schema):
+    """ Default time chunks """
+    antenna, utime = (ds.dims[k] for k in ('antenna', 'utime'))
+
+    return da.full(schema["shape"], antenna, chunks=schema["chunks"])
+
+
 def default_time(ds, schema):
     """ Default time """
 
@@ -251,6 +258,12 @@ def default_schema():
             "default": default_time_unique,
         },
 
+        "time_arow_chunks" : {
+            "dims": ("utime",),
+            "dtype": np.int32,
+            "default": default_time_arow_chunks,
+        },
+
         "time_vrow_chunks" : {
             "dims": ("utime",),
             "dtype": np.int32,
@@ -268,7 +281,7 @@ def default_schema():
         },
 
         "antenna_uvw": {
-            "dims": ("utime", "antenna", "(u,v,w)"),
+            "dims": ("arow", "(u,v,w)"),
             "dtype": np.float64,
         },
 
@@ -307,7 +320,7 @@ def default_schema():
         },
 
         "parallactic_angles": {
-            "dims": ("utime", "antenna"),
+            "dims": ("arow",),
             "dtype": np.float64,
         },
 
@@ -317,7 +330,7 @@ def default_schema():
         },
 
         "direction_independent_effects": {
-            "dims": ("utime", "antenna", "chan", "corr"),
+            "dims": ("arow", "chan", "corr"),
             "dtype": np.complex128,
             "default": partial(identity_on_dim, dim="corr")
         },
@@ -330,7 +343,7 @@ def default_schema():
         },
 
         "pointing_errors": {
-            "dims": ("utime", "antenna", "chan", "(l,m)"),
+            "dims": ("arow", "chan", "(l,m)"),
             "dtype": np.float64,
         },
 
@@ -374,17 +387,17 @@ def scratch_schema():
         },
 
         "complex_phase": {
-            "dims": ("point", "utime", "antenna", "chan"),
+            "dims": ("point", "arow", "chan"),
             "dtype": np.complex128,
         },
 
         "ejones": {
-            "dims": ("point", "utime", "antenna", "chan", "corr"),
+            "dims": ("point", "arow", "chan", "corr"),
             "dtype": np.complex128,
         },
 
         "antenna_jones": {
-            "dims": ("point", "utime", "antenna", "chan", "corr"),
+            "dims": ("point", "arow", "chan", "corr"),
             "dtype": np.complex128,
         },
 
@@ -434,6 +447,7 @@ def default_dim_sizes(dims=None):
 
     # Derive vrow from baselines and unique times
     nbl = ds['antenna']*(ds['antenna']-1)//2
+    ds.update({'arow': ds['utime']*ds['antenna'] })
     ds.update({'vrow': ds['utime']*nbl })
 
     # Source dimensions
@@ -483,13 +497,18 @@ def default_dataset(xds=None, dims=None):
     if xds is None:
         # Create coordinates for each dimension
         coords = { k: np.arange(dims[k]) for k in dims.keys() }
-        # Create a dummy array with shape ('vrow',) so that there is
-        # a chunking strategy along this dimension. Needed for most default
-        # methods
-        arrays = { "__dummy__" : xr.DataArray(da.ones(shape=dims['vrow'],
+        # Create a dummy arrays for arow and vrow dimensions
+        # Needed for most default methods
+        arrays = { "__dummy_vrow__" : xr.DataArray(da.ones(shape=dims["vrow"],
                                                         chunks=10000,
                                                         dtype=np.float64),
                                                 dims=["vrow"]) }
+        arrays = { "__dummy_arow__" : xr.DataArray(da.ones(shape=dims["arow"],
+                                                        chunks=10000,
+                                                        dtype=np.float64),
+                                                dims=["arow"]) }
+
+
         xds = xr.Dataset(arrays, coords=coords)
     else:
         # Create coordinates for default dimensions
@@ -537,9 +556,9 @@ def default_dataset(xds=None, dims=None):
 
     xds = xds.assign(**missing_arrays)
 
-    # Drop dummy array if present
-    if "__dummy__" in xds:
-        xds = xds.drop("__dummy__")
+    # Drop dummy arrays if present
+    drops = [a for a in ("__dummy_vrow__", "__dummy_arow__") if a in xds]
+    xds = xds.drop(drops)
 
     return xds
 
@@ -929,7 +948,8 @@ def _reduction(xds):
     # Then reduce in vrow and unique times
     for utime in utimes:
         vrows = xds.time_vrow_chunks[:utime].values.sum()
-        yield [('utime', utime), ('vrow', vrows)]
+        arows = xds.time_arow_chunks[:utime].values.sum()
+        yield [('utime', utime), ('vrow', vrows), ('arow', arows)]
 
 if __name__ == "__main__":
     from pprint import pprint

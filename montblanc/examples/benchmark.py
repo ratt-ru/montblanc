@@ -67,6 +67,7 @@ dims = {
     'utime': args.timesteps,
     'antenna': args.antenna,
     'vrow': args.timesteps*args.antenna*(args.antenna-1)//2,
+    'arow': args.timesteps*args.antenna,
     'point': args.point,
     'gaussian': args.gaussian,
 }
