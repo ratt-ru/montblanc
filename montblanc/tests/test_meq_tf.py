@@ -143,7 +143,7 @@ def get_gaussian_sources(nsrc):
     gauss_shape[:] = rf(size=gauss_shape.shape)
     return c, s, a, r, gauss_shape
 
-npsrc, ngsrc = 10, 10
+npsrc, ngsrc = 5, 5
 
 pt_lm, pt_stokes, pt_alpha, pt_ref_freq = get_point_sources(npsrc)
 
@@ -239,32 +239,28 @@ class RadioSourceProvider(SourceProvider):
         return pt_lm[lp:up, :]
 
     def point_stokes(self, context):
-        (lp, up), (lt, ut) = context.dim_extents('npsrc', 'ntime')
-        return np.tile(pt_stokes[lp:up, np.newaxis, :], [1, ut-lt, 1])
+        (lp, up), (lt, ut), (lc, uc) = context.dim_extents('npsrc', 'ntime', 'nchan')
+        # (npsrc, ntime, nchan, 4)
+        s = pt_stokes[lp:up,None,None,:]
+        a = np.broadcast_to(pt_alpha[lp:up,None,None,None], (up-lp,ut-lt,1,1))
+        rf = pt_ref_freq[lp:up,None,None,None]
+        f = frequency[None,None,lc:uc,None]
 
-    def point_alpha(self, context):
-        (lp, up), (lt, ut) = context.dim_extents('npsrc', 'ntime')
-        return np.tile(pt_alpha[lp:up, np.newaxis], [1, ut-lt])
-
-    def point_ref_freq(self, context):
-        (lp, up) = context.dim_extents('npsrc')
-        return pt_ref_freq[lp:up]
+        return s*(f/rf)**a
 
     def gaussian_lm(self, context):
         lg, ug = context.dim_extents('ngsrc')
         return g_lm[lg:ug, :]
 
     def gaussian_stokes(self, context):
-        (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
-        return np.tile(g_stokes[lg:ug, np.newaxis, :], [1, ut-lt, 1])
+        (lg, ug), (lt, ut), (lc, uc) = context.dim_extents('ngsrc', 'ntime', 'nchan')
+        # (ngsrc, ntime, nchan, 4)
+        s = g_stokes[lg:ug,None,None,:]
+        a = np.broadcast_to(pt_alpha[lg:ug,None,None,None], (ug-lg,ut-lt,1,1))
+        rf = g_ref_freq[lg:ug,None,None,None]
+        f = frequency[None,None,lc:uc,None]
 
-    def gaussian_alpha(self, context):
-        (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
-        return np.tile(g_alpha[lg:ug, np.newaxis], [1, ut-lt])
-
-    def gaussian_ref_freq(self, context):
-        (lg, ug) = context.dim_extents('ngsrc')
-        return g_ref_freq[lg:ug]
+        return s*(f/rf)**a
 
     def gaussian_shape(self, context):
         (lg, ug) = context.dim_extents('ngsrc')

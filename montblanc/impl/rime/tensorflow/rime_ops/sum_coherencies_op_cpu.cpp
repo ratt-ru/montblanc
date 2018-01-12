@@ -42,8 +42,8 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
         c->DebugString(ant_jones));
 
     // sgn_brightness
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(sgn_brightness, 2, &input),
-        "sgn_brightness shape must be [nsrc, ntime] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(sgn_brightness, 3, &input),
+        "sgn_brightness shape must be [nsrc, ntime, nchan] but is " +
         c->DebugString(sgn_brightness));
 
     // base_coherencies

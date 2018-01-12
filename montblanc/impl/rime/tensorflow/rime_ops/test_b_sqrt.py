@@ -4,14 +4,13 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
-def brightness_numpy(stokes, alpha, frequency, ref_freq, pol_type):
-    nsrc, ntime, _ = stokes.shape
-    nchan, = frequency.shape
+def brightness_numpy(stokes, pol_type):
+    nsrc, ntime, nchan, _ = stokes.shape
 
-    I = stokes[:,:,0].reshape(nsrc, ntime, 1)
-    Q = stokes[:,:,1].reshape(nsrc, ntime, 1)
-    U = stokes[:,:,2].reshape(nsrc, ntime, 1)
-    V = stokes[:,:,3].reshape(nsrc, ntime, 1)
+    I = stokes[:,:,:,0]
+    Q = stokes[:,:,:,1]
+    U = stokes[:,:,:,2]
+    V = stokes[:,:,:,3]
 
     if pol_type == "linear":
         pass
@@ -20,18 +19,14 @@ def brightness_numpy(stokes, alpha, frequency, ref_freq, pol_type):
     else:
         raise ValueError("Invalid pol_type '{}'".format(pol_type))
 
-    # Compute the spectral index
-    freq_ratio = frequency[None,None,:]/ref_freq[:,None,None]
-    power = np.power(freq_ratio, alpha[:,:,None])
-
     CT = np.complex128 if stokes.dtype == np.float64 else np.complex64
 
     # Compute the brightness matrix
     B = np.empty(shape=(nsrc, ntime, nchan, 4), dtype=CT)
-    B[:,:,:,0] = power*(I+Q)
-    B[:,:,:,1] = power*(U+V*1j)
-    B[:,:,:,2] = power*(U-V*1j)
-    B[:,:,:,3] = power*(I-Q)
+    B[:,:,:,0] = I+Q
+    B[:,:,:,1] = U+V*1j
+    B[:,:,:,2] = U-V*1j
+    B[:,:,:,3] = I-Q
 
     return B
 
@@ -70,29 +65,25 @@ class TestBSqrt(unittest.TestCase):
         # Set up our numpy input arrays
 
         # Stokes parameters, should produce a positive definite matrix
-        stokes = np.empty(shape=(nsrc, ntime, 4), dtype=FT)
-        Q = stokes[:,:,1] = rf(nsrc, ntime) - 0.5
-        U = stokes[:,:,2] = rf(nsrc, ntime) - 0.5
-        V = stokes[:,:,3] = rf(nsrc, ntime) - 0.5
-        noise = rf(nsrc, ntime)*0.1
+        stokes = np.empty(shape=(nsrc, ntime, nchan, 4), dtype=FT)
+        Q = stokes[:,:,:,1] = rf(nsrc, ntime, nchan) - 0.5
+        U = stokes[:,:,:,2] = rf(nsrc, ntime, nchan) - 0.5
+        V = stokes[:,:,:,3] = rf(nsrc, ntime, nchan) - 0.5
+        noise = rf(nsrc, ntime, nchan)*0.1
         # Need I^2 = Q^2 + U^2 + V^2 + noise^2
-        stokes[:,:,0] = np.sqrt(Q**2 + U**2 + V**2 + noise)
+        stokes[:,:,:,0] = np.sqrt(Q**2 + U**2 + V**2 + noise)
 
         # Choose random flux to invert
-        mask = np.random.randint(0, 2, size=(nsrc, ntime)) == 1
+        mask = np.random.randint(0, 2, size=(nsrc, ntime, nchan)) == 1
         stokes[mask,0] = -stokes[mask,0]
 
         # Make the last matrix zero to test the positive semi-definite case
-        stokes[-1,-1,:] = 0
-
-        alpha = rf(nsrc, ntime)*0.8
-        frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=FT)
-        ref_freq = 0.2e9*rf(nsrc,) + 1.3e9
+        stokes[-1,-1,-1,:] = 0
 
         # Argument list
-        np_args = [stokes, alpha, frequency, ref_freq]
+        np_args = [stokes]
         # Argument string name list
-        arg_names = ["stokes", "alpha", "frequency", "ref_freq"]
+        arg_names = ["stokes"]
 
         # Constructor tensorflow variables
         tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
@@ -119,7 +110,7 @@ class TestBSqrt(unittest.TestCase):
             cpu_bsqrt, cpu_invert = S.run(cpu_op)
 
             # Get our actual brightness matrices
-            b = brightness_numpy(stokes, alpha, frequency, ref_freq, pol_type)
+            b = brightness_numpy(stokes, pol_type)
             b_2x2 = b.reshape(nsrc, ntime, nchan, 2, 2)
             b_sqrt_2x2 = cpu_bsqrt.reshape(nsrc, ntime, nchan, 2, 2)
 
@@ -129,7 +120,7 @@ class TestBSqrt(unittest.TestCase):
                 b_sqrt_2x2, b_sqrt_2x2.conj())
 
             # Apply any sign inversions
-            square[:,:,:,:,:] *= cpu_invert[:,:,None,None,None]
+            square[:,:,:,:,:] *= cpu_invert[:,:,:,None,None]
 
             # And we should obtain the brightness matrix
             assert np.allclose(b_2x2, square)

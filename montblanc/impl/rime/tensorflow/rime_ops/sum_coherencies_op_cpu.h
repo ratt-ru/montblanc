@@ -53,7 +53,7 @@ public:
         auto antenna2 = in_antenna2.tensor<int,2>();
         auto shape = in_shape.tensor<FT, 4>();
         auto ant_jones = in_ant_jones.tensor<CT, 5>();
-        auto sgn_brightness = in_sgn_brightness.tensor<tf::int8, 2>();
+        auto sgn_brightness = in_sgn_brightness.tensor<tf::int8, 3>();
         auto base_coherencies = in_base_coherencies.tensor<CT, 4>();
         auto coherencies = coherencies_ptr->tensor<CT, 4>();
 
@@ -91,7 +91,7 @@ public:
                         CT b2 = std::conj(ant_jones(src, time, ant2, chan, 1)*s);
                         CT b3 = std::conj(ant_jones(src, time, ant2, chan, 3)*s);
 
-                        FT sign = sgn_brightness(src, time);
+                        FT sign = sgn_brightness(src, time, chan);
 
                         // Multiply jones matrices and accumulate them
                         // in the sum terms

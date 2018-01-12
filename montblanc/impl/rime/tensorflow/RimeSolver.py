@@ -951,7 +951,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         feed_rotation = rime.feed_rotation(pa_sin, pa_cos, CT=CT,
                                            feed_type=polarisation_type)
 
-    def antenna_jones(lm, stokes, alpha, ref_freq):
+    def antenna_jones(lm, stokes):
         """
         Compute the jones terms for each antenna.
 
@@ -972,8 +972,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
         # Compute the square root of the brightness matrix
         # (as well as the sign)
-        bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
-            D.frequency, ref_freq, CT=CT,
+        bsqrt, sgn_brightness = rime.b_sqrt(stokes, CT=CT,
             polarisation_type=polarisation_type)
 
         # Check for nans/infs in the bsqrt
@@ -1023,7 +1022,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         npsrc +=  nsrc
 
         ant_jones, sgn_brightness = antenna_jones(S.point_lm,
-            S.point_stokes, S.point_alpha, S.point_ref_freq)
+            S.point_stokes)
         shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
             shape, ant_jones, sgn_brightness, coherencies)
@@ -1040,7 +1039,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         ngsrc += nsrc
 
         ant_jones, sgn_brightness = antenna_jones(S.gaussian_lm,
-            S.gaussian_stokes, S.gaussian_alpha, S.gaussian_ref_freq)
+            S.gaussian_stokes)
         gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, S.gaussian_shape)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
@@ -1058,7 +1057,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         nssrc += nsrc
 
         ant_jones, sgn_brightness = antenna_jones(S.sersic_lm,
-            S.sersic_stokes, S.sersic_alpha, S.sersic_ref_freq)
+            S.sersic_stokes)
         sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, S.sersic_shape)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
