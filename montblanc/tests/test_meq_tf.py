@@ -114,8 +114,8 @@ def get_point_sources(nsrc):
     alphas = np.empty(shape=(nsrc,), dtype=dtype)
     ref_freq = np.empty(shape=(nsrc,), dtype=dtype)
 
-    # Source coordinates between -0.5 and 0.5 degrees
-    source_coords[:] = (rf(size=source_coords.shape) - 0.5)
+    # Source coordinates between -45 and 45 degrees
+    source_coords[:] = (rf(size=source_coords.shape) - 0.5)*90.0
     Q[:] = rf(size=Q.shape)*0.1
     U[:] = rf(size=U.shape)*0.1
     V[:] = rf(size=V.shape)*0.1
@@ -143,7 +143,7 @@ def get_gaussian_sources(nsrc):
     gauss_shape[:] = rf(size=gauss_shape.shape)
     return c, s, a, r, gauss_shape
 
-npsrc, ngsrc = 5, 5
+npsrc, ngsrc = 10, 10
 
 pt_lm, pt_stokes, pt_alpha, pt_ref_freq = get_point_sources(npsrc)
 
