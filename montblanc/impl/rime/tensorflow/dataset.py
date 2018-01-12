@@ -23,6 +23,23 @@ from montblanc.src_types import source_types
 
 dsmod = cppimport.imp('montblanc.ext.dataset_mod')
 
+def _create_if_not_present(ds, attr, default_fn):
+    """
+    Retrieves `attr` from `ds` if present, otherwise
+    creates it with `default_fn`
+    """
+    try:
+        data = getattr(ds, attr)
+    except AttributeError:
+        # Create the attribute with default_fn and assign to the dataset
+        schema = ds.attrs['schema'][attr]
+        data = default_fn(ds, schema)
+        ds.assign(**{attr: xr.DataArray(data, dims=schema["dims"])})
+
+        return data.compute()
+
+    return data.values
+
 def default_base_ant_pairs(antenna, auto_correlations=False):
     """ Compute base antenna pairs """
     k = 0 if auto_correlations == True else 1
@@ -55,7 +72,7 @@ def default_time_offset(ds, schema):
     return da.arange(utime,chunks=schema["chunks"])*bl
 
 def default_time_vrow_chunks(ds, schema):
-    """ Default time chunks """
+    """ Default visibility row chunks for each timestep """
     vrow, utime = (ds.dims[k] for k in ('vrow', 'utime'))
 
     bl = vrow // utime
@@ -63,34 +80,34 @@ def default_time_vrow_chunks(ds, schema):
     return da.full(schema["shape"], bl, chunks=schema["chunks"])
 
 def default_time_arow_chunks(ds, schema):
-    """ Default time chunks """
-    antenna, utime = (ds.dims[k] for k in ('antenna', 'utime'))
+    """ Default antenna row chunks for each timestep """
 
-    return da.full(schema["shape"], antenna, chunks=schema["chunks"])
+    antenna1 = _create_if_not_present(ds, 'antenna1', default_antenna1)
+    antenna2 = _create_if_not_present(ds, 'antenna2', default_antenna2)
+    time_vrow_chunks = _create_if_not_present(ds, 'time_vrow_chunks',
+                                                default_time_vrow_chunks)
 
+    start = 0
+    time_arow_chunks = []
+
+    for chunk in time_vrow_chunks:
+        end = start + chunk
+        a1 = antenna1[start:end]
+        a2 = antenna2[start:end]
+        time_arow_chunks.append(len(np.unique(np.append(a1,a2))))
+
+        start = end
+
+    time_arow_chunks = np.asarray(time_arow_chunks, dtype=np.int32)
+    return da.from_array(time_arow_chunks, chunks=schema["chunks"])
 
 def default_time(ds, schema):
     """ Default time """
 
-    # Try get time_unique off the dataset first
-    # otherwise generate from scratch
-    try:
-        time_unique = ds.time_unique
-    except AttributeError:
-        time_unique_schema = ds.attrs['schema']['time_unique']
-        time_unique = default_time_unique(ds, time_unique_schema).compute()
-    else:
-        time_unique = time_unique.values
-
-    # Try get time_vrow_chunks off the dataset first
-    # otherwise generate from scratch
-    try:
-        time_vrow_chunks = ds.time_vrow_chunks
-    except AttributeError:
-        time_chunk_schema = ds.attrs['schema']['time_vrow_chunks']
-        time_vrow_chunks = default_time_vrow_chunks(ds, time_chunk_schema).compute()
-    else:
-        time_vrow_chunks = time_vrow_chunks.values
+    time_unique = _create_if_not_present(ds, "time_unique",
+                                        default_time_unique)
+    time_vrow_chunks = _create_if_not_present(ds, "time_vrow_chunks",
+                                        default_time_vrow_chunks)
 
     # Must agree
     if not len(time_vrow_chunks) == len(time_unique):
@@ -104,13 +121,9 @@ def default_time(ds, schema):
 def default_time_index(ds, schema):
     # Try get time_vrow_chunks off the dataset first
     # otherwise generate from scratch
-    try:
-        time_vrow_chunks = ds.time_vrow_chunks
-    except AttributeError:
-        time_chunk_schema = ds.attrs['schema']['time_vrow_chunks']
-        time_vrow_chunks = default_time_vrow_chunks(ds, time_chunk_schema).compute()
-    else:
-        time_vrow_chunks = time_vrow_chunks.values
+
+    time_vrow_chunks = _create_if_not_present(ds, "time_vrow_chunks",
+                                        default_time_vrow_chunks)
 
     time_index_chunks = []
     start = 0
@@ -546,15 +559,19 @@ def default_dataset(xds=None, dims=None):
                        chunks=schema["chunks"],
                         dtype=schema["dtype"])
 
-    def _create_array(array):
-        """ Create array """
-        schema = in_schema[array]
+    new_arrays = {}
+
+    for n in missing_arrays:
+        # While creating missing arrays, other missing arrays
+        # may be created
+        if n in xds:
+            continue
+
+        schema = in_schema[n]
         default = schema.get('default', _default_zeros)
-        return xr.DataArray(default(xds, schema), dims=schema["dims"])
+        new_arrays[n] = xr.DataArray(default(xds, schema), dims=schema["dims"])
 
-    missing_arrays = { n: _create_array(n) for n in missing_arrays }
-
-    xds = xds.assign(**missing_arrays)
+    xds = xds.assign(**new_arrays)
 
     # Drop dummy arrays if present
     drops = [a for a in ("__dummy_vrow__", "__dummy_arow__") if a in xds]
@@ -647,16 +664,17 @@ def dataset_from_ms(ms):
         Dataset with MS columns as arrays
     """
 
-    renames = { 'vrows': 'vrow',
+    renames = { 'rows': 'vrow',
                 'chans': 'chan',
                 'pols': 'pol',
-                'corrs': 'corr'}
+                'corrs': 'corr',
+                'time_chunks' : 'time_vrow_chunks'}
 
     xds = xds_from_ms(ms).rename(renames)
     xads = xds_from_table("::".join((ms, "ANTENNA")), table_schema="ANTENNA")
     xspwds = xds_from_table("::".join((ms, "SPECTRAL_WINDOW")), table_schema="SPECTRAL_WINDOW")
-    xds = xds.assign(antenna_position=xads.rename({"vrows" : "antenna"}).drop('msrows').position,
-                    frequency=xspwds.rename({"vrows":"spw", "chans" : "chan"}).drop('msrows').chan_freq[0])
+    xds = xds.assign(antenna_position=xads.rename({"rows" : "antenna"}).drop('msrows').position,
+                    frequency=xspwds.rename({"rows":"spw", "chans" : "chan"}).drop('msrows').chan_freq[0])
     return xds
 
 def merge_dataset(iterable):
@@ -720,48 +738,66 @@ def merge_dataset(iterable):
     return xr.Dataset(data_vars, attrs=attrs)
 
 
-def group_vrow_chunks(xds, max_group_size=100000):
+def group_vrow_chunks(xds, max_arow=1000, max_vrow=100000):
     """
-    Return a dictionary of unique time and vrow groups.
+    Return a dictionary of unique time, vrow and arow groups.
     Groups are formed by accumulating chunks in the
-    `time_vrow_chunks` array attached to `xds` until `max_group_size`
-    is reached.
+    `time_vrow_chunks` array attached to `xds` until
+    either `max_arow` or `max_vrow` is reached.
 
     Parameters
     ----------
     xds : :class:`xarray.Dataset`
         Dataset with `time_vrow_chunks` member
-    max_group_size (optional) : integer
-        Maximum group size
+    max_arow (optional) : integer
+        Maximum antenna row group size
+    max_vrow (optional) : integer
+        Maximum visibility row group size
 
     Returns
     -------
     dict
         { 'utime': (time_group_1, ..., time_group_n),
+          'arow': (arow_group_1, ..., arow_group_n),
           'vrow': (vrow_group_1, ..., vrow_group_n) }
     """
     vrow_groups = [0]
     utime_groups = [0]
+    arow_groups = [0]
+    arows = 0
     vrows = 0
     utimes = 0
 
-    for chunk in xds.time_vrow_chunks.values:
-        next_ = vrows + chunk
+    vrow_chunks = xds.time_vrow_chunks.values
+    arow_chunks = xds.time_arow_chunks.values
 
-        if next_ > max_group_size:
+    for arow_chunk, vrow_chunk in zip(arow_chunks, vrow_chunks):
+        next_vrow = vrows + vrow_chunk
+        next_arow = arows + arow_chunk
+
+        if next_vrow > max_vrow:
+            arow_groups.append(arows)
             vrow_groups.append(vrows)
             utime_groups.append(utimes)
-            vrows = chunk
+
+            arows = arow_chunk
+            vrows = vrow_chunk
             utimes = 1
         else:
-            vrows = next_
+            arows = next_arow
+            vrows = next_vrow
             utimes += 1
 
     if vrows > 0:
         vrow_groups.append(vrows)
         utime_groups.append(utimes)
+        arow_groups.append(arows)
 
-    return { 'utime': tuple(utime_groups[1:]), 'vrow': tuple(vrow_groups[1:]) }
+    return {
+        'utime': tuple(utime_groups[1:]),
+        'vrow': tuple(vrow_groups[1:]),
+        'arow': tuple(arow_groups[1:])
+    }
 
 def montblanc_dataset(xds=None):
     """
@@ -791,6 +827,8 @@ def montblanc_dataset(xds=None):
         weight = da.broadcast_to(xds.weight.data[:,None,:], shape).rechunk(chunks)
         mds = xds.assign(weight=xr.DataArray(weight, dims=weight_dims))
 
+    _create_if_not_present(mds, "time_arow_chunks", default_time_arow_chunks)
+
     # Fill in any default arrays
     mds = default_dataset(mds)
 
@@ -800,7 +838,7 @@ def montblanc_dataset(xds=None):
     # because vrows need to be grouped together
     # per-unique timestep. Perform this chunking operation now.
     max_vrow = max(mds.chunks['vrow'])
-    chunks = group_vrow_chunks(mds, max_group_size=max_vrow)
+    chunks = group_vrow_chunks(mds, max_vrow=max_vrow)
     mds = mds.chunk(chunks)
 
     # Derive antenna UVW coordinates.
@@ -916,6 +954,11 @@ def rechunk_to_budget(mds, mem_budget, reduce_fn=None):
 
     max_vrows = ar.get('vrow', max(mds.antenna1.data.chunks[0]))
     grc = group_vrow_chunks(mds, max_vrows)
+
+    for k, v in ar.items():
+        print k, v, dims[k]
+        print da.core.normalize_chunks(v, (dims[k],))[0]
+
     ar = { k: da.core.normalize_chunks(v, (dims[k],))[0]
                                 for k, v in ar.items() }
     ar.update(grc)
@@ -936,8 +979,6 @@ def _reduction(xds):
     """ Default reduction """
     dims = xds.dims
 
-    utimes = _uniq_log2_range(1, dims['utime'], 50)
-
     st = source_types()
     sources = max(dims[s] for s in st)
 
@@ -945,7 +986,12 @@ def _reduction(xds):
     if sources > 50:
         yield [(s, 50) for s in st]
 
-    # Then reduce in vrow and unique times
+    # Then reduce by unique times 'utime'.
+    # This implicitly reduce the number of
+    # visibility 'vrows' and antenna 'arows'
+    # associated with each 'utime' data point.
+    utimes = _uniq_log2_range(1, dims['utime'], 50)
+
     for utime in utimes:
         vrows = xds.time_vrow_chunks[:utime].values.sum()
         arows = xds.time_arow_chunks[:utime].values.sum()
