@@ -45,7 +45,7 @@ print beam_file_pattern
 
 # Find the location of the meqtree pipeliner script
 meqpipe_actual = subprocess.check_output(['which', meqpipe]).strip()
-cfg_section = 'montblanc-compare'
+cfg_section = 'montblanc-compare-circ'
 
 #======================================================
 # Configure the beam files with frequencies from the MS
