@@ -1,4 +1,4 @@
-[montblanc-compare-circ]
+[montblanc-compare-circular]
 img_sel.image_clean_gain = 0.1
 img_sel.image_clean_method = clark
 img_sel.image_clean_niter = 1000
@@ -75,7 +75,7 @@ uvw_source = from MS
 rot_l.enable_pa = enabled
 
 
-[montblanc-compare]
+[montblanc-compare-linear]
 img_sel.image_clean_gain = 0.1
 img_sel.image_clean_method = clark
 img_sel.image_clean_niter = 1000
