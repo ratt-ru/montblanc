@@ -57,7 +57,14 @@ def run_test(msfile, pol_type, **kwargs):
 
     # Zero the visibility data
     with pt.table(msfile, ack=False, readonly=False) as T:
-        shape = [T.nrows()] + T.getcoldesc('DATA')['shape'].tolist()
+        data_desc = T.getcoldesc('DATA')
+
+        try:
+            shape = data_desc['shape'].tolist()
+        except KeyError:
+            shape = list(T.getcol('DATA', startrow=0, nrow=1).shape[1:])
+
+        shape = [T.nrows()] + shape
         T.putcol(mb_vis_column, np.zeros(shape, dtype=np.complex64))
         T.putcol(meq_vis_column, np.zeros(shape, dtype=np.complex64))
 
