@@ -145,7 +145,6 @@ else:
         'cerberus >= 1.1',
         'cppimport >= 17.9.18',
         'numpy >= 1.11.3',
-        'numexpr >= 2.6.1',
         'pybind11 >= 2.2.0',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
