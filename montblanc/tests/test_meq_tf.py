@@ -31,8 +31,11 @@ def run_test(msfile, pol_type, **kwargs):
     sim_script = os.path.join(meq_dir, 'turbo-sim.py')
     tigger_sky_file = os.path.join(meq_dir, 'sky_model.txt')
 
+    # Is the beam enabled
+    beam_on = kwargs.get('beam_on', True)
+    beam_on = 1 if beam_on is True else 0
+
     # Directory in which we expect our beams to be located
-    beam_on = 1
     beam_dir = os.path.join(DATA_DIR, 'beams')
     beam_file_prefix = 'beam'
     base_beam_file = os.path.join(beam_dir, beam_file_prefix)
@@ -81,6 +84,9 @@ def run_test(msfile, pol_type, **kwargs):
 
     # Set up the frequencies in each FITS file
     for file in fgen:
+        if file is None:
+            continue
+
         with file:
             header = file[0].header
             bandwidth_delta = bandwidth / (header['NAXIS3']-1)
@@ -103,8 +109,8 @@ def run_test(msfile, pol_type, **kwargs):
             frequency_jitter[0] = frequency_jitter[-1] = 0.0
             gfrequency += frequency_jitter
 
-            # Check that gfrequency is strictly ordered
-            assert np.all(np.diff(gfrequency) > 0.0)
+            # Check that gfrequency is monotically increasing
+            assert np.all(np.diff(gfrequency) >= 0.0)
 
             for i, gfreq in enumerate(gfrequency, 1):
                 header['GFREQ%d' % i] = gfreq
@@ -223,12 +229,12 @@ def run_test(msfile, pol_type, **kwargs):
         'img_sel.imaging_column={c}'.format(c=meq_vis_column),
         # Beam FITS file pattern
         'pybeams_fits.filename_pattern={p}'.format(p=beam_file_pattern),
-        # FITS L AXIS
+        # FITS L and M AXIS
         'pybeams_fits.l_axis={l}'.format(l=l_axis),
+        'pybeams_fits.m_axis={m}'.format(m=m_axis),
         sim_script,
         '=simulate'
         ]
-
 
     import montblanc
 
@@ -312,7 +318,7 @@ def run_test(msfile, pol_type, **kwargs):
 
     if beam_on == 1:
         beam_prov = FitsBeamSourceProvider(beam_file_pattern,
-            l_axis=l_axis, m_axis='Y')
+            l_axis=l_axis, m_axis=m_axis)
         source_providers.append(beam_prov)
 
     source_providers.append(RadioSourceProvider())
