@@ -25,7 +25,8 @@ import re
 
 import montblanc
 
-from parallactic_angles import parallactic_angles
+from .parallactic_angles import parallactic_angles
+from .ant_uvw import antenna_uvw
 
 from montblanc.src_types import (
     source_types,
@@ -35,6 +36,8 @@ from montblanc.src_types import (
     source_range,
     source_range_tuple,
     source_range_slices)
+
+
 
 def nr_of_baselines(na, auto_correlations=False):
     """

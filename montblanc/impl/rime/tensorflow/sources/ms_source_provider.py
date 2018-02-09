@@ -23,7 +23,6 @@ import collections
 import functools
 import types
 
-import cppimport
 import numpy as np
 
 import montblanc.util as mbu
@@ -31,8 +30,6 @@ import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 
 from montblanc.impl.rime.tensorflow.sources.source_provider import SourceProvider
 from montblanc.impl.rime.tensorflow.sources import SourceContext
-
-dsmod = cppimport.imp("montblanc.ext.dataset_mod")
 
 class MSSourceProvider(SourceProvider):
     """
@@ -132,16 +129,16 @@ class MSSourceProvider(SourceProvider):
         lrow, urow = MS.uvw_row_extents(context)
         uvw = self._manager.ordered_uvw_table.getcol(MS.UVW,
                                                 startrow=lrow,
-                                                nrow=urow-lrow).reshape(-1,3)
+                                                nrow=urow-lrow)
 
         # Perform the per-antenna UVW decomposition
-        na = self._manager.antenna_table.nrows()
-        ntime, nbl = cube.dim_extent_size('ntime', 'nbl')
+        ntime, nbl = context.dim_extent_size('ntime', 'nbl')
+        na = context.dim_global_size('na')
         chunks = np.repeat(nbl, ntime).astype(ant1.dtype)
-        print uvw.shape, ant1.shape, ant2.shape, chunks.shape, na
 
-        return dsmod.antenna_uvw(uvw, ant1, ant2, chunks, nr_of_antenna=na)
+        auvw = mbu.antenna_uvw(uvw, ant1, ant2, chunks, nr_of_antenna=na)
 
+        return auvw.reshape(context.shape).astype(context.dtype)
 
     def antenna1(self, context):
         """ antenna1 data source """

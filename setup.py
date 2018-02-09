@@ -143,9 +143,8 @@ else:
     install_requires += [
         'astropy >= 1.3.0',
         'cerberus >= 1.1',
-        'cppimport >= 17.9.18',
+        'numba >= 0.36.2',
         'numpy >= 1.11.3',
-        'pybind11 >= 2.2.0',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
         "{} == 1.4.0".format(tensorflow_package),

@@ -1,13 +1,12 @@
 import unittest
 from pprint import pformat
 
-import cppimport
-import six
+from six.moves import range
 import numpy as np
 
-dsmod = cppimport.imp("montblanc.ext.dataset_mod")
+from montblanc.util import antenna_uvw
 
-class TestDatasetMod(unittest.TestCase):
+class TestAntennaUvWDecomposition(unittest.TestCase):
     def test_uvw_antenna(self):
         na = 17
         ntime = 1
@@ -28,16 +27,8 @@ class TestDatasetMod(unittest.TestCase):
             bl_uvw =  (ant_uvw[:,ant1,:] - ant_uvw[:,ant2,:]).reshape(-1, 3)
 
             # Now recover the per-antenna and per-baseline UVW coordinates.
-            rant_uvw = dsmod.antenna_uvw(bl_uvw, ant1, ant2, time_chunks, nr_of_antenna=na)
-            rbl_uvw = rant_uvw[:,ant1,:] - rant_uvw[:,ant2,:]
-
-            if not np.allclose(rbl_uvw, bl_uvw):
-                self.fail("Recovered baselines do "
-                          "not agree\nant1 %s\nant2 %s" % (
-                            pformat(ant1), pformat(ant2)))
-
-            if not np.allclose(rant_uvw, ant_uvw):
-                self.fail("Recovered antenna do not agree")
+            rant_uvw = antenna_uvw(bl_uvw, ant1, ant2, time_chunks,
+                                    nr_of_antenna=na, check_decomposition=True)
 
 
     def test_uvw_antenna_missing_bl(self):
@@ -67,7 +58,7 @@ class TestDatasetMod(unittest.TestCase):
                     ant1 = ant1[keep]
                     ant2 = ant2[keep]
 
-                    valid_ants = list(set(six.moves.range(na)).difference(remove_ants))
+                    valid_ants = list(set(range(na)).difference(remove_ants))
 
                     yield valid_ants, remove_ants, ant1, ant2
 
@@ -93,24 +84,9 @@ class TestDatasetMod(unittest.TestCase):
 
             # Now recover the per-antenna and per-baseline UVW coordinates
             # for the ntime chunks
-            rant_uvw = dsmod.antenna_uvw(cbl_uvw, cant1, cant2, time_chunks, nr_of_antenna=na)
+            rant_uvw = antenna_uvw(cbl_uvw, cant1, cant2, time_chunks,
+                                nr_of_antenna=na, check_decomposition=True)
 
-            # Reconstruct the baseline UVW coordinates for each chunk
-            rbl_uvw = np.concatenate([rant_uvw[t,a1,:] - rant_uvw[t,a2,:]
-                        for t, (a1, a2) in enumerate(zip(ant1, ant2))])
-
-            # Check that they agree
-            if not np.allclose(cbl_uvw, rbl_uvw):
-                self.fail("Recovered baselines do "
-                          "not agree\nant1 %s\nant2 %s" % (
-                            pformat(ant1), pformat(ant2)))
-
-            # Check that the coordinates of the removed antenna
-            # are nan in each time chunk
-            for t, ra in enumerate(remove_ants):
-                self.assertTrue(np.all(np.isnan(rant_uvw[t,ra,:])),
-                    "Removed antenna '%s' UVW coordinates "
-                    "in time chunk '%d' are not nan" % (ra, t))
 
 if __name__ == "__main__":
     unittest.main()
