@@ -143,6 +143,7 @@ else:
     install_requires += [
         'astropy >= 1.3.0',
         'cerberus >= 1.1',
+        'nose >= 1.3.7',
         'numba >= 0.36.2',
         'numpy >= 1.11.3',
         'python-casacore >= 2.1.2',
