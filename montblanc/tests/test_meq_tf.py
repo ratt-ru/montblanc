@@ -4,11 +4,13 @@ import subprocess
 import sys
 import tempfile
 
+from astropy.io import fits
 import numpy as np
 import pyrap.tables as pt
 
 rf = np.random.random
 
+from montblanc.tests.beam_factory import beam_factory
 
 # Directory that holds MS and Beam data
 DATA_DIR = 'data'
@@ -36,16 +38,13 @@ def run_test(msfile, pol_type, **kwargs):
     beam_on = 1 if beam_on is True else 0
 
     # Directory in which we expect our beams to be located
-    beam_dir = os.path.join(DATA_DIR, 'beams')
-    beam_file_prefix = 'beam'
-    base_beam_file = os.path.join(beam_dir, beam_file_prefix)
-    beam_file_pattern = ''.join((base_beam_file, '_$(corr)_$(reim).fits'))
+    beam_file_pattern = 'test_beam_$(corr)_$(reim).fits'
 
     # Beam file pattern
     beam_file_pattern = kwargs.get("beam_file_pattern", beam_file_pattern)
 
-    l_axis = kwargs.get('l_axis', '-X' if pol_type == "linear" else '-R')
-    m_axis = kwargs.get('m_axis', 'Y' if pol_type == "circular" else 'L')
+    l_axis = kwargs.get('l_axis', '-X')
+    m_axis = kwargs.get('m_axis', 'Y')
 
     # Find the location of the meqtree pipeliner script
     meqpipe_actual = subprocess.check_output(['which', meqpipe]).strip()
@@ -78,17 +77,15 @@ def run_test(msfile, pol_type, **kwargs):
     bandwidth = frequency[-1] - frequency[0]
 
     # Get filenames from pattern and open the files
-    filenames = _create_filenames(beam_file_pattern, pol_type)
-    files = _open_fits_files(filenames)
-    fgen = [f for (re, im) in files.itervalues() for f in (re, im)]
+    filenames = beam_factory(polarisation_type=pol_type)
+    filenames = [f for ri_pair in filenames.values() for f in ri_pair]
 
     # Set up the frequencies in each FITS file
-    for file in fgen:
-        if file is None:
-            continue
+    for filename in filenames:
 
-        with file:
+        with fits.open(filename, mode='update', memmap=False) as file:
             header = file[0].header
+            assert header['CTYPE3'] == 'FREQ'
             bandwidth_delta = bandwidth / (header['NAXIS3']-1)
             header['CRVAL3'] = frequency[0]
             header['CDELT3'] = bandwidth_delta
