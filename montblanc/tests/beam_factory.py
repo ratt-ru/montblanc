@@ -1,3 +1,4 @@
+from os.path import exists as pexists
 from os.path import join as pjoin
 
 from astropy.io import fits
@@ -21,10 +22,32 @@ BITPIX_MAP = {
 DEFAULT_SCHEMA = pjoin("test_beam_$(corr)_$(reim).fits")
 
 def beam_factory(polarisation_type='linear',
+                    frequency=None,
                     dtype=np.float64,
                     schema=DEFAULT_SCHEMA,
-                    overwrite=True):
+                    overwrite=False):
     """ Generate a MeqTrees compliant beam cube """
+
+    # MeerKAT l-band, 64 channels
+    if frequency is None:
+        frequency = np.linspace(.856e9, .856e9*2, 64,
+            endpoint=True, dtype=np.float64)
+
+    nchan = frequency.shape[0]
+    bandwidth = frequency[-1] - frequency[0]
+    bandwidth_delta = bandwidth / (nchan-1)
+
+    # Generate a linear space of grid frequencies
+    # Jitter them randomly, except for the endpoints
+    gfrequency = np.linspace(frequency[0], frequency[-1],
+                            nchan-1, dtype=np.float64)
+    frequency_jitter = np.random.random(size=gfrequency.shape)-0.5
+    frequency_jitter *= 0.1*bandwidth_delta
+    frequency_jitter[0] = frequency_jitter[-1] = 0.0
+    gfrequency += frequency_jitter
+
+    # Check that gfrequency is monotically increasing
+    assert np.all(np.diff(gfrequency) >= 0.0)
 
     if polarisation_type == 'linear':
         CORR = LINEAR_CORRELATIONS
@@ -60,10 +83,10 @@ def beam_factory(polarisation_type='linear',
     axis3 = [
         ("CTYPE", ('FREQ', )),
         ("CUNIT", None),
-        ("NAXIS", (33, "number of FREQ")),
+        ("NAXIS", (frequency.shape[0], "number of FREQ")),
         ("CRPIX", (1, "reference frequency position")),
-        ("CRVAL", (1400062500.0, "reference frequency")),
-        ("CDELT", (246093.75, "frequency step in Hz"))]
+        ("CRVAL", (frequency[0], "reference frequency")),
+        ("CDELT", (bandwidth_delta, "frequency step in Hz"))]
 
     axis4 = [
         ("CTYPE", ('STOKES', )),
@@ -97,6 +120,10 @@ def beam_factory(polarisation_type='linear',
         if vt is not None]
     header.update(ax_info)
 
+    # Now setup the GFREQS
+    for i, gfreq in enumerate(gfrequency, 1):
+        header['GFREQ%d' % i] = gfreq
+
     # Figure out the beam filenames from the schema
     filenames = _create_filenames(schema, polarisation_type)
 
@@ -104,10 +131,42 @@ def beam_factory(polarisation_type='linear',
                                             if nax[1] is not None]))
 
     for filename in [f for ri_pair in filenames.values() for f in ri_pair]:
-        beam = np.random.random(size=shape).astype(dtype)
+        if overwrite:
+            beam = np.random.random(size=shape).astype(dtype)
 
-        primary_hdu = fits.PrimaryHDU(beam, header=header)
-        primary_hdu.writeto(filename, overwrite=overwrite)
+            primary_hdu = fits.PrimaryHDU(beam, header=header)
+            primary_hdu.writeto(filename, overwrite=overwrite)
+        else:
+            with fits.open(filename, mode='update', memmap=False) as file:
+                uheader = file[0].header
+                assert uheader['CTYPE3'] == 'FREQ'
+                unchan = uheader['NAXIS3']
+
+                bandwidth_delta = bandwidth / (unchan-1)
+                uheader['CRVAL3'] = frequency[0]
+                uheader['CDELT3'] = bandwidth_delta
+
+                # Generate a linear space of grid frequencies
+                # Jitter them randomly, except for the endpoints
+                gfrequency = np.linspace(frequency[0], frequency[-1],
+                                        unchan-1, dtype=np.float64)
+                frequency_jitter = np.random.random(size=gfrequency.shape)-0.5
+                frequency_jitter *= 0.1*bandwidth_delta
+                frequency_jitter[0] = frequency_jitter[-1] = 0.0
+                gfrequency += frequency_jitter
+
+                # Check that gfrequency is monotically increasing
+                assert np.all(np.diff(gfrequency) >= 0.0)
+
+                # Remove existing GFREQ data
+                try:
+                    del uheader['GFREQ?*']
+                except:
+                    pass
+
+                # Update existing GFREQ data
+                for i, gfreq in enumerate(gfrequency, 1):
+                    uheader['GFREQ%d' % i] = gfreq
 
     return filenames
 

@@ -77,40 +77,9 @@ def run_test(msfile, pol_type, **kwargs):
     bandwidth = frequency[-1] - frequency[0]
 
     # Get filenames from pattern and open the files
-    filenames = beam_factory(polarisation_type=pol_type)
-    filenames = [f for ri_pair in filenames.values() for f in ri_pair]
-
-    # Set up the frequencies in each FITS file
-    for filename in filenames:
-
-        with fits.open(filename, mode='update', memmap=False) as file:
-            header = file[0].header
-            assert header['CTYPE3'] == 'FREQ'
-            bandwidth_delta = bandwidth / (header['NAXIS3']-1)
-            header['CRVAL3'] = frequency[0]
-            header['CDELT3'] = bandwidth_delta
-
-            # Remove existing GFREQ data
-            try:
-                del header['GFREQ?*']
-            except:
-                pass
-
-            # Uncomment to fall back to standard frequency interpolation
-            #continue
-
-            # Generate a linear space of grid frequencies
-            # Jitter them randomly, except for the endpoints
-            gfrequency = np.linspace(frequency[0], frequency[-1], header['NAXIS3']-1)
-            frequency_jitter = (rf(size=gfrequency.shape)-0.5)*0.1*bandwidth_delta
-            frequency_jitter[0] = frequency_jitter[-1] = 0.0
-            gfrequency += frequency_jitter
-
-            # Check that gfrequency is monotically increasing
-            assert np.all(np.diff(gfrequency) >= 0.0)
-
-            for i, gfreq in enumerate(gfrequency, 1):
-                header['GFREQ%d' % i] = gfreq
+    filenames = beam_factory(polarisation_type=pol_type,
+                            frequency=frequency,
+                            schema=beam_file_pattern)
 
     #=========================================
     # Source Configuration
@@ -412,7 +381,8 @@ if __name__ == "__main__":
 
     def create_parser():
         p = argparse.ArgumentParser()
-        p.add_argument("ms", type=str, default=pjoin("data", "WSRT.MS"))
+        p.add_argument("ms", default=pjoin("data", "WSRT.MS"),
+                                nargs="?")
         p.add_argument("-p", "--polarisation-type",
                             choices=['linear', 'circular'],
                             default='linear')
