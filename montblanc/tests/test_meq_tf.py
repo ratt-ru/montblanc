@@ -16,6 +16,20 @@ from montblanc.tests.beam_factory import beam_factory
 DATA_DIR = 'data'
 
 def run_test(msfile, pol_type, **kwargs):
+    """
+    Parameters
+    ----------
+    msfile : str
+        Name of the Measurement Set
+    pol_type : str
+        'linear' or 'circular'
+    beam_file_schema (optional) : str
+        Beam filename schema. Defaults to 'test_beam_$(corr)_$(reim).fits'
+    overwrite_beams (optional) : bool
+        If ``True`` create new beams using the cos**3 beam
+    """
+
+
     #=========================================
     # Directory and Script Configuration
     #=========================================
@@ -38,10 +52,10 @@ def run_test(msfile, pol_type, **kwargs):
     beam_on = 1 if beam_on is True else 0
 
     # Directory in which we expect our beams to be located
-    beam_file_pattern = 'test_beam_$(corr)_$(reim).fits'
+    beam_file_schema = 'test_beam_$(corr)_$(reim).fits'
 
     # Beam file pattern
-    beam_file_pattern = kwargs.get("beam_file_pattern", beam_file_pattern)
+    beam_file_schema = kwargs.get("beam_file_schema", beam_file_schema)
 
     l_axis = kwargs.get('l_axis', '-X')
     m_axis = kwargs.get('m_axis', 'Y')
@@ -76,10 +90,13 @@ def run_test(msfile, pol_type, **kwargs):
 
     bandwidth = frequency[-1] - frequency[0]
 
+    overwrite_beams = kwargs.get('overwrite_beams', False)
+
     # Get filenames from pattern and open the files
     filenames = beam_factory(polarisation_type=pol_type,
                             frequency=frequency,
-                            schema=beam_file_pattern)
+                            schema=beam_file_schema,
+                            overwrite=overwrite_beams)
 
     #=========================================
     # Source Configuration
@@ -194,7 +211,7 @@ def run_test(msfile, pol_type, **kwargs):
         # Imaging Column
         'img_sel.imaging_column={c}'.format(c=meq_vis_column),
         # Beam FITS file pattern
-        'pybeams_fits.filename_pattern={p}'.format(p=beam_file_pattern),
+        'pybeams_fits.filename_pattern={p}'.format(p=beam_file_schema),
         # FITS L and M AXIS
         'pybeams_fits.l_axis={l}'.format(l=l_axis),
         'pybeams_fits.m_axis={m}'.format(m=m_axis),
@@ -283,7 +300,7 @@ def run_test(msfile, pol_type, **kwargs):
     source_providers.append(MSSourceProvider(ms_mgr))
 
     if beam_on == 1:
-        beam_prov = FitsBeamSourceProvider(beam_file_pattern,
+        beam_prov = FitsBeamSourceProvider(beam_file_schema,
             l_axis=l_axis, m_axis=m_axis)
         source_providers.append(beam_prov)
 

@@ -40,7 +40,7 @@ def beam_factory(polarisation_type='linear',
     # Generate a linear space of grid frequencies
     # Jitter them randomly, except for the endpoints
     gfrequency = np.linspace(frequency[0], frequency[-1],
-                            nchan-1, dtype=np.float64)
+                            32, dtype=np.float64)
     frequency_jitter = np.random.random(size=gfrequency.shape)-0.5
     frequency_jitter *= 0.1*bandwidth_delta
     frequency_jitter[0] = frequency_jitter[-1] = 0.0
@@ -132,7 +132,13 @@ def beam_factory(polarisation_type='linear',
 
     for filename in [f for ri_pair in filenames.values() for f in ri_pair]:
         if overwrite:
-            beam = np.random.random(size=shape).astype(dtype)
+            ex = np.deg2rad(1.0)
+            coords = np.linspace(-ex, ex, header['NAXIS2'], endpoint=True)
+
+            r = np.sqrt(coords[:,None]**2 + coords[None,:]**2)[:,:,None]
+            fq = gfrequency[None,None,:]
+
+            beam = np.cos(np.minimum(65*fq*1e-9*r, 1.0881))**3
 
             primary_hdu = fits.PrimaryHDU(beam, header=header)
             primary_hdu.writeto(filename, overwrite=overwrite)
