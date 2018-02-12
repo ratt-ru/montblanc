@@ -1,3 +1,39 @@
+"""
+This script runs Montblanc and MeqTrees and compares
+the visibilities output by both.
+
+To run this script you'll need a Measurement Set.
+It's often easier to create this using the
+`simms <https://github.com/radio-astro/simms_>`_ package.
+
+For example, create a VLA Measurement Set, call the following:
+
+.. code-block:: shell
+
+    simms -T vla -t ascii -cs itrf -st 1 -dt 4 -f0 1.42GHz -df 4MHz
+        -nc 8 -dir "J2000,5h42m36.1378s,+49d51m7.23000000001s"
+        -feed 'perfect R L' -pl "RR RL LR LL" -n vla_test.ms
+        ~/paper_sims/simms/simms/observatories/vlac.itrf.txt
+
+Then, to call the script run
+
+.. code-block:: shell
+
+    python test_meq_tf.py vla.ms -p circular -a "overwrite_beams=True"
+
+This tells the script to configure Montblanc+MeqTrees for circular
+polarisations (the VLA telescope uses circular polarisations) and
+to create new cos**3 testing beams. It is possible to also supply
+your own beams for the test by specifying
+``-a "beam_file_schema='my_beam_\$(corr)_\$(reim).fits'`` for example.
+
+Other options can be passed
+
+-- See :func:`run_test` for more details
+and options.
+"""
+
+
 import itertools
 import os
 import subprocess
@@ -403,7 +439,13 @@ if __name__ == "__main__":
         p.add_argument("-p", "--polarisation-type",
                             choices=['linear', 'circular'],
                             default='linear')
-        p.add_argument("-a", "--args", type=parse_python_assigns, default="")
+        p.add_argument("-a", "--args", type=parse_python_assigns,
+                            default="",
+                            help="semi-colon separated list of "
+                                "python variable assignments. "
+                                "These variable assignments are "
+                                "passed into the run_tests function."
+                                "See its docstring for details.")
         return p
 
     args = create_parser().parse_args()
