@@ -38,6 +38,7 @@ from montblanc.src_types import (
     source_range_slices)
 
 
+from parsing import parse_python_assigns
 
 def nr_of_baselines(na, auto_correlations=False):
     """
