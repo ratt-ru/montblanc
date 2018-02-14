@@ -29,6 +29,7 @@ import montblanc.util as mbu
 import montblanc.impl.rime.tensorflow.ms.ms_manager as MS
 
 from montblanc.impl.rime.tensorflow.sources.source_provider import SourceProvider
+from montblanc.impl.rime.tensorflow.sources import SourceContext
 
 class MSSourceProvider(SourceProvider):
     """
@@ -104,53 +105,40 @@ class MSSourceProvider(SourceProvider):
 
     def uvw(self, context):
         """ Per-antenna UVW coordinate data source """
-        # Special case for handling antenna uvw code
 
-        # Antenna reading code expects (ntime, nbl) ordering
-        if MS.UVW_DIM_ORDER != ('ntime', 'nbl'):
-            raise ValueError("'{o}'' ordering expected for "
-                "antenna reading code.".format(o=MS.UVW_DIM_ORDER))
+        # Hacky access of private member
+        cube = context._cube
 
-        # Figure out our extents in the time dimension
-        # and our global antenna and baseline sizes
-        (t_low, t_high) = context.dim_extents('ntime')
-        na, nbl = context.dim_global_size('na', 'nbl')
+        # Create antenna1 source context
+        a1_actual = cube.array("antenna1", reify=True)
+        a1_ctx = SourceContext("antenna1", cube, context.cfg,
+            context.iter_args, cube.array("antenna1"),
+            a1_actual.shape, a1_actual.dtype)
 
-        # We expect to handle all antenna at once
-        if context.shape != (t_high - t_low, na, 3):
-            raise ValueError("Received an unexpected shape "
-                "{s} in (ntime,na,3) antenna reading code".format(
-                    s=context.shape))
+        # Create antenna2 source context
+        a2_actual = cube.array("antenna2", reify=True)
+        a2_ctx = SourceContext("antenna2", cube, context.cfg,
+            context.iter_args, cube.array("antenna2"),
+            a2_actual.shape, a2_actual.dtype)
 
-        # Create per antenna UVW coordinates.
-        # u_01 = u_1 - u_0
-        # u_02 = u_2 - u_0
-        # ...
-        # u_0N = u_N - U_0
-        # where N = na - 1.
+        # Get antenna1 and antenna2 data
+        ant1 = self.antenna1(a1_ctx).ravel()
+        ant2 = self.antenna2(a2_ctx).ravel()
 
-        # Choosing u_0 = 0 we have:
-        # u_1 = u_01
-        # u_2 = u_02
-        # ...
-        # u_N = u_0N
+        # Obtain per baseline UVW data
+        lrow, urow = MS.uvw_row_extents(context)
+        uvw = self._manager.ordered_uvw_table.getcol(MS.UVW,
+                                                startrow=lrow,
+                                                nrow=urow-lrow)
 
-        # Then, other baseline values can be derived as
-        # u_21 = u_1 - u_2
+        # Perform the per-antenna UVW decomposition
+        ntime, nbl = context.dim_extent_size('ntime', 'nbl')
+        na = context.dim_global_size('na')
+        chunks = np.repeat(nbl, ntime).astype(ant1.dtype)
 
-        # Allocate space for per-antenna UVW, zeroing antenna 0 at each timestep
-        ant_uvw = np.empty(shape=context.shape, dtype=context.dtype)
-        ant_uvw[:,0,:] = 0
+        auvw = mbu.antenna_uvw(uvw, ant1, ant2, chunks, nr_of_antenna=na)
 
-        # Read in uvw[1:na] row at each timestep
-        for ti, t in enumerate(xrange(t_low, t_high)):
-            # Inspection confirms that this achieves the same effect as
-            # ant_uvw[ti,1:na,:] = ...getcol(UVW, ...).reshape(na-1, -1)
-            self._manager.ordered_uvw_table.getcolnp(MS.UVW,
-                ant_uvw[ti,1:na,:],
-                startrow=t*nbl, nrow=na-1)
-
-        return ant_uvw
+        return auvw.reshape(context.shape).astype(context.dtype)
 
     def antenna1(self, context):
         """ antenna1 data source """
