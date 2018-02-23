@@ -18,15 +18,15 @@ auto shape_function = [](InferenceContext* c) {
     // TODO. Check shape and dimension sizes for 'parallactic_angle_sin'
     ShapeHandle in_parallactic_angle_sin = c->input(0);
     // Assert 'parallactic_angle_sin' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_parallactic_angle_sin, 2, &input),
-        "parallactic_angle_sin must have shape [None, None] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_parallactic_angle_sin, 1, &input),
+        "parallactic_angle_sin must have shape [arow] but is " +
         c->DebugString(in_parallactic_angle_sin));
 
     // TODO. Check shape and dimension sizes for 'parallactic_angle_cos'
     ShapeHandle in_parallactic_angle_cos = c->input(1);
     // Assert 'parallactic_angle_cos' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_parallactic_angle_cos, 2, &input),
-        "parallactic_angle_cos must have shape [None, None] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_parallactic_angle_cos, 1, &input),
+        "parallactic_angle_cos must have shape [arow] but is " +
         c->DebugString(in_parallactic_angle_cos));
 
 
@@ -39,7 +39,6 @@ auto shape_function = [](InferenceContext* c) {
 
     ShapeHandle out_feed_rotation = c->MakeShape({
         c->Dim(in_parallactic_angle_sin, 0),
-        c->Dim(in_parallactic_angle_sin, 1),
         4
     });
 
