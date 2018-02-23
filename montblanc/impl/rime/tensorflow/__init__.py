@@ -18,14 +18,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-def load_tf_lib():
+def load_tf_lib(rime_lib_path=None):
     """ Load the tensorflow library """
-    from os.path import join as pjoin
     import pkg_resources
 
     import tensorflow as tf
 
-    path = pjoin('ext', 'rime.so')
-    rime_lib_path = pkg_resources.resource_filename("montblanc", path)
+    if rime_lib_path is None:
+        from os.path import join as pjoin
+        rime_lib_path = pjoin('ext', 'rime.so')
+        rime_lib_path = pkg_resources.resource_filename("montblanc",
+                                                        rime_lib_path)
+
     return tf.load_op_library(rime_lib_path)
 
