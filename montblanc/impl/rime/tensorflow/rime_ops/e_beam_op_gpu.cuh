@@ -24,8 +24,8 @@ template <> class LaunchTraits<float>
 {
 public:
     static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 8;
-    static constexpr int BLOCKDIMZ = 4;
+    static constexpr int BLOCKDIMY = 32;
+    static constexpr int BLOCKDIMZ = 1;
 
     static dim3 block_size(int X, int Y, int Z)
     {
@@ -40,8 +40,8 @@ template <> class LaunchTraits<double>
 {
 public:
     static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 8;
-    static constexpr int BLOCKDIMZ = 4;
+    static constexpr int BLOCKDIMY = 16;
+    static constexpr int BLOCKDIMZ = 1;
 
     static dim3 block_size(int X, int Y, int Z)
     {
