@@ -6,7 +6,7 @@ import tensorflow as tf
 
 # Load the library containing the custom operation
 from montblanc.impl.rime.tensorflow import load_tf_lib
-rime = load_tf_lib()
+rime = load_tf_lib("rime.so")
 
 def complex_phase_op(lm, uvw, frequency):
     """
@@ -36,7 +36,7 @@ def complex_phase(lm, uvw, frequency):
 
     # The shapes are themselves tensors
     nsrc = lm_shape[0]
-    ntime, na = uvw_shape[0], uvw_shape[1]
+    narow = uvw_shape[0]
     nchan = frequency_shape[0]
 
     # Define some constants
@@ -45,14 +45,14 @@ def complex_phase(lm, uvw, frequency):
 
     # Reshape now so that we get broadcasting in later operations
     # Need to pack list since list contains tensors, e.g. nsrc
-    l = tf.reshape(lm[:,0], tf.pack([nsrc,1,1,1]))
-    m = tf.reshape(lm[:,1], tf.pack([nsrc,1,1,1]))
+    l = tf.reshape(lm[:,0], tf.stack([nsrc,1,1]))
+    m = tf.reshape(lm[:,1], tf.stack([nsrc,1,1]))
 
-    u = tf.reshape(uvw[:,:,0], tf.pack([1,ntime,na,1]))
-    v = tf.reshape(uvw[:,:,1], tf.pack([1,ntime,na,1]))
-    w = tf.reshape(uvw[:,:,2], tf.pack([1,ntime,na,1]))
+    u = tf.reshape(uvw[:,0], tf.stack([1,narow,1]))
+    v = tf.reshape(uvw[:,1], tf.stack([1,narow,1]))
+    w = tf.reshape(uvw[:,2], tf.stack([1,narow,1]))
 
-    frequency = tf.reshape(frequency, tf.pack([1,1,1,nchan]))
+    frequency = tf.reshape(frequency, tf.stack([1,1,nchan]))
 
     n = tf.sqrt(one - l**2 - m**2) - one
 
@@ -68,27 +68,27 @@ def complex_phase(lm, uvw, frequency):
 
 def complex_phase_numpy(lm, uvw, frequency):
     nsrc, _ = lm.shape
-    ntime, na, _ = uvw.shape
+    narow, _ = uvw.shape
     nchan, = frequency.shape
 
-    lm = lm.reshape(nsrc, 1, 1, 1, 2)
-    uvw = uvw.reshape(1, ntime, na, 1, 3)
-    frequency = frequency.reshape(1, 1, 1, nchan)
+    lm = lm.reshape(nsrc, 1, 1, 2)
+    uvw = uvw.reshape(1, narow, 1, 3)
+    frequency = frequency.reshape(1, 1, nchan)
 
-    l, m = lm[:,:,:,:,0], lm[:,:,:,:,1]
-    u, v, w = uvw[:,:,:,:,0], uvw[:,:,:,:,1], uvw[:,:,:,:,2]
+    l, m = lm[:,:,:,0], lm[:,:,:,1]
+    u, v, w = uvw[:,:,:,0], uvw[:,:,:,1], uvw[:,:,:,2]
 
     n = np.sqrt(1.0 - l**2 - m**2) - 1.0
     real_phase = -2*np.pi*1j*(l*u + m*v + n*w)*frequency/lightspeed
     return np.exp(real_phase)
 
 dtype, ctype = np.float64, np.complex128
-nsrc, ntime, na, nchan = 100, 50, 64, 128
+nsrc, narow, nchan = 100, 50*16, 128
 lightspeed = 299792458.
 
 # Set up our numpy input arrays
 np_lm = np.random.random(size=(nsrc,2)).astype(dtype)*0.1
-np_uvw = np.random.random(size=(ntime,na,3)).astype(dtype)
+np_uvw = np.random.random(size=(narow,3)).astype(dtype)
 np_frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=dtype)
 
 # Create tensorflow arrays from the numpy arrays
@@ -138,10 +138,10 @@ with tf.Session() as S:
     print 'Numpy CPU time %f' % (timeit.default_timer() - start)
 
     # Check that our shapes and values agree with a certain tolerance
-    assert tf_cplx_phase_op_cpu.shape == (nsrc, ntime, na, nchan)
-    assert tf_cplx_phase_op_gpu.shape == (nsrc, ntime, na, nchan)
-    assert tf_cplx_phase_expr_gpu.shape == (nsrc, ntime, na, nchan)
-    assert np_cplx_phase.shape == (nsrc, ntime, na, nchan)
+    assert tf_cplx_phase_op_cpu.shape == (nsrc, narow, nchan)
+    assert tf_cplx_phase_op_gpu.shape == (nsrc, narow, nchan)
+    assert tf_cplx_phase_expr_gpu.shape == (nsrc, narow, nchan)
+    assert np_cplx_phase.shape == (nsrc, narow, nchan)
     assert np.allclose(tf_cplx_phase_op_cpu, np_cplx_phase)
     assert np.allclose(tf_cplx_phase_op_gpu, np_cplx_phase)
     assert np.allclose(tf_cplx_phase_expr_gpu, np_cplx_phase)
