@@ -1,149 +1,89 @@
-import os
-import timeit
+import unittest
 
 import numpy as np
 import tensorflow as tf
-
-# Load the library containing the custom operation
-from montblanc.impl.rime.tensorflow import load_tf_lib
-rime = load_tf_lib("rime.so")
-
-def complex_phase_op(lm, uvw, frequency):
-    """
-    This function wraps rime_phase by deducing the
-    complex output result type from the input
-    """
-    lm_dtype = lm.dtype.base_dtype
-
-    if lm_dtype == tf.float32:
-        CT = tf.complex64
-    elif lm_dtype == tf.float64:
-        CT = tf.complex128
-    else:
-        raise TypeError("Unhandled type '{t}'".format(t=lm.dtype))
-
-    return rime.phase(lm, uvw, frequency, CT=CT)
-
-def complex_phase(lm, uvw, frequency):
-    """
-    Compute the complex phase from lm, uvw and frequency expressions
-    """
-
-    # Get the dynamic shape of input tensors
-    lm_shape = tf.shape(lm)
-    uvw_shape = tf.shape(uvw)
-    frequency_shape = tf.shape(frequency)
-
-    # The shapes are themselves tensors
-    nsrc = lm_shape[0]
-    narow = uvw_shape[0]
-    nchan = frequency_shape[0]
-
-    # Define some constants
-    one = tf.constant(1.0, dtype=dtype)
-    minus_two_pi_over_C = tf.constant(-2.0*np.pi/lightspeed, dtype=dtype)
-
-    # Reshape now so that we get broadcasting in later operations
-    # Need to pack list since list contains tensors, e.g. nsrc
-    l = tf.reshape(lm[:,0], tf.stack([nsrc,1,1]))
-    m = tf.reshape(lm[:,1], tf.stack([nsrc,1,1]))
-
-    u = tf.reshape(uvw[:,0], tf.stack([1,narow,1]))
-    v = tf.reshape(uvw[:,1], tf.stack([1,narow,1]))
-    w = tf.reshape(uvw[:,2], tf.stack([1,narow,1]))
-
-    frequency = tf.reshape(frequency, tf.stack([1,1,nchan]))
-
-    n = tf.sqrt(one - l**2 - m**2) - one
-
-    # Outer product l*u + m*v * n*w
-    phase = tf.convert_to_tensor(l*u + m*v + n*w, name='real_phase')
-
-    # Multiply in constants
-    phase = minus_two_pi_over_C*phase*frequency
-
-    # No GPU implementation of exp yet
-    #return tf.exp(tf.complex(0.0, phase), name='complex_phase')
-    return tf.complex(tf.cos(phase), tf.sin(phase))
+from tensorflow.python.client import device_lib
 
 def complex_phase_numpy(lm, uvw, frequency):
+    """ Compute complex phase using numpy """
+
+    lightspeed = 299792458.
     nsrc, _ = lm.shape
     narow, _ = uvw.shape
     nchan, = frequency.shape
 
-    lm = lm.reshape(nsrc, 1, 1, 2)
-    uvw = uvw.reshape(1, narow, 1, 3)
-    frequency = frequency.reshape(1, 1, nchan)
-
-    l, m = lm[:,:,:,0], lm[:,:,:,1]
-    u, v, w = uvw[:,:,:,0], uvw[:,:,:,1], uvw[:,:,:,2]
+    l = lm[:,None,None,0]
+    m = lm[:,None,None,1]
+    u = uvw[None,:,None,0]
+    v = uvw[None,:,None,1]
+    w = uvw[None,:,None,2]
 
     n = np.sqrt(1.0 - l**2 - m**2) - 1.0
     real_phase = -2*np.pi*1j*(l*u + m*v + n*w)*frequency/lightspeed
     return np.exp(real_phase)
 
-dtype, ctype = np.float64, np.complex128
-nsrc, narow, nchan = 100, 50*16, 128
-lightspeed = 299792458.
+class TestComplexPhase(unittest.TestCase):
+    """ Tests the ComplexPhase operator """
 
-# Set up our numpy input arrays
-np_lm = np.random.random(size=(nsrc,2)).astype(dtype)*0.1
-np_uvw = np.random.random(size=(narow,3)).astype(dtype)
-np_frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=dtype)
+    def setUp(self):
+        # Load the rime operation library
+        from montblanc.impl.rime.tensorflow import load_tf_lib
+        self.rime = load_tf_lib("rime.so")
+        # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
+        self.gpu_devs = [d.name for d in device_lib.list_local_devices()
+                                if d.device_type == 'GPU']
 
-# Create tensorflow arrays from the numpy arrays
-lm = tf.Variable(np_lm, name='lm')
-uvw = tf.Variable(np_uvw, name='uvw')
-frequency = tf.Variable(np_frequency, name='frequency')
-#lm, uvw, frequency = map(tf.Variable, [np_lm, np_uvw, np_frequency])
 
-# Get an expression for the complex phase op on the CPU
-with tf.device('/cpu:0'):
-    cplx_phase_op_cpu = complex_phase_op(lm, uvw, frequency)
+    def test_complex_phase(self):
+        """ Test the ComplexPhase operator """
 
-# Get an expression for the complex phase op on the GPU
-with tf.device('/gpu:0'):
-    cplx_phase_op_gpu = complex_phase_op(lm, uvw, frequency)
+        # List of type constraints for testing this operator
+        type_permutations = [[np.float32, np.complex64],
+                            [np.float64, np.complex128]]
 
-# Get an expression for the complex phase expression on the GPU
-with tf.device('/gpu:0'):
-    cplx_phase_expr_gpu = complex_phase(lm, uvw, frequency)
+        for FT, CT in type_permutations:
+            self._impl_test_complex_phase(FT, CT)
 
-init_op = tf.global_variables_initializer()
+    def _impl_test_complex_phase(self, FT, CT):
+        """ Implementation of the ComplexPhase operator test """
+        nsrc, narow, nchan = 10, 15*16, 16
 
-# Now create a tensorflow Session to evaluate the above
-with tf.Session() as S:
-    S.run(init_op)
+        # Set up our numpy input arrays
+        lm = np.random.random(size=(nsrc,2)).astype(FT)*0.1
+        uvw = np.random.random(size=(narow,3)).astype(FT)
+        frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=FT)
 
-    # Evaluate and time tensorflow GPU
-    start = timeit.default_timer()
-    tf_cplx_phase_op_gpu = S.run(cplx_phase_op_gpu)
-    print 'Tensorflow custom GPU time %f' % (timeit.default_timer() - start)
+        np_args = [lm, uvw, frequency]
+        arg_names = ["lm", "uvw", "frequency"]
 
-    # Evaluate and time tensorflow GPU
-    start = timeit.default_timer()
-    tf_cplx_phase_expr_gpu = S.run(cplx_phase_expr_gpu)
-    print 'Tensorflow expression GPU time %f' % (timeit.default_timer() - start)
+        tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
-    # Evaluate and time tensorflow CPU
-    start = timeit.default_timer()
-    tf_cplx_phase_op_cpu = S.run(cplx_phase_op_cpu)
-    print 'Tensorflow CPU time %f' % (timeit.default_timer() - start)
+        def _pin_op(device, *tf_args):
+            """ Pin operation to device """
+            with tf.device(device):
+                return self.rime.phase(*tf_args, CT=CT)
 
-    # Evaluate and time numpy CPU
-    start = timeit.default_timer()
-    # Now calculate the complex phase using numpy
-    # Reshapes help us to broadcast
-    np_cplx_phase = complex_phase_numpy(np_lm, np_uvw, np_frequency)
-    print 'Numpy CPU time %f' % (timeit.default_timer() - start)
+        # Pin operation to CPU
+        cpu_op = _pin_op('/cpu:0', *tf_args)
 
-    # Check that our shapes and values agree with a certain tolerance
-    assert tf_cplx_phase_op_cpu.shape == (nsrc, narow, nchan)
-    assert tf_cplx_phase_op_gpu.shape == (nsrc, narow, nchan)
-    assert tf_cplx_phase_expr_gpu.shape == (nsrc, narow, nchan)
-    assert np_cplx_phase.shape == (nsrc, narow, nchan)
-    assert np.allclose(tf_cplx_phase_op_cpu, np_cplx_phase)
-    assert np.allclose(tf_cplx_phase_op_gpu, np_cplx_phase)
-    assert np.allclose(tf_cplx_phase_expr_gpu, np_cplx_phase)
+        # Run the op on all GPUs
+        gpu_ops = [_pin_op(d, *tf_args) for d in self.gpu_devs]
 
-print 'Tests Succeeded'
+        # Initialise variables
+        init_op = tf.global_variables_initializer()
+
+        with tf.Session() as S:
+            S.run(init_op)
+
+            # Get the CPU ejones
+            cpu_cplx_phase = S.run(cpu_op)
+
+            np_cplx_phase = complex_phase_numpy(lm, uvw, frequency)
+
+            self.assertTrue(np.allclose(np_cplx_phase, cpu_cplx_phase))
+
+            for gpu_cplx_phase in S.run(gpu_ops):
+                self.assertTrue(np.allclose(cpu_cplx_phase, gpu_cplx_phase))
+
+if __name__ == "__main__":
+    unittest.main()
