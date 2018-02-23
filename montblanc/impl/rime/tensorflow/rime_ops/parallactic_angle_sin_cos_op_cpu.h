@@ -30,18 +30,17 @@ public:
         // Create reference to input Tensorflow tensors
         const auto & in_parallactic_angle = context->input(0);
 
-        int ntime = in_parallactic_angle.dim_size(0);
-        int na = in_parallactic_angle.dim_size(1);
+        int npa = in_parallactic_angle.dim_size(0);
 
         // Allocate output tensors
         // Allocate space for output tensor 'pa_sin'
         tf::Tensor * pa_sin_ptr = nullptr;
-        tf::TensorShape pa_sin_shape = tf::TensorShape({ ntime, na });
+        tf::TensorShape pa_sin_shape = tf::TensorShape({ npa });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, pa_sin_shape, &pa_sin_ptr));
         // Allocate space for output tensor 'pa_cos'
         tf::Tensor * pa_cos_ptr = nullptr;
-        tf::TensorShape pa_cos_shape = tf::TensorShape({ ntime, na });
+        tf::TensorShape pa_cos_shape = tf::TensorShape({ npa });
         OP_REQUIRES_OK(context, context->allocate_output(
             1, pa_cos_shape, &pa_cos_ptr));
 

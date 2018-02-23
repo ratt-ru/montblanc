@@ -18,28 +18,15 @@ auto shape_function = [](InferenceContext* c) {
     // TODO. Check shape and dimension sizes for 'parallactic_angle'
     ShapeHandle in_parallactic_angle = c->input(0);
     // Assert 'parallactic_angle' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_parallactic_angle, 2, &input),
-        "parallactic_angle must have shape [None, None] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_parallactic_angle, 1, &input),
+        "parallactic_angle must have shape [arow] but is " +
         c->DebugString(in_parallactic_angle));
 
-    // TODO: Supply a proper shapes for output variables here,
-    // usually derived from input shapes
-    // ShapeHandle output_1 = c->MakeShape({
-    //      c->Dim(input_1, 0),  // input_1 dimension 0
-    //      c->Dim(input_2, 1)}); // input_2 dimension 1""")
+    ShapeHandle out = c->MakeShape({c->Dim(in_parallactic_angle, 0)});
 
-    ShapeHandle out_pa_sin = c->MakeShape({
-        c->Dim(in_parallactic_angle, 0),
-        c->Dim(in_parallactic_angle, 1) });
-    ShapeHandle out_pa_cos = c->MakeShape({
-        c->Dim(in_parallactic_angle, 0),
-        c->Dim(in_parallactic_angle, 1) });
+    c->set_output(0, out);
+    c->set_output(1, out);
 
-    c->set_output(0, out_pa_sin);
-    c->set_output(1, out_pa_cos);
-
-
-    // printf("output shape %s\\n", c->DebugString(out).c_str());;
 
     return Status::OK();
 };
