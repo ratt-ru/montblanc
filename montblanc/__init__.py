@@ -23,7 +23,6 @@ import os
 
 from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
-from montblanc.version import __version__
 
 log = setup_logging()
 
