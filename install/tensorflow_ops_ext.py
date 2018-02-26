@@ -103,9 +103,8 @@ def create_tensorflow_extension(nvcc_settings, device_info):
     include_dirs += [tf_inc, os.path.join(tf_inc, "external", "nsync", "public")]
 
     # Libraries
-    tf_lib = tf.sysconfig.get_lib()
-    library_dirs = [tf_lib]
-    libraries = ["tensorflow_framework"]
+    library_dirs = [tf.sysconfig.get_lib()]
+    libraries = ["-ltensorflow_framework"]
     extra_link_args = ['-fPIC', '-fopenmp', debug_opt]
 
     # Macros
