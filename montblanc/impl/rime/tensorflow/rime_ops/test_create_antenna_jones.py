@@ -97,9 +97,9 @@ class TestCreateAntennaJones(unittest.TestCase):
 
             # Get the CPU create_antenna_jones
             cpu_aj = S.run(cpu_op)
-            np_aj = np_create_antenna_jones(bsqrt,
-                complex_phase, feed_rotation, ejones,
-                arow_time_index)
+            np_aj = np_create_antenna_jones(bsqrt, complex_phase,
+                                            feed_rotation, ejones,
+                                            arow_time_index)
 
             self.assertTrue(np.allclose(np_aj, cpu_aj))
 

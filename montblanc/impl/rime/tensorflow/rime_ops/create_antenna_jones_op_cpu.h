@@ -19,9 +19,29 @@ typedef Eigen::ThreadPoolDevice CPUDevice;
 template <typename FT, typename CT>
 class CreateAntennaJones<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
+private:
+    bool have_bsqrt;
+    bool have_complex_phase;
+    bool have_feed_rotation;
+    bool have_ddes;
+
 public:
     explicit CreateAntennaJones(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context) {}
+        tensorflow::OpKernel(context),
+        have_bsqrt(false),
+        have_complex_phase(false),
+        have_feed_rotation(false),
+        have_ddes(false)
+    {
+        OP_REQUIRES_OK(context, context->GetAttr("have_bsqrt",
+                                                 &have_bsqrt));
+        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase",
+                                                 &have_complex_phase));
+        OP_REQUIRES_OK(context, context->GetAttr("have_feed_rotation",
+                                                 &have_feed_rotation));
+        OP_REQUIRES_OK(context, context->GetAttr("have_ddes",
+                                                 &have_ddes));
+    }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
@@ -31,14 +51,58 @@ public:
         const tf::Tensor & in_bsqrt = context->input(0);
         const tf::Tensor & in_complex_phase = context->input(1);
         const tf::Tensor & in_feed_rotation = context->input(2);
-        const tf::Tensor & in_ejones = context->input(3);
+        const tf::Tensor & in_ddes = context->input(3);
         const tf::Tensor & in_arow_time_index = context->input(4);
 
-        // Extract problem dimensions
-        int nsrc = in_complex_phase.dim_size(0);
-        int narow = in_complex_phase.dim_size(1);
-        int nchan = in_complex_phase.dim_size(2);
-        int npol = in_bsqrt.dim_size(3);
+        int nsrc = -1, ntime = -1, narow = -1, nchan = -1, npol = -1;
+
+        auto update_dim = [](int & old_size,
+                            const tf::Tensor & tensor,
+                            int dim) -> tf::Status
+        {
+            auto new_size = tensor.dim_size(dim);
+
+            if(old_size == -1)
+            {
+                old_size = new_size;
+            }
+            else if(old_size != new_size)
+            {
+                return tf::Status(tf::errors::InvalidArgument(
+                        "Previously set dimension size '",  old_size,
+                        "' does not equal new size '", new_size, "'"));
+            }
+
+            return tf::Status::OK();
+        };
+
+        if(have_bsqrt)
+        {
+            OP_REQUIRES_OK(context, update_dim(nsrc, in_bsqrt, 0));
+            OP_REQUIRES_OK(context, update_dim(ntime, in_bsqrt, 1));
+            OP_REQUIRES_OK(context, update_dim(nchan, in_bsqrt, 2));
+            OP_REQUIRES_OK(context, update_dim(npol, in_bsqrt, 3));
+        }
+
+        if(have_complex_phase)
+        {
+            OP_REQUIRES_OK(context, update_dim(nsrc, in_complex_phase, 0));
+            OP_REQUIRES_OK(context, update_dim(narow, in_complex_phase, 1));
+            OP_REQUIRES_OK(context, update_dim(nchan, in_complex_phase, 2));
+        }
+
+        if(have_feed_rotation)
+        {
+            OP_REQUIRES_OK(context, update_dim(narow, in_feed_rotation, 0));
+        }
+
+        if(have_ddes)
+        {
+            OP_REQUIRES_OK(context, update_dim(nsrc, in_ddes, 0));
+            OP_REQUIRES_OK(context, update_dim(narow, in_ddes, 1));
+            OP_REQUIRES_OK(context, update_dim(nchan, in_ddes, 2));
+            OP_REQUIRES_OK(context, update_dim(npol, in_ddes, 3));
+        }
 
         //GPU kernel above requires this hard-coded number
         OP_REQUIRES(context, npol == CREATE_ANTENNA_JONES_NPOL,
@@ -53,54 +117,105 @@ public:
             0, ant_jones_shape, &ant_jones_ptr));
 
         // Get pointers to flattened tensor data buffers
-        auto bsqrt = in_bsqrt.tensor<CT, 4>();
-        auto complex_phase = in_complex_phase.tensor<CT, 3>();
-        auto feed_rotation = in_feed_rotation.tensor<CT, 2>();
-        auto ejones = in_ejones.tensor<CT, 4>();
+        auto bsqrt = in_bsqrt.flat<CT>();
+        auto complex_phase = in_complex_phase.flat<CT>();
+        auto feed_rotation = in_feed_rotation.flat<CT>();
+        auto ddes = in_ddes.flat<CT>();
         auto arow_time_index = in_arow_time_index.tensor<int, 1>();
         auto ant_jones = ant_jones_ptr->tensor<CT, 4>();
+
+        int index;
 
         #pragma omp parallel for collapse(2)
         for(int src=0; src < nsrc; ++src)
         {
             for(int row=0; row < narow; ++row)
             {
-                // Reference feed rotation matrix
-                const CT & l0 = feed_rotation(row, 0);
-                const CT & l1 = feed_rotation(row, 1);
-                const CT & l2 = feed_rotation(row, 2);
-                const CT & l3 = feed_rotation(row, 3);
-
                 const int time = arow_time_index(row);
 
                 for(int chan=0; chan < nchan; ++chan)
                 {
-                    // Reference the complex phase
-                    const CT & cp = complex_phase(src, row, chan);
+                    // Maintain a double buffer of complex matrix values
+                    CT buf0[2] = {{1.0, 0.0}, {1.0, 0.0}};
+                    CT buf1[2] = {{0.0, 0.0}, {0.0, 0.0}};
+                    CT buf2[2] = {{0.0, 0.0}, {0.0, 0.0}};
+                    CT buf3[2] = {{1.0, 0.0}, {1.0, 0.0}};
+                    // active and inactive buffer indices
+                    int a = 0;
+                    int i = 1;
 
-                    // Multiply complex phase by brightness square root
-                    const CT kb0 = cp*bsqrt(src, time, chan, 0);
-                    const CT kb1 = cp*bsqrt(src, time, chan, 1);
-                    const CT kb2 = cp*bsqrt(src, time, chan, 2);
-                    const CT kb3 = cp*bsqrt(src, time, chan, 3);
+                    if(have_bsqrt)
+                    {
+                        // Reference brightness square root
+                        index = ((src*ntime + time)*nchan + chan)*npol;
+                        const CT & b0 = bsqrt(index + 0);
+                        const CT & b1 = bsqrt(index + 1);
+                        const CT & b2 = bsqrt(index + 2);
+                        const CT & b3 = bsqrt(index + 3);
 
-                    // Multiply in the feed rotation
-                    const CT lkb0 = l0*kb0 + l1*kb2;
-                    const CT lkb1 = l0*kb1 + l1*kb3;
-                    const CT lkb2 = l2*kb0 + l3*kb2;
-                    const CT lkb3 = l2*kb1 + l3*kb3;
+                        buf0[i] = b0*buf0[a] + b1*buf2[a];
+                        buf1[i] = b0*buf1[a] + b1*buf3[a];
+                        buf2[i] = b2*buf0[a] + b3*buf2[a];
+                        buf3[i] = b2*buf1[a] + b3*buf3[a];
 
-                    // Reference ejones matrix
-                    const CT & e0 = ejones(src, row, chan, 0);
-                    const CT & e1 = ejones(src, row, chan, 1);
-                    const CT & e2 = ejones(src, row, chan, 2);
-                    const CT & e3 = ejones(src, row, chan, 3);
+                        std::swap(a, i);
+                    }
+
+                    if(have_complex_phase)
+                    {
+                        // Reference complex phase
+                        index = (src*narow + row)*nchan + chan;
+                        const CT & cp = complex_phase(index);
+
+                        buf0[i] = cp*buf0[a];
+                        buf1[i] = cp*buf1[a];
+                        buf2[i] = cp*buf2[a];
+                        buf3[i] = cp*buf3[a];
+
+                        std::swap(a, i);
+                    }
+
+                    if(have_feed_rotation)
+                    {
+                        // Reference feed rotation matrix
+                        index = row*npol;
+                        const CT & l0 = feed_rotation(index + 0);
+                        const CT & l1 = feed_rotation(index + 1);
+                        const CT & l2 = feed_rotation(index + 2);
+                        const CT & l3 = feed_rotation(index + 3);
+
+                        buf0[i] = l0*buf0[a] + l1*buf2[a];
+                        buf1[i] = l0*buf1[a] + l1*buf3[a];
+                        buf2[i] = l2*buf0[a] + l3*buf2[a];
+                        buf3[i] = l2*buf1[a] + l3*buf3[a];
+
+                        std::swap(a, i);
+                    }
+
+
+                    if(have_ddes)
+                    {
+                        // Reference ddes matrix
+                        index = ((src*narow + row)*nchan + chan)*npol;
+                        const CT & e0 = ddes(index + 0);
+                        const CT & e1 = ddes(index + 1);
+                        const CT & e2 = ddes(index + 2);
+                        const CT & e3 = ddes(index + 3);
+
+                        buf0[i] = e0*buf0[a] + e1*buf2[a];
+                        buf1[i] = e0*buf1[a] + e1*buf3[a];
+                        buf2[i] = e2*buf0[a] + e3*buf2[a];
+                        buf3[i] = e2*buf1[a] + e3*buf3[a];
+
+                        std::swap(a, i);
+                    }
 
                     // Multiply in the dde term
-                    ant_jones(src, row, chan, 0) = e0*lkb0 + e1*lkb2;
-                    ant_jones(src, row, chan, 1) = e0*lkb1 + e1*lkb3;
-                    ant_jones(src, row, chan, 2) = e2*lkb0 + e3*lkb2;
-                    ant_jones(src, row, chan, 3) = e2*lkb1 + e3*lkb3;
+                    index = ((src*narow + row)*nchan + chan)*npol;
+                    ant_jones(index + 0) = buf0[a];
+                    ant_jones(index + 1) = buf1[a];
+                    ant_jones(index + 2) = buf2[a];
+                    ant_jones(index + 3) = buf3[a];
                 }
             }
         }

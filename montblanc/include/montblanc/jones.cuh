@@ -22,6 +22,17 @@
 
 namespace montblanc {
 
+template <
+    typename T,
+    typename Tr=montblanc::kernel_traits<T>,
+    typename Po=montblanc::kernel_policies<T> >
+__device__ __forceinline__
+typename Tr::CT jones_identity()
+{
+    bool is_diag = ((int(cub::LaneId()) - 1) & 0x2) != 0;
+    return Po::make_ct(is_diag ? T(1.0) : T(0.0), T(0.0));
+}
+
 // The base visibility index. 0 0 0 0 4 4 4 4 8 8 8 8
 #define _MONTBLANC_VIS_BASE_IDX int(cub::LaneId() & 28)
 // Odd polarisation? 0 1 0 1 0 1 0 1 0 1 0 1

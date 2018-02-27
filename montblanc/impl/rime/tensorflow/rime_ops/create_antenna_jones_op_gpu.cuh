@@ -37,20 +37,29 @@ template <> struct LaunchTraits<double>
     static constexpr int BLOCKDIMZ = 1;
 };
 
+template <typename T>
+__device__  __forceinline__ void device_swap(T & a, T & b)
+{
+    T c(a); a=b; b=c;
+}
+
 // CUDA kernel outline
 template <typename Traits>
 __global__ void rime_create_antenna_jones(
     const typename Traits::CT * bsqrt,
     const typename Traits::CT * complex_phase,
     const typename Traits::CT * feed_rotation,
-    const typename Traits::CT * ejones,
+    const typename Traits::CT * ddes,
     const int * arow_time_index,
     typename Traits::CT * ant_jones,
-    int nsrc, int ntime, int narow, int nchan, int npol)
+    int nsrc, int ntime, int narow, int nchan, int npol,
+    bool have_bsqrt, bool have_complex_phase,
+    bool have_feed_rotation, bool have_ddes)
 {
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
     using LTr = LaunchTraits<FT>;
+    using Po = typename montblanc::kernel_policies<FT>;
 
     int polchan = blockIdx.x*blockDim.x + threadIdx.x;
     int chan = polchan / npol;
@@ -71,7 +80,7 @@ __global__ void rime_create_antenna_jones(
     // Feed rotation varies by arow and polarisation
     // Polarisation is baked into the X dimension, so use the
     // first npol threads to load polarisation info
-    if(threadIdx.x < npol)
+    if(have_feed_rotation && threadIdx.x < npol)
     {
         i = arow*npol + pol;
         shared.fr[threadIdx.y][threadIdx.x] = feed_rotation[i];
@@ -85,32 +94,65 @@ __global__ void rime_create_antenna_jones(
 
     __syncthreads();
 
+    using montblanc::jones_multiply_4x4_in_place;
+    using montblanc::complex_multiply_in_place;
+
     for(int src=0; src < nsrc; ++src)
     {
-        // Load in bsqrt
-        i = src*ntime + shared.time_index[threadIdx.y];
-        CT brightness_sqrt = bsqrt[i*npolchan + polchan];
+        CT buf[2];
+        int a = 0, in = 1;
+        bool initialised = 0;
 
-        // Load in the complex phase
-        int i = (src*narow + arow)*nchan + chan;
-        CT cplx_phase = complex_phase[i];
+        if(have_bsqrt)
+        {
+            // Load and multiply the brightness square root
+            i = src*ntime + shared.time_index[threadIdx.y];
+            buf[in] = bsqrt[i*npolchan + polchan];
+            if(initialised)
+                { jones_multiply_4x4_in_place<FT>(buf[in], buf[a]); }
+            device_swap(a, in);
+            initialised = true;
+        }
 
-        // Multiply brightness square root into the complex phase
-        montblanc::complex_multiply_in_place<FT>(cplx_phase, brightness_sqrt);
+        if(have_complex_phase)
+        {
+            // Load and multiply the complex phase
+            i = (src*narow + arow)*nchan + chan;
+            buf[in] = complex_phase[i];
+            if(initialised)
+                { complex_multiply_in_place<FT>(buf[in], buf[a]); }
+            device_swap(a, in);
+            initialised = true;
+        }
 
-        // Load in the feed rotation and multiply by KB
-        CT L = shared.fr[threadIdx.y][pol];
+        if(have_feed_rotation)
+        {
+            // Load and multiply the feed rotation
+            buf[in] = shared.fr[threadIdx.y][pol];
+            if(initialised)
+                { jones_multiply_4x4_in_place<FT>(buf[in], buf[a]); }
+            device_swap(a, in);
+            initialised = true;
+        }
 
-        montblanc::jones_multiply_4x4_in_place<FT>(L, cplx_phase);
-
-        // Load in the E Beam and multiply by LKB
         i = (src*narow + arow)*npolchan + polchan;
-        CT E = ejones[i];
 
-        montblanc::jones_multiply_4x4_in_place<FT>(E, L);
+        if(have_ddes)
+        {
+            // Load and multiply the ddes
+            buf[in] = ddes[i];
+            if(initialised)
+                { jones_multiply_4x4_in_place<FT>(buf[in], buf[a]); }
+            device_swap(a, in);
+            initialised = true;
+        }
+
+        // If still uninitialised, set to jones identity
+        if(!initialised)
+            { buf[a] = montblanc::jones_identity<FT>(); }
 
         // Output final per antenna value
-        ant_jones[i] = E;
+        ant_jones[i] = buf[a];
     }
 }
 
@@ -118,9 +160,29 @@ __global__ void rime_create_antenna_jones(
 template <typename FT, typename CT>
 class CreateAntennaJones<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
+private:
+    bool have_bsqrt;
+    bool have_complex_phase;
+    bool have_feed_rotation;
+    bool have_ddes;
+
 public:
     explicit CreateAntennaJones(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context) {}
+        tensorflow::OpKernel(context),
+        have_bsqrt(false),
+        have_complex_phase(false),
+        have_feed_rotation(false),
+        have_ddes(false)
+    {
+        OP_REQUIRES_OK(context, context->GetAttr("have_bsqrt",
+                                                 &have_bsqrt));
+        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase",
+                                                 &have_complex_phase));
+        OP_REQUIRES_OK(context, context->GetAttr("have_feed_rotation",
+                                                 &have_feed_rotation));
+        OP_REQUIRES_OK(context, context->GetAttr("have_ddes",
+                                                 &have_ddes));
+    }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
@@ -130,15 +192,59 @@ public:
         const tf::Tensor & in_bsqrt = context->input(0);
         const tf::Tensor & in_complex_phase = context->input(1);
         const tf::Tensor & in_feed_rotation = context->input(2);
-        const tf::Tensor & in_ejones = context->input(3);
+        const tf::Tensor & in_ddes = context->input(3);
         const tf::Tensor & in_arow_time_index = context->input(4);
 
-        // Extract problem dimensions
-        int nsrc = in_complex_phase.dim_size(0);
-        int narow = in_complex_phase.dim_size(1);
-        int ntime = in_bsqrt.dim_size(1);
-        int nchan = in_complex_phase.dim_size(2);
-        int npol = in_bsqrt.dim_size(3);
+        int nsrc = -1, ntime = -1, narow = -1, nchan = -1, npol = -1;
+
+        auto update_dim = [](int & old_size,
+                            const tf::Tensor & tensor,
+                            int dim) -> tf::Status
+        {
+            auto new_size = tensor.dim_size(dim);
+
+            if(old_size == -1)
+            {
+                old_size = new_size;
+            }
+            else if(old_size != new_size)
+            {
+                return tf::Status(tf::errors::InvalidArgument(
+                        "Previously set dimension size '",  old_size,
+                        "' does not equal new size '", new_size, "'"));
+            }
+
+            return tf::Status::OK();
+        };
+
+        if(have_bsqrt)
+        {
+            OP_REQUIRES_OK(context, update_dim(nsrc, in_bsqrt, 0));
+            OP_REQUIRES_OK(context, update_dim(ntime, in_bsqrt, 1));
+            OP_REQUIRES_OK(context, update_dim(nchan, in_bsqrt, 2));
+            OP_REQUIRES_OK(context, update_dim(npol, in_bsqrt, 3));
+        }
+
+        if(have_complex_phase)
+        {
+            OP_REQUIRES_OK(context, update_dim(nsrc, in_complex_phase, 0));
+            OP_REQUIRES_OK(context, update_dim(narow, in_complex_phase, 1));
+            OP_REQUIRES_OK(context, update_dim(nchan, in_complex_phase, 2));
+        }
+
+        if(have_feed_rotation)
+        {
+            OP_REQUIRES_OK(context, update_dim(narow, in_feed_rotation, 0));
+        }
+
+        if(have_ddes)
+        {
+            OP_REQUIRES_OK(context, update_dim(nsrc, in_ddes, 0));
+            OP_REQUIRES_OK(context, update_dim(narow, in_ddes, 1));
+            OP_REQUIRES_OK(context, update_dim(nchan, in_ddes, 2));
+            OP_REQUIRES_OK(context, update_dim(npol, in_ddes, 3));
+        }
+
         int npolchan = nchan*npol;
 
         //GPU kernel above requires this hard-coded number
@@ -173,8 +279,8 @@ public:
             in_complex_phase.flat<CT>().data());
         auto feed_rotation = reinterpret_cast<const typename Tr::CT *>(
             in_feed_rotation.flat<CT>().data());
-        auto ejones = reinterpret_cast<const typename Tr::CT *>(
-            in_ejones.flat<CT>().data());
+        auto ddes = reinterpret_cast<const typename Tr::CT *>(
+            in_ddes.flat<CT>().data());
         auto arow_time_index = reinterpret_cast<const int *>(
             in_arow_time_index.flat<int>().data());
         auto ant_jones = reinterpret_cast<typename Tr::CT *>(
@@ -183,8 +289,10 @@ public:
         // Call the rime_create_antenna_jones CUDA kernel
         rime_create_antenna_jones<Tr><<<grid, block, 0, device.stream()>>>(
             bsqrt, complex_phase, feed_rotation,
-            ejones, arow_time_index, ant_jones,
-            nsrc, ntime, narow, nchan, npol);
+            ddes, arow_time_index, ant_jones,
+            nsrc, ntime, narow, nchan, npol,
+            have_bsqrt, have_complex_phase,
+            have_feed_rotation, have_ddes);
     }
 };
 
