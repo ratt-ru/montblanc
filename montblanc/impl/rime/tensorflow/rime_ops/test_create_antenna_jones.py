@@ -45,13 +45,27 @@ class TestCreateAntennaJones(unittest.TestCase):
         """ Tests the CreateAntennaJones operator """
         # List of type constraint for testing this operator
         type_permutations = [[np.float32, np.complex64],
-                             [np.float64, np.complex128]]
+                            [np.float64, np.complex128]]
+
+        # Set up type permutation and jones term permutations
+        # We don't test all jones term permutations because
+        # the total output shape can't be inferred
+        # for all combinations
+        perms = []
+        for type_perms in type_permutations:
+            perms.append(type_perms + [True, True, False, False])
+            perms.append(type_perms + [False, False, True, True])
+            perms.append(type_perms + [False, False, False, True])
 
         # Run test with the type combinations above
-        for FT, CT in type_permutations:
-            self._impl_test_create_antenna_jones(FT, CT)
+        for FT, CT, bsqrt, cplx_phase, feed_rot, ddes in perms:
+            self._impl_test_create_antenna_jones(FT, CT,
+                                                bsqrt, cplx_phase,
+                                                feed_rot, ddes)
 
-    def _impl_test_create_antenna_jones(self, FT, CT):
+    def _impl_test_create_antenna_jones(self, FT, CT,
+                                        have_bsqrt, have_complex_phase,
+                                        have_feed_rotation, have_ddes):
         """ Implementation of the CreateAntennaJones operator test """
         rf = lambda *s: np.random.random(size=s).astype(FT)
         rc = lambda *s: (rf(*s) + rf(*s) * 1j).astype(CT)
@@ -81,7 +95,11 @@ class TestCreateAntennaJones(unittest.TestCase):
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return self.rime.create_antenna_jones(*tf_args, FT=FT)
+                return self.rime.create_antenna_jones(*tf_args, FT=FT,
+                                have_bsqrt=have_bsqrt,
+                                have_complex_phase=have_complex_phase,
+                                have_feed_rotation=have_feed_rotation,
+                                have_ddes=have_ddes)
 
         # Pin operation to CPU
         cpu_op = _pin_op('/cpu:0', *tf_args)
@@ -97,11 +115,17 @@ class TestCreateAntennaJones(unittest.TestCase):
 
             # Get the CPU create_antenna_jones
             cpu_aj = S.run(cpu_op)
-            np_aj = np_create_antenna_jones(bsqrt, complex_phase,
-                                            feed_rotation, ejones,
-                                            arow_time_index)
 
-            self.assertTrue(np.allclose(np_aj, cpu_aj))
+            # Only test against numpy if we have all the terms
+            test_np = (have_bsqrt and have_complex_phase and
+                        have_feed_rotation and have_ddes)
+
+            if test_np:
+                np_aj = np_create_antenna_jones(bsqrt, complex_phase,
+                                                feed_rotation, ejones,
+                                                arow_time_index)
+
+                self.assertTrue(np.allclose(np_aj, cpu_aj))
 
             # Compare with GPU create_antenna_jones
             for gpu_aj in S.run(gpu_ops):
