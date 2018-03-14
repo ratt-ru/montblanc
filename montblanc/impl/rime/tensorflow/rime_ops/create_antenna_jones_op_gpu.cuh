@@ -110,8 +110,9 @@ __global__ void rime_create_antenna_jones(
             buf[in] = bsqrt[i*npolchan + polchan];
             if(initialised)
                 { jones_multiply_4x4_in_place<FT>(buf[in], buf[a]); }
+            else
+                { initialised = true; }
             device_swap(a, in);
-            initialised = true;
         }
 
         if(have_complex_phase)
@@ -121,8 +122,9 @@ __global__ void rime_create_antenna_jones(
             buf[in] = complex_phase[i];
             if(initialised)
                 { complex_multiply_in_place<FT>(buf[in], buf[a]); }
+            else
+                { initialised = true; }
             device_swap(a, in);
-            initialised = true;
         }
 
         if(have_feed_rotation)
@@ -131,8 +133,9 @@ __global__ void rime_create_antenna_jones(
             buf[in] = shared.fr[threadIdx.y][pol];
             if(initialised)
                 { jones_multiply_4x4_in_place<FT>(buf[in], buf[a]); }
+            else
+                { initialised = true; }
             device_swap(a, in);
-            initialised = true;
         }
 
         i = (src*narow + arow)*npolchan + polchan;
@@ -143,8 +146,9 @@ __global__ void rime_create_antenna_jones(
             buf[in] = ddes[i];
             if(initialised)
                 { jones_multiply_4x4_in_place<FT>(buf[in], buf[a]); }
+            else
+                { initialised = true; }
             device_swap(a, in);
-            initialised = true;
         }
 
         // If still uninitialised, set to jones identity

@@ -136,13 +136,14 @@ public:
                 for(int chan=0; chan < nchan; ++chan)
                 {
                     // Maintain a double buffer of complex matrix values
-                    CT buf0[2] = {{1.0, 0.0}, {1.0, 0.0}};
-                    CT buf1[2] = {{0.0, 0.0}, {0.0, 0.0}};
-                    CT buf2[2] = {{0.0, 0.0}, {0.0, 0.0}};
-                    CT buf3[2] = {{1.0, 0.0}, {1.0, 0.0}};
+                    CT buf0[2];
+                    CT buf1[2];
+                    CT buf2[2];
+                    CT buf3[2];
                     // active and inactive buffer indices
                     int a = 0;
                     int i = 1;
+                    bool initialised = false;
 
                     if(have_bsqrt)
                     {
@@ -153,10 +154,21 @@ public:
                         const CT & b2 = bsqrt(index + 2);
                         const CT & b3 = bsqrt(index + 3);
 
-                        buf0[i] = b0*buf0[a] + b1*buf2[a];
-                        buf1[i] = b0*buf1[a] + b1*buf3[a];
-                        buf2[i] = b2*buf0[a] + b3*buf2[a];
-                        buf3[i] = b2*buf1[a] + b3*buf3[a];
+                        if(initialised)
+                        {
+                            buf0[i] = b0*buf0[a] + b1*buf2[a];
+                            buf1[i] = b0*buf1[a] + b1*buf3[a];
+                            buf2[i] = b2*buf0[a] + b3*buf2[a];
+                            buf3[i] = b2*buf1[a] + b3*buf3[a];
+                        }
+                        else
+                        {
+                            buf0[i] = b0;
+                            buf1[i] = b1;
+                            buf2[i] = b2;
+                            buf3[i] = b3;
+                            initialised = true;
+                        }
 
                         std::swap(a, i);
                     }
@@ -167,10 +179,21 @@ public:
                         index = (src*narow + row)*nchan + chan;
                         const CT & cp = complex_phase(index);
 
-                        buf0[i] = cp*buf0[a];
-                        buf1[i] = cp*buf1[a];
-                        buf2[i] = cp*buf2[a];
-                        buf3[i] = cp*buf3[a];
+                        if(initialised)
+                        {
+                            buf0[i] = cp*buf0[a];
+                            buf1[i] = cp*buf1[a];
+                            buf2[i] = cp*buf2[a];
+                            buf3[i] = cp*buf3[a];
+                        }
+                        else
+                        {
+                            buf0[i] = cp;
+                            buf1[i] = cp;
+                            buf2[i] = cp;
+                            buf3[i] = cp;
+                            initialised = true;
+                        }
 
                         std::swap(a, i);
                     }
@@ -179,15 +202,27 @@ public:
                     {
                         // Reference feed rotation matrix
                         index = row*npol;
+
                         const CT & l0 = feed_rotation(index + 0);
                         const CT & l1 = feed_rotation(index + 1);
                         const CT & l2 = feed_rotation(index + 2);
                         const CT & l3 = feed_rotation(index + 3);
 
-                        buf0[i] = l0*buf0[a] + l1*buf2[a];
-                        buf1[i] = l0*buf1[a] + l1*buf3[a];
-                        buf2[i] = l2*buf0[a] + l3*buf2[a];
-                        buf3[i] = l2*buf1[a] + l3*buf3[a];
+                        if(initialised)
+                        {
+                            buf0[i] = l0*buf0[a] + l1*buf2[a];
+                            buf1[i] = l0*buf1[a] + l1*buf3[a];
+                            buf2[i] = l2*buf0[a] + l3*buf2[a];
+                            buf3[i] = l2*buf1[a] + l3*buf3[a];
+                        }
+                        else
+                        {
+                            buf0[i] = l0;
+                            buf1[i] = l1;
+                            buf2[i] = l2;
+                            buf3[i] = l3;
+                            initialised = true;
+                        }
 
                         std::swap(a, i);
                     }
@@ -202,12 +237,32 @@ public:
                         const CT & e2 = ddes(index + 2);
                         const CT & e3 = ddes(index + 3);
 
-                        buf0[i] = e0*buf0[a] + e1*buf2[a];
-                        buf1[i] = e0*buf1[a] + e1*buf3[a];
-                        buf2[i] = e2*buf0[a] + e3*buf2[a];
-                        buf3[i] = e2*buf1[a] + e3*buf3[a];
+                        if(initialised)
+                        {
+                            buf0[i] = e0*buf0[a] + e1*buf2[a];
+                            buf1[i] = e0*buf1[a] + e1*buf3[a];
+                            buf2[i] = e2*buf0[a] + e3*buf2[a];
+                            buf3[i] = e2*buf1[a] + e3*buf3[a];
+                        }
+                        else
+                        {
+                            buf0[i] = e0;
+                            buf1[i] = e1;
+                            buf2[i] = e2;
+                            buf3[i] = e3;
+                            initialised = true;
+                        }
 
                         std::swap(a, i);
+                    }
+
+                    // This shouldn't happen, use ID matrix
+                    if(!initialised)
+                    {
+                        buf0[a] = { 1.0, 0.0 };
+                        buf1[a] = { 0.0, 0.0 };
+                        buf2[a] = { 0.0, 0.0 };
+                        buf3[a] = { 1.0, 0.0 };
                     }
 
                     // Multiply in the dde term
