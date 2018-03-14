@@ -19,9 +19,17 @@ typedef Eigen::ThreadPoolDevice CPUDevice;
 template <typename FT, typename CT>
 class SumCoherencies<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
+private:
+    bool have_complex_phase;
+
 public:
     explicit SumCoherencies(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context) {}
+        tensorflow::OpKernel(context),
+        have_complex_phase(false)
+    {
+        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase",
+                                                 &have_complex_phase));
+    }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
@@ -33,7 +41,8 @@ public:
         const tf::Tensor & in_shape = context->input(3);
         const tf::Tensor & in_ant_jones = context->input(4);
         const tf::Tensor & in_sgn_brightness = context->input(5);
-        const tf::Tensor & in_base_coherencies = context->input(6);
+        const tf::Tensor & in_complex_phase = context->input(6);
+        const tf::Tensor & in_base_coherencies = context->input(7);
 
         int nvrow = in_time_index.dim_size(0);
         int nsrc = in_shape.dim_size(0);
@@ -55,6 +64,7 @@ public:
         auto shape = in_shape.tensor<FT, 3>();
         auto ant_jones = in_ant_jones.tensor<CT, 5>();
         auto sgn_brightness = in_sgn_brightness.tensor<tf::int8, 2>();
+        auto complex_phase = in_complex_phase.flat<CT>();
         auto base_coherencies = in_base_coherencies.tensor<CT, 3>();
         auto coherencies = coherencies_ptr->tensor<CT, 3>();
 
@@ -77,19 +87,38 @@ public:
                 for(int src=0; src<nsrc; ++src)
                 {
                     // Reference antenna 1 jones
-                    const CT & a0 = ant_jones(src, time, ant1, chan, 0);
-                    const CT & a1 = ant_jones(src, time, ant1, chan, 1);
-                    const CT & a2 = ant_jones(src, time, ant1, chan, 2);
-                    const CT & a3 = ant_jones(src, time, ant1, chan, 3);
+                    CT a0 = ant_jones(src, time, ant1, chan, 0);
+                    CT a1 = ant_jones(src, time, ant1, chan, 1);
+                    CT a2 = ant_jones(src, time, ant1, chan, 2);
+                    CT a3 = ant_jones(src, time, ant1, chan, 3);
 
                     // Multiply shape value into antenna1 jones
                     const FT & s = shape(src, vrow, chan);
 
+                    a0 = s*a0;
+                    a1 = s*a1;
+                    a2 = s*a2;
+                    a3 = s*a3;
+
+                    // Now multiply in the complex phase if we have it
+                    if(have_complex_phase)
+                    {
+                        // complex_phase index is flat because it may be scalar
+                        const int index = (src*nvrow + vrow)*nchan + chan;
+                        const CT & cp = complex_phase(index);
+
+                        a0 = cp*a0;
+                        a1 = cp*a1;
+                        a2 = cp*a2;
+                        a3 = cp*a3;
+                    }
+
                     // Conjugate transpose of antenna 2 jones with shape factor
-                    CT b0 = std::conj(ant_jones(src, time, ant2, chan, 0)*s);
-                    CT b1 = std::conj(ant_jones(src, time, ant2, chan, 2)*s);
-                    CT b2 = std::conj(ant_jones(src, time, ant2, chan, 1)*s);
-                    CT b3 = std::conj(ant_jones(src, time, ant2, chan, 3)*s);
+                    const CT b0 = std::conj(ant_jones(src, time, ant2, chan, 0));
+                    const CT b1 = std::conj(ant_jones(src, time, ant2, chan, 2));
+                    const CT b2 = std::conj(ant_jones(src, time, ant2, chan, 1));
+                    const CT b3 = std::conj(ant_jones(src, time, ant2, chan, 3));
+
 
                     FT sign = sgn_brightness(src, time);
 

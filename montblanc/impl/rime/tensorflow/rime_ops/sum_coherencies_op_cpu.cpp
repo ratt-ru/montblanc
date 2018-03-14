@@ -15,6 +15,9 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
     ShapeHandle input;
     DimensionHandle d;
 
+    bool have_complex_phase = false;
+    c->GetAttr("have_complex_phase", &have_complex_phase);
+
     // Get input shapes
     ShapeHandle time_index = c->input(0);
     ShapeHandle antenna1 = c->input(1);
@@ -22,7 +25,8 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
     ShapeHandle shape = c->input(3);
     ShapeHandle ant_jones = c->input(4);
     ShapeHandle sgn_brightness = c->input(5);
-    ShapeHandle base_coherencies = c->input(6);
+    ShapeHandle complex_phase = c->input(6);
+    ShapeHandle base_coherencies = c->input(7);
 
     // time_index
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(time_index, 1, &input),
@@ -51,6 +55,14 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
         "sgn_brightness shape must be [nsrc, ntime] but is " +
         c->DebugString(sgn_brightness));
 
+    // complex phase
+    if(have_complex_phase)
+    {
+        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(complex_phase, 3, &input),
+            "complex_phase shape must be [nsrc, nvrows, nchan] but is " +
+            c->DebugString(complex_phase));
+    }
+
     // base_coherencies
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(base_coherencies, 3, &input),
         "base_coherencies shape must be [nvrows, nchan, 4] but is " +
@@ -77,10 +89,12 @@ REGISTER_OP("SumCoherencies")
     .Input("shape: FT")
     .Input("ant_jones: CT")
     .Input("sgn_brightness: int8")
+    .Input("complex_phase: CT")
     .Input("base_coherencies: CT")
     .Output("coherencies: CT")
     .Attr("FT: {double, float} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
+    .Attr("have_complex_phase: bool = true")
     .SetShapeFn(sum_coherencies_shape_function);
 
 // Register a CPU kernel for SumCoherencies that handles floats

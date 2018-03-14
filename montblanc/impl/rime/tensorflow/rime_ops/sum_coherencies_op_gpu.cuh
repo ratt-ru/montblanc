@@ -46,9 +46,11 @@ __global__ void rime_sum_coherencies(
     const typename Traits::FT * shape,
     const typename Traits::ant_jones_type * ant_jones,
     const typename Traits::sgn_brightness_type * sgn_brightness,
+    const typename Traits::CT * complex_phase,
     const typename Traits::vis_type * base_coherencies,
     typename Traits::vis_type * coherencies,
-    int nsrc, int ntime, int nvrow, int na, int nchan, int npolchan)
+    int nsrc, int ntime, int nvrow, int na, int nchan, int npolchan,
+    bool have_complex_phase)
 {
     // Shared memory usage unnecesssary, but demonstrates use of
     // constant Trait members to create kernel shared memory.
@@ -75,21 +77,31 @@ __global__ void rime_sum_coherencies(
     // Sum over visibilities
     for(int src=0; src < nsrc; ++src)
     {
-        // Load in shape value
-        i = (src*nvrow + vrow)*nchan + chan;
-        FT shape_ = shape[i];
 
         int base = src*ntime + time;
 
         // Load in antenna 1 jones
         i = (base*na + ant1)*npolchan + polchan;
         CT J1 = ant_jones[i];
+
+        // Load in shape value and complex phase
+        i = (src*nvrow + vrow)*nchan + chan;
+        FT shape_ = shape[i];
+        // Multiply shape factor into antenna 1 jones
+        J1.x *= shape_; J1.y *= shape_;
+
+        // Multiply in the complex phase if it's available
+        if(have_complex_phase)
+        {
+            CT cp = complex_phase[i];
+            CT J1tmp = J1;
+            J1.x = J1tmp.x*cp.x - J1tmp.y*cp.y,
+            J1.y = J1tmp.x*cp.y + J1tmp.y*cp.x;
+        }
+
         // Load antenna 2 jones
         i = (base*na + ant2)*npolchan + polchan;
         CT J2 = ant_jones[i];
-
-        // Multiply shape factor into antenna 2 jones
-        J2.x *= shape_; J2.y *= shape_;
 
         // Multiply jones matrices, result into J1
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<FT>(
@@ -115,9 +127,17 @@ __global__ void rime_sum_coherencies(
 template <typename FT, typename CT>
 class SumCoherencies<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
+private:
+    bool have_complex_phase;
+
 public:
     explicit SumCoherencies(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context) {}
+        tensorflow::OpKernel(context),
+        have_complex_phase(false)
+    {
+        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase",
+                                                 &have_complex_phase));
+    }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
@@ -129,7 +149,8 @@ public:
         const tf::Tensor & in_shape = context->input(3);
         const tf::Tensor & in_ant_jones = context->input(4);
         const tf::Tensor & in_sgn_brightness = context->input(5);
-        const tf::Tensor & in_base_coherencies = context->input(6);
+        const tf::Tensor & in_complex_phase = context->input(6);
+        const tf::Tensor & in_base_coherencies = context->input(7);
 
         int nvrow = in_time_index.dim_size(0);
         int ntime = in_ant_jones.dim_size(1);
@@ -162,6 +183,8 @@ public:
             in_ant_jones.flat<CT>().data());
         auto sgn_brightness = reinterpret_cast<const typename Tr::sgn_brightness_type *>(
             in_sgn_brightness.flat<tf::int8>().data());
+        auto complex_phase = reinterpret_cast<const typename Tr::CT *>(
+            in_complex_phase.flat<CT>().data());
         auto base_coherencies = reinterpret_cast<const typename Tr::vis_type *>(
             in_base_coherencies.flat<CT>().data());
         auto coherencies = reinterpret_cast<typename Tr::vis_type *>(
@@ -180,8 +203,9 @@ public:
         // Call the rime_sum_coherencies CUDA kernel
         rime_sum_coherencies<Tr><<<grid, block, 0, device.stream()>>>(
             time_index, antenna1, antenna2, shape, ant_jones,
-            sgn_brightness, base_coherencies, coherencies,
-            nsrc, ntime, nvrow, na, nchan, npolchan);
+            sgn_brightness, complex_phase, base_coherencies, coherencies,
+            nsrc, ntime, nvrow, na, nchan, npolchan,
+            have_complex_phase);
     }
 };
 
