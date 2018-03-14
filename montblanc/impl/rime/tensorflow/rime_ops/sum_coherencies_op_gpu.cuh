@@ -49,8 +49,7 @@ __global__ void rime_sum_coherencies(
     const typename Traits::CT * complex_phase,
     const typename Traits::vis_type * base_coherencies,
     typename Traits::vis_type * coherencies,
-    int nsrc, int ntime, int nvrow, int na, int nchan, int npolchan,
-    bool have_complex_phase)
+    int nsrc, int ntime, int nvrow, int na, int nchan, int npolchan)
 {
     // Shared memory usage unnecesssary, but demonstrates use of
     // constant Trait members to create kernel shared memory.
@@ -91,7 +90,7 @@ __global__ void rime_sum_coherencies(
         J1.x *= shape_; J1.y *= shape_;
 
         // Multiply in the complex phase if it's available
-        if(have_complex_phase)
+        if(complex_phase != nullptr)
         {
             CT cp = complex_phase[i];
             CT J1tmp = J1;
@@ -203,9 +202,9 @@ public:
         // Call the rime_sum_coherencies CUDA kernel
         rime_sum_coherencies<Tr><<<grid, block, 0, device.stream()>>>(
             time_index, antenna1, antenna2, shape, ant_jones,
-            sgn_brightness, complex_phase, base_coherencies, coherencies,
-            nsrc, ntime, nvrow, na, nchan, npolchan,
-            have_complex_phase);
+            sgn_brightness, have_complex_phase ? complex_phase : nullptr,
+            base_coherencies, coherencies,
+            nsrc, ntime, nvrow, na, nchan, npolchan);
     }
 };
 

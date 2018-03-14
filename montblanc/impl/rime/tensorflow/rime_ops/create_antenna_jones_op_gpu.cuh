@@ -52,9 +52,7 @@ __global__ void rime_create_antenna_jones(
     const typename Traits::CT * ddes,
     const int * arow_time_index,
     typename Traits::CT * ant_jones,
-    int nsrc, int ntime, int narow, int nchan, int npol,
-    bool have_bsqrt, bool have_complex_phase,
-    bool have_feed_rotation, bool have_ddes)
+    int nsrc, int ntime, int narow, int nchan, int npol)
 {
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
@@ -80,7 +78,7 @@ __global__ void rime_create_antenna_jones(
     // Feed rotation varies by arow and polarisation
     // Polarisation is baked into the X dimension, so use the
     // first npol threads to load polarisation info
-    if(have_feed_rotation && threadIdx.x < npol)
+    if(feed_rotation != nullptr && threadIdx.x < npol)
     {
         i = arow*npol + pol;
         shared.fr[threadIdx.y][threadIdx.x] = feed_rotation[i];
@@ -103,7 +101,7 @@ __global__ void rime_create_antenna_jones(
         int a = 0, in = 1;
         bool initialised = 0;
 
-        if(have_bsqrt)
+        if(bsqrt != nullptr)
         {
             // Load and multiply the brightness square root
             i = src*ntime + shared.time_index[threadIdx.y];
@@ -115,7 +113,7 @@ __global__ void rime_create_antenna_jones(
             device_swap(a, in);
         }
 
-        if(have_complex_phase)
+        if(complex_phase != nullptr)
         {
             // Load and multiply the complex phase
             i = (src*narow + arow)*nchan + chan;
@@ -127,7 +125,7 @@ __global__ void rime_create_antenna_jones(
             device_swap(a, in);
         }
 
-        if(have_feed_rotation)
+        if(feed_rotation != nullptr)
         {
             // Load and multiply the feed rotation
             buf[in] = shared.fr[threadIdx.y][pol];
@@ -140,7 +138,7 @@ __global__ void rime_create_antenna_jones(
 
         i = (src*narow + arow)*npolchan + polchan;
 
-        if(have_ddes)
+        if(ddes != nullptr)
         {
             // Load and multiply the ddes
             buf[in] = ddes[i];
@@ -292,11 +290,12 @@ public:
 
         // Call the rime_create_antenna_jones CUDA kernel
         rime_create_antenna_jones<Tr><<<grid, block, 0, device.stream()>>>(
-            bsqrt, complex_phase, feed_rotation,
-            ddes, arow_time_index, ant_jones,
-            nsrc, ntime, narow, nchan, npol,
-            have_bsqrt, have_complex_phase,
-            have_feed_rotation, have_ddes);
+            have_bsqrt ? bsqrt : nullptr,
+            have_complex_phase ? complex_phase : nullptr,
+            have_feed_rotation ? feed_rotation : nullptr,
+            have_ddes ? ddes : nullptr,
+            arow_time_index, ant_jones,
+            nsrc, ntime, narow, nchan, npol);
     }
 };
 

@@ -16,8 +16,8 @@ def np_create_antenna_jones(bsqrt, complex_phase, feed_rotation,
     ej_shape = ejones.shape[0:-1] + (2, 2)
 
     # Multiple result into feed rotation
-    # time, antenna, i, j
-    # src, time, antenna, channel, j, k
+    # arow, i, j
+    # src, arow, channel, j, k
     result = np.einsum("aij,sacjk->sacik",
                        feed_rotation.reshape(fr_shape),
                        result.reshape(res_shape))
