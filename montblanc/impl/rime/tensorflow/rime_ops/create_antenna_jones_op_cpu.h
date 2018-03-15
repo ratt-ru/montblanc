@@ -124,8 +124,6 @@ public:
         auto arow_time_index = in_arow_time_index.tensor<int, 1>();
         auto ant_jones = ant_jones_ptr->tensor<CT, 4>();
 
-        int index;
-
         #pragma omp parallel for collapse(2)
         for(int src=0; src < nsrc; ++src)
         {
@@ -148,7 +146,7 @@ public:
                     if(have_bsqrt)
                     {
                         // Reference brightness square root
-                        index = ((src*ntime + time)*nchan + chan)*npol;
+                        const int index = ((src*ntime + time)*nchan + chan)*npol;
                         const CT & b0 = bsqrt(index + 0);
                         const CT & b1 = bsqrt(index + 1);
                         const CT & b2 = bsqrt(index + 2);
@@ -176,7 +174,7 @@ public:
                     if(have_complex_phase)
                     {
                         // Reference complex phase
-                        index = (src*narow + row)*nchan + chan;
+                        const int index = (src*narow + row)*nchan + chan;
                         const CT & cp = complex_phase(index);
 
                         if(initialised)
@@ -201,7 +199,7 @@ public:
                     if(have_feed_rotation)
                     {
                         // Reference feed rotation matrix
-                        index = row*npol;
+                        const int index = row*npol;
 
                         const CT & l0 = feed_rotation(index + 0);
                         const CT & l1 = feed_rotation(index + 1);
@@ -231,7 +229,7 @@ public:
                     if(have_ddes)
                     {
                         // Reference ddes matrix
-                        index = ((src*narow + row)*nchan + chan)*npol;
+                        const int index = ((src*narow + row)*nchan + chan)*npol;
                         const CT & e0 = ddes(index + 0);
                         const CT & e1 = ddes(index + 1);
                         const CT & e2 = ddes(index + 2);
@@ -266,7 +264,7 @@ public:
                     }
 
                     // Multiply in the dde term
-                    index = ((src*narow + row)*nchan + chan)*npol;
+                    const int index = ((src*narow + row)*nchan + chan)*npol;
                     ant_jones(index + 0) = buf0[a];
                     ant_jones(index + 1) = buf1[a];
                     ant_jones(index + 2) = buf2[a];
