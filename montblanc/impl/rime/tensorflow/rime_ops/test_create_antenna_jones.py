@@ -53,6 +53,7 @@ class TestCreateAntennaJones(unittest.TestCase):
         # for all combinations
         perms = []
         for type_perms in type_permutations:
+            perms.append(type_perms + [True, True, True, True])
             perms.append(type_perms + [True, True, False, False])
             perms.append(type_perms + [False, False, True, True])
             perms.append(type_perms + [False, False, False, True])
