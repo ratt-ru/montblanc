@@ -127,7 +127,7 @@ install_requires = [
     'bitstring >= 3.1.5',
     'boltons >= 17.1.0',
     'dask >= 0.17.1',
-    'distributed >= 1.21.1',
+    'distributed >= 1.21.3',
     'futures >= 3.0.5',
     'hypercube == 0.3.3',
     'xarray-ms >= 0.0.1',
