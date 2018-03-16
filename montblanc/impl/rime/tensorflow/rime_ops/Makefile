@@ -1,5 +1,6 @@
 # Tensorflow includes and defines
 TF_INC=$(shell python -c 'import tensorflow as tf; print tf.sysconfig.get_include()')
+TF_LIBDIR=$(shell python -c 'import tensorflow as tf; print tf.sysconfig.get_lib()')
 TF_CUDA=$(shell python -c 'import tensorflow as tf; print int(tf.test.is_built_with_cuda())')
 MB_INC=../../../../include
 
@@ -22,12 +23,12 @@ OBJECTS=$(addsuffix .o, $(basename $(SOURCES)))
 LIBRARY=rime.so
 
 # Compiler flags
-INCLUDES= -I $(TF_INC) -I $(MB_INC)
+INCLUDES= -I $(TF_INC) -I $(MB_INC) -I$(TF_INC)/external/nsync/public
 CPPFLAGS=-std=c++11 $(TF_FLAGS) $(INCLUDES) -fPIC -fopenmp -O2 -march=native -mtune=native
 NVCCFLAGS=-std=c++11 -D GOOGLE_CUDA=$(TF_CUDA) $(TF_FLAGS) $(INCLUDES) \
 	-x cu --compiler-options "-fPIC" --gpu-architecture=sm_30 -lineinfo
 
-LDFLAGS = -fPIC -fopenmp
+LDFLAGS = -fPIC -fopenmp -L$(TF_LIBDIR) -ltensorflow_framework
 
 # Compiler directives
 COMPILE.cpp = g++ $(DEPFLAGS) $(CPPFLAGS) -c
