@@ -27,10 +27,6 @@ private:
     DataTypeVector dtypes_;
     std::vector<PartialTensorShape> shapes_;
 
-private:
-    bool _is_closed(void) EXCLUSIVE_LOCKS_REQUIRED(mu_)
-        { return closed_; }
-
 public:
     explicit QueueResource(const DataTypeVector & dtypes,
                            const std::vector<PartialTensorShape> & shapes)
@@ -40,19 +36,28 @@ public:
 
     void close(void) LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
-        closed_ = true;
+        {
+            mutex_lock l(mu_);
+            closed_ = true;
+        }
+
+        // Notify all waiting consumers
+        cv_.notify_all();
     }
 
     Status insert(std::vector<Tensor> tensors) LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
+        {
+            mutex_lock l(mu_);
 
-        if(_is_closed())
-            { return errors::OutOfRange("Queue is closed"); }
+            if(closed_)
+                { return errors::OutOfRange("Queue is closed"); }
 
-        entries_.push_back(std::move(tensors));
-        cv_.notify_all();
+            entries_.push_back(std::move(tensors));
+        }
+
+        // Notify a waiting consumer
+        cv_.notify_one();
 
         return Status::OK();
     }
@@ -61,12 +66,13 @@ public:
     {
         mutex_lock l(mu_);
 
-        if(entries_.empty() && _is_closed())
-            { return errors::OutOfRange("Queue is closed"); }
-
-        // Wait if empty
-        while(entries_.empty())
+        // Wait if empty and not closed
+        while(entries_.empty() && !closed_)
             { cv_.wait(l); }
+
+        // Bail if empty and closed
+        if(entries_.empty() && closed_)
+            { return errors::OutOfRange("Queue is closed"); }
 
         // Pop the first entry and return it
         *out = std::move(entries_.front());
