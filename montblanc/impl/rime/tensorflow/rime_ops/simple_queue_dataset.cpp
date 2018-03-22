@@ -32,6 +32,12 @@ public:
                            const std::vector<PartialTensorShape> & shapes)
       : dtypes_(dtypes), shapes_(shapes), closed_(false)
     {
+        // printf("Creating QueueResource %p\n", (void *) this);
+    }
+
+    ~QueueResource() override
+    {
+        // printf("Destroying QueueResource %p\n", (void *) this);
     }
 
     void close(void) LOCKS_EXCLUDED(mu_)
@@ -137,15 +143,17 @@ public:
             ResourceMgr * mgr = ctx->resource_manager();
             OP_REQUIRES_OK(ctx, cinfo.Init(mgr, def()));
 
-            QueueResource * resource;
+            QueueResource * queue_resource;
             OP_REQUIRES_OK(ctx, mgr->LookupOrCreate<QueueResource>(
-                cinfo.container(), cinfo.name(), &resource,
+                cinfo.container(), cinfo.name(), &queue_resource,
                 [this, ctx](QueueResource ** result) EXCLUSIVE_LOCKS_REQUIRED(mu_)
                 {
                     *result = new QueueResource(dtypes_, shapes_);
                     return Status::OK();
                 }
             ));
+
+            core::ScopedUnref unref_queue(queue_resource);
 
             initialised = true;
         }
@@ -261,11 +269,12 @@ public:
     explicit QueueDatasetOp(OpKernelConstruction * ctx)
                     : DatasetOpKernel(ctx) {}
 
+protected:
     void MakeDataset(OpKernelContext * ctx, DatasetBase ** output) override
     {
         QueueResource * queue_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
-                                          &queue_resource));
+                                              &queue_resource));
 
         core::ScopedUnref unref_queue(queue_resource);
 
@@ -277,57 +286,76 @@ public:
     }
 
 private:
-  class Dataset : public GraphDatasetBase
-  {
-  public:
-      QueueResource * queue_resource_;
-
-      explicit Dataset(OpKernelContext * ctx, QueueResource * queue_resource)
-          : GraphDatasetBase(ctx),
-            queue_resource_(queue_resource)
-      {
-         queue_resource_->Ref();
-      }
-
-    ~Dataset() override
-        { queue_resource_->Unref(); }
-
-    const DataTypeVector & output_dtypes() const override
-        { return queue_resource_->output_dtypes(); }
-
-    const std::vector<PartialTensorShape> & output_shapes() const override
-        { return queue_resource_->output_shapes(); }
-
-    string DebugString()
-        { return "QueueDataset"; }
-
-    std::unique_ptr<IteratorBase>
-    MakeIterator(const string & prefix) const override
+    class Dataset : public GraphDatasetBase
     {
-        return std::unique_ptr<IteratorBase>(new Iterator(
-          {this, strings::StrCat(prefix, "::QueueDataset")}));
-    }
-  };
+    public:
+        QueueResource * queue_resource_;
 
-
-  class Iterator : public DatasetIterator<Dataset>
-  {
-  private:
-
-  public:
-    explicit Iterator(const Params & params)
-        : DatasetIterator<Dataset>(params) {}
-
-        virtual Status GetNextInternal(IteratorContext * ctx,
-                    std::vector<Tensor> * out_tensors,
-                    bool * end_of_sequence) override
+        explicit Dataset(OpKernelContext * ctx, QueueResource * queue_resource)
+                : GraphDatasetBase(ctx), queue_resource_(queue_resource)
         {
-            *end_of_sequence = !dataset()->queue_resource_
-                                         ->pop(out_tensors).ok();
-            return Status::OK();
+            queue_resource_->Ref();
+            // printf("Creating QueueDatset %p\n", (void *) this);
         }
-  };
-};
+
+        Dataset(const Dataset & rhs) = delete;
+        Dataset & operator=(const Dataset & rhs) = delete;
+
+        ~Dataset() override
+        {
+            queue_resource_->Unref();
+            // printf("Destroying QueueDatset %p\n", (void *) this);
+        }
+
+        const DataTypeVector & output_dtypes() const override
+            { return queue_resource_->output_dtypes(); }
+
+        const std::vector<PartialTensorShape> & output_shapes() const override
+            { return queue_resource_->output_shapes(); }
+
+        string DebugString()
+            { return "QueueDataset"; }
+
+        std::unique_ptr<IteratorBase>
+        MakeIterator(const string & prefix) const override
+        {
+            return std::unique_ptr<IteratorBase>(new Iterator(
+              {this, strings::StrCat(prefix, "::QueueDataset")}));
+        }
+
+    protected:
+        Status AsGraphDefInternal(OpKernelContext * ctx,
+                                DatasetGraphDefBuilder * b,
+                                Node ** output) const override
+        {
+            return errors::InvalidArgument("Not Implemented");
+        }
+
+    private:
+        class Iterator : public DatasetIterator<Dataset>
+        {
+        public:
+            explicit Iterator(const Params & params)
+                : DatasetIterator<Dataset>(params) {}
+
+            virtual Status GetNextInternal(IteratorContext * ctx,
+                        std::vector<Tensor> * out_tensors,
+                        bool * end_of_sequence) override
+            {
+                *end_of_sequence = !dataset()->queue_resource_
+                                             ->pop(out_tensors).ok();
+                return Status::OK();
+            }
+        protected:
+          Status SaveInternal(IteratorStateWriter* writer) override
+            { return errors::InvalidArgument("Not Implemented"); }
+
+          Status RestoreInternal(IteratorContext * ctx,
+                                IteratorStateReader * reader) override
+            { return errors::InvalidArgument("Not Implemented"); }
+        }; // class Iterator
+    };     // class Dataset
+};         // class QueueDatasetOp
 
 REGISTER_OP("QueueDataset")
     .Input("queue_handle: resource")
