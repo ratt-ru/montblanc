@@ -4,13 +4,13 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
+from montblanc.impl.rime.tensorflow.tensorflow_ops import (
+                feed_rotation as feed_rotation_op)
+
 class TestFeedRotation(unittest.TestCase):
     """ Tests the FeedRotation operator """
 
     def setUp(self):
-        # Load the rime operation library
-        from montblanc.impl.rime.tensorflow import load_tf_lib
-        self.rime = load_tf_lib()
         # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
         self.gpu_devs = [d.name for d in device_lib.list_local_devices()
                                 if d.device_type == 'GPU']
@@ -49,8 +49,7 @@ class TestFeedRotation(unittest.TestCase):
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return self.rime.feed_rotation(*tf_args,
-                    CT=CT, feed_type=feed_type)
+                return feed_rotation_op(*tf_args, CT=CT, feed_type=feed_type)
 
         # Pin operation to CPU
         cpu_op = _pin_op('/cpu:0', *tf_args)

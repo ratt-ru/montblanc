@@ -4,13 +4,14 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
+from montblanc.impl.rime.tensorflow.tensorflow_ops import (
+            parallactic_angle_sin_cos as parallactic_angle_sin_cos_op)
+
+
 class TestParallacticAngleSinCos(unittest.TestCase):
     """ Tests the ParallacticAngleSinCos operator """
 
     def setUp(self):
-        # Load the rime operation library
-        from montblanc.impl.rime.tensorflow import load_tf_lib
-        self.rime = load_tf_lib()
         # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
         self.gpu_devs = [d.name for d in device_lib.list_local_devices()
                                 if d.device_type == 'GPU']
@@ -43,7 +44,7 @@ class TestParallacticAngleSinCos(unittest.TestCase):
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return self.rime.parallactic_angle_sin_cos(*tf_args)
+                return parallactic_angle_sin_cos_op(*tf_args)
 
         # Pin operation to CPU
         cpu_op = _pin_op('/cpu:0', *tf_args)

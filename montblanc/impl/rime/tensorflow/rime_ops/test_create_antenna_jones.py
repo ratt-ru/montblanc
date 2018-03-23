@@ -4,6 +4,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
+from montblanc.impl.rime.tensorflow.tensorflow_ops import (
+                create_antenna_jones as create_antenna_jones_op)
+
 
 def np_create_antenna_jones(bsqrt, complex_phase, feed_rotation,
                                         ejones, arow_time_index):
@@ -34,9 +37,6 @@ class TestCreateAntennaJones(unittest.TestCase):
     """ Tests the CreateAntennaJones operator """
 
     def setUp(self):
-        # Load the rime operation library
-        from montblanc.impl.rime.tensorflow import load_tf_lib
-        self.rime = load_tf_lib()
         # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
         self.gpu_devs = [d.name for d in device_lib.list_local_devices()
                                 if d.device_type == 'GPU']
@@ -96,7 +96,7 @@ class TestCreateAntennaJones(unittest.TestCase):
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return self.rime.create_antenna_jones(*tf_args, FT=FT,
+                return create_antenna_jones_op(*tf_args, FT=FT,
                                 have_bsqrt=have_bsqrt,
                                 have_complex_phase=have_complex_phase,
                                 have_feed_rotation=have_feed_rotation,
