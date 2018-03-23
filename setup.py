@@ -152,7 +152,7 @@ else:
         'pybind11 >= 2.2.0',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
-        "{} == 1.7.0rc0".format(tensorflow_package),
+        "{} == 1.7.0rc1".format(tensorflow_package),
     ]
 
     from install.tensorflow_ops_ext import (BuildCommand,
