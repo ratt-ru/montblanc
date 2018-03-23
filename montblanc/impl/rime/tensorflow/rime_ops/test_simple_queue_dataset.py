@@ -1,3 +1,4 @@
+import threading
 import unittest
 
 import numpy as np
@@ -8,7 +9,7 @@ class TestQueueTensorDataset(unittest.TestCase):
     def setUp(self):
         # Load the rime operation library
         from montblanc.impl.rime.tensorflow import load_tf_lib
-        self.rime = load_tf_lib("./rime.so")
+        self.rime = load_tf_lib()
 
     def test_queue_tensor_dataset(self):
 
@@ -87,15 +88,19 @@ class TestQueueTensorDataset(unittest.TestCase):
           def output_classes(self):
             return self._queue.output_classes
 
+        N = 12
+
         with tf.Graph().as_default() as graph:
             ci = tf.placeholder(dtype=tf.int64)
             cf = tf.placeholder(dtype=tf.float64)
 
             queue = TensorQueue([tf.int64, tf.float64])
             ds = QueueDataset(queue)
+            ds = ds.map(lambda i, f: (i+1, f*2), num_parallel_calls=3)
+            ds = ds.prefetch(1)
 
             put_op = queue.put([ci, cf])
-            close_op =queue.close()
+            close_op = queue.close()
 
             it = ds.make_initializable_iterator()
             next_op = it.get_next()
@@ -105,10 +110,6 @@ class TestQueueTensorDataset(unittest.TestCase):
         with tf.Session(graph=graph) as S:
             S.run([global_init_op, it.initializer])
 
-            import threading
-
-            N = 3
-
             def _enqueue(n):
                 for i in  range(1, n+1):
                     S.run(put_op, feed_dict={ci: [i]*i, cf: [i]*i})
@@ -116,7 +117,6 @@ class TestQueueTensorDataset(unittest.TestCase):
                 S.run(close_op)
 
             t = threading.Thread(target=_enqueue, args=(N,))
-            t.setDaemon(True)
             t.start()
 
             for i in range(1, N+1):
@@ -127,11 +127,14 @@ class TestQueueTensorDataset(unittest.TestCase):
 
                 tf_ints, tf_floats = S.run(next_op)
 
-                self.assertTrue(np.all(np_ints == tf_ints))
-                self.assertTrue(np.all(np_floats == tf_floats))
+                self.assertTrue(np.all(np_ints+1 == tf_ints))
+                self.assertTrue(np.all(np_floats*2 == tf_floats))
+
 
             with self.assertRaises(tf.errors.OutOfRangeError) as cm:
                 S.run(next_op)
+
+            t.join()
 
 if __name__ == "__main__":
     unittest.main()
