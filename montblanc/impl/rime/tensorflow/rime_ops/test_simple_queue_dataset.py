@@ -39,8 +39,8 @@ class TestQueueTensorDataset(unittest.TestCase):
         thang = self
 
         class TensorQueue(object):
-            def __init__(self, dtypes, shapes=None):
-                with ops.name_scope("tensors"):
+            def __init__(self, dtypes, shapes=None, shared_name=None):
+                with ops.name_scope("tensor_queue") as scope:
                     if isinstance(dtypes, tuple):
                         pass
                     elif isinstance(dtypes, list):
@@ -55,26 +55,35 @@ class TestQueueTensorDataset(unittest.TestCase):
 
                         self.output_shapes = shapes
                     else:
-                        self.output_shapes = tuple(tensor_shape.unknown_shape() for dt in self.output_types)
+                        self.output_shapes = tuple(tensor_shape.unknown_shape()
+                                                for dt in dtypes)
 
-                self.output_classes = tuple(ops.Tensor for dt in self.output_types)
-                self.handle = thang.rime.dataset_queue_handle(self.output_types, self.output_shapes)
+                self.output_classes = tuple(ops.Tensor for dt in dtypes)
+                self.handle = thang.rime.dataset_queue_handle(dtypes,
+                                                    self.output_shapes,
+                                                    name=scope,
+                                                    shared_name=shared_name)
 
-            def put(self, tensors):
-                return thang.rime.dataset_queue_enqueue(self.handle, tensors)
+            def put(self, tensors, name=None):
+                return thang.rime.dataset_queue_enqueue(self.handle,
+                                                        tensors,
+                                                        name=name)
 
-            def close(self):
-                return thang.rime.dataset_queue_close(self.handle)
+            def close(self, name=None):
+                return thang.rime.dataset_queue_close(self.handle,
+                                                        name=name)
 
         class QueueDataset(tf.data.Dataset):
           """A `Dataset` consuming elements from a queue"""
 
-          def __init__(self, queue):
+          def __init__(self, queue, name=None):
             super(QueueDataset, self).__init__()
             self._queue = queue
+            self._name = name
 
           def _as_variant_tensor(self):
-            return thang.rime.queue_dataset(self._queue.handle)
+            return thang.rime.queue_dataset(self._queue.handle,
+                                            name=self._name)
 
           @property
           def output_shapes(self):
