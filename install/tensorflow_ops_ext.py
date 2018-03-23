@@ -111,6 +111,7 @@ def create_tensorflow_extension(nvcc_settings, device_info):
     define_macros = [
         ('_MWAITXINTRIN_H_INCLUDED', None),
         ('_FORCE_INLINES', None),
+        ('NDEBUG', None),
         ('_GLIBCXX_USE_CXX11_ABI', 0)]
 
     # Common flags

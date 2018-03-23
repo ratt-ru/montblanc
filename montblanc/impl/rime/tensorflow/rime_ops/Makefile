@@ -4,7 +4,7 @@ TF_LIBDIR=$(shell python -c 'import tensorflow as tf; print tf.sysconfig.get_lib
 TF_CUDA=$(shell python -c 'import tensorflow as tf; print int(tf.test.is_built_with_cuda())')
 MB_INC=../../../../include
 
-TF_FLAGS=-D_MWAITXINTRIN_H_INCLUDED -D_FORCE_INLINES -D_GLIBCXX_USE_CXX11_ABI=0
+TF_FLAGS=-D_MWAITXINTRIN_H_INCLUDED -D_FORCE_INLINES -D_GLIBCXX_USE_CXX11_ABI=0 -DNDEBUG
 
 # Dependencies
 DEPDIR:=.d
