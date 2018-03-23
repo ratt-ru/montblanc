@@ -26,31 +26,32 @@ class TensorQueue(object):
     """
     A Queue of tensors.
     """
+
     def __init__(self, dtypes, shapes=None, shared_name=None):
         with ops.name_scope("tensor_queue") as scope:
-            if isinstance(dtypes, tuple):
-                pass
-            elif isinstance(dtypes, list):
-                dtypes = tuple(dtypes)
+            flat_dtypes = nest.flatten(dtypes)
+
+            if shapes is None:
+                uk = tensor_shape.unknown_shape()
+                flat_shapes = tuple(uk for dt in flat_dtypes)
             else:
-                dtypes = (dtypes,)
+                shapes = nest.map_structure(tensor_shape.as_shape, shapes)
+                flat_shapes = nest.flatten(shapes)
 
-            self.output_types = dtypes
+            flat_classes = tuple(ops.Tensor for dt in flat_dtypes)
 
-            if shapes is not None:
-                assert len(shapes) == len(dtypes)
-
-                self.output_shapes = shapes
-            else:
-                self.output_shapes = tuple(tensor_shape.unknown_shape()
-                                        for dt in dtypes)
-
-        self.output_classes = tuple(ops.Tensor for dt in dtypes)
-        self.handle = dataset_queue_handle(dtypes, self.output_shapes,
-                                           name=scope, shared_name=shared_name)
+        self._nest = dtypes
+        self.output_types = nest.pack_sequence_as(dtypes, flat_dtypes)
+        self.output_shapes = nest.pack_sequence_as(dtypes, flat_shapes)
+        self.output_classes = nest.pack_sequence_as(dtypes, flat_classes)
+        self.handle = dataset_queue_handle(flat_dtypes, flat_shapes,
+                                                        name=scope,
+                                                        shared_name=shared_name)
 
     def put(self, tensors, name=None):
-        return dataset_queue_enqueue(self.handle, tensors, name=name)
+        nest.assert_same_structure(tensors, self._nest)
+        return dataset_queue_enqueue(self.handle, nest.flatten(tensors),
+                                                                name=name)
 
     def close(self, name=None):
         return dataset_queue_close(self.handle, name=name)

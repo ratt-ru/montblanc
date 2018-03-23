@@ -9,6 +9,66 @@ from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue,
 
 class TestQueueTensorDataset(unittest.TestCase):
 
+    def test_queue_tensor_dataset_nest(self):
+        with tf.Graph().as_default() as graph:
+            ci = tf.placeholder(dtype=tf.int64)
+            cf = tf.placeholder(dtype=tf.float64)
+
+            dtypes = { 'i': ci.dtype, 'sub' : {'f': cf.dtype}}
+
+            queue = TensorQueue(dtypes)
+            ds = QueueDataset(queue)
+
+            put_op = queue.put({'i': ci, 'sub' : {'f': cf}})
+            close_op = queue.close()
+
+            it = ds.make_initializable_iterator()
+            next_op = it.get_next()
+
+            global_init_op = tf.global_variables_initializer()
+
+        with tf.Session(graph=graph) as S:
+            S.run([global_init_op, it.initializer])
+
+            twenty_floats = np.full((10,10), 2.0, dtype=np.float64)
+
+            S.run(put_op, feed_dict={ci: 23, cf: twenty_floats})
+
+            result = S.run(next_op)
+            self.assertTrue(np.all(twenty_floats == result['sub']['f']))
+            self.assertTrue(23 == result['i'])
+
+        with tf.Graph().as_default() as graph:
+            ci = tf.placeholder(dtype=tf.int64)
+            cf = tf.placeholder(dtype=tf.float64)
+
+            # dtypes and shapes must have the same structure
+            dtypes = { 'i': ci.dtype, 'sub' : {'f': cf.dtype}}
+            shapes = { 'i': None, 'sub' : {'f': [10, 10]}}
+
+            queue = TensorQueue(dtypes, shapes)
+            ds = QueueDataset(queue)
+
+            put_op = queue.put({'i': ci, 'sub' : {'f': cf}})
+            close_op = queue.close()
+
+            it = ds.make_initializable_iterator()
+            next_op = it.get_next()
+
+            global_init_op = tf.global_variables_initializer()
+
+        with tf.Session(graph=graph) as S:
+            S.run([global_init_op, it.initializer])
+
+            twenty_floats = np.full((10,10), 2.0, dtype=np.float64)
+
+            S.run(put_op, feed_dict={ci: 23, cf: twenty_floats})
+
+            result = S.run(next_op)
+            self.assertTrue(np.all(twenty_floats == result['sub']['f']))
+            self.assertTrue(23 == result['i'])
+
+
     def test_queue_tensor_dataset(self):
         N = 12
 
@@ -16,12 +76,12 @@ class TestQueueTensorDataset(unittest.TestCase):
             ci = tf.placeholder(dtype=tf.int64)
             cf = tf.placeholder(dtype=tf.float64)
 
-            queue = TensorQueue([tf.int64, tf.float64])
+            queue = TensorQueue((tf.int64, tf.float64))
             ds = QueueDataset(queue)
             ds = ds.map(lambda i, f: (i+1, f*2), num_parallel_calls=3)
             ds = ds.prefetch(1)
 
-            put_op = queue.put([ci, cf])
+            put_op = queue.put((ci, cf))
             close_op = queue.close()
 
             it = ds.make_initializable_iterator()
