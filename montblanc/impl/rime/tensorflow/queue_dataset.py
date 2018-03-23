@@ -40,18 +40,21 @@ class TensorQueue(object):
 
             flat_classes = tuple(ops.Tensor for dt in flat_dtypes)
 
-        self._nest = dtypes
-        self.output_types = nest.pack_sequence_as(dtypes, flat_dtypes)
+        self.output_types = dtypes
         self.output_shapes = nest.pack_sequence_as(dtypes, flat_shapes)
         self.output_classes = nest.pack_sequence_as(dtypes, flat_classes)
         self.handle = dataset_queue_handle(flat_dtypes, flat_shapes,
-                                                        name=scope,
-                                                        shared_name=shared_name)
+                                           name=scope, shared_name=shared_name)
 
     def put(self, tensors, name=None):
-        nest.assert_same_structure(tensors, self._nest)
-        return dataset_queue_enqueue(self.handle, nest.flatten(tensors),
-                                                                name=name)
+        nest.assert_same_structure(tensors, self.output_types)
+        flat_dtypes = nest.flatten(self.output_types)
+        tensors = tuple(
+            ops.convert_to_tensor(t, dtype=dt, name="component_%i"%i)
+            for i, (t, dt)
+            in enumerate(zip(nest.flatten(tensors), flat_dtypes)))
+
+        return dataset_queue_enqueue(self.handle, tensors, name=name)
 
     def close(self, name=None):
         return dataset_queue_close(self.handle, name=name)

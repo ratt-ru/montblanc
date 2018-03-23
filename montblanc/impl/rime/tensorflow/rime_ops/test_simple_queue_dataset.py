@@ -9,7 +9,36 @@ from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue,
 
 class TestQueueTensorDataset(unittest.TestCase):
 
-    def test_queue_tensor_dataset_nest(self):
+    def test_numpy_conversion(self):
+        with tf.Graph().as_default() as graph:
+            ci = tf.placeholder(dtype=tf.int64)
+            cf = tf.placeholder(dtype=tf.float64)
+
+            dtypes = { 'i': ci.dtype, 'sub' : {'f': cf.dtype}}
+            hundred_floats = np.full((10,10), 2.0, dtype=np.float64)
+
+            queue = TensorQueue(dtypes)
+            ds = QueueDataset(queue)
+
+            put_op = queue.put({'i': np.int64(23),
+                                'sub' : {'f': hundred_floats}})
+            close_op = queue.close()
+
+            it = ds.make_initializable_iterator()
+            next_op = it.get_next()
+
+            global_init_op = tf.global_variables_initializer()
+
+        with tf.Session(graph=graph) as S:
+            S.run([global_init_op, it.initializer])
+            S.run(put_op)
+
+            result = S.run(next_op)
+            self.assertTrue(np.all(hundred_floats == result['sub']['f']))
+            self.assertTrue(23 == result['i'])
+
+
+    def test_nest_dtype_only(self):
         with tf.Graph().as_default() as graph:
             ci = tf.placeholder(dtype=tf.int64)
             cf = tf.placeholder(dtype=tf.float64)
@@ -30,14 +59,15 @@ class TestQueueTensorDataset(unittest.TestCase):
         with tf.Session(graph=graph) as S:
             S.run([global_init_op, it.initializer])
 
-            twenty_floats = np.full((10,10), 2.0, dtype=np.float64)
+            hundred_floats = np.full((10,10), 2.0, dtype=np.float64)
 
-            S.run(put_op, feed_dict={ci: 23, cf: twenty_floats})
+            S.run(put_op, feed_dict={ci: 23, cf: hundred_floats})
 
             result = S.run(next_op)
-            self.assertTrue(np.all(twenty_floats == result['sub']['f']))
+            self.assertTrue(np.all(hundred_floats == result['sub']['f']))
             self.assertTrue(23 == result['i'])
 
+    def test_nest_dtypes_and_shapes(self):
         with tf.Graph().as_default() as graph:
             ci = tf.placeholder(dtype=tf.int64)
             cf = tf.placeholder(dtype=tf.float64)
@@ -60,16 +90,15 @@ class TestQueueTensorDataset(unittest.TestCase):
         with tf.Session(graph=graph) as S:
             S.run([global_init_op, it.initializer])
 
-            twenty_floats = np.full((10,10), 2.0, dtype=np.float64)
+            hundred_floats = np.full((10,10), 2.0, dtype=np.float64)
 
-            S.run(put_op, feed_dict={ci: 23, cf: twenty_floats})
+            S.run(put_op, feed_dict={ci: 23, cf: hundred_floats})
 
             result = S.run(next_op)
-            self.assertTrue(np.all(twenty_floats == result['sub']['f']))
+            self.assertTrue(np.all(hundred_floats == result['sub']['f']))
             self.assertTrue(23 == result['i'])
 
-
-    def test_queue_tensor_dataset(self):
+    def test_basic(self):
         N = 12
 
         with tf.Graph().as_default() as graph:
