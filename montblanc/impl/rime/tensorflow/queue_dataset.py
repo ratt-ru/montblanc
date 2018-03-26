@@ -28,6 +28,40 @@ class TensorQueue(object):
     """
 
     def __init__(self, dtypes, shapes=None, shared_name=None):
+        """
+        Constructs a simple queue accepting ``put`` operations
+        of tensors with the specified ``dtypes`` and ``shapes``.
+
+        ``dtypes`` and ``shapes`` may be either tuples, or
+        nested dict/tuple structures. For example:
+
+        ..code-block:: python
+
+            ci = tf.placeholder(tf.int64)
+            cf = tf.placeholder(tf.float64)
+
+            dtypes = { 'a': ci.dtype, 'sub' : { 'b': cf.dtype } }
+            shapes = { 'a': (), 'sub' : { 'b': (10,10) } }
+
+            queue = TensorQueue(dtypes, shapes)
+            put_op = queue.put( {'a': ci, 'sub' : { 'b': cf } })
+
+            with tf.Session() as S:
+                S.run(put_op, feed_dict={ci: 2, cf: np.ones((10,10))})
+
+        Parameters
+        ----------
+        dtypes : nested dicts or nested tuples
+            A nested collection of dicts or tuples
+            containing dtypes
+        shapes : nested dicts or nested tuples
+            A nested collection of dicts or tuples
+            containing shapes associated with ``dtypes``.
+            Must have the same structure as ``dtypes``
+        shared_name : str, optional
+            Shared resource name if this Queue is to be
+            shared amongst multiple tensorflow Sesssions.
+        """
         with ops.name_scope("tensor_queue") as scope:
             flat_dtypes = nest.flatten(dtypes)
 
