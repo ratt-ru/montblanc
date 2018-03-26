@@ -14,9 +14,8 @@ import tensorflow as tf
 from montblanc.src_types import source_var_types
 
 from montblanc.impl.rime.tensorflow.staging_area_wrapper import create_staging_area_wrapper
-from montblanc.impl.rime.tensorflow import load_tf_lib
-
-rime = load_tf_lib()
+import montblanc.impl.rime.tensorflow.tensorflow_ops as ops
+from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue, QueueDataset)
 
 
 def _partition(iter_dims, data_sources):
@@ -210,7 +209,7 @@ def _construct_tensorflow_staging_areas(in_schema, out_schema,
 
     return FD
 
-def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
+def __construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
     """ Constructs a tensorflow expression for computing the RIME """
     local_cpu = feed_data.local_cpu
     local_compute = feed_data.local_compute
@@ -497,36 +496,176 @@ def _construct_tensorflow_expression(feed_data, slvr_cfg, device, dev_id):
                         output_data['model_vis'],
                         output_data['chi_squared'])
 
+QueueDatasetDetails = attr.make_class('QueueDatasetDetails',
+                                        ['queue',
+                                        'dataset',
+                                        'iterator',
+                                        'next_op',
+                                        'put_op',
+                                        'destroy_buffer_op',
+                                        'placeholders'])
+
+def _create_queue_dataset_details(feed_data, device):
+    """
+    Creates a queue dataset for the given ``feed_data``
+    and ``device`` and returns an object encapsulating
+    the details for inserting data into the queue and
+    retrieving data from the dataset's associated iterator.
+
+    Parameters
+    ----------
+    feed_data : dict
+
+    device : str or :class:`tf.DeviceSpec`
+        tensorflow device
+
+    Returns
+    -------
+    :class:`QueueDatasetDetails`
+        Contains queue, dataset, iterator objects, as well
+        as operations for inserting into the queue (and dataset)
+        and the iterator next op.
+    """
+    from tensorflow.contrib.data.python.ops import prefetching_ops
+    from tensorflow.python.data.ops import iterator_ops
+    from tensorflow.python.ops import resource_variable_ops
+    from tensorflow.python.framework import function
+    from tensorflow.python.data.util import nest
+
+    # Work out the shapes and data types handled by the
+    # queue (and dataset)
+    dtypes = {k: v['dtype'] for k, v in feed_data.items()}
+    shapes = {k: [None]*len(v['dims']) for k, v in feed_data.items()}
+
+    # Create the queue and a put operation with associated
+    # placeholders for insertion into the queue
+    queue = TensorQueue(dtypes, shapes)
+    placeholders = {k: tf.placeholder(dtypes[k], shapes[k])
+                                for k in feed_data.keys()}
+    put = queue.put(placeholders)
+
+    # Now create the queue dataset, associated iterator and next op
+    ds = QueueDataset(queue)
+    it = ds.make_initializable_iterator()
+    next_ = it.get_next()
+
+    # Use a prefetch buffer if the device
+    # on which the graph executes is a GPU
+    if device.device_type == "GPU":
+        @function.Defun(tf.string)
+        def _remote_fn(h):
+            # TODO(sjperkins)
+            # function_buffering_resource does not yet seem
+            # to support nested structures. Flatten nested
+            # structures in types and shapes,
+            # then reconstruct nested structures lower down
+            # with nest.pack_sequeunce_as
+            flat_types = tuple(nest.flatten(ds.output_types))
+            flat_shapes = tuple(nest.flatten(ds.output_shapes))
+
+            remote_iterator = iterator_ops.Iterator.from_string_handle(
+                h, flat_types, flat_shapes)
+
+            return remote_iterator.get_next()
+
+        # Prefetch from this device
+        target = tf.constant('/CPU:0')
+
+        with tf.device(device):
+            buf_resource_handle = prefetching_ops.function_buffering_resource(
+                f=_remote_fn,
+                target_device=target,
+                string_arg=it.string_handle(),
+                buffer_size=1,
+                thread_pool_size=1,
+                shared_name="cpu_gpu")
+
+        with tf.device(device):
+            flat_types = tuple(nest.flatten(ds.output_types))
+            next_ = prefetching_ops.function_buffering_resource_get_next(
+                function_buffer_resource=buf_resource_handle,
+                output_types=flat_types)
+
+            # Repack next_ back into a structure output by the dataset
+            # (and expected by the user)
+            next_ = nest.pack_sequence_as(ds.output_types, next_)
+
+        destroy_buf_op = resource_variable_ops.destroy_resource_op(
+                    buf_resource_handle, ignore_lookup_error=True)
+    else:
+        destroy_buf_op = None
+
+    return QueueDatasetDetails(queue, ds, it, next_, put,
+                                destroy_buf_op, placeholders)
+
+def _construct_tensorflow_expression(cfg, device):
+    """
+    Construct a tensorflow expression for the given
+    configuration ``cfg`` and tensorflow device ``device``
+    """
+
+    from montblanc.impl.rime.tensorflow.dataset import input_schema, output_schema
+    # Promote string device specifiers to tf.DeviceSpec
+    if isinstance(device, six.string_types):
+        device = tf.DeviceSpec.from_string(device)
+
+    # Partition input arrays
+    (source_data_arrays, feed_many,
+        feed_once) = _partition(('utime', 'vrow'), input_schema())
+
+    feed_multiple = toolz.merge(feed_once, feed_many)
+
+    # Create the graph
+    with tf.Graph().as_default() as graph:
+        multiple_dataset = _create_queue_dataset_details(feed_multiple, device)
+        source_datasets = {k: _create_queue_dataset_details(v, device) for k, v
+                                        in source_data_arrays.items()}
+
+    TensorflowExpression = attr.make_class("TensorflowExpression",
+        ["multiple_dataset", "source_datasets", "graph"])
+
+    return TensorflowExpression(multiple_dataset, source_datasets, graph)
+
 import unittest
+from dataset import input_schema, output_schema
+from pprint import pprint
 
 class TestPartition(unittest.TestCase):
     def test_partition(self):
-        from dataset import input_schema, output_schema
-        from pprint import pprint
-
-        source_data_arrays, feed_many, feed_once = _partition(
-                                    ('utime', 'vrow'), input_schema())
-
-    def test_construct_staging_areas(self):
-        from dataset import input_schema, output_schema
-
-        devices = ['/cpu:0']
-
-        _construct_tensorflow_staging_areas(input_schema(),
-            output_schema(), ('utime', 'vrow'), devices)
-
+        (source_data_arrays, feed_many,
+            feed_once) = _partition(('utime', 'vrow'), input_schema())
 
     def test_construct_tensorflow_expression(self):
-        from dataset import input_schema, output_schema
+        cfg = {'polarisation_type': 'linear'}
 
-        devices = ['/cpu:0']
-        slvr_cfg = {'polarisation_type': 'linear'}
+        def _dummy_data(ph):
+            """ Generate some dummy data given a tensorflow placeholder """
+            shape = tuple(2 if s is None else s for s in ph.shape.as_list())
+            return np.zeros(shape, dtype=ph.dtype.as_numpy_dtype())
 
-        feed_data = _construct_tensorflow_staging_areas(input_schema(),
-            output_schema(), ('utime', 'vrow'), devices)
+        # Test with available devices (CPU + GPU)
+        with tf.Session() as S:
+            devices = [d.name for d in S.list_devices()]
 
-        expr = _construct_tensorflow_expression(feed_data, slvr_cfg,
-                                                        devices[0], 0)
+        # Test each device separately
+        for device in devices:
+            expr = _construct_tensorflow_expression(cfg, device)
+
+            mds = expr.multiple_dataset
+            mphs = mds.placeholders
+
+            with tf.Session(graph=expr.graph) as S:
+                # Initialise the iterator
+                S.run(expr.multiple_dataset.iterator.initializer)
+
+                # Feed some dummy data into the queue
+                feed_dict = {ph: _dummy_data(ph) for ph in mphs.values()}
+
+                S.run(expr.multiple_dataset.put_op, feed_dict=feed_dict)
+
+                # Call the iterator next op
+                result = S.run(mds.next_op)
+                self.assertTrue(sorted(result.keys()) == sorted(mphs.keys()))
 
 if __name__ == "__main__":
     unittest.main()
