@@ -17,7 +17,7 @@ from tensorflow.python.framework import tensor_util
 # from tensorflow.python.util import deprecation
 # from tensorflow.python.util.tf_export import tf_export
 
-from montblanc.impl.rime.tensorflow.tensorflow_ops import (queue_dataset as qds,
+from montblanc.impl.rime.tensorflow.tensorflow_ops import (simple_queue_dataset as qds,
                                                         dataset_queue_handle,
                                                         dataset_queue_enqueue,
                                                         dataset_queue_close)

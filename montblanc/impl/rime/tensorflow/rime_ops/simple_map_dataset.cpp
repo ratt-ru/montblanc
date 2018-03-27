@@ -1,4 +1,4 @@
-#include <deque>
+#include <unordered_map>
 
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/common_shape_fns.h"
@@ -15,29 +15,56 @@ namespace {
 
 using namespace tensorflow;
 
-class QueueResource : public ResourceBase
+// Partial Ordering Comparator for Tensor keys containing scalar int64's
+struct KeyTensorLess {
+  bool operator()(const Tensor& lhs, const Tensor& rhs) const {
+    return std::less<int64>{}(lhs.scalar<int64>()(), rhs.scalar<int64>()());
+  }
+};
+
+// Key Equality operator for Tensor keys containing scalar int64's
+struct KeyTensorEqual {
+  bool operator()(const Tensor& lhs, const Tensor& rhs) const {
+    return std::equal_to<int64>{}(lhs.scalar<int64>()(), rhs.scalar<int64>()());
+  }
+};
+
+// Hash for Tensor keys containing scalar int64's
+struct KeyTensorHash {
+  std::size_t operator()(const Tensor& key) const {
+    return std::hash<int64>{}(key.scalar<int64>()());
+  }
+};
+
+class MapResource : public ResourceBase
 {
+private:
+    using Tuple = std::vector<Tensor>;
+    using KeyType = Tensor;
+    using MapType = std::unordered_map<KeyType, Tuple,
+                                        KeyTensorHash, KeyTensorEqual>;
+
 private:
     mutex mu_;
 
     condition_variable cv_ GUARDED_BY(mu_);
-    std::deque<std::vector<Tensor>> entries_ GUARDED_BY(mu_);
     bool closed_ GUARDED_BY(mu_);
+    MapType map_ GUARDED_BY(mu_);
 
     DataTypeVector dtypes_;
     std::vector<PartialTensorShape> shapes_;
 
 public:
-    explicit QueueResource(const DataTypeVector & dtypes,
+    explicit MapResource(const DataTypeVector & dtypes,
                            const std::vector<PartialTensorShape> & shapes)
       : dtypes_(dtypes), shapes_(shapes), closed_(false)
     {
-        // printf("Creating QueueResource %p\n", (void *) this);
+        // printf("Creating MapResource %p\n", (void *) this);
     }
 
-    ~QueueResource() override
+    ~MapResource() override
     {
-        // printf("Destroying QueueResource %p\n", (void *) this);
+        // printf("Destroying MapResource %p\n", (void *) this);
     }
 
     void close(void) LOCKS_EXCLUDED(mu_)
@@ -51,15 +78,15 @@ public:
         cv_.notify_all();
     }
 
-    Status insert(std::vector<Tensor> tensors) LOCKS_EXCLUDED(mu_)
+    Status insert(const KeyType & key, std::vector<Tensor> tensors) LOCKS_EXCLUDED(mu_)
     {
         {
             mutex_lock l(mu_);
 
             if(closed_)
-                { return errors::OutOfRange("Queue is closed"); }
+                { return errors::OutOfRange("Map is closed"); }
 
-            entries_.push_back(std::move(tensors));
+            map_.insert({key, tensors});
         }
 
         // Notify a waiting consumer
@@ -68,24 +95,25 @@ public:
         return Status::OK();
     }
 
-    Status pop(std::vector<Tensor> * out) LOCKS_EXCLUDED(mu_)
+    Status pop(const KeyType & key, std::vector<Tensor> * out) LOCKS_EXCLUDED(mu_)
     {
         mutex_lock l(mu_);
 
-        // Wait if empty and not closed
-        while(entries_.empty() && !closed_)
+        typename MapType::iterator it;
+
+        // Wait until the element with the requested key is present
+        while(((it = map_.find(key)) == map_.end()) && !closed_)
             { cv_.wait(l); }
 
-        // Bail if empty and closed
-        if(entries_.empty() && closed_)
-            { return errors::OutOfRange("Queue is closed"); }
+        if(it == map_.end() && closed_)
+            { return errors::OutOfRange("Map is closed"); }
 
-        // Pop the first entry and return it
-        *out = std::move(entries_.front());
-        entries_.pop_front();
+        *out  = std::move(it->second);
+        map_.erase(it);
 
         return Status::OK();
     }
+
 
     const DataTypeVector &
     output_dtypes() const
@@ -96,11 +124,11 @@ public:
       { return shapes_; }
 
     string DebugString() override
-      { return "QueueResource"; }
+      { return "MapResource"; }
 
 };
 
-class DatasetQueueHandleOp : public OpKernel
+class DatasetMapHandleOp : public OpKernel
 {
 private:
     mutex mu_;
@@ -112,7 +140,7 @@ private:
     bool initialised GUARDED_BY(mu_);
 
 public:
-    explicit DatasetQueueHandleOp(OpKernelConstruction * ctx)
+    explicit DatasetMapHandleOp(OpKernelConstruction * ctx)
                 : OpKernel(ctx),
                   initialised(false)
     {
@@ -120,11 +148,11 @@ public:
         OP_REQUIRES_OK(ctx, ctx->GetAttr("Toutput_shapes", &shapes_));
     }
 
-    ~DatasetQueueHandleOp() override
+    ~DatasetMapHandleOp() override
     {
         if(cinfo.resource_is_private_to_kernel())
         {
-            if(!cinfo.resource_manager()->Delete<QueueResource>(
+            if(!cinfo.resource_manager()->Delete<MapResource>(
                 cinfo.container(), cinfo.name()).ok())
             {
               // Do nothing; the resource will have been deleted by session resets.
@@ -137,36 +165,36 @@ public:
         mutex_lock l(mu_);
 
         // If not initialised, get the resource manager
-        // and create the QueueResource
+        // and create the MapResource
         if(!initialised)
         {
             ResourceMgr * mgr = ctx->resource_manager();
             OP_REQUIRES_OK(ctx, cinfo.Init(mgr, def()));
 
-            QueueResource * queue_resource;
-            OP_REQUIRES_OK(ctx, mgr->LookupOrCreate<QueueResource>(
-                cinfo.container(), cinfo.name(), &queue_resource,
-                [this, ctx](QueueResource ** result) EXCLUSIVE_LOCKS_REQUIRED(mu_)
+            MapResource * map_resource;
+            OP_REQUIRES_OK(ctx, mgr->LookupOrCreate<MapResource>(
+                cinfo.container(), cinfo.name(), &map_resource,
+                [this, ctx](MapResource ** result) EXCLUSIVE_LOCKS_REQUIRED(mu_)
                 {
-                    *result = new QueueResource(dtypes_, shapes_);
+                    *result = new MapResource(dtypes_, shapes_);
                     return Status::OK();
                 }
             ));
 
-            core::ScopedUnref unref_queue(queue_resource);
+            core::ScopedUnref unref_map(map_resource);
 
             initialised = true;
         }
 
-        // Now assign the QueueResource to output position 0
+        // Now assign the MapResource to output position 0
         OP_REQUIRES_OK(ctx, MakeResourceHandleToOutput(
                   ctx, 0, cinfo.container(), cinfo.name(),
-                  MakeTypeIndex<QueueResource>()));
+                  MakeTypeIndex<MapResource>()));
     }
 };
 
-REGISTER_OP("DatasetQueueHandle")
-    .Output("queue_handle: resource")
+REGISTER_OP("DatasetMapHandle")
+    .Output("map_handle: resource")
     .Attr("Toutput_types: list(type) >= 1")
     .Attr("Toutput_shapes: list(shape) >= 1")
     .Attr("container: string = ''")
@@ -175,27 +203,30 @@ REGISTER_OP("DatasetQueueHandle")
                       // stateful to inhibit constant folding.
     .SetShapeFn(shape_inference::ScalarShape);
 
-REGISTER_KERNEL_BUILDER(Name("DatasetQueueHandle")
+REGISTER_KERNEL_BUILDER(Name("DatasetMapHandle")
                         .Device(DEVICE_CPU),
-                        DatasetQueueHandleOp);
+                        DatasetMapHandleOp);
 
-class DatasetQueueEnqueueOp : public OpKernel
+class DatasetMapInsertOp : public OpKernel
 {
 private:
     mutex mu_;
 
 public:
-    explicit DatasetQueueEnqueueOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
+    explicit DatasetMapInsertOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
 
     void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
         mutex_lock l(mu_);
 
-        QueueResource * queue_resource;
+        MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
-                                          &queue_resource));
+                                          &map_resource));
 
-        core::ScopedUnref unref_queue(queue_resource);
+        core::ScopedUnref unref_map(map_resource);
+
+        const Tensor * key_tensor;
+        OP_REQUIRES_OK(ctx, ctx->input("key", &key_tensor));
 
         // Convert component Tensors into a vector
         OpInputList components;
@@ -206,12 +237,13 @@ public:
             { tensors.emplace_back(std::move(components[c])); }
 
         // Insert
-        OP_REQUIRES_OK(ctx, queue_resource->insert(std::move(tensors)));
+        OP_REQUIRES_OK(ctx, map_resource->insert(*key_tensor, std::move(tensors)));
     }
 };
 
-REGISTER_OP("DatasetQueueEnqueue")
-    .Input("queue_handle: resource")
+REGISTER_OP("DatasetMapInsert")
+    .Input("map_handle: resource")
+    .Input("key: int64")
     .Input("components: Toutput_types")
     .Attr("Toutput_types: list(type) >= 1")
     .Attr("container: string = ''")
@@ -220,65 +252,69 @@ REGISTER_OP("DatasetQueueEnqueue")
                       // stateful to inhibit constant folding.
     .SetShapeFn(shape_inference::NoOutputs);
 
-REGISTER_KERNEL_BUILDER(Name("DatasetQueueEnqueue")
+REGISTER_KERNEL_BUILDER(Name("DatasetMapInsert")
                         .Device(DEVICE_CPU),
-                        DatasetQueueEnqueueOp);
+                        DatasetMapInsertOp);
 
 
-class QueueCloseOp : public OpKernel
+class MapCloseOp : public OpKernel
 {
 private:
     mutex mu_;
 
 public:
-    explicit QueueCloseOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
+    explicit MapCloseOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
 
     void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
         mutex_lock l(mu_);
 
-        // Obtain queue resource and close it
-        QueueResource * queue_resource;
+        // Obtain map resource and close it
+        MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
-                                          &queue_resource));
+                                          &map_resource));
 
-        core::ScopedUnref unref_queue(queue_resource);
+        core::ScopedUnref unref_map(map_resource);
 
-        queue_resource->close();
+        map_resource->close();
     }
 };
 
-REGISTER_OP("DatasetQueueClose")
-    .Input("queue_handle: resource")
+REGISTER_OP("DatasetMapClose")
+    .Input("map_handle: resource")
     .Attr("container: string = ''")
     .Attr("shared_name: string = ''")
     .SetIsStateful()  // Source dataset ops must be marked
                       // stateful to inhibit constant folding.
     .SetShapeFn(shape_inference::NoOutputs);
 
-REGISTER_KERNEL_BUILDER(Name("DatasetQueueClose")
+REGISTER_KERNEL_BUILDER(Name("DatasetMapClose")
                         .Device(DEVICE_CPU),
-                        QueueCloseOp);
+                        MapCloseOp);
 
 
 // See documentation in ../ops/dataset_ops.cc for a high-level
 // description of the following op.
-class SimpleQueueDatasetOp : public DatasetOpKernel
+class SimpleMapDatasetOp : public DatasetOpKernel
 {
 public:
-    explicit SimpleQueueDatasetOp(OpKernelConstruction * ctx)
+    explicit SimpleMapDatasetOp(OpKernelConstruction * ctx)
                     : DatasetOpKernel(ctx) {}
 
 protected:
     void MakeDataset(OpKernelContext * ctx, DatasetBase ** output) override
     {
-        QueueResource * queue_resource;
-        OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
-                                              &queue_resource));
+        DatasetBase * input;
+        OP_REQUIRES_OK(ctx, GetDatasetFromVariantTensor(ctx->input(0),
+                                                            &input));
 
-        core::ScopedUnref unref_queue(queue_resource);
+        MapResource * map_resource;
+        OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 1),
+                                                        &map_resource));
 
-        *output = new Dataset(ctx, queue_resource);
+        core::ScopedUnref unref_map(map_resource);
+
+        *output = new Dataset(ctx, input, map_resource);
         // TODO(sjperkins)
         // Sometimes this is needed if kind of nothing is associated
         // with the dataset (iterators and next operators???????
@@ -289,38 +325,46 @@ private:
     class Dataset : public GraphDatasetBase
     {
     public:
-        QueueResource * queue_resource_;
+        const DatasetBase * input_;
+        MapResource * map_resource_;
 
-        explicit Dataset(OpKernelContext * ctx, QueueResource * queue_resource)
-                : GraphDatasetBase(ctx), queue_resource_(queue_resource)
+        explicit Dataset(OpKernelContext * ctx,
+                        const DatasetBase * input,
+                        MapResource * map_resource)
+                : GraphDatasetBase(ctx),
+                    input_(input),
+                    map_resource_(map_resource)
         {
-            queue_resource_->Ref();
-            // printf("Creating QueueDatset %p\n", (void *) this);
+            input_->Ref();
+            map_resource_->Ref();
+            // printf("Creating MapDatset %p\n", (void *) this);
         }
+
+        ~Dataset() override
+        {
+            input_->Unref();
+            map_resource_->Unref();
+            // printf("Destroying MapDatset %p\n", (void *) this);
+        }
+
 
         Dataset(const Dataset & rhs) = delete;
         Dataset & operator=(const Dataset & rhs) = delete;
 
-        ~Dataset() override
-        {
-            queue_resource_->Unref();
-            // printf("Destroying QueueDatset %p\n", (void *) this);
-        }
-
         const DataTypeVector & output_dtypes() const override
-            { return queue_resource_->output_dtypes(); }
+            { return map_resource_->output_dtypes(); }
 
         const std::vector<PartialTensorShape> & output_shapes() const override
-            { return queue_resource_->output_shapes(); }
+            { return map_resource_->output_shapes(); }
 
         string DebugString()
-            { return "SimpleQueueDataset"; }
+            { return "SimpleMapDataset"; }
 
         std::unique_ptr<IteratorBase>
         MakeIterator(const string & prefix) const override
         {
             return std::unique_ptr<IteratorBase>(new Iterator(
-              {this, strings::StrCat(prefix, "::SimpleQueueDataset")}));
+              {this, strings::StrCat(prefix, "::SimpleMapDataset")}));
         }
 
     protected:
@@ -334,16 +378,39 @@ private:
     private:
         class Iterator : public DatasetIterator<Dataset>
         {
+        private:
+            mutex mu_;
+
+            std::unique_ptr<IteratorBase> input_impl_ GUARDED_BY(mu_);
+
         public:
             explicit Iterator(const Params & params)
-                : DatasetIterator<Dataset>(params) {}
+                : DatasetIterator<Dataset>(params),
+                input_impl_(params.dataset->input_->MakeIterator(params.prefix))
+            {
+            }
 
             virtual Status GetNextInternal(IteratorContext * ctx,
                         std::vector<Tensor> * out_tensors,
                         bool * end_of_sequence) override
             {
-                *end_of_sequence = !dataset()->queue_resource_
-                                             ->pop(out_tensors).ok();
+                std::vector<Tensor> keys;
+
+                TF_RETURN_IF_ERROR(input_impl_->GetNext(ctx, &keys,
+                                                    end_of_sequence));
+
+                if(*end_of_sequence)
+                    { return Status::OK(); }
+
+                if(keys.size() != 1)
+                {
+                    return errors::InvalidArgument("Got multiple keys (",
+                                                    keys.size(),
+                                                    "), expected 1.");
+                }
+
+                *end_of_sequence = !dataset()->map_resource_
+                                      ->pop(keys[0], out_tensors).ok();
                 return Status::OK();
             }
         protected:
@@ -355,17 +422,18 @@ private:
             { return errors::InvalidArgument("Not Implemented"); }
         }; // class Iterator
     };     // class Dataset
-};         // class SimpleQueueDatasetOp
+};         // class SimpleMapDatasetOp
 
-REGISTER_OP("SimpleQueueDataset")
-    .Input("queue_handle: resource")
+REGISTER_OP("SimpleMapDataset")
+    .Input("key_dataset: variant")
+    .Input("map_handle: resource")
     .Output("handle: variant")
     .SetIsStateful()  // Source dataset ops must be marked
                       // stateful to inhibit constant folding.
     .SetShapeFn(shape_inference::ScalarShape);
 
-REGISTER_KERNEL_BUILDER(Name("SimpleQueueDataset").Device(DEVICE_CPU),
-                        SimpleQueueDatasetOp);
+REGISTER_KERNEL_BUILDER(Name("SimpleMapDataset").Device(DEVICE_CPU),
+                        SimpleMapDatasetOp);
 
 }  // namespace
 
