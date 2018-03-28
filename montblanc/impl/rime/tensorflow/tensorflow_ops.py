@@ -5,7 +5,7 @@ import pkg_resources
 import tensorflow as tf
 
 # Load standard/development version of rime tensorflow library?
-if False:
+if True:
     # Installed library location
     _rime_lib_path = pkg_resources.resource_filename("montblanc", "ext")
 else:
@@ -27,8 +27,6 @@ _export_ops += ["dataset_queue_handle", "dataset_queue_enqueue",
 # Map Dataset operators for export
 _export_ops += ["dataset_map_handle", "dataset_map_insert",
                 "dataset_map_close", "simple_map_dataset"]
-
-print dir(_rime_so)
 
 # Store ops in this module
 globals().update({n: getattr(_rime_so, n) for n in _export_ops})
