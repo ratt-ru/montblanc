@@ -9,20 +9,21 @@ from montblanc.impl.rime.tensorflow.map_dataset import (TensorMap,
 
 class TestMapTensorDataset(unittest.TestCase):
 
-    def __test_numpy_conversion(self):
+    def test_numpy_conversion(self):
         with tf.Graph().as_default() as graph:
+            ck = tf.placeholder(dtype=tf.int64)
             ci = tf.placeholder(dtype=tf.int64)
             cf = tf.placeholder(dtype=tf.float64)
 
             dtypes = { 'i': ci.dtype, 'sub' : {'f': cf.dtype}}
             hundred_floats = np.full((10,10), 2.0, dtype=np.float64)
 
-            map = TensorMap(dtypes)
-            ds = MapDataset(map)
+            tensor_map = TensorMap(dtypes)
+            ds = MapDataset(tf.data.Dataset.range(2,3), tensor_map)
 
-            insert_op = map.put({'i': np.int64(23),
+            insert_op = tensor_map.insert(2, {'i': np.int64(23),
                                 'sub' : {'f': hundred_floats}})
-            close_op = map.close()
+            close_op = tensor_map.close()
 
             it = ds.make_initializable_iterator()
             next_op = it.get_next()
@@ -38,18 +39,19 @@ class TestMapTensorDataset(unittest.TestCase):
             self.assertTrue(23 == result['i'])
 
 
-    def __test_nest_dtype_only(self):
+    def test_nest_dtype_only(self):
         with tf.Graph().as_default() as graph:
+            ck = tf.placeholder(dtype=tf.int64)
             ci = tf.placeholder(dtype=tf.int64)
             cf = tf.placeholder(dtype=tf.float64)
 
             dtypes = { 'i': ci.dtype, 'sub' : {'f': cf.dtype}}
 
-            map = TensorMap(dtypes)
-            ds = MapDataset(map)
+            tensor_map = TensorMap(dtypes)
+            ds = MapDataset(tf.data.Dataset.range(2,3), tensor_map)
 
-            insert_op = map.put({'i': ci, 'sub' : {'f': cf}})
-            close_op = map.close()
+            insert_op = tensor_map.insert(ck, {'i': ci, 'sub' : {'f': cf}})
+            close_op = tensor_map.close()
 
             it = ds.make_initializable_iterator()
             next_op = it.get_next()
@@ -61,14 +63,15 @@ class TestMapTensorDataset(unittest.TestCase):
 
             hundred_floats = np.full((10,10), 2.0, dtype=np.float64)
 
-            S.run(insert_op, feed_dict={ci: 23, cf: hundred_floats})
+            S.run(insert_op, feed_dict={ck: 2, ci: 23, cf: hundred_floats})
 
             result = S.run(next_op)
             self.assertTrue(np.all(hundred_floats == result['sub']['f']))
             self.assertTrue(23 == result['i'])
 
-    def __test_nest_dtypes_and_shapes(self):
+    def test_nest_dtypes_and_shapes(self):
         with tf.Graph().as_default() as graph:
+            ck = tf.placeholder(dtype=tf.int64)
             ci = tf.placeholder(dtype=tf.int64)
             cf = tf.placeholder(dtype=tf.float64)
 
@@ -76,11 +79,11 @@ class TestMapTensorDataset(unittest.TestCase):
             dtypes = { 'i': ci.dtype, 'sub' : {'f': cf.dtype}}
             shapes = { 'i': None, 'sub' : {'f': [10, 10]}}
 
-            map = TensorMap(dtypes, shapes)
-            ds = MapDataset(map)
+            tensor_map = TensorMap(dtypes)
+            ds = MapDataset(tf.data.Dataset.range(2,3), tensor_map)
 
-            insert_op = map.put({'i': ci, 'sub' : {'f': cf}})
-            close_op = map.close()
+            insert_op = tensor_map.insert(ck, {'i': ci, 'sub' : {'f': cf}})
+            close_op = tensor_map.close()
 
             it = ds.make_initializable_iterator()
             next_op = it.get_next()
@@ -92,7 +95,7 @@ class TestMapTensorDataset(unittest.TestCase):
 
             hundred_floats = np.full((10,10), 2.0, dtype=np.float64)
 
-            S.run(insert_op, feed_dict={ci: 23, cf: hundred_floats})
+            S.run(insert_op, feed_dict={ck: 2, ci: 23, cf: hundred_floats})
 
             result = S.run(next_op)
             self.assertTrue(np.all(hundred_floats == result['sub']['f']))
