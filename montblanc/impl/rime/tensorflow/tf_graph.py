@@ -604,7 +604,9 @@ def _construct_tensorflow_expression(cfg, device):
     configuration ``cfg`` and tensorflow device ``device``
     """
 
-    from montblanc.impl.rime.tensorflow.dataset import input_schema, output_schema
+    from montblanc.impl.rime.tensorflow.dataset import (input_schema,
+                                                    output_schema,
+                                                    internal_schema)
     # Promote string device specifiers to tf.DeviceSpec
     if isinstance(device, six.string_types):
         device = tf.DeviceSpec.from_string(device)
@@ -614,7 +616,7 @@ def _construct_tensorflow_expression(cfg, device):
         feed_many,
         feed_once) = _partition(('utime', 'vrow'), input_schema())
 
-    feed_multiple = toolz.merge(feed_once, feed_many)
+    feed_multiple = toolz.merge(feed_once, feed_many, internal_schema())
 
     # Create the graph
     with tf.Graph().as_default() as graph:
