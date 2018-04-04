@@ -1,5 +1,5 @@
-
 import collections
+from pprint import pprint
 
 import attr
 from attrdict import AttrDict
@@ -627,10 +627,63 @@ def _construct_tensorflow_expression(cfg, device):
                                     ordered=True, device=device)
                             for k, v in source_data_arrays.items()}
 
-    TensorflowExpression = attr.make_class("TensorflowExpression",
-        ["multiple_dataset", "source_staging_areas", "graph"])
+        inputs = multiple_dataset.next_op
 
-    return TensorflowExpression(multiple_dataset, source_staging_areas, graph)
+        def point_body(points, lm):
+            key = inputs['point_keys'][points]
+            staging_area = source_staging_areas['point']
+            _, point_inputs = staging_area.get(key, name="point_get")
+            print point_inputs['point_lm']
+            lm = lm + tf.reduce_sum(point_inputs['point_lm'], axis=0)
+            lm.set_shape((2,))
+
+            return points+1, lm
+
+        def gaussian_body(gaussians, lm):
+            key = inputs['gaussian_keys'][gaussians]
+            staging_area = source_staging_areas['gaussian']
+            _, gaussian_inputs = staging_area.get(key)
+            lm = lm + tf.reduce_sum(gaussian_inputs['gaussian_lm'], axis=0)
+            lm.set_shape((2,))
+
+            return gaussians+1, lm
+
+        def sersic_body(sersics, lm):
+            key = inputs['sersic_keys'][sersics]
+            staging_area = source_staging_areas['sersic']
+            _, sersic_inputs = staging_area.get(key)
+            lm = lm + tf.reduce_sum(sersic_inputs['sersic_lm'], axis=0)
+
+            lm.set_shape((2,))
+
+            return sersics+1, lm
+
+        with tf.device(device):
+            zero_lm = tf.constant([0.0,0.0], dtype=tf.float64)
+            zero_index = tf.constant(0, dtype=tf.int32)
+
+            npsrc = tf.shape(inputs['point_keys'])[0]
+            _, plm = tf.while_loop(lambda p, lm: tf.less(p, npsrc),
+                            point_body, [zero_index, zero_lm])
+
+            ngsrc = tf.shape(inputs['gaussian_keys'])[0]
+            _, glm = tf.while_loop(lambda g, lm: tf.less(g, ngsrc),
+                            gaussian_body, [zero_index, zero_lm])
+
+            nssrc = tf.shape(inputs['sersic_keys'])[0]
+            _, slm = tf.while_loop(lambda s, lm: tf.less(s, nssrc),
+                            sersic_body, [zero_index, zero_lm])
+
+            result = (plm, glm, slm)
+
+        pprint(inputs)
+
+    TensorflowExpression = attr.make_class("TensorflowExpression",
+        ["multiple_dataset", "source_staging_areas", "graph",
+        "result"])
+
+    return TensorflowExpression(multiple_dataset, source_staging_areas,
+                                graph, result)
 
 import unittest
 from dataset import input_schema, output_schema
@@ -664,21 +717,31 @@ class TestPartition(unittest.TestCase):
                 # Initialise the iterator
                 S.run(expr.multiple_dataset.iterator.initializer)
 
+                def _feed_source(source, keys):
+                    src = expr.source_staging_areas[source]
+                    lm_str = '%s_lm' % source
+                    lm_ph = src.placeholders[src.fed_arrays.index(lm_str)]
+
+                    feed_dict = {ph: _dummy_data(ph) for ph in src.placeholders }
+
+                    for i, key in enumerate(keys):
+                        feed_dict.update({src.put_key_ph: key})
+                        feed_dict.update({lm_ph: np.full((10,2), i+1)})
+                        S.run(src.put_op, feed_dict=feed_dict)
+
                 # Feed some dummy data into the queue
                 feed_dict = {ph: _dummy_data(ph) for ph in mphs.values()}
+                feed_dict.update({mphs['point_keys'] : [0, 1, 2]})
+                _feed_source('point', [0, 1, 2])
+                feed_dict.update({mphs['gaussian_keys'] : [0, 1, 2]})
+                _feed_source('gaussian', [0, 1, 2])
+                feed_dict.update({mphs['sersic_keys'] : [0, 1, 2]})
+                _feed_source('sersic', [0, 1, 2])
 
                 S.run(expr.multiple_dataset.put_op, feed_dict=feed_dict)
 
-                # Call the iterator next op
-                result = S.run(mds.next_op)
-                self.assertTrue(sorted(result.keys()) == sorted(mphs.keys()))
 
-                pds = expr.source_staging_areas['point']
-
-                feed_dict = {ph: _dummy_data(ph) for ph in pds.placeholders }
-                feed_dict.update({pds.put_key_ph: 2})
-                S.run(pds.put_op, feed_dict=feed_dict)
-                S.run(pds.get_op, feed_dict={pds.get_key_ph: 2})
+                print S.run(expr.result)
 
 if __name__ == "__main__":
     unittest.main()
