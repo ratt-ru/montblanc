@@ -1,12 +1,21 @@
-from attrdict import AttrDict
+from six import string_types
 
+from attrdict import AttrDict
 import tensorflow as tf
 from tensorflow.python.ops import data_flow_ops
 
 from queue_wrapper import _get_queue_types
 
 class StagingAreaWrapper(object):
-    def __init__(self, name, fed_arrays, array_schemas, shared_name=None, ordered=False):
+    def __init__(self, name, fed_arrays, array_schemas,
+                    shared_name=None, ordered=False,
+                    device=None):
+
+        if device is None:
+            device = tf.DeviceSpec()
+        elif isinstance(device, string_types):
+            device = tf.DeviceSpec.from_string(device)
+
         self._name = name
         self._fed_arrays = fed_arrays
         self._array_schemas = array_schemas
@@ -14,18 +23,22 @@ class StagingAreaWrapper(object):
         # Infer types of the given fed_arrays
         self._dtypes = [array_schemas[n]["dtype"] for n in fed_arrays]
 
+
         # Create placeholders for the fed arrays
-        self._placeholders = placeholders = [tf.placeholder(dt,
-                name="{n}_placeholder".format(n=n))
+        self._placeholders = placeholders = [
+                tf.placeholder(dt,
+                                [None]*len(array_schemas[n]['dims']),
+                                name="{n}_placeholder".format(n=n))
             for n, dt in zip(fed_arrays, self._dtypes)]
 
         self._put_key_ph = tf.placeholder(dtype=tf.int64)
         self._get_key_ph = tf.placeholder(dtype=tf.int64)
         self._peek_key_ph = tf.placeholder(dtype=tf.int64)
 
-        self._staging_area = sa = data_flow_ops.MapStagingArea(
-            self._dtypes, names=fed_arrays, ordered=ordered,
-            shared_name=shared_name)
+        with tf.device(device):
+            self._staging_area = sa = data_flow_ops.MapStagingArea(
+                self._dtypes, names=fed_arrays, ordered=ordered,
+                shared_name=shared_name)
 
         self._put_op = sa.put(self._put_key_ph, {n: p for n, p
                                             in zip(fed_arrays, placeholders)},

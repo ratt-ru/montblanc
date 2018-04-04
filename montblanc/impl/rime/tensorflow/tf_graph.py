@@ -610,7 +610,8 @@ def _construct_tensorflow_expression(cfg, device):
         device = tf.DeviceSpec.from_string(device)
 
     # Partition input arrays
-    (source_data_arrays, feed_many,
+    (source_data_arrays,
+        feed_many,
         feed_once) = _partition(('utime', 'vrow'), input_schema())
 
     feed_multiple = toolz.merge(feed_once, feed_many)
@@ -618,13 +619,16 @@ def _construct_tensorflow_expression(cfg, device):
     # Create the graph
     with tf.Graph().as_default() as graph:
         multiple_dataset = _create_queue_dataset_details(feed_multiple, device)
-        source_datasets = {k: _create_queue_dataset_details(v, device) for k, v
-                                        in source_data_arrays.items()}
+
+        source_staging_areas = {k: create_staging_area_wrapper('%s_cpu' % k,
+                                    v.keys(), input_schema(),
+                                    ordered=True, device=device)
+                            for k, v in source_data_arrays.items()}
 
     TensorflowExpression = attr.make_class("TensorflowExpression",
-        ["multiple_dataset", "source_datasets", "graph"])
+        ["multiple_dataset", "source_staging_areas", "graph"])
 
-    return TensorflowExpression(multiple_dataset, source_datasets, graph)
+    return TensorflowExpression(multiple_dataset, source_staging_areas, graph)
 
 import unittest
 from dataset import input_schema, output_schema
@@ -666,6 +670,13 @@ class TestPartition(unittest.TestCase):
                 # Call the iterator next op
                 result = S.run(mds.next_op)
                 self.assertTrue(sorted(result.keys()) == sorted(mphs.keys()))
+
+                pds = expr.source_staging_areas['point']
+
+                feed_dict = {ph: _dummy_data(ph) for ph in pds.placeholders }
+                feed_dict.update({pds.put_key_ph: 2})
+                S.run(pds.put_op, feed_dict=feed_dict)
+                S.run(pds.get_op, feed_dict={pds.get_key_ph: 2})
 
 if __name__ == "__main__":
     unittest.main()
