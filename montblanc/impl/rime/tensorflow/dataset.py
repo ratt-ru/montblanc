@@ -183,6 +183,22 @@ def default_gaussian(ds, schema):
 
 default_sersic = default_gaussian
 
+def internal_schema():
+    return {
+        "point_keys" : {
+            "dims": (None,),
+            "dtype": np.int64,
+        },
+        "gaussian_keys" : {
+            "dims": (None,),
+            "dtype": np.int64,
+        },
+        "sersic_keys" : {
+            "dims": (None,),
+            "dtype": np.int64,
+        },
+    }
+
 def source_schema():
     return {
         "point_lm": {
