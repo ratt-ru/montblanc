@@ -151,12 +151,14 @@ public:
         const auto & in_parallactic_angle_sin = context->input(0);
         const auto & in_parallactic_angle_cos = context->input(1);
 
-        int npa = in_parallactic_angle_sin.dim_size(0);
+        int ntime = in_parallactic_angle_sin.dim_size(0);
+        int na = in_parallactic_angle_sin.dim_size(1);
+        int npa = ntime*na;
 
         // Allocate output tensors
         // Allocate space for output tensor 'feed_rotation'
         tf::Tensor * feed_rotation_ptr = nullptr;
-        tf::TensorShape feed_rotation_shape = tf::TensorShape({ npa, 4 });
+        tf::TensorShape feed_rotation_shape = tf::TensorShape({ ntime, na, 4 });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, feed_rotation_shape, &feed_rotation_ptr));
 

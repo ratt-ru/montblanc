@@ -33,9 +33,9 @@ class TestFeedRotation(unittest.TestCase):
         """ Implementation of the FeedRotation operator test """
 
         # Create input variables
-        npa = 10*7
+        ntime, na = 10, 7
 
-        parallactic_angle = np.random.random(size=[npa]).astype(FT)
+        parallactic_angle = np.random.random(size=[ntime,na]).astype(FT)
         parallactic_angle_sin = np.sin(parallactic_angle)
         parallactic_angle_cos = np.cos(parallactic_angle)
 
