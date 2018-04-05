@@ -185,15 +185,15 @@ default_sersic = default_gaussian
 
 def internal_schema():
     return {
-        "point_keys" : {
+        "__point_keys" : {
             "dims": (None,),
             "dtype": np.int64,
         },
-        "gaussian_keys" : {
+        "__gaussian_keys" : {
             "dims": (None,),
             "dtype": np.int64,
         },
-        "sersic_keys" : {
+        "__sersic_keys" : {
             "dims": (None,),
             "dtype": np.int64,
         },
