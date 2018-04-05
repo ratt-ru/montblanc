@@ -29,9 +29,10 @@ class TestParallacticAngleSinCos(unittest.TestCase):
         """ Implementation of the ParallacticAngleSinCos operator test """
 
         # Create input variables
-        npa = 10*7
+        ntime = 10
+        na = 7
 
-        parallactic_angle = np.random.random(size=[npa]).astype(FT)
+        parallactic_angle = np.random.random(size=[ntime, na]).astype(FT)
 
 
         # Argument list
