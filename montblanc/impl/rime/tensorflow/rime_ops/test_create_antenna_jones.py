@@ -8,29 +8,28 @@ from montblanc.impl.rime.tensorflow.tensorflow_ops import (
                 create_antenna_jones as create_antenna_jones_op)
 
 
-def np_create_antenna_jones(bsqrt, complex_phase, feed_rotation,
-                                        ejones, arow_time_index):
+def np_create_antenna_jones(bsqrt, complex_phase, feed_rotation, ddes):
     """ Compute antenna jones term using numpy """
-    result = bsqrt[:,arow_time_index,:,:] * complex_phase[:,:,:,None]
+    result = bsqrt[:,:,None,:,:] * complex_phase[:,:,:,:,None]
 
     # Reshape npol dimensions to 2x2
     fr_shape = feed_rotation.shape[0:-1] + (2, 2)
     res_shape = result.shape[0:-1] + (2, 2)
-    ej_shape = ejones.shape[0:-1] + (2, 2)
+    ej_shape = ddes.shape[0:-1] + (2, 2)
 
     # Multiple result into feed rotation
-    # arow, i, j
-    # src, arow, channel, j, k
-    result = np.einsum("aij,sacjk->sacik",
+    # time, antenna, i, j
+    # src, time, antenna, channel, j, k
+    result = np.einsum("taij,stacjk->stacik",
                        feed_rotation.reshape(fr_shape),
                        result.reshape(res_shape))
 
-    # Multiply result into ejones
-    result = np.einsum("sacij,sacjk->sacik",
-                       ejones.reshape(ej_shape),result)
+    # Multiply result into ddes
+    result = np.einsum("stacij,stacjk->stacik",
+                       ddes.reshape(ej_shape),result)
 
     # Return shape in expected format
-    return result.reshape(ejones.shape)
+    return result.reshape(ddes.shape)
 
 
 class TestCreateAntennaJones(unittest.TestCase):
@@ -71,27 +70,20 @@ class TestCreateAntennaJones(unittest.TestCase):
         rf = lambda *s: np.random.random(size=s).astype(FT)
         rc = lambda *s: (rf(*s) + rf(*s) * 1j).astype(CT)
 
-        nsrc, nchan, npol = 10, 16, 4
-
-        ant_groups = np.random.randint(10, 20, size=15, dtype=np.int32)
-        narow = ant_groups.sum()
-        ntime = ant_groups.size
-        time_index_range = np.arange(ntime, dtype=np.int32)
-        arow_time_index = np.repeat(time_index_range, ant_groups)
+        nsrc, ntime, na, nchan, npol = 10, 20, 7, 16, 4
 
         bsqrt = rc(nsrc, ntime, nchan, npol)
-        complex_phase = rc(nsrc, narow, nchan)
-        feed_rotation = rc(narow, npol)
-        ejones = rc(nsrc, narow, nchan, npol)
+        complex_phase = rc(nsrc, ntime, na, nchan)
+        feed_rotation = rc(ntime, na, npol)
+        ddes = rc(nsrc, ntime, na, nchan, npol)
 
         np_args = [bsqrt, complex_phase,
-                   feed_rotation, ejones,
-                   arow_time_index]
+                   feed_rotation, ddes]
         arg_names = ["bsqrt", "complex_phase",
-                     "feed_rotation", "ejones",
-                     "arow_time_index"]
+                     "feed_rotation", "ddes"]
 
-        tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
+        tf_args = [tf.Variable(v, name=n) for v, n
+                    in zip(np_args, arg_names)]
 
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
@@ -114,7 +106,7 @@ class TestCreateAntennaJones(unittest.TestCase):
         with tf.Session() as S:
             S.run(init_op)
 
-            # Get the CPU create_antenna_jones
+            # Get the CPU sincos
             cpu_aj = S.run(cpu_op)
 
             # Only test against numpy if we have all the terms
@@ -123,12 +115,11 @@ class TestCreateAntennaJones(unittest.TestCase):
 
             if test_np:
                 np_aj = np_create_antenna_jones(bsqrt, complex_phase,
-                                                feed_rotation, ejones,
-                                                arow_time_index)
+                                                feed_rotation, ddes)
 
                 self.assertTrue(np.allclose(np_aj, cpu_aj))
 
-            # Compare with GPU create_antenna_jones
+            # Compare with GPU sincos
             for gpu_aj in S.run(gpu_ops):
                 self.assertTrue(np.allclose(cpu_aj, gpu_aj))
 

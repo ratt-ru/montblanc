@@ -34,10 +34,10 @@ auto create_antenna_jones_shape_function = [](InferenceContext* c) {
     ShapeHandle complex_phase = c->input(1);
     ShapeHandle feed_rotation = c->input(2);
     ShapeHandle ddes = c->input(3);
-    ShapeHandle arow_time_index = c->input(4);
 
     auto nsrc = c->UnknownDim();
-    auto narow = c->UnknownDim();
+    auto ntime = c->UnknownDim();
+    auto na = c->UnknownDim();
     auto nchan = c->UnknownDim();
     auto npol = c->UnknownDim();
 
@@ -71,6 +71,7 @@ auto create_antenna_jones_shape_function = [](InferenceContext* c) {
             c->DebugString(bsqrt));
 
         update_dim("nsrc", nsrc, c->Dim(bsqrt, 0));
+        update_dim("ntime", ntime, c->Dim(bsqrt, 1));
         update_dim("nchan", nchan, c->Dim(bsqrt, 2));
         update_dim("npol", npol, c->Dim(bsqrt, 3));
     }
@@ -78,53 +79,49 @@ auto create_antenna_jones_shape_function = [](InferenceContext* c) {
     // complex_phase
     if(have_complex_phase)
     {
-        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(complex_phase, 3, &input),
-            "complex_phase shape must be [nsrc, arow, nchan] but is " +
+        // complex_phase
+        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(complex_phase, 4, &input),
+            "complex_phase shape must be [nsrc, ntime, na, nchan] but is " +
             c->DebugString(complex_phase));
 
         update_dim("nsrc", nsrc, c->Dim(complex_phase, 0));
-        update_dim("narow", narow, c->Dim(complex_phase, 1));
-        update_dim("nchan", nchan, c->Dim(complex_phase, 2));
+        update_dim("ntime", ntime, c->Dim(complex_phase, 1));
+        update_dim("na", na, c->Dim(complex_phase, 2));
+        update_dim("nchan", nchan, c->Dim(complex_phase, 3));
     }
 
     // feed_rotation
     if(have_feed_rotation)
     {
-        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(feed_rotation, 2, &input),
-            "bsqrt shape must be [arow, 4] but is " +
+        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(feed_rotation, 3, &input),
+            "bsqrt shape must be [ntime, na, 4] but is " +
             c->DebugString(feed_rotation));
-        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(feed_rotation, 1), 4, &d),
-            "bsqrt shape must be [arow, 4] but is " +
+        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(feed_rotation, 2), 4, &d),
+            "bsqrt shape must be [ntime, na, 4] but is " +
             c->DebugString(feed_rotation));
 
-        update_dim("narow", narow, c->Dim(feed_rotation, 1));
+        update_dim("ntime", ntime, c->Dim(feed_rotation, 0));
+        update_dim("na", na, c->Dim(feed_rotation, 1));
     }
 
     // DDES
     if(have_ddes)
     {
-        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(ddes, 4, &input),
-            "ddes shape must be [nsrc, arow, nchan, 4] but is " +
+        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(ddes, 5, &input),
+            "ddes shape must be [nsrc, ntime, na, nchan, 4] but is " +
             c->DebugString(ddes));
-        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(ddes, 3), 4, &d),
-            "ddes shape must be [nsrc, arow, nchan, 4] but is " +
+        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(ddes, 4), 4, &d),
+            "ddes shape must be [nsrc, ntime, na, nchan, 4] but is " +
             c->DebugString(ddes));
 
         update_dim("nsrc", nsrc, c->Dim(ddes, 0));
-        update_dim("narow", narow, c->Dim(ddes, 1));
-        update_dim("nchan", nchan, c->Dim(ddes, 2));
-        update_dim("npol", npol, c->Dim(ddes, 3));
+        update_dim("ntime", ntime, c->Dim(ddes, 1));
+        update_dim("na", na, c->Dim(ddes, 2));
+        update_dim("nchan", nchan, c->Dim(ddes, 3));
+        update_dim("npol", npol, c->Dim(ddes, 4));
     }
 
-    // arow_time_index
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(arow_time_index, 1, &input),
-        "arow_time_index shape must be [arow] but is " +
-        c->DebugString(arow_time_index));
-
-    update_dim("narow", narow, c->Dim(arow_time_index, 0));
-
-    ShapeHandle ant_jones = c->MakeShape({nsrc, narow, nchan, npol});
-
+    ShapeHandle ant_jones = c->MakeShape({nsrc, ntime, na, nchan, npol});
     // Set the output shape
     c->set_output(0, ant_jones);
 
@@ -137,7 +134,6 @@ REGISTER_OP("CreateAntennaJones")
     .Input("complex_phase: CT")
     .Input("feed_rotation: CT")
     .Input("ddes: CT")
-    .Input("arow_time_index: int32")
     .Output("ant_jones: CT")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
