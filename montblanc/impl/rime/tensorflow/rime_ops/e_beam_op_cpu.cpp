@@ -36,30 +36,30 @@ auto ebeam_shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(frequency, 1, &input),
         "frequency shape must be [nchan,] but is " + c->DebugString(frequency));
 
-    // point errors should be shape (arow, nchan, 2)
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(point_errors, 3, &input),
-        "point_errors shape must be [arow, nchan, 2] but is " +
+    // point errors should be shape (ntime, na, nchan, 2)
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(point_errors, 4, &input),
+        "point_errors shape must be [ntime, na, nchan, 2] but is " +
         c->DebugString(point_errors));
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(point_errors, 2), 2, &d),
-        "point_errors shape must be [arow, nchan, 2] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(point_errors, 3), 2, &d),
+        "point_errors shape must be [ntime, na, nchan, 2] but is " +
         c->DebugString(point_errors));
 
     // antenna scaling should be shape (na, nchan, 2)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna_scaling, 3, &input),
-        "point_errors shape must be [arow, nchan, 2] but is " +
+        "point_errors shape must be [na, nchan, 2] but is " +
         c->DebugString(antenna_scaling));
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(antenna_scaling, 2), 2, &d),
-        "point_errors shape must be [arow, nchan, 2] but is " +
+        "point_errors shape must be [na, nchan, 2] but is " +
         c->DebugString(antenna_scaling));
 
-    // parallactic angle_sin should be shape (arow)
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(parallactic_angle_sin, 1, &input),
-        "parallactic_angle shape_sin must be [arow] but is " +
+    // parallactic angle_sin should be shape (ntime, na)
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(parallactic_angle_sin, 2, &input),
+        "parallactic_angle shape_sin must be [ntime, na] but is " +
         c->DebugString(parallactic_angle_sin));
 
-    // parallactic angle_cos should be shape (arow)
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(parallactic_angle_cos, 1, &input),
-        "parallactic_angle_cos shape must be [arow] but is " +
+    // parallactic angle_cos should be shape (ntime, na)
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(parallactic_angle_cos, 2, &input),
+        "parallactic_angle_cos shape must be [ntime, na] but is " +
         c->DebugString(parallactic_angle_cos));
 
     // beam_extents
@@ -83,10 +83,11 @@ auto ebeam_shape_function = [](InferenceContext* c) {
         "ebeam shape must be [beam_lw, beam_mh, beam_nud, 4] but is " +
         c->DebugString(ebeam));
 
-    // E Jones output is (nsrc, arow, nchan, 4)
+    // E Jones output is (nsrc, ntime, na, nchan, 4)
     ShapeHandle ejones = c->MakeShape({
         c->Dim(lm, 0),
         c->Dim(parallactic_angle_sin, 0),
+        c->Dim(parallactic_angle_sin, 1),
         c->Dim(frequency, 0),
         4});
 

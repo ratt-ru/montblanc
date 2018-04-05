@@ -55,8 +55,10 @@ public:
 
         // Extract problem dimensions
         int nsrc = in_lm.dim_size(0);
-        int arow = in_point_errors.dim_size(0);
-        int nchan = in_point_errors.dim_size(1);
+        int ntime = in_point_errors.dim_size(0);
+        int na = in_point_errors.dim_size(1);
+
+        int nchan = in_point_errors.dim_size(2);
         int npol = EBEAM_NPOL;
         int npolchan = npol * nchan;
 
@@ -78,7 +80,8 @@ public:
         FT mscale = FT(beam_mh-1)/(upper_m - lower_m);
 
         // Reason about our output shape
-        tf::TensorShape jones_shape({nsrc, arow, nchan, EBEAM_NPOL});
+        tf::TensorShape jones_shape({nsrc,
+            ntime, na, nchan, EBEAM_NPOL});
 
         // Create a pointer for the jones result
         tf::Tensor * jones_ptr = nullptr;
@@ -92,15 +95,15 @@ public:
 
         auto lm = in_lm.tensor<FT, 2>();
         auto frequency = in_frequency.tensor<FT, 1>();
-        auto point_errors = in_point_errors.tensor<FT, 3>();
+        auto point_errors = in_point_errors.tensor<FT, 4>();
         auto antenna_scaling = in_antenna_scaling.tensor<FT, 3>();
-        auto parallactic_angle_sin = in_parallactic_angle_sin.tensor<FT, 1>();
-        auto parallactic_angle_cos = in_parallactic_angle_cos.tensor<FT, 1>();
+        auto parallactic_angle_sin = in_parallactic_angle_sin.tensor<FT, 2>();
+        auto parallactic_angle_cos = in_parallactic_angle_cos.tensor<FT, 2>();
         auto beam_freq_map = in_beam_freq_map.flat<FT>();
         auto beam_freq_map_begin = beam_freq_map.data();
         auto beam_freq_map_end = beam_freq_map_begin + beam_freq_map.size();
         auto e_beam = in_ebeam.tensor<CT, 4>();
-        auto jones = jones_ptr->tensor<CT, 4>();
+        auto jones = jones_ptr->tensor<CT, 5>();
 
         constexpr FT zero = 0.0;
         constexpr FT one = 1.0;
@@ -162,99 +165,102 @@ public:
             //         value, value-f);
         }
 
-        #pragma omp parallel for
-        for(int row=0; row < arow; ++row)
+        #pragma omp parallel for collapse(2)
+        for(int time=0; time < ntime; ++time)
         {
-            // Rotation angle
-            const FT & sint = parallactic_angle_sin(row);
-            const FT & cost = parallactic_angle_cos(row);
-
-            for(int src=0; src < nsrc; ++src)
+            for(int ant=0; ant < na; ++ant)
             {
-                // Rotate lm coordinate angle
-                FT l = lm(src,0)*cost - lm(src,1)*sint;
-                FT m = lm(src,0)*sint + lm(src,1)*cost;
+                // Rotation angle
+                const FT & sint = parallactic_angle_sin(time, ant);
+                const FT & cost = parallactic_angle_cos(time, ant);
 
-                for(int chan=0; chan < nchan; chan++)
+                for(int src=0; src < nsrc; ++src)
                 {
-                    // Offset lm coordinates by point errors
-                    // and scale by antenna scaling
-                    FT vl = l + point_errors(row, chan, 0);
-                    FT vm = m + point_errors(row, chan, 1);
+                    // Rotate lm coordinate angle
+                    FT l = lm(src,0)*cost - lm(src,1)*sint;
+                    FT m = lm(src,0)*sint + lm(src,1)*cost;
 
-                    vl *= antenna_scaling(row, chan, 0);
-                    vm *= antenna_scaling(row, chan, 1);
-
-                    // Shift into the cube coordinate system
-                    vl = lscale*(vl - lower_l);
-                    vm = mscale*(vm - lower_m);
-
-                    vl = std::max(zero, std::min(vl, lmax));
-                    vm = std::max(zero, std::min(vm, mmax));
-
-                    // Find the snapped grid coordinates
-                    FT gl0 = std::floor(vl);
-                    FT gm0 = std::floor(vm);
-
-                    FT gl1 = std::min(FT(gl0+one), lmax);
-                    FT gm1 = std::min(FT(gm0+one), mmax);
-
-                    // Difference between grid and offset coordinates
-                    FT ld = vl - gl0;
-                    FT md = vm - gm0;
-
-                    for(int pol=0; pol<EBEAM_NPOL; ++pol)
+                    for(int chan=0; chan < nchan; chan++)
                     {
-                        std::complex<FT> pol_sum = {zero, zero};
-                        FT abs_sum = zero;
+                        // Offset lm coordinates by point errors
+                        // and scale by antenna scaling
+                        FT vl = l + point_errors(time, ant, chan, 0);
+                        FT vm = m + point_errors(time, ant, chan, 1);
 
-                        // Load in the complex values from the E beam
-                        // at the supplied coordinate offsets.
-                        // Save the complex sum in pol_sum
-                        // and the sum of abs in abs_sum
-                        trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                            gl0, gm0, gchan0[chan],
-                            beam_lw, beam_mh, beam_nud, pol,
-                            (one-ld)*(one-md)*(chd0[chan]));
-                        trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                            gl1, gm0, gchan0[chan],
-                            beam_lw, beam_mh, beam_nud, pol,
-                            ld*(one-md)*(chd0[chan]));
-                        trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                            gl0, gm1, gchan0[chan],
-                            beam_lw, beam_mh, beam_nud, pol,
-                            (one-ld)*md*(chd0[chan]));
-                        trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                            gl1, gm1, gchan0[chan],
-                            beam_lw, beam_mh, beam_nud, pol,
-                            ld*md*(chd0[chan]));
+                        vl *= antenna_scaling(ant, chan, 0);
+                        vm *= antenna_scaling(ant, chan, 1);
 
-                        trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                            gl0, gm0, gchan1[chan],
-                            beam_lw, beam_mh, beam_nud, pol,
-                            (one-ld)*(one-md)*chd1[chan]);
-                        trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                            gl1, gm0, gchan1[chan],
-                            beam_lw, beam_mh, beam_nud, pol,
-                            ld*(one-md)*chd1[chan]);
-                        trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                            gl0, gm1, gchan1[chan],
-                            beam_lw, beam_mh, beam_nud, pol,
-                            (one-ld)*md*chd1[chan]);
-                        trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
-                            gl1, gm1, gchan1[chan],
-                            beam_lw, beam_mh, beam_nud, pol,
-                            ld*md*chd1[chan]);
+                        // Shift into the cube coordinate system
+                        vl = lscale*(vl - lower_l);
+                        vm = mscale*(vm - lower_m);
 
-                        // Normalising factor for the polarised sum
-                        FT norm = one / std::abs(pol_sum);
-                        if(!std::isfinite(norm))
-                            { norm = one; }
+                        vl = std::max(zero, std::min(vl, lmax));
+                        vm = std::max(zero, std::min(vm, mmax));
 
-                        // Multiply in the absolute value
-                        pol_sum.real(pol_sum.real() * norm * abs_sum);
-                        pol_sum.imag(pol_sum.imag() * norm * abs_sum);
-                        jones(src,row,chan,pol) = pol_sum;
+                        // Find the snapped grid coordinates
+                        FT gl0 = std::floor(vl);
+                        FT gm0 = std::floor(vm);
+
+                        FT gl1 = std::min(FT(gl0+one), lmax);
+                        FT gm1 = std::min(FT(gm0+one), mmax);
+
+                        // Difference between grid and offset coordinates
+                        FT ld = vl - gl0;
+                        FT md = vm - gm0;
+
+                        for(int pol=0; pol<EBEAM_NPOL; ++pol)
+                        {
+                            std::complex<FT> pol_sum = {zero, zero};
+                            FT abs_sum = zero;
+
+                            // Load in the complex values from the E beam
+                            // at the supplied coordinate offsets.
+                            // Save the complex sum in pol_sum
+                            // and the sum of abs in abs_sum
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
+                                gl0, gm0, gchan0[chan],
+                                beam_lw, beam_mh, beam_nud, pol,
+                                (one-ld)*(one-md)*(chd0[chan]));
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
+                                gl1, gm0, gchan0[chan],
+                                beam_lw, beam_mh, beam_nud, pol,
+                                ld*(one-md)*(chd0[chan]));
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
+                                gl0, gm1, gchan0[chan],
+                                beam_lw, beam_mh, beam_nud, pol,
+                                (one-ld)*md*(chd0[chan]));
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
+                                gl1, gm1, gchan0[chan],
+                                beam_lw, beam_mh, beam_nud, pol,
+                                ld*md*(chd0[chan]));
+
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
+                                gl0, gm0, gchan1[chan],
+                                beam_lw, beam_mh, beam_nud, pol,
+                                (one-ld)*(one-md)*chd1[chan]);
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
+                                gl1, gm0, gchan1[chan],
+                                beam_lw, beam_mh, beam_nud, pol,
+                                ld*(one-md)*chd1[chan]);
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
+                                gl0, gm1, gchan1[chan],
+                                beam_lw, beam_mh, beam_nud, pol,
+                                (one-ld)*md*chd1[chan]);
+                            trilinear_interpolate<FT, CT>(pol_sum, abs_sum, e_beam,
+                                gl1, gm1, gchan1[chan],
+                                beam_lw, beam_mh, beam_nud, pol,
+                                ld*md*chd1[chan]);
+
+                            // Normalising factor for the polarised sum
+                            FT norm = one / std::abs(pol_sum);
+                            if(!std::isfinite(norm))
+                                { norm = one; }
+
+                            // Multiply in the absolute value
+                            pol_sum.real(pol_sum.real() * norm * abs_sum);
+                            pol_sum.imag(pol_sum.imag() * norm * abs_sum);
+                            jones(src,time,ant,chan,pol) = pol_sum;
+                        }
                     }
                 }
             }

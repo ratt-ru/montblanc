@@ -150,7 +150,7 @@ __global__ void rime_e_beam(
     const typename Traits::FT lower_m,
     const typename Traits::FT upper_l,
     const typename Traits::FT upper_m,
-    int nsrc, int narow, int nchan, int npolchan,
+    int nsrc, int ntime, int na, int nchan, int npolchan,
     int beam_lw, int beam_mh, int beam_nud)
 {
     // Simpler float and complex types
@@ -165,25 +165,26 @@ __global__ void rime_e_beam(
     using LTr = typename montblanc::ebeam::LaunchTraits<FT>;
 
     int POLCHAN = blockIdx.x*blockDim.x + threadIdx.x;
-    int AROW = blockIdx.y*blockDim.y + threadIdx.y;
+    int ANT = blockIdx.y*blockDim.y + threadIdx.y;
+    int TIME = blockIdx.z*blockDim.z + threadIdx.z;
     constexpr int BLOCKCHANS = LTr::BLOCKDIMX >> 2;
     constexpr FT zero = 0.0f;
     constexpr FT one = 1.0f;
 
-    if(AROW >= narow || POLCHAN >= npolchan)
+    if(TIME >= ntime || ANT >= na || POLCHAN >= npolchan)
         { return; }
 
     __shared__ struct {
         FT beam_freq_map[BEAM_NUD_LIMIT];
         FT lscale;             // l axis scaling factor
         FT mscale;             // m axis scaling factor
-        FT pa_sin[LTr::BLOCKDIMY];  // sin of parallactic angle
-        FT pa_cos[LTr::BLOCKDIMY];  // cos of parallactic angle
+        FT pa_sin[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];  // sin of parallactic angle
+        FT pa_cos[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];  // cos of parallactic angle
         FT gchan0[BLOCKCHANS];  // channel grid position (snapped)
         FT gchan1[BLOCKCHANS];  // channel grid position (snapped)
         FT chd[BLOCKCHANS];    // difference between gchan0 and actual grid position
         // pointing errors
-        point_error_type pe[LTr::BLOCKDIMY][BLOCKCHANS];
+        point_error_type pe[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][BLOCKCHANS];
         // antenna scaling
         antenna_scale_type as[LTr::BLOCKDIMY][BLOCKCHANS];
     } shared;
@@ -203,26 +204,24 @@ __global__ void rime_e_beam(
     }
 
     // Precompute l and m scaling factors in shared memory
-    if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0)
+    if(threadIdx.z == 0 && threadIdx.y == 0 && threadIdx.z == 0)
     {
         shared.lscale = FT(beam_lw - 1) / (upper_l - lower_l);
         shared.mscale = FT(beam_mh - 1) / (upper_m - lower_m);
     }
 
-    // Pointing errors vary by antenna row and channel,
-    // Antenna scaling factors vary by antenna row and channel,
+    // Pointing errors vary by time, antenna and channel,
     if(ebeam_pol() == 0)
     {
-        i = AROW*nchan + (POLCHAN >> 2);
-        shared.pe[threadIdx.y][thread_chan()] = point_errors[i];
-        shared.as[threadIdx.y][thread_chan()] = antenna_scaling[i];
+        i = (TIME*na + ANT)*nchan + (POLCHAN >> 2);
+        shared.pe[threadIdx.z][threadIdx.y][thread_chan()] = point_errors[i];
     }
 
-    // Parallactic angles vary by antenna row, but not channel
-    if(threadIdx.x == 0)
+    // Antenna scaling factors vary by antenna and channel, but not timestep
+    if(threadIdx.z == 0 && ebeam_pol() == 0)
     {
-        shared.pa_sin[threadIdx.y] = parallactic_angle_sin[AROW];
-        shared.pa_cos[threadIdx.y] = parallactic_angle_cos[AROW];
+        i = ANT*nchan + (POLCHAN >> 2);
+        shared.as[threadIdx.y][thread_chan()] = antenna_scaling[i];
     }
 
     // Think this is needed so all beam_freq_map values are loaded
@@ -255,6 +254,14 @@ __global__ void rime_e_beam(
         shared.chd[thread_chan()] = (freq - lower_freq)/freq_diff;
     }
 
+    // Parallactic angles vary by time and antenna, but not channel
+    if(threadIdx.x == 0)
+    {
+        i = TIME*na + ANT;
+        shared.pa_sin[threadIdx.z][threadIdx.y] = parallactic_angle_sin[i];
+        shared.pa_cos[threadIdx.z][threadIdx.y] = parallactic_angle_cos[i];
+    }
+
     __syncthreads();
 
     for(int SRC=0; SRC < nsrc; ++SRC)
@@ -263,10 +270,10 @@ __global__ void rime_e_beam(
 
        // L coordinate
         // Rotate
-        FT l = rlm.x*shared.pa_cos[threadIdx.y] -
-            rlm.y*shared.pa_sin[threadIdx.y];
+        FT l = rlm.x*shared.pa_cos[threadIdx.z][threadIdx.y] -
+            rlm.y*shared.pa_sin[threadIdx.z][threadIdx.y];
         // Add the pointing errors for this antenna.
-        l += shared.pe[threadIdx.y][thread_chan()].x;
+        l += shared.pe[threadIdx.z][threadIdx.y][thread_chan()].x;
         // Scale by antenna scaling factors
         l *= shared.as[threadIdx.y][thread_chan()].x;
         // l grid position
@@ -281,10 +288,10 @@ __global__ void rime_e_beam(
 
         // M coordinate
         // rotate
-        FT m = rlm.x*shared.pa_sin[threadIdx.y] +
-            rlm.y*shared.pa_cos[threadIdx.y];
+        FT m = rlm.x*shared.pa_sin[threadIdx.z][threadIdx.y] +
+            rlm.y*shared.pa_cos[threadIdx.z][threadIdx.y];
         // Add the pointing errors for this antenna.
-        m += shared.pe[threadIdx.y][thread_chan()].y;
+        m += shared.pe[threadIdx.z][threadIdx.y][thread_chan()].y;
         // Scale by antenna scaling factors
         m *= shared.as[threadIdx.y][thread_chan()].y;
         // m grid position
@@ -369,7 +376,7 @@ __global__ void rime_e_beam(
 
         pol_sum.x *= norm * abs_sum;
         pol_sum.y *= norm * abs_sum;
-        i = (SRC*narow + AROW)*npolchan + POLCHAN;
+        i = ((SRC*ntime + TIME)*na + ANT)*npolchan + POLCHAN;
         jones[i] = pol_sum;
     }
 }
@@ -399,8 +406,9 @@ public:
 
         // Extract problem dimensions
         int nsrc = in_lm.dim_size(0);
-        int narow = in_point_errors.dim_size(0);
-        int nchan = in_point_errors.dim_size(1);
+        int ntime = in_point_errors.dim_size(0);
+        int na = in_point_errors.dim_size(1);
+        int nchan = in_point_errors.dim_size(2);
         int npolchan = nchan*EBEAM_NPOL;
         int beam_lw = in_ebeam.dim_size(0);
         int beam_mh = in_ebeam.dim_size(1);
@@ -408,7 +416,7 @@ public:
 
         // Reason about our output shape
         // Create a pointer for the jones result
-        tf::TensorShape jones_shape({nsrc, narow, nchan, EBEAM_NPOL});
+        tf::TensorShape jones_shape({nsrc, ntime, na, nchan, EBEAM_NPOL});
         tf::Tensor * jones_ptr = nullptr;
 
         // Allocate memory for the jones
@@ -436,9 +444,9 @@ public:
         typedef typename montblanc::ebeam::LaunchTraits<FT> LTr;
 
         // Set up our kernel dimensions
-        dim3 blocks(LTr::block_size(npolchan, narow, 1));
+        dim3 blocks(LTr::block_size(npolchan, na, ntime));
         dim3 grid(montblanc::grid_from_thread_block(
-            blocks, npolchan, narow, 1));
+            blocks, npolchan, na, ntime));
 
         // Check that there are enough threads in the thread block
         // to properly load the beam frequency map into shared memory.
@@ -463,13 +471,13 @@ public:
                 jones_ptr->flat<CT>().data());
         auto parallactic_angle_sin = reinterpret_cast<
             const typename Tr::FT *>(
-                in_parallactic_angle_sin.flat<FT>().data());
+                in_parallactic_angle_sin.tensor<FT, 2>().data());
         auto parallactic_angle_cos = reinterpret_cast<
             const typename Tr::FT *>(
-                in_parallactic_angle_cos.flat<FT>().data());
+                in_parallactic_angle_cos.tensor<FT, 2>().data());
         auto beam_freq_map = reinterpret_cast<
             const typename Tr::FT *>(
-                in_beam_freq_map.flat<FT>().data());
+                in_beam_freq_map.tensor<FT, 1>().data());
         auto ebeam = reinterpret_cast<
             const typename Tr::CT *>(
                 in_ebeam.flat<CT>().data());
@@ -479,7 +487,7 @@ public:
             parallactic_angle_sin, parallactic_angle_cos,
             beam_freq_map, ebeam, jones,
             lower_l, lower_m, upper_l, upper_m,
-            nsrc, narow, nchan, npolchan,
+            nsrc, ntime, na, nchan, npolchan,
             beam_lw, beam_mh, beam_nud);
 
     }
