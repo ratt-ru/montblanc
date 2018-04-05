@@ -11,14 +11,14 @@ def complex_phase_numpy(lm, uvw, frequency):
 
     lightspeed = 299792458.
     nsrc, _ = lm.shape
-    narow, _ = uvw.shape
+    ntime, na, _ = uvw.shape
     nchan, = frequency.shape
 
-    l = lm[:,None,None,0]
-    m = lm[:,None,None,1]
-    u = uvw[None,:,None,0]
-    v = uvw[None,:,None,1]
-    w = uvw[None,:,None,2]
+    l = lm[:,None,None,None,0]
+    m = lm[:,None,None,None,1]
+    u = uvw[None,:,:,None,0]
+    v = uvw[None,:,:,None,1]
+    w = uvw[None,:,:,None,2]
 
     n = np.sqrt(1.0 - l**2 - m**2) - 1.0
     real_phase = -2*np.pi*1j*(l*u + m*v + n*w)*frequency/lightspeed
@@ -31,8 +31,6 @@ class TestComplexPhase(unittest.TestCase):
         # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
         self.gpu_devs = [d.name for d in device_lib.list_local_devices()
                                 if d.device_type == 'GPU']
-
-
     def test_complex_phase(self):
         """ Test the ComplexPhase operator """
 
@@ -45,11 +43,12 @@ class TestComplexPhase(unittest.TestCase):
 
     def _impl_test_complex_phase(self, FT, CT):
         """ Implementation of the ComplexPhase operator test """
-        nsrc, narow, nchan = 10, 15*16, 16
+
+        nsrc, ntime, na, nchan = 10, 15, 16, 16
 
         # Set up our numpy input arrays
         lm = np.random.random(size=(nsrc,2)).astype(FT)*0.1
-        uvw = np.random.random(size=(narow,3)).astype(FT)
+        uvw = np.random.random(size=(ntime,na,3)).astype(FT)
         frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=FT)
 
         np_args = [lm, uvw, frequency]

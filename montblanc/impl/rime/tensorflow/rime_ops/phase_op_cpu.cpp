@@ -28,20 +28,21 @@ auto phase_shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(lm, 1), 2, &d),
         "lm shape must be [nsrc, 2] but is " + c->DebugString(lm));
 
-    // uvw should be shape (arow, 3)
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(uvw, 2, &input),
-        "uvw shape must be [arow, 3] but is " + c->DebugString(uvw));
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(uvw, 1), 3, &d),
-        "uvw shape must be [arow, 3] but is " + c->DebugString(uvw));
+    // uvw should be shape (ntime, na, 3)
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(uvw, 3, &input),
+        "uvw shape must be [ntime, na, 3] but is " + c->DebugString(uvw));
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(uvw, 2), 3, &d),
+        "uvw shape must be [ntime, na, 3] but is " + c->DebugString(uvw));
 
     // frequency should be shape (nchan,)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(frequency, 1, &input),
         "frequency shape must be [nchan,] but is " + c->DebugString(frequency));
 
-    // Complex phase output is (nsrc, arow, nchan)
+    // Complex phase output is (nsrc, ntime, na, nchan)
     ShapeHandle output = c->MakeShape({
         c->Dim(lm, 0),
         c->Dim(uvw, 0),
+        c->Dim(uvw, 1),
         c->Dim(frequency, 0)});
 
     // Set the output shape
