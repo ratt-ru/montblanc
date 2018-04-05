@@ -549,6 +549,11 @@ def _create_queue_dataset_details(feed_data, device):
     it = ds.make_initializable_iterator()
     next_ = it.get_next()
 
+    # TODO(sjperkins)
+    # Replace the following section of code with
+    # https://www.tensorflow.org/versions/master/api_docs/python/tf/contrib/data/prefetch_to_device
+    # which should arrive in tensorflow 1.8
+
     # Use a prefetch buffer if the device
     # on which the graph executes is a GPU
     if device.device_type == "GPU":
