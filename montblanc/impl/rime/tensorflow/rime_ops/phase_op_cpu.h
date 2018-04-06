@@ -8,7 +8,7 @@
 
 #define RIME_PHASE_OPENMP_STRATEGY 0
 #define RIME_PHASE_EIGEN_STRATEGY 1
-#define RIME_PHASE_CPU_STRATEGY RIME_PHASE_EIGEN_STRATEGY
+#define RIME_PHASE_CPU_STRATEGY RIME_PHASE_OPENMP_STRATEGY
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -38,7 +38,8 @@ template <typename FT, typename CT>
 class Phase<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 public:
-    explicit Phase(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+    explicit Phase(tensorflow::OpKernelConstruction * context)
+        : tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
@@ -56,8 +57,8 @@ public:
         // Are our uvw coordinates (ntime, na, 3) or (nrow, 3) ?
         // If the latter, ntime = 1, na = nrow
         bool is_row = in_uvw.dims() == 2;
-        int ntime = is_row ? 1 : in_uvw.dim_size(0);
-        int na = is_row ? in_uvw.dim_size(0) : in_uvw.dim_size(1);;
+        int ntime = in_uvw.dim_size(0);
+        int na = is_row ? 1 : in_uvw.dim_size(1);
         int nrow = ntime*na;
 
         // Reason about our output shape

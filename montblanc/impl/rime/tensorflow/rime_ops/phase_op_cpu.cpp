@@ -31,6 +31,7 @@ auto phase_shape_function = [](InferenceContext* c) {
     // uvw should either be shape (nrow, 3) or (ntime, na, 3)
     Status uvw_status = c->WithRankAtLeast(uvw, 2, &input);
     uvw_status.Update(c->WithRankAtMost(uvw, 3, &input));
+    uvw_status.Update(c->WithValue(c->Dim(uvw, c->Rank(uvw)-1), 3, &d));
 
     TF_RETURN_WITH_CONTEXT_IF_ERROR(uvw_status,
         "uvw shape must either be [nrow, 3] or "
@@ -39,7 +40,8 @@ auto phase_shape_function = [](InferenceContext* c) {
 
     // frequency should be shape (nchan,)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(frequency, 1, &input),
-        "frequency shape must be [nchan,] but is " + c->DebugString(frequency));
+        "frequency shape must be [nchan,] but is " +
+        c->DebugString(frequency));
 
     // Complex phase output is either
     // (nsrc, ntime, na, nchan) or (nsrc, nrow, nchan)

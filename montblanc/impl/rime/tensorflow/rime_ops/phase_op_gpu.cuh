@@ -121,7 +121,8 @@ __global__ void rime_phase(
 template <typename FT, typename CT>
 class Phase<GPUDevice, FT, CT> : public tensorflow::OpKernel {
 public:
-    explicit Phase(tensorflow::OpKernelConstruction * context) : tensorflow::OpKernel(context) {}
+    explicit Phase(tensorflow::OpKernelConstruction * context)
+        : tensorflow::OpKernel(context) {}
 
     void Compute(tensorflow::OpKernelContext * context) override
     {

@@ -119,8 +119,8 @@ public:
             0, ant_jones_shape, &ant_jones_ptr));
 
         // Get pointers to flattened tensor data buffers
-        auto bsqrt = in_bsqrt.tensor<CT, 4>();
-        auto complex_phase = in_complex_phase.tensor<CT, 4>();
+        auto bsqrt = in_bsqrt.flat<CT>();
+        auto complex_phase = in_complex_phase.flat<CT>();
         auto feed_rotation = in_feed_rotation.tensor<CT, 3>();
         auto ddes = in_ddes.tensor<CT, 5>();
         auto ant_jones = ant_jones_ptr->tensor<CT, 5>();
@@ -148,10 +148,10 @@ public:
                         {
                             // Reference brightness square root
                             const int index = ((src*ntime + time)*nchan + chan)*npol;
-                            const CT & b0 = bsqrt(src, time, chan, 0);
-                            const CT & b1 = bsqrt(src, time, chan, 1);
-                            const CT & b2 = bsqrt(src, time, chan, 2);
-                            const CT & b3 = bsqrt(src, time, chan, 3);
+                            const CT & b0 = bsqrt(index + 0);
+                            const CT & b1 = bsqrt(index + 1);
+                            const CT & b2 = bsqrt(index + 2);
+                            const CT & b3 = bsqrt(index + 3);
 
                             if(initialised)
                             {
@@ -175,7 +175,9 @@ public:
                         if(have_complex_phase)
                         {
                             // Reference complex phase
-                            const CT & cp = complex_phase(src, time, ant, chan);
+                            int index = src*ntime + time;
+                            index = (index*na + ant)*nchan + chan;
+                            const CT & cp = complex_phase(index);
 
                             if(initialised)
                             {
@@ -199,10 +201,11 @@ public:
                         if(have_feed_rotation)
                         {
                             // Reference feed rotation matrix
-                            const CT & l0 = feed_rotation(time, ant, 0);
-                            const CT & l1 = feed_rotation(time, ant, 1);
-                            const CT & l2 = feed_rotation(time, ant, 2);
-                            const CT & l3 = feed_rotation(time, ant, 3);
+                            const int index = (time*na + ant)*npol;
+                            const CT & l0 = feed_rotation(index + 0);
+                            const CT & l1 = feed_rotation(index + 1);
+                            const CT & l2 = feed_rotation(index + 2);
+                            const CT & l3 = feed_rotation(index + 3);
 
                             if(initialised)
                             {
@@ -227,10 +230,12 @@ public:
                         if(have_ddes)
                         {
                             // Reference ddes matrix
-                            const CT & e0 = ddes(src, time, ant, chan, 0);
-                            const CT & e1 = ddes(src, time, ant, chan, 1);
-                            const CT & e2 = ddes(src, time, ant, chan, 2);
-                            const CT & e3 = ddes(src, time, ant, chan, 3);
+                            int index = ((src*ntime + time)*na + ant);
+                            index = (index*nchan + chan)*npol;
+                            const CT & e0 = ddes(index + 0);
+                            const CT & e1 = ddes(index + 1);
+                            const CT & e2 = ddes(index + 2);
+                            const CT & e3 = ddes(index + 3);
 
                             if(initialised)
                             {
