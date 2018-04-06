@@ -10,15 +10,21 @@ def complex_phase_numpy(lm, uvw, frequency):
     """ Compute complex phase using numpy """
 
     lightspeed = 299792458.
-    nsrc, _ = lm.shape
-    ntime, na, _ = uvw.shape
-    nchan, = frequency.shape
 
-    l = lm[:,None,None,None,0]
-    m = lm[:,None,None,None,1]
-    u = uvw[None,:,:,None,0]
-    v = uvw[None,:,:,None,1]
-    w = uvw[None,:,:,None,2]
+    # Set up slicing depending on whether a row based uvw
+    # scheme is used
+    dims = uvw.ndim - 1
+    all_ = slice(None)
+
+    lm_idx = (all_,) + (None,)*dims + (None,)
+    uvw_idx = (None,) + (all_,)*dims + (None,)
+
+    l = lm[lm_idx + (0,)]
+    m = lm[lm_idx + (1,)]
+
+    u = uvw[uvw_idx + (0,)]
+    v = uvw[uvw_idx + (1,)]
+    w = uvw[uvw_idx + (2,)]
 
     n = np.sqrt(1.0 - l**2 - m**2) - 1.0
     real_phase = -2*np.pi*1j*(l*u + m*v + n*w)*frequency/lightspeed
@@ -38,17 +44,24 @@ class TestComplexPhase(unittest.TestCase):
         type_permutations = [[np.float32, np.complex64],
                             [np.float64, np.complex128]]
 
-        for FT, CT in type_permutations:
-            self._impl_test_complex_phase(FT, CT)
+        perms = [[type_permutations[0], True],
+                 [type_permutations[1], True],
+                 [type_permutations[0], False],
+                 [type_permutations[1], False]]
 
-    def _impl_test_complex_phase(self, FT, CT):
+        for (FT, CT), use_row in perms:
+            self._impl_test_complex_phase(FT, CT, use_row)
+
+    def _impl_test_complex_phase(self, FT, CT, use_row):
         """ Implementation of the ComplexPhase operator test """
 
         nsrc, ntime, na, nchan = 10, 15, 16, 16
 
+        uvw_shape = (ntime*na,3) if use_row else (ntime,na,3)
+
         # Set up our numpy input arrays
         lm = np.random.random(size=(nsrc,2)).astype(FT)*0.1
-        uvw = np.random.random(size=(ntime,na,3)).astype(FT)
+        uvw = np.random.random(size=uvw_shape).astype(FT)
         frequency = np.linspace(1.3e9, 1.5e9, nchan, endpoint=True, dtype=FT)
 
         np_args = [lm, uvw, frequency]
@@ -73,13 +86,14 @@ class TestComplexPhase(unittest.TestCase):
         with tf.Session() as S:
             S.run(init_op)
 
-            # Get the CPU ejones
+            # Get the CPU complex phase
             cpu_cplx_phase = S.run(cpu_op)
 
+            # Compare vs numpy
             np_cplx_phase = complex_phase_numpy(lm, uvw, frequency)
-
             self.assertTrue(np.allclose(np_cplx_phase, cpu_cplx_phase))
 
+            # Compare vs GPU
             for gpu_cplx_phase in S.run(gpu_ops):
                 self.assertTrue(np.allclose(cpu_cplx_phase, gpu_cplx_phase))
 

@@ -134,12 +134,19 @@ public:
 
         // Extract problem dimensions
         int nsrc = in_lm.dim_size(0);
-        int ntime = in_uvw.dim_size(0);
-        int na = in_uvw.dim_size(1);
         int nchan = in_frequency.dim_size(0);
 
+        // Are our uvw coordinates (ntime, na, 3) or (nrow, 3) ?
+        // If the latter, ntime = 1, na = nrow
+        bool is_row = in_uvw.dims() == 2;
+        int ntime = is_row ? 1 : in_uvw.dim_size(0);
+        int na = is_row ? in_uvw.dim_size(0) : in_uvw.dim_size(1);;
+        int nrow = ntime*na;
+
         // Reason about our output shape
-        tf::TensorShape complex_phase_shape({nsrc, ntime, na, nchan});
+        tf::TensorShape complex_phase_shape =
+            is_row ? tf::TensorShape({nsrc, nrow, nchan})
+                   : tf::TensorShape({nsrc, ntime, na, nchan});
 
         // Create a pointer for the complex_phase result
         tf::Tensor * complex_phase_ptr = nullptr;

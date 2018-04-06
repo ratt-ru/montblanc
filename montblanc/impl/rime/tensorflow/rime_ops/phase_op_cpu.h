@@ -8,7 +8,7 @@
 
 #define RIME_PHASE_OPENMP_STRATEGY 0
 #define RIME_PHASE_EIGEN_STRATEGY 1
-#define RIME_PHASE_CPU_STRATEGY RIME_PHASE_OPENMP_STRATEGY
+#define RIME_PHASE_CPU_STRATEGY RIME_PHASE_EIGEN_STRATEGY
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -51,12 +51,19 @@ public:
 
         // Extract problem dimensions
         int nsrc = in_lm.dim_size(0);
-        int ntime = in_uvw.dim_size(0);
-        int na = in_uvw.dim_size(1);
         int nchan = in_frequency.dim_size(0);
 
+        // Are our uvw coordinates (ntime, na, 3) or (nrow, 3) ?
+        // If the latter, ntime = 1, na = nrow
+        bool is_row = in_uvw.dims() == 2;
+        int ntime = is_row ? 1 : in_uvw.dim_size(0);
+        int na = is_row ? in_uvw.dim_size(0) : in_uvw.dim_size(1);;
+        int nrow = ntime*na;
+
         // Reason about our output shape
-        tf::TensorShape complex_phase_shape({nsrc, ntime, na, nchan});
+        tf::TensorShape complex_phase_shape =
+            is_row ? tf::TensorShape({nsrc, nrow, nchan})
+                   : tf::TensorShape({nsrc, ntime, na, nchan});
 
         // Create a pointer for the complex_phase result
         tf::Tensor * complex_phase_ptr = nullptr;
@@ -69,10 +76,13 @@ public:
             { return; }
 
         // Access the underlying tensors, proper
+        // Here we shape the uvw complex_phase tensors
+        // into a row-based form
         auto lm = in_lm.tensor<FT, 2>();
-        auto uvw = in_uvw.tensor<FT, 3>();
+        auto uvw = in_uvw.shaped<FT, 2>({nrow, 3});
         auto frequency = in_frequency.tensor<FT, 1>();
-        auto complex_phase = complex_phase_ptr->tensor<CT, 4>();
+        auto complex_phase = complex_phase_ptr->shaped<CT, 3>(
+                                    {nsrc, nrow, nchan});
 
         // Constant
         constexpr FT lightspeed = 299792458.0;
@@ -88,23 +98,24 @@ public:
             FT m = lm(src,1);
             FT n = std::sqrt(1.0 - l*l - m*m) - 1.0;
 
-            for(int time=0; time<ntime; ++time)
+            for(int row=0; row<nrow; ++row)
             {
-                for(int antenna=0; antenna<na; ++antenna)
+                FT u = uvw(row,0);
+                FT v = uvw(row,1);
+                FT w = uvw(row,2);
+
+                FT real_phase_base = minus_two_pi_over_c*(l*u + m*v + n*w);
+
+                for(int chan=0; chan<nchan; ++chan)
                 {
-                    FT u = uvw(time,antenna,0);
-                    FT v = uvw(time,antenna,1);
-                    FT w = uvw(time,antenna,2);
-
-                    FT real_phase_base = minus_two_pi_over_c*(l*u + m*v + n*w);
-
-                    for(int chan=0; chan<nchan; ++chan)
-                    {
-                        // Our real phase input to the exponential function is purely imaginary so we can
-                        // can elide a call to std::exp<complex<FT>> and just compute the cos and sin
-                        FT real_phase = real_phase_base*frequency(chan);
-                        complex_phase(src,time,antenna,chan) = { std::cos(real_phase), std::sin(real_phase) };
-                    }
+                    // Our real phase input to the exponential function
+                    // is purely imaginary so we can can elide a call to
+                    // std::exp<complex<FT>> and just
+                    // compute the cos and sin
+                    FT real_phase = real_phase_base*frequency(chan);
+                    complex_phase(src,row,chan) = {
+                                    std::cos(real_phase),
+                                    std::sin(real_phase) };
                 }
             }
         }
@@ -118,15 +129,14 @@ public:
         using idx2 = Eigen::type2index<2>;
 
         // Shapes for reshaping and broadcasting
-        Eigen::IndexList<int, idx1, idx1, idx1> lm_shape;
+        Eigen::IndexList<int, idx1, idx1> lm_shape;
         lm_shape.set(0, nsrc);
 
-        Eigen::IndexList<idx1, int, int, idx1> uvw_shape;
-        uvw_shape.set(1, ntime);
-        uvw_shape.set(2, na);
+        Eigen::IndexList<idx1, int, idx1> uvw_shape;
+        uvw_shape.set(1, nrow);
 
-        Eigen::IndexList<idx1, idx1, idx1, int> freq_shape;
-        freq_shape.set(3, nchan);
+        Eigen::IndexList<idx1, idx1, int> freq_shape;
+        freq_shape.set(2, nchan);
 
         Eigen::IndexList<idx0, idx0> l_slice_offset;
         Eigen::IndexList<idx0, idx1> m_slice_offset;
@@ -135,19 +145,18 @@ public:
         lm_slice_size.set(0, nsrc);
 
         // Slice lm to get l and m arrays
-        Eigen::Tensor<FT, 4, Eigen::RowMajor> l(nsrc,1,1,1);
+        Eigen::Tensor<FT, 3, Eigen::RowMajor> l(nsrc,1,1);
         l.device(device) = lm.slice(l_slice_offset, lm_slice_size)
             .reshape(lm_shape);
-        Eigen::Tensor<FT, 4, Eigen::RowMajor> m(nsrc,1,1,1);
+        Eigen::Tensor<FT, 3, Eigen::RowMajor> m(nsrc,1,1);
         m.device(device) = lm.slice(m_slice_offset, lm_slice_size)
             .reshape(lm_shape);
 
-        Eigen::IndexList<idx0, idx0, idx0> u_slice_offset;
-        Eigen::IndexList<idx0, idx0, idx1> v_slice_offset;
-        Eigen::IndexList<idx0, idx0, idx2> w_slice_offset;
-        Eigen::IndexList<int, int, idx1> uvw_slice_size;
-        uvw_slice_size.set(0, ntime);
-        uvw_slice_size.set(1,  na);
+        Eigen::IndexList<idx0, idx0> u_slice_offset;
+        Eigen::IndexList<idx0, idx1> v_slice_offset;
+        Eigen::IndexList<idx0, idx2> w_slice_offset;
+        Eigen::IndexList<int, idx1> uvw_slice_size;
+        uvw_slice_size.set(0, nrow);
 
         // Slice uvw to get u, v and w arrays
         auto u = uvw.slice(u_slice_offset, uvw_slice_size)
@@ -170,17 +179,16 @@ public:
             n.broadcast(uvw_shape)*w.eval().broadcast(lm_shape))
                 .broadcast(freq_shape);
 
-        Eigen::IndexList<int, int, int, idx1> freq_broad;
+        Eigen::IndexList<int, int, idx1> freq_broad;
         freq_broad.set(0, nsrc);
-        freq_broad.set(1, ntime);
-        freq_broad.set(2, na);
+        freq_broad.set(1, nrow);
 
         // Reshape and broadcast frequency to match real_phase
         auto f = frequency.reshape(freq_shape).broadcast(freq_broad);
 
         // Evaluate common sub-expression early so that its
         // not recomputed twice for sin and cosine.
-        Eigen::Tensor<FT, 4, Eigen::RowMajor> phase(nsrc, ntime, na, nchan);
+        Eigen::Tensor<FT, 3, Eigen::RowMajor> phase(nsrc, nrow, nchan);
         phase.device(device) = real_phase*f*real_phase.constant(minus_two_pi_over_c);
         // Calculate the phase
         //auto phase = real_phase*f*real_phase.constant(minus_two_pi_over_c);
