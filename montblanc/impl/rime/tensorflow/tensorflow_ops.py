@@ -105,7 +105,7 @@ def tf_call_wrap(fn, *args, **kwargs):
 
                 # Fixed type, easy
                 if input_spec.type:
-                    arg_type = input_spec.type
+                    dtype = input_spec.type
                 # If a polymorphic type, there'll be an attribute
                 # with a default type associated
                 elif input_spec.type_attr:
@@ -116,7 +116,7 @@ def tf_call_wrap(fn, *args, **kwargs):
                                     "of missing input %s" % name)
 
                 # Convert to a tensorflow dtype
-                dtype = as_dtype(arg_type)
+                dtype = as_dtype(dtype)
 
                 # This input may have a dimension schema associated with it
                 # which we can use to infer the shape
@@ -128,7 +128,7 @@ def tf_call_wrap(fn, *args, **kwargs):
                     shape = tf.TensorShape(None)
 
                 # Create the placeholder
-                fn_kwargs[name] = tf.placeholder(arg_type, shape)
+                fn_kwargs[name] = tf.placeholder(dtype=dtype, shape=shape)
 
         # Handle Attributes
         elif name in op_def.attr:
