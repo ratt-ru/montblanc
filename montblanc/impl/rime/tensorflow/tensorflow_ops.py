@@ -70,6 +70,77 @@ def parse_shape_schema(schema):
 
     return [schema[i+1:j] for i, j in zip(idx, idx[1:]) if i+1 != j]
 
+try:
+    from dask.utils import SerializableLock as Lock
+except ImportError:
+    from threading import Lock
+
+class PlaceholderContext(object):
+    """
+    Singleton class for collecting placeholder values
+    during graph construction
+    """
+    _instance = None
+    _lock = Lock()
+
+    def __new__(cls):
+
+        # Create the singleton instance if necessary
+        # Note https://en.wikipedia.org/wiki/Double-checked_locking pattern
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super(cls, PlaceholderContext).__new__(cls)
+
+        return cls._instance
+
+    def __init__(self):
+        # Not guarded by lock since this will only
+        # get called in __new__
+        self.depth = 0
+        self.cache = []
+
+    def __setitem__(self, name, value):
+        with self._lock:
+            try:
+                cache = self.cache[self.depth-1]
+            except IndexError:
+                if len(self.cache) == 0:
+                    raise ValueError("PlaceholderContext must be used "
+                                     "in a with statement.")
+                else:
+                    raise ValueError("PlaceholderContext is in an "
+                                     "inconsistent state.")
+            else:
+                cache[name] = value
+
+    def __getitem__(self, name):
+        with self._lock:
+            try:
+                cache = self.cache[self.depth-1]
+            except IndexError:
+                if len(self.cache) == 0:
+                    raise ValueError("PlaceholderContext must be used "
+                                     "in a with statement.")
+                else:
+                    raise ValueError("PlaceholderContext is in an "
+                                     "inconsistent state.")
+            else:
+                return cache[name]
+
+    def __enter__(self):
+        with self._lock:
+            self.depth += 1
+            self.cache.append({})
+            return self
+
+    def __exit__(self, etype, evalue, etrace):
+        with self._lock:
+            self.depth -= 1
+            self.cache.pop()
+
+_placeholder_context = PlaceholderContext()
+
 def tf_call_wrap(fn, *args, **kwargs):
     arg_spec = inspect.getargspec(fn)
 
@@ -127,8 +198,10 @@ def tf_call_wrap(fn, *args, **kwargs):
                 else:
                     shape = tf.TensorShape(None)
 
-                # Create the placeholder
-                fn_kwargs[name] = tf.placeholder(dtype=dtype, shape=shape)
+                # Create the placeholder, adding it to the function kwargs
+                # and into the placeholder context
+                ph = tf.placeholder(dtype=dtype, shape=shape)
+                _placeholder_context[name] = fn_kwargs[name] = ph
 
         # Handle Attributes
         elif name in op_def.attr:
