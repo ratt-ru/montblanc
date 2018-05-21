@@ -8,6 +8,8 @@ import pkg_resources
 import tensorflow as tf
 from tensorflow.python.framework.dtypes import as_dtype
 
+import montblanc
+
 # Convert tensorflow CamelCase op names to python snake case
 _first_cap_re = re.compile('(.)([A-Z][a-z]+)')
 _all_cap_re = re.compile('([a-z0-9])([A-Z])')
@@ -75,6 +77,12 @@ try:
 except ImportError:
     from threading import Lock
 
+class InvalidPlaceholderContextUse(Exception):
+    def __init__(self):
+        super(Exception, self).__init__("PlaceholderContext was "
+                                        "accessed outside a with "
+                                        "statement.")
+
 class PlaceholderContext(object):
     """
     Singleton class for collecting placeholder values
@@ -106,8 +114,7 @@ class PlaceholderContext(object):
                 cache = self.cache[self.depth-1]
             except IndexError:
                 if len(self.cache) == 0:
-                    raise ValueError("PlaceholderContext must be used "
-                                     "in a with statement.")
+                    raise InvalidPlaceholderContextUse()
                 else:
                     raise ValueError("PlaceholderContext is in an "
                                      "inconsistent state.")
@@ -120,8 +127,7 @@ class PlaceholderContext(object):
                 cache = self.cache[self.depth-1]
             except IndexError:
                 if len(self.cache) == 0:
-                    raise ValueError("PlaceholderContext must be used "
-                                     "in a with statement.")
+                    raise InvalidPlaceholderContextUse()
                 else:
                     raise ValueError("PlaceholderContext is in an "
                                      "inconsistent state.")
@@ -200,8 +206,13 @@ def tf_call_wrap(fn, *args, **kwargs):
 
                 # Create the placeholder, adding it to the function kwargs
                 # and into the placeholder context
-                ph = tf.placeholder(dtype=dtype, shape=shape)
-                _placeholder_context[name] = fn_kwargs[name] = ph
+                fn_kwargs[name] = ph = tf.placeholder(dtype=dtype, shape=shape)
+
+                try:
+                    _placeholder_context[name] = ph
+                except InvalidPlaceholderContextUse:
+                    montblanc.log.warn("Failed to store placeholder "
+                                       "for argument '%s'" % name)
 
         # Handle Attributes
         elif name in op_def.attr:
