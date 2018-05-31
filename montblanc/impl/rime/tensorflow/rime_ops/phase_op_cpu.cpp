@@ -1,5 +1,3 @@
-#include <cstdlib>
-
 #include "phase_op_cpu.h"
 
 #include "tensorflow/core/framework/shape_inference.h"
@@ -73,6 +71,9 @@ REGISTER_OP("Phase")
     .Output("complex_phase: CT")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
+    .Attr("lm_schema: string = '(source, (l,m))'")
+    .Attr("uvw_schema: string = '(time, ant, (u,v,w))'")
+    .Attr("frequency_schema: string = '(chan,)'")
     .SetShapeFn(phase_shape_function);
 
 REGISTER_KERNEL_BUILDER(
