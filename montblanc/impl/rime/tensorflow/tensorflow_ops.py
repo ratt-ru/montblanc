@@ -29,7 +29,8 @@ else:
 
 _rime_so = tf.load_op_library(pjoin(_rime_lib_path, 'rime.so'))
 
-__OP_TUPLE = namedtuple("__OP_TUPLE", ["inputs", "outputs", "attr", "orig_op"])
+__OP_TUPLE = namedtuple("__OP_TUPLE", ["inputs", "attr", "outputs",
+                                    "orig_op_def", "function"])
 
 def _xform_op_list(op_list):
     """
@@ -39,11 +40,12 @@ def _xform_op_list(op_list):
     result = {}
 
     for op in op_list:
-        result[to_snake_case(op.name)] = __OP_TUPLE(
+        snake_name = to_snake_case(op.name)
+        result[snake_name] = __OP_TUPLE(
             OrderedDict((iarg.name, iarg) for iarg in op.input_arg),
-            OrderedDict((oarg.name, oarg) for oarg in op.output_arg),
             OrderedDict((attr.name, attr) for attr in op.attr),
-            op)
+            OrderedDict((oarg.name, oarg) for oarg in op.output_arg),
+            op, getattr(_rime_so, snake_name))
 
     return result
 
