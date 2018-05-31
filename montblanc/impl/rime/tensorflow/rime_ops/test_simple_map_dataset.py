@@ -9,6 +9,62 @@ from montblanc.impl.rime.tensorflow.map_dataset import (TensorMap,
 
 class TestMapTensorDataset(unittest.TestCase):
 
+    def test_dataset_in_graph_while_loop(self):
+        N = 12
+        nkeys = 6
+
+        with tf.Session() as S:
+            devices = [dev.name for dev in S.list_devices()]
+
+        for device in devices:
+            with tf.Graph().as_default() as graph:
+                key_ph = tf.placeholder(tf.int64, name="key", shape=())
+                value_ph = tf.placeholder(tf.int64, name="value", shape=())
+                keys_ph = tf.placeholder(tf.int64, name="keys", shape=(None,1))
+
+                dtypes = value_ph.dtype
+
+                tensor_map = TensorMap(dtypes, tf.TensorShape([]))
+                key_ds = tf.data.Dataset.from_tensor_slices(keys_ph)
+                ds = MapDataset(key_ds, tensor_map)
+                ds = ds.apply(tf.contrib.data.prefetch_to_device(device, buffer_size=1))
+
+                insert_op = tensor_map.insert(key_ph, value_ph)
+                close_op = tensor_map.close()
+
+                it = ds.make_initializable_iterator()
+
+                def cond(i, s):
+                    return tf.less(i, tf.size(keys_ph))
+
+                def body(i, s):
+                    v = it.get_next()
+                    s = s + v
+                    return i+1, s
+
+                deps = [it.initializer]
+
+                with tf.control_dependencies(deps):
+                    loop = tf.while_loop(cond, body,
+                        [tf.convert_to_tensor(0, dtype=tf.int32),
+                        tf.convert_to_tensor(0, dtype=tf.int64)])
+
+                global_init_op = tf.global_variables_initializer()
+
+            with tf.Session(graph=graph) as S:
+                S.run(global_init_op)
+
+                for i in range(N):
+                    keys = i*nkeys + np.arange(nkeys, dtype=np.int64)
+
+                    for key in keys:
+                        S.run(insert_op, feed_dict={key_ph: key, value_ph: i})
+
+                    keys =  keys.reshape((nkeys,1))
+                    S.run([it.initializer, loop], feed_dict={keys_ph: keys})
+
+                S.run(close_op)
+
     def test_numpy_conversion(self):
         with tf.Graph().as_default() as graph:
             ck = tf.placeholder(dtype=tf.int64)
@@ -37,6 +93,7 @@ class TestMapTensorDataset(unittest.TestCase):
             result = S.run(next_op)
             self.assertTrue(np.all(hundred_floats == result['sub']['f']))
             self.assertTrue(23 == result['i'])
+            S.run(close_op)
 
 
     def test_nest_dtype_only(self):
@@ -68,6 +125,7 @@ class TestMapTensorDataset(unittest.TestCase):
             result = S.run(next_op)
             self.assertTrue(np.all(hundred_floats == result['sub']['f']))
             self.assertTrue(23 == result['i'])
+            S.run(close_op)
 
     def test_nest_dtypes_and_shapes(self):
         with tf.Graph().as_default() as graph:
@@ -100,6 +158,7 @@ class TestMapTensorDataset(unittest.TestCase):
             result = S.run(next_op)
             self.assertTrue(np.all(hundred_floats == result['sub']['f']))
             self.assertTrue(23 == result['i'])
+            S.run(close_op)
 
     def test_basic(self):
         N = 12

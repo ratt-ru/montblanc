@@ -36,6 +36,7 @@ class TestQueueTensorDataset(unittest.TestCase):
             result = S.run(next_op)
             self.assertTrue(np.all(hundred_floats == result['sub']['f']))
             self.assertTrue(23 == result['i'])
+            S.run(close_op)
 
 
     def test_nest_dtype_only(self):
@@ -66,6 +67,7 @@ class TestQueueTensorDataset(unittest.TestCase):
             result = S.run(next_op)
             self.assertTrue(np.all(hundred_floats == result['sub']['f']))
             self.assertTrue(23 == result['i'])
+            S.run(close_op)
 
     def test_nest_dtypes_and_shapes(self):
         with tf.Graph().as_default() as graph:
@@ -97,6 +99,7 @@ class TestQueueTensorDataset(unittest.TestCase):
             result = S.run(next_op)
             self.assertTrue(np.all(hundred_floats == result['sub']['f']))
             self.assertTrue(23 == result['i'])
+            S.run(close_op)
 
     def test_basic(self):
         N = 12
