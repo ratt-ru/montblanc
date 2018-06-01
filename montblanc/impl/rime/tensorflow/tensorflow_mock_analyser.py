@@ -181,6 +181,7 @@ def get_tf_placeholders(op_def, call_args):
                             "of missing input %s" % name)
 
         arg_ph_info = {
+            'ops': set([fn_name]),
             'allowed_types': allowed,
             'default_type_name': type_name,
             'default': dtype,
@@ -289,14 +290,17 @@ def _inspect_tf_op_call(*args, **kwargs):
     # Find the missing placeholder definitions
     missing_ph = get_tf_placeholders(op_def, call_args)
 
-    # Add missing to op_ph, checking against any existing values
+    # Integrate missing into op placeholders,
+    # checking against any existing values
     for k, new in missing_ph.items():
         try:
             old = op_ph[k]
         except KeyError:
+            # Doesn't exist yet, assign and continue
             op_ph[k] = new
             continue
 
+        # Check that these attributes agree
         for attr in ('allowed_types', 'default', 'default_type_name'):
             if new[attr] != old[attr]:
                 raise ValueError("old['%s']['%s'] (%s) != "
@@ -304,22 +308,25 @@ def _inspect_tf_op_call(*args, **kwargs):
                                     (k, attr, new[attr],
                                      k, attr, old[attr]))
 
+        # We allow schema's to be optional
         old_schema = new.get('schema', None)
         new_schema = old.get('schema', None)
 
-        if new_schema and old_schema and new_schema != old_schema:
+        # Take a new schema if we don't have an existing
+        if old_schema is None and new_schema is not None:
+            old['schema'] = new_schema
+        # There is no new schema
+        elif new_schema is None:
+            pass
+        # Old and new schema's should exist
+        elif new_schema != old_schema:
             raise ValueError("old['schema'] (%s) != new['schema'] (%s)" %
                                 (old_schema, new_schema))
-        elif not new_schema and old_schema:
-            new['schema'] = old_schema
 
-        # if diff:
-        #     raise ValueError("Existing placeholder definition "
-        #                      "differs from the new as follows:\n"
-        #                      "%s\n for variable %s in function %s" %
-        #                         (diff, k, op_def.function.__name__))
+        # Add this op to the set of ops requiring this input placeholder
+        old['ops'].update(new['ops'])
 
-    print("Inspected '%s' op" % op_def.function.__name__)
+    # Create KnownVariable for each output
     return tuple(mock.MagicMock(var_name=name, var_type=KnownVariable)
                  for name in op_def.outputs.keys())
 
