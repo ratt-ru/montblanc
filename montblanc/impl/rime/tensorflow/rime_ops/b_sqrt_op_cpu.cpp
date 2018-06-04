@@ -66,7 +66,7 @@ REGISTER_OP("BSqrt")
     .Attr("stokes_schema: string = '(source, time, corr)'")
     .Attr("alpha_schema: string = '(source, time)'")
     .Attr("frequency_schema: string = '(chan)'")
-    .Attr("ref_freq_schema: string = '(source, time)'")
+    .Attr("ref_freq_schema: string = '(source)'")
     .SetShapeFn(bsqrt_shape_function);
 
 REGISTER_KERNEL_BUILDER(
