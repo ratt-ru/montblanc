@@ -50,6 +50,7 @@ REGISTER_OP("ParallacticAngleSinCos")
     .Output("pa_sin: FT")
     .Output("pa_cos: FT")
     .Attr("FT: {float, double} = DT_FLOAT")
+    .Attr("parallactic_angle_schema: string = '(time, ant)'")
     .Doc(R"doc(Given the parallactic angle, returns the sine and cosine of the angle.)doc")
     .SetShapeFn(shape_function);
 

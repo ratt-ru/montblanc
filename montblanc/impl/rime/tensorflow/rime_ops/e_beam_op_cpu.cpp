@@ -46,10 +46,10 @@ auto ebeam_shape_function = [](InferenceContext* c) {
 
     // antenna scaling should be shape (na, nchan, 2)
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna_scaling, 3, &input),
-        "point_errors shape must be [na, nchan, 2] but is " +
+        "antenna_scaling shape must be [na, nchan, 2] but is " +
         c->DebugString(antenna_scaling));
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(antenna_scaling, 2), 2, &d),
-        "point_errors shape must be [na, nchan, 2] but is " +
+        "antenna_scaling shape must be [na, nchan, 2] but is " +
         c->DebugString(antenna_scaling));
 
     // parallactic angle_sin should be shape (ntime, na)
@@ -107,10 +107,19 @@ REGISTER_OP("EBeam")
     .Input("parallactic_angle_cos: FT")
     .Input("beam_extents: FT")
     .Input("beam_freq_map: FT")
-    .Input("e_beam: CT")
+    .Input("ebeam: CT")
     .Output("jones: CT")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
+    .Attr("lm_schema: string = '(source, (l,m))'")
+    .Attr("frequency_schema: string = '(chan)'")
+    .Attr("point_errors_schema: string = '(time, ant, chan, (l,m)'")
+    .Attr("antenna_scaling_schema: string = '(time, ant)'")
+    .Attr("parallactic_angle_sin_schema: string = '(time, ant)'")
+    .Attr("parallactic_angle_cos_schema: string = '(time, ant)'")
+    .Attr("beam_extents_schema: string = '(6)'")
+    .Attr("beam_freq_map_schema: string = '(beam_nud,)'")
+    .Attr("ebeam_schema: string = '(beam_lw, beam_mh, beam_nud, corr)'")
     .SetShapeFn(ebeam_shape_function);
 
 REGISTER_KERNEL_BUILDER(

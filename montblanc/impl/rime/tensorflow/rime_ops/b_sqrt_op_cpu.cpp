@@ -63,6 +63,10 @@ REGISTER_OP("BSqrt")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
     .Attr("polarisation_type: {'linear', 'circular'} = 'linear'")
+    .Attr("stokes_schema: string = '(source, time, corr)'")
+    .Attr("alpha_schema: string = '(source, time)'")
+    .Attr("frequency_schema: string = '(chan)'")
+    .Attr("ref_freq_schema: string = '(source, time)'")
     .SetShapeFn(bsqrt_shape_function);
 
 REGISTER_KERNEL_BUILDER(

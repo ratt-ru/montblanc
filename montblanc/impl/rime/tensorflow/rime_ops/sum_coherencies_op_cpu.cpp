@@ -95,6 +95,10 @@ REGISTER_OP("SumCoherencies")
     .Attr("FT: {double, float} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
     .Attr("have_complex_phase: bool = true")
+    .Attr("time_index_schema: string = '(row,)'")
+    .Attr("antenna1_schema: string = '(row,)'")
+    .Attr("antenna2_schema: string = '(row,)'")
+    .Attr("base_coherencies_schema: string = '(row, chan, corr)'")
     .SetShapeFn(sum_coherencies_shape_function);
 
 // Register a CPU kernel for SumCoherencies that handles floats
