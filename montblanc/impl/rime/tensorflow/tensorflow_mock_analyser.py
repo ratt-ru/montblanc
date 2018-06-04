@@ -5,7 +5,6 @@ from __future__ import print_function
 import contextlib
 from functools import partial
 import inspect
-from pprint import pformat
 
 import tensorflow as tf
 
@@ -309,8 +308,8 @@ def _inspect_tf_op_call(*args, **kwargs):
                                      k, attr, old[attr]))
 
         # We allow schema's to be optional
-        old_schema = new.get('schema', None)
-        new_schema = old.get('schema', None)
+        new_schema = new.get('schema', None)
+        old_schema = old.get('schema', None)
 
         # Take a new schema if we don't have an existing
         if old_schema is None and new_schema is not None:
@@ -350,7 +349,6 @@ def analyse_tensorflow_function(fn):
     mocks.append(patch(".".join((mod, "tf.while_loop")), side_effect=_while))
 
     placeholders = {}
-    discovered_inputs = VariableDict()
     tfops_mod = "montblanc.impl.rime.tensorflow.tensorflow_ops"
 
     # Mock each RIME tensorflow function
@@ -368,5 +366,8 @@ def analyse_tensorflow_function(fn):
 
     with contextlib.nested(*mocks):
         fn({'polarisation_type' : 'linear'}, device, datasets)
+
+    discovered_inputs = {n: v for _, ds in datasets.items()
+                              for n, v in ds.items() }
 
     return discovered_inputs, placeholders
