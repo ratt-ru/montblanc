@@ -75,6 +75,10 @@ class VariableDict(dict):
     Dictionary that creates :class:`mock.MagicMock` objects
     for missing dictionary entries.
     """
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
+        super(VariableDict, self).__init__(*args, **kwargs)
+
 
     def __getitem__(self, key):
         try:
@@ -82,7 +86,8 @@ class VariableDict(dict):
         except KeyError:
             pass
 
-        data = mock.MagicMock(var_name=key, var_type=UnknownVariable)
+        data = mock.MagicMock(var_name=key, var_type=UnknownVariable,
+                              dataset=self.name)
         super(VariableDict, self).__setitem__(key, data)
         return data
 
@@ -98,7 +103,7 @@ class DatasetsDict(dict):
         except KeyError:
             pass
 
-        data = VariableDict()
+        data = VariableDict(key)
         super(DatasetsDict, self).__setitem__(key, data)
         return data
 
@@ -144,18 +149,17 @@ def get_tf_placeholders(op_def, call_args):
         if not isinstance(arg, mock.MagicMock):
             continue
 
+        var_type = arg.var_type
+
         # Ignore, this is a known variable
-        if arg.var_type == KnownVariable:
+        if var_type == KnownVariable:
             continue
 
-
-        if arg.var_type != UnknownVariable:
+        if var_type != UnknownVariable:
             continue
             raise ValueError("Input '%s' to function '%s' was not derived "
                              "from an established input (%s)"
-                                % (input_name, fn_name, arg.var_type))
-
-        var_type = arg.var_type
+                                % (input_name, fn_name, var_type))
 
         ph_name = arg.var_name
 
@@ -180,6 +184,7 @@ def get_tf_placeholders(op_def, call_args):
                             "of missing input %s" % name)
 
         arg_ph_info = {
+            'dataset': arg.dataset,
             'ops': set([fn_name]),
             'allowed_types': allowed,
             'default_type_name': type_name,
@@ -292,11 +297,13 @@ def _inspect_tf_op_call(*args, **kwargs):
     # Integrate missing into op placeholders,
     # checking against any existing values
     for k, new in missing_ph.items():
+        dataset =  op_ph.setdefault(new.pop('dataset'), {})
+
         try:
-            old = op_ph[k]
+            old = dataset[k]
         except KeyError:
             # Doesn't exist yet, assign and continue
-            op_ph[k] = new
+            dataset[k] = new
             continue
 
         # Check that these attributes agree
@@ -367,7 +374,4 @@ def analyse_tensorflow_function(fn):
     with contextlib.nested(*mocks):
         fn({'polarisation_type' : 'linear'}, device, datasets)
 
-    discovered_inputs = {n: v for _, ds in datasets.items()
-                              for n, v in ds.items() }
-
-    return discovered_inputs, placeholders
+    return datasets, placeholders
