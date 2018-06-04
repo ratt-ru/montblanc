@@ -69,5 +69,14 @@ def parse_shape_schema(schema):
 
     idx.append(len(schema)-1)
 
-    return [schema[i+1:j].strip() for i, j in zip(idx, idx[1:]) if i+1 != j]
+    def _xform(substr):
+        # Try integer conversion
+        try:
+            return int(substr)
+        except ValueError:
+            return substr
+
+    return [_xform(schema[i+1:j].strip())
+            for i, j in zip(idx, idx[1:])
+            if i+1 != j]
 
