@@ -20,7 +20,8 @@ from tensorflow.python.framework import tensor_util
 from montblanc.impl.rime.tensorflow.tensorflow_ops import (simple_queue_dataset as qds,
                                                         dataset_queue_handle,
                                                         dataset_queue_enqueue,
-                                                        dataset_queue_close)
+                                                        dataset_queue_close,
+                                                        dataset_queue_size)
 
 class TensorQueue(object):
     """
@@ -92,6 +93,9 @@ class TensorQueue(object):
 
     def close(self, name=None):
         return dataset_queue_close(self.handle, name=name)
+
+    def size(self, name=None):
+        return dataset_queue_size(self.handle, name=name)
 
 class QueueDataset(tf.data.Dataset):
   """

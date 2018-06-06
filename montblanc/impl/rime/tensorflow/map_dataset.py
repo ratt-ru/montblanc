@@ -20,7 +20,8 @@ from tensorflow.python.framework import tensor_util
 from montblanc.impl.rime.tensorflow.tensorflow_ops import (simple_map_dataset as mds,
                                                         dataset_map_handle,
                                                         dataset_map_insert,
-                                                        dataset_map_close)
+                                                        dataset_map_close,
+                                                        dataset_map_size)
 
 class TensorMap(object):
     """
@@ -96,6 +97,9 @@ class TensorMap(object):
 
     def close(self, name=None):
         return dataset_map_close(self.handle, name=name)
+
+    def size(self, name=None):
+        return dataset_map_size(self.handle, name=name)
 
 class MapDataset(tf.data.Dataset):
   """
