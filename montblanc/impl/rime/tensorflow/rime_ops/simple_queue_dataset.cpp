@@ -87,6 +87,14 @@ public:
         return Status::OK();
     }
 
+
+    std::size_t size(void) LOCKS_EXCLUDED(mu_)
+    {
+        mutex_lock l(mu_);
+
+        return entries_.size();
+    }
+
     const DataTypeVector &
     output_dtypes() const
       { return dtypes_; }
@@ -259,6 +267,50 @@ REGISTER_OP("DatasetQueueClose")
 REGISTER_KERNEL_BUILDER(Name("DatasetQueueClose")
                         .Device(DEVICE_CPU),
                         QueueCloseOp);
+
+
+class QueueSizeOp : public OpKernel
+{
+private:
+    mutex mu_;
+
+public:
+    explicit QueueSizeOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
+
+    void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
+    {
+        mutex_lock l(mu_);
+
+        // Obtain queue resource and close it
+        QueueResource * queue_resource;
+        OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
+                                          &queue_resource));
+
+        core::ScopedUnref unref_queue(queue_resource);
+
+        // Allocate size output tensor
+        Tensor* size = nullptr;
+        OP_REQUIRES_OK(ctx, ctx->allocate_output(0, TensorShape({}), &size));
+
+            // Set it to the actual size
+        size->scalar<int32>().setConstant(queue_resource->size());
+    }
+};
+
+REGISTER_OP("DatasetQueueSize")
+    .Input("queue_handle: resource")
+    .Output("size: int32")
+    .Attr("container: string = ''")
+    .Attr("shared_name: string = ''")
+    .SetIsStateful()  // Source dataset ops must be marked
+                      // stateful to inhibit constant folding.
+    .SetShapeFn(shape_inference::ScalarShape);
+
+REGISTER_KERNEL_BUILDER(Name("DatasetQueueSize")
+                        .Device(DEVICE_CPU),
+                        QueueSizeOp);
+
+
 
 
 // See documentation in ../ops/dataset_ops.cc for a high-level

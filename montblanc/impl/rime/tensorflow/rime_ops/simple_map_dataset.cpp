@@ -115,6 +115,13 @@ public:
     }
 
 
+    std::size_t size(void) LOCKS_EXCLUDED(mu_)
+    {
+        mutex_lock l(mu_);
+        return map_.size();
+    }
+
+
     const DataTypeVector &
     output_dtypes() const
       { return dtypes_; }
@@ -291,6 +298,50 @@ REGISTER_OP("DatasetMapClose")
 REGISTER_KERNEL_BUILDER(Name("DatasetMapClose")
                         .Device(DEVICE_CPU),
                         MapCloseOp);
+
+
+class MapSizeOp : public OpKernel
+{
+private:
+    mutex mu_;
+
+public:
+    explicit MapSizeOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
+
+    void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
+    {
+        mutex_lock l(mu_);
+
+        // Obtain map resource and close it
+        MapResource * map_resource;
+        OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
+                                          &map_resource));
+
+        core::ScopedUnref unref_map(map_resource);
+
+        // Allocate size output tensor
+        Tensor* size = nullptr;
+        OP_REQUIRES_OK(ctx, ctx->allocate_output(0, TensorShape({}), &size));
+
+        // Set it to the actual size
+        size->scalar<int32>().setConstant(map_resource->size());
+    }
+};
+
+REGISTER_OP("DatasetMapSize")
+    .Input("map_handle: resource")
+    .Output("size: int32")
+    .Attr("container: string = ''")
+    .Attr("shared_name: string = ''")
+    .SetIsStateful()  // Source dataset ops must be marked
+                      // stateful to inhibit constant folding.
+    .SetShapeFn(shape_inference::ScalarShape);
+
+REGISTER_KERNEL_BUILDER(Name("DatasetMapClose")
+                        .Device(DEVICE_CPU),
+                        MapSizeOp);
+
+
 
 
 // See documentation in ../ops/dataset_ops.cc for a high-level
