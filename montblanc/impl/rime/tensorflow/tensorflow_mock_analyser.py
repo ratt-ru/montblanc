@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from collections import namedtuple
 import contextlib
 from functools import partial
 import inspect
@@ -337,6 +338,82 @@ def _inspect_tf_op_call(*args, **kwargs):
                  for name in op_def.outputs.keys())
 
 
+
+from montblanc.impl.rime.tensorflow.map_dataset import (TensorMap,
+                                                        MapDataset)
+from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue,
+                                                        QueueDataset)
+
+
+def create_datasets(dataset_inputs, dataset_ph_info):
+    _dims = {"(u,v,w)": 3, "(l,m)": 2, "(x,y,z)": 3, "corr": 4}
+    hardcoded_types = {"FT": tf.float64, "CT": tf.complex128}
+
+    datasets = {}
+    dataset_info = {}
+    tensor_queues = {}
+    placeholders = {}
+
+    DI = namedtuple("DatasetInfo", ["placeholders", "queue",
+                                    "dataset", "put", "close"])
+
+    # For each individual dataset
+    for ds_name in dataset_inputs:
+        # Get a dictionary holding the placeholders for this dataset
+        placeholders[ds_name] = ds_ph = {}
+        ds_ph_info = dataset_ph_info[ds_name]
+        inputs = dataset_inputs[ds_name]
+
+        dtypes = {}
+        shapes = {}
+
+        # For each input
+        for name in inputs:
+            # Try find existing placeholder information
+            try:
+                ph_info = ds_ph_info[name]
+            except KeyError:
+                # Handle internal '__<source>_keys__' inputs
+                if not name.startswith("__") or not name.endswith("_keys__"):
+                    raise ValueError("Unhandled input %s" % name)
+
+                # Create placeholder for internal input
+                dtypes[name] = dtype = tf.int32
+                shapes[name] = shape = tf.TensorShape((None,))
+                ds_ph[name] = ph = tf.placeholder(dtype=dtype, shape=shape,
+                                                  name=name.lstrip("_"))
+            else:
+                # Create a placeholder for this input
+                dtype = hardcoded_types.get(ph_info['default_type_name'],
+                                            ph_info['default'])
+
+                try:
+                    schema = ph_info['schema']
+                except KeyError:
+                    # No idea what kind of shape this tensor has
+                    shape = tf.TensorShape(None)
+                else:
+                    shape = [d if isinstance(d, int) else _dims.get(d, None)
+                             for d in schema]
+                    shape = tf.TensorShape(shape)
+
+                dtypes[name] = dtype
+                shapes[name] = shape
+                ds_ph[name] = tf.placeholder(dtype=dtype, shape=shape,
+                                             name=name)
+
+        tensor_queues[ds_name] = tensor_queue = TensorQueue(dtypes, shapes)
+        datasets[ds_name] = queue_dataset = QueueDataset(tensor_queue)
+        put = tensor_queue.put(ds_ph)
+        close = tensor_queue.close()
+        dataset_info[ds_name] = DI(ds_ph, tensor_queue,
+                                   queue_dataset, put, close)
+
+    return dataset_info
+
+
+
+
 def analyse_tensorflow_function(fn):
     """
     Finds the inputs required to feed tensorflow function ``fn``
@@ -344,7 +421,6 @@ def analyse_tensorflow_function(fn):
 
     mod = fn.__module__
     patch = mock.patch
-
     mocks = []
 
     # Mock the entire tensorflow module, as well as
@@ -374,4 +450,4 @@ def analyse_tensorflow_function(fn):
     with contextlib.nested(*mocks):
         fn({'polarisation_type' : 'linear'}, device, datasets)
 
-    return datasets, placeholders
+    return create_datasets(datasets, placeholders)
