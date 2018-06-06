@@ -2,20 +2,10 @@ import tensorflow as tf
 
 from tensorflow.python.data.util import nest
 from tensorflow.python.data.util import sparse
-# from tensorflow.python.eager import context
-# from tensorflow.python.framework import dtypes
-# from tensorflow.python.framework import function
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import sparse_tensor as sparse_tensor_lib
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import tensor_util
-# from tensorflow.python.ops import array_ops
-# from tensorflow.python.ops import gen_dataset_ops
-# from tensorflow.python.ops import gen_io_ops
-# from tensorflow.python.ops import math_ops
-# from tensorflow.python.ops import script_ops
-# from tensorflow.python.util import deprecation
-# from tensorflow.python.util.tf_export import tf_export
 
 from montblanc.impl.rime.tensorflow.tensorflow_ops import (simple_queue_dataset as qds,
                                                         dataset_queue_handle,
