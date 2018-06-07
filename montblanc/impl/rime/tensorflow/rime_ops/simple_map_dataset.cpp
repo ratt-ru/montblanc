@@ -337,7 +337,7 @@ REGISTER_OP("DatasetMapSize")
                       // stateful to inhibit constant folding.
     .SetShapeFn(shape_inference::ScalarShape);
 
-REGISTER_KERNEL_BUILDER(Name("DatasetMapClose")
+REGISTER_KERNEL_BUILDER(Name("DatasetMapSize")
                         .Device(DEVICE_CPU),
                         MapSizeOp);
 

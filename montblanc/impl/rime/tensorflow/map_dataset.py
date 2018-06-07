@@ -73,7 +73,7 @@ class TensorMap(object):
 
     def insert(self, key, tensors, name=None):
         if name is None:
-            name = "tensor_map"
+            name = "tensor_map_insert"
 
         nest.assert_same_structure(tensors, self.output_types)
         flat_dtypes = nest.flatten(self.output_types)
