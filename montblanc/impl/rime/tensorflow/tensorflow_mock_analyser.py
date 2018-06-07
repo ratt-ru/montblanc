@@ -454,11 +454,10 @@ def create_datasets(dataset_inputs, dataset_ph_info):
 
 
 
-def analyse_tensorflow_function(fn):
+def analyse_tensorflow_function(fn, cfg, device):
     """
     Finds the inputs required to feed tensorflow function ``fn``
     """
-
     mod = fn.__module__
     patch = mock.patch
     mocks = []
@@ -485,9 +484,9 @@ def analyse_tensorflow_function(fn):
         mocks.append(patch(target, side_effect=side_effect))
 
     datasets = DatasetsDict()
-    device = '/cpu:0'
+    device = tf.DeviceSpec(device)
 
     with contextlib.nested(*mocks):
-        fn({'polarisation_type' : 'linear'}, device, datasets)
+        fn(cfg, device, datasets)
 
     return create_datasets(datasets, placeholders)
