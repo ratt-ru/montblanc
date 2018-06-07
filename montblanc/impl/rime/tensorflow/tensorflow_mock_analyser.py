@@ -6,6 +6,7 @@ from collections import namedtuple
 import contextlib
 from functools import partial
 import inspect
+import types
 
 import tensorflow as tf
 
@@ -92,6 +93,45 @@ class VariableDict(dict):
         super(VariableDict, self).__setitem__(key, data)
         return data
 
+class FakeIterator(object):
+    def __init__(self, name):
+        self._var_dict = VariableDict(name)
+
+    @property
+    def initializer(self):
+        return None
+
+    def get_next(self):
+        return self._var_dict
+
+class FakeDataset(object):
+    # Methods which return a dataset
+    ds_methods = ['apply', 'batch', 'cache', 'concatenate', 'filter',
+                    'flat_map', 'from_generator', 'from_sparse_tensor_slices',
+                    'from_tensor_slices', 'from_tensors', 'interleave',
+                    'list_files', 'map', 'padded_batch', 'prefetch', 'range',
+                    'repeat', 'shard', 'shuffle', 'skip', 'take', 'zip']
+
+    def __fake_dataset__(self, *args, **kwargs):
+        return self
+
+    def __init__(self, name):
+        # TODO(sjperkins)
+        # replace with metaclass
+        for method in FakeDataset.ds_methods:
+            setattr(self, method, self.__fake_dataset__)
+
+        self._iterator = FakeIterator(name)
+
+    def make_one_shot_iterator(self):
+        return self._iterator
+
+    def make_initializable_iterator(self):
+        return self._iterator
+
+    def variables(self):
+        return self._iterator._var_dict
+
 class DatasetsDict(dict):
     """
     Dictionary that creates :class:`VariableDict` objects
@@ -104,7 +144,7 @@ class DatasetsDict(dict):
         except KeyError:
             pass
 
-        data = VariableDict(key)
+        data = FakeDataset(key)
         super(DatasetsDict, self).__setitem__(key, data)
         return data
 
@@ -368,7 +408,7 @@ def create_datasets(dataset_inputs, dataset_ph_info):
         shapes = {}
 
         # For each input
-        for name in inputs:
+        for name in inputs.variables():
             # Try find existing placeholder information
             try:
                 ph_info = ds_ph_info[name]
