@@ -8,6 +8,11 @@ from functools import partial
 import inspect
 import types
 
+try:
+    from cytoolz import merge
+except ImportError:
+    from toolz import merge
+
 import tensorflow as tf
 
 from montblanc.impl.rime.tensorflow.tensorflow_ops import (op_defs,
@@ -313,14 +318,54 @@ from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue,
                                                         QueueDataset)
 
 
-def create_datasets(dataset_inputs, dataset_ph_info):
+MapDatasetInfo = namedtuple("MapDatasetInfo", ["placeholders", "tensor_map",
+                                                "dataset", "map_keys",
+                                                "put", "put_key", "close"] )
+
+QueueDatasetInfo = namedtuple("QueueDatasetInfo", ["placeholders", "tensor_queue",
+                                                "dataset", "put", "close"])
+
+
+
+def tensor_map(ds_name, ds_ph, dtypes, shapes):
+    """
+    Creates TensorMap dataset
+    """
+    tensor_map = TensorMap(dtypes, shapes)
+    map_keys = tf.placeholder(tf.int64, shape=(None,1),
+                              name="%s_map_keys" % ds_name)
+    put_key = tf.placeholder(tf.int64, shape=(),
+                             name="%s_put_key" % ds_name)
+    key_ds = tf.data.Dataset.from_tensor_slices(map_keys)
+    map_dataset = MapDataset(key_ds, tensor_map, name=ds_name)
+    put = tensor_map.insert(put_key, ds_ph)
+    close = tensor_map.close()
+
+    return MapDatasetInfo(ds_ph, tensor_map, map_dataset,
+                           map_keys, put, put_key, close)
+
+def tensor_queue(ds_name, ds_ph, dtypes, shapes):
+    """
+    Creates TensorQueue dataset
+    """
+    tensor_queue = TensorQueue(dtypes, shapes)
+    tensor_dataset = QueueDataset(tensor_queue, name=ds_name)
+    put = tensor_queue.put(ds_ph)
+    close = tensor_queue.close()
+    return QueueDatasetInfo(ds_ph, tensor_queue, tensor_dataset,
+                            put, close)
+
+def create_datasets(dataset_inputs, dataset_ph_info, ds_type="map"):
+    """
+    Creates datasets from inputs and placeholder info.
+
+    If the type is ``map``, MapDatasets will be created,
+    otherwise if the type is ``queue`` QueueDataset will be created.
+    """
+
     _dims = {"(u,v,w)": 3, "(l,m)": 2, "(x,y,z)": 3, "corr": 4}
     hardcoded_types = {"FT": tf.float64, "CT": tf.complex128}
-
     dataset_info = {}
-
-    DI = namedtuple("DatasetInfo", ["placeholders", "tensor_map", "dataset",
-                                    "map_keys", "put", "put_key", "close"])
 
     # For each individual dataset
     for ds_name in dataset_inputs:
@@ -367,17 +412,12 @@ def create_datasets(dataset_inputs, dataset_ph_info):
                 ds_ph[name] = tf.placeholder(dtype=dtype, shape=shape,
                                              name=name)
 
-        tensor_map = TensorMap(dtypes, shapes)
-        map_keys = tf.placeholder(tf.int64, shape=(None,1),
-                                  name="%s_map_keys" % ds_name)
-        put_key = tf.placeholder(tf.int64, shape=(),
-                                 name="%s_put_key" % ds_name)
-        key_ds = tf.data.Dataset.from_tensor_slices(map_keys)
-        map_dataset = MapDataset(key_ds, tensor_map)
-        put = tensor_map.insert(put_key, ds_ph)
-        close = tensor_map.close()
-        dataset_info[ds_name] = DI(ds_ph, tensor_map, map_dataset,
-                                   map_keys, put, put_key, close)
+        if ds_type == "map":
+            dataset_info[ds_name] = tensor_map(ds_name, ds_ph, dtypes, shapes)
+        elif ds_type == "queue":
+            dataset_info[ds_name] = tensor_queue(ds_name, ds_ph, dtypes, shapes)
+        else:
+            raise ValueError("Wrong dataset type %s" % ds_type)
 
     return dataset_info
 
@@ -466,12 +506,6 @@ class DatasetsDict(dict):
 def FakeMapDataset(keys, tensor_map):
     return tensor_map.dataset
 
-# class FakeMapDataset(FakeDataset):
-#     def __init__(self, keys, tensor_map):
-#         super(FakeMapDataset, self).__init__(tensor_map.name)
-#         self._dataset = tensor_map.dataset
-
-
 
 class FakeTensorMap(object):
     def __init__(self, name, dataset):
@@ -514,10 +548,13 @@ def analyse_tensorflow_function(fn, cfg, device):
 
     mocks.append(patch(".".join((mod, "MapDataset")), side_effect=FakeMapDataset))
 
-    placeholders = {}
+    # Mock each RIME tensorflow function
     tfops_mod = "montblanc.impl.rime.tensorflow.tensorflow_ops"
 
-    # Mock each RIME tensorflow function
+    # Dictionary of placeholders created whenever a RIME tensorflow
+    # function is called
+    placeholders = {}
+
     for op_name, op_def in op_defs.items():
         target = ".".join((tfops_mod, op_def.function.__name__))
         # Curry def and placeholders into the side effect
@@ -531,7 +568,18 @@ def analyse_tensorflow_function(fn, cfg, device):
     maps = TensorMapDict(datasets)
     device = tf.DeviceSpec(device)
 
-    with contextlib.nested(*mocks):
-        fn(cfg, device, datasets, maps)
+    # Main input dataset
+    input_ds = datasets["inputs"]
 
-    return create_datasets(datasets, placeholders)
+    with contextlib.nested(*mocks):
+        fn(cfg, device, input_ds, maps)
+
+    # Extract the main input dataset definitions
+    input_ds = {"inputs": datasets.pop("inputs")}
+
+    # Now create source datasets composed of maps
+    # and main input dataset composed of a queue
+    src_ds = create_datasets(datasets, placeholders, "map")
+    input_ds = create_datasets(input_ds, placeholders, "queue")
+
+    return merge(input_ds, src_ds)
