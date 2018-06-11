@@ -59,94 +59,22 @@ def cmp_dicts(dict_1, dict_2, dict_1_name, dict_2_name, path=""):
 
     return key_err + value_err + err
 
+
 class KnownVariable(object):
     """ Indicates a variable which we know about """
     pass
 
+
 class UnknownVariable(object):
     """ Indicates a variable of which we know nothing """
     pass
+
 
 class PlaceholderVariable(object):
     """ Indicates a placeholder variable """
     pass
 
 
-class VariableDict(dict):
-    """
-    Dictionary that creates :class:`mock.MagicMock` objects
-    for missing dictionary entries.
-    """
-    def __init__(self, name, *args, **kwargs):
-        self.name = name
-        super(VariableDict, self).__init__(*args, **kwargs)
-
-
-    def __getitem__(self, key):
-        try:
-            return super(VariableDict, self).__getitem__(key)
-        except KeyError:
-            pass
-
-        data = mock.MagicMock(var_name=key, var_type=UnknownVariable,
-                              dataset=self.name)
-        super(VariableDict, self).__setitem__(key, data)
-        return data
-
-class FakeIterator(object):
-    def __init__(self, name):
-        self._var_dict = VariableDict(name)
-
-    @property
-    def initializer(self):
-        return None
-
-    def get_next(self):
-        return self._var_dict
-
-class FakeDataset(object):
-    # Methods which return a dataset
-    ds_methods = ['apply', 'batch', 'cache', 'concatenate', 'filter',
-                    'flat_map', 'from_generator', 'from_sparse_tensor_slices',
-                    'from_tensor_slices', 'from_tensors', 'interleave',
-                    'list_files', 'map', 'padded_batch', 'prefetch', 'range',
-                    'repeat', 'shard', 'shuffle', 'skip', 'take', 'zip']
-
-    def __fake_dataset__(self, *args, **kwargs):
-        return self
-
-    def __init__(self, name):
-        # TODO(sjperkins)
-        # replace with metaclass
-        for method in FakeDataset.ds_methods:
-            setattr(self, method, self.__fake_dataset__)
-
-        self._iterator = FakeIterator(name)
-
-    def make_one_shot_iterator(self):
-        return self._iterator
-
-    def make_initializable_iterator(self):
-        return self._iterator
-
-    def variables(self):
-        return self._iterator._var_dict
-
-class DatasetsDict(dict):
-    """
-    Dictionary that creates :class:`VariableDict` objects
-    for missing dictionary entries.
-    """
-
-    def __getitem__(self, key):
-        try:
-            return super(DatasetsDict, self).__getitem__(key)
-        except KeyError:
-            pass
-
-        data = FakeDataset(key)
-        super(DatasetsDict, self).__setitem__(key, data)
-        return data
 
 def get_tf_placeholders(op_def, call_args):
     """
@@ -389,21 +317,18 @@ def create_datasets(dataset_inputs, dataset_ph_info):
     _dims = {"(u,v,w)": 3, "(l,m)": 2, "(x,y,z)": 3, "corr": 4}
     hardcoded_types = {"FT": tf.float64, "CT": tf.complex128}
 
-    datasets = {}
     dataset_info = {}
-    tensor_queues = {}
-    placeholders = {}
 
-    DI = namedtuple("DatasetInfo", ["placeholders", "queue",
-                                    "dataset", "put", "close"])
+    DI = namedtuple("DatasetInfo", ["placeholders", "tensor_map", "dataset",
+                                    "map_keys", "put", "put_key", "close"])
 
     # For each individual dataset
     for ds_name in dataset_inputs:
         # Get a dictionary holding the placeholders for this dataset
-        placeholders[ds_name] = ds_ph = {}
         ds_ph_info = dataset_ph_info[ds_name]
         inputs = dataset_inputs[ds_name]
 
+        ds_ph = {}
         dtypes = {}
         shapes = {}
 
@@ -442,16 +367,133 @@ def create_datasets(dataset_inputs, dataset_ph_info):
                 ds_ph[name] = tf.placeholder(dtype=dtype, shape=shape,
                                              name=name)
 
-        tensor_queues[ds_name] = tensor_queue = TensorQueue(dtypes, shapes)
-        datasets[ds_name] = queue_dataset = QueueDataset(tensor_queue)
-        put = tensor_queue.put(ds_ph)
-        close = tensor_queue.close()
-        dataset_info[ds_name] = DI(ds_ph, tensor_queue,
-                                   queue_dataset, put, close)
+        tensor_map = TensorMap(dtypes, shapes)
+        map_keys = tf.placeholder(tf.int64, shape=(None,1),
+                                  name="%s_map_keys" % ds_name)
+        put_key = tf.placeholder(tf.int64, shape=(),
+                                 name="%s_put_key" % ds_name)
+        key_ds = tf.data.Dataset.from_tensor_slices(map_keys)
+        map_dataset = MapDataset(key_ds, tensor_map)
+        put = tensor_map.insert(put_key, ds_ph)
+        close = tensor_map.close()
+        dataset_info[ds_name] = DI(ds_ph, tensor_map, map_dataset,
+                                   map_keys, put, put_key, close)
 
     return dataset_info
 
 
+
+class VariableDict(dict):
+    """
+    Dictionary that creates :class:`mock.MagicMock` objects
+    for missing dictionary entries.
+    """
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
+        super(VariableDict, self).__init__(*args, **kwargs)
+
+
+    def __getitem__(self, key):
+        try:
+            return super(VariableDict, self).__getitem__(key)
+        except KeyError:
+            pass
+
+        data = mock.MagicMock(var_name=key, var_type=UnknownVariable,
+                              dataset=self.name)
+        super(VariableDict, self).__setitem__(key, data)
+        return data
+
+
+class FakeIterator(object):
+    def __init__(self, name):
+        self._var_dict = VariableDict(name)
+
+    @property
+    def initializer(self):
+        return None
+
+    def get_next(self):
+        return self._var_dict
+
+
+class FakeDataset(object):
+    # Methods which return a dataset
+    ds_methods = ['apply', 'batch', 'cache', 'concatenate', 'filter',
+                    'flat_map', 'from_generator', 'from_sparse_tensor_slices',
+                    'from_tensor_slices', 'from_tensors', 'interleave',
+                    'list_files', 'map', 'padded_batch', 'prefetch', 'range',
+                    'repeat', 'shard', 'shuffle', 'skip', 'take', 'zip']
+
+    def __fake_dataset__(self, *args, **kwargs):
+        return self
+
+    def __init__(self, name):
+        # TODO(sjperkins)
+        # replace with metaclass
+        for method in FakeDataset.ds_methods:
+            setattr(self, method, self.__fake_dataset__)
+
+        self._iterator = FakeIterator(name)
+
+    def make_one_shot_iterator(self):
+        return self._iterator
+
+    def make_initializable_iterator(self):
+        return self._iterator
+
+    def variables(self):
+        return self._iterator._var_dict
+
+
+class DatasetsDict(dict):
+    """
+    Dictionary that creates :class:`VariableDict` objects
+    for missing dictionary entries.
+    """
+
+    def __getitem__(self, key):
+        try:
+            return super(DatasetsDict, self).__getitem__(key)
+        except KeyError:
+            pass
+
+        data = FakeDataset(key)
+        super(DatasetsDict, self).__setitem__(key, data)
+        return data
+
+
+def FakeMapDataset(keys, tensor_map):
+    return tensor_map.dataset
+
+# class FakeMapDataset(FakeDataset):
+#     def __init__(self, keys, tensor_map):
+#         super(FakeMapDataset, self).__init__(tensor_map.name)
+#         self._dataset = tensor_map.dataset
+
+
+
+class FakeTensorMap(object):
+    def __init__(self, name, dataset):
+        self.name = name
+        self.dataset = dataset
+
+
+class TensorMapDict(dict):
+    """
+    """
+    def __init__(self, datasets):
+        self._datasets = datasets
+
+    def __getitem__(self, key):
+        try:
+            return super(TensorMapDict, self).__getitem__(key)
+        except KeyError:
+            pass
+
+        data = FakeTensorMap(key, self._datasets[key])
+        super(TensorMapDict, self).__setitem__(key, data)
+        return data
 
 
 def analyse_tensorflow_function(fn, cfg, device):
@@ -470,6 +512,8 @@ def analyse_tensorflow_function(fn, cfg, device):
     mocks.append(patch(".".join((mod, "tf.cond")), side_effect=_cond))
     mocks.append(patch(".".join((mod, "tf.while_loop")), side_effect=_while))
 
+    mocks.append(patch(".".join((mod, "MapDataset")), side_effect=FakeMapDataset))
+
     placeholders = {}
     tfops_mod = "montblanc.impl.rime.tensorflow.tensorflow_ops"
 
@@ -484,9 +528,10 @@ def analyse_tensorflow_function(fn, cfg, device):
         mocks.append(patch(target, side_effect=side_effect))
 
     datasets = DatasetsDict()
+    maps = TensorMapDict(datasets)
     device = tf.DeviceSpec(device)
 
     with contextlib.nested(*mocks):
-        fn(cfg, device, datasets)
+        fn(cfg, device, datasets, maps)
 
     return create_datasets(datasets, placeholders)
