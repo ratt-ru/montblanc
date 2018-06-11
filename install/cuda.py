@@ -32,7 +32,7 @@ import tempfile
 
 from install_log import log
 
-minimum_cuda_version = 6050
+minimum_cuda_version = 8000
 
 def find_in_path(filename, paths):
     for p in paths:

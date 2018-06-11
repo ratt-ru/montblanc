@@ -31,23 +31,12 @@ def beam_factory(polarisation_type='linear',
     # MeerKAT l-band, 64 channels
     if frequency is None:
         frequency = np.linspace(.856e9, .856e9*2, 64,
-            endpoint=True, dtype=np.float64)
-
-    nchan = frequency.shape[0]
-    bandwidth = frequency[-1] - frequency[0]
-    bandwidth_delta = bandwidth / (nchan-1)
-
+                                endpoint=True, dtype=np.float64)
     # Generate a linear space of grid frequencies
-    # Jitter them randomly, except for the endpoints
     gfrequency = np.linspace(frequency[0], frequency[-1],
                             32, dtype=np.float64)
-    frequency_jitter = np.random.random(size=gfrequency.shape)-0.5
-    frequency_jitter *= 0.1*bandwidth_delta
-    frequency_jitter[0] = frequency_jitter[-1] = 0.0
-    gfrequency += frequency_jitter
-
-    # Check that gfrequency is monotically increasing
-    assert np.all(np.diff(gfrequency) >= 0.0)
+    bandwidth = gfrequency[-1] - frequency[0]
+    bandwidth_delta = bandwidth / gfrequency.shape[0]-1
 
     if polarisation_type == 'linear':
         CORR = LINEAR_CORRELATIONS
@@ -67,25 +56,25 @@ def beam_factory(polarisation_type='linear',
     axis1 = [
         ("CTYPE", ('X', "points right on the sky")),
         ("CUNIT", ('DEG', 'degrees')),
-        ("NAXIS", (513, "number of X")),
-        ("CRPIX", (257, "reference pixel (one relative)")),
+        ("NAXIS", (257, "number of X")),
+        ("CRPIX", (129, "reference pixel (one relative)")),
         ("CRVAL", (0.0110828777007, "degrees")),
         ("CDELT", (0.011082, "degrees"))]
 
     axis2 = [
         ("CTYPE", ('Y', "points up on the sky")),
         ("CUNIT", ('DEG', 'degrees')),
-        ("NAXIS", (513, "number of Y")),
-        ("CRPIX", (257, "reference pixel (one relative)")),
+        ("NAXIS", (257, "number of Y")),
+        ("CRPIX", (129, "reference pixel (one relative)")),
         ("CRVAL", (-2.14349358381E-07, "degrees")),
         ("CDELT", (0.011082, "degrees"))]
 
     axis3 = [
         ("CTYPE", ('FREQ', )),
         ("CUNIT", None),
-        ("NAXIS", (frequency.shape[0], "number of FREQ")),
+        ("NAXIS", (gfrequency.shape[0], "number of FREQ")),
         ("CRPIX", (1, "reference frequency position")),
-        ("CRVAL", (frequency[0], "reference frequency")),
+        ("CRVAL", (gfrequency[0], "reference frequency")),
         ("CDELT", (bandwidth_delta, "frequency step in Hz"))]
 
     axis4 = [
@@ -121,23 +110,28 @@ def beam_factory(polarisation_type='linear',
     header.update(ax_info)
 
     # Now setup the GFREQS
+    # Jitter them randomly, except for the endpoints
+    frequency_jitter = np.random.random(size=gfrequency.shape)-0.5
+    frequency_jitter *= 0.1*bandwidth_delta
+    frequency_jitter[0] = frequency_jitter[-1] = 0.0
+    gfrequency += frequency_jitter
+
+    # Check that gfrequency is monotically increasing
+    assert np.all(np.diff(gfrequency) >= 0.0)
+
     for i, gfreq in enumerate(gfrequency, 1):
         header['GFREQ%d' % i] = gfreq
 
     # Figure out the beam filenames from the schema
     filenames = _create_filenames(schema, polarisation_type)
 
-    shape = tuple(reversed([nax[1][0] for _, _, nax, _, _, _ in axes
-                                            if nax[1] is not None]))
-
     for filename in [f for ri_pair in filenames.values() for f in ri_pair]:
         if overwrite:
             ex = np.deg2rad(1.0)
             coords = np.linspace(-ex, ex, header['NAXIS2'], endpoint=True)
 
-            r = np.sqrt(coords[:,None]**2 + coords[None,:]**2)[:,:,None]
-            fq = gfrequency[None,None,:]
-
+            r = np.sqrt(coords[None,:,None]**2 + coords[None,None,:]**2)
+            fq = gfrequency[:,None,None]
             beam = np.cos(np.minimum(65*fq*1e-9*r, 1.0881))**3
 
             primary_hdu = fits.PrimaryHDU(beam, header=header)
