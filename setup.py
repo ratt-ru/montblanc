@@ -80,10 +80,13 @@ TF_VERSION = "1.8.0"
 try:
     import tensorflow as tf
 except ImportError:
-    raise ImportError("Please 'pip install tensorflow==%s' or "
-                      "'pip install tensorflow-gpu==%s' prior to "
-                      "installation if you require CPU or GPU "
-                      "support, respectively" % (TF_VERSION, TF_VERSION))
+    if not on_rtd:
+        raise ImportError("Please 'pip install tensorflow==%s' or "
+                          "'pip install tensorflow-gpu==%s' prior to "
+                          "installation if you require CPU or GPU "
+                          "support, respectively" % (TF_VERSION, TF_VERSION))
+
+    use_tf_cuda = False
 else:
     use_tf_cuda = tf.test.is_built_with_cuda()
 
