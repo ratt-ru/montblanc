@@ -15,6 +15,14 @@ Certain pre-requisites must be installed:
 Pre-requisites
 ~~~~~~~~~~~~~~
 
+- Montblanc depends on tensorflow_. Choose one of the following,
+  depending on whether you require CPU or GPU acceleration:
+
+  .. code:: bash
+
+    $ pip install tensorflow==1.8.0
+    $ pip install tensorflow-gpu==1.8.0
+
 - GPU Acceleration requires `CUDA 8.0 <CUDA_>`_ and `cuDNN 6.0 for CUDA 8.0 <cudnn_>`_.
 
   - It is often easier to CUDA install from the `NVIDIA <CUDA_>`_ site on Linux systems.
@@ -24,7 +32,7 @@ Pre-requisites
   to determine if a GPU-supported installation can proceed.
   If your CUDA installation does not live in ``/usr``, it  helps to set a
   number of environment variables for this to proceed smoothly.
-  For example, if CUDA is installed in ``/usr/local/cuda-8.0`` and cuDNN is unzipped
+  **For example**, if CUDA is installed in ``/usr/local/cuda-8.0`` and cuDNN is unzipped
   into ``/usr/local/cudnn-6.0-cuda-8.0``, run the following on the command line or
   place it in your ``.bashrc``
 
@@ -44,9 +52,6 @@ Pre-requisites
 
       # Latest NVIDIA drivers
       $ export LD_LIBRARY_PATH=/usr/lib/nvidia-375:$LD_LIBRARY_PATH
-
-  If the installer cannot find CUDA it will only install the `CPU version of tensorflow <tensorflow-cpu_>`_
-  and only **compile multi-threaded CPU operators**.
 
 -  casacore_ and the `measures <ftp://ftp.astron.nl/outgoing/Measures/>`__ found in casacore-data.
    Gijs Molenaar has kindly packaged this on Ubuntu/Debian style systems.
@@ -128,8 +133,7 @@ and pip install montblanc in development mode.
 Possible Issues
 ~~~~~~~~~~~~~~~
 
-- Montblanc doesn't use your GPU, install the `GPU version of tensorflow <tensorflow-gpu_>`_
-  or compile GPU tensorflow operators.
+- Montblanc doesn't use your GPU or compile GPU tensorflow operators.
   The installation process attempts to find your CUDA install location.
   It will log information about where it thinks this is and which GPU devices
   you have installed.
@@ -181,5 +185,6 @@ Possible Issues
 .. _casacore: https://github.com/casacore/casacore
 .. _python-casacore: https://github.com/casacore/python-casacore
 .. _venv: http://docs.python-guide.org/en/latest/dev/virtualenvs/
+.. _tensorflow: https://tensorflow.org/
 .. _tensorflow-gpu: https://pypi.python.org/pypi/tensorflow-gpu
 .. _tensorflow-cpu: https://pypi.python.org/pypi/tensorflow

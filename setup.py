@@ -75,6 +75,18 @@ def reinitialize_command(self, command, reinit_subcommands):
 # Replace original command with monkey-patched version
 Distribution.reinitialize_command = reinitialize_command
 
+TF_VERSION = "1.8.0"
+
+try:
+    import tensorflow as tf
+except ImportError:
+    raise ImportError("Please 'pip install tensorflow==%s' or "
+                      "'pip install tensorflow-gpu==%s' prior to "
+                      "installation if you require CPU or GPU "
+                      "support, respectively" % (TF_VERSION, TF_VERSION))
+else:
+    use_tf_cuda = tf.test.is_built_with_cuda()
+
 #============================
 # Detect CUDA and GPU Devices
 #============================
@@ -84,36 +96,38 @@ Distribution.reinitialize_command = reinitialize_command
 from install.cuda import inspect_cuda, InspectCudaException
 from install.cub import install_cub, InstallCubException
 
-try:
-    # Look for CUDA devices and NVCC/CUDA installation
-    device_info, nvcc_settings = inspect_cuda()
-    tensorflow_package = 'tensorflow-gpu'
+if use_tf_cuda:
+    try:
+        # Look for CUDA devices and NVCC/CUDA installation
+        device_info, nvcc_settings = inspect_cuda()
+        tensorflow_package = 'tensorflow-gpu'
 
-    cuda_version = device_info['cuda_version']
-    log.info("CUDA '{}' found. "
-        "Installing tensorflow GPU".format(cuda_version))
+        cuda_version = device_info['cuda_version']
+        log.info("CUDA '{}' found. "
+            "Installing tensorflow GPU".format(cuda_version))
 
 
-    log.info("CUDA installation settings:\n{}"
-                .format(json.dumps(nvcc_settings, indent=2)))
+        log.info("CUDA installation settings:\n{}"
+                    .format(json.dumps(nvcc_settings, indent=2)))
 
-    log.info("CUDA code will be compiled for the following devices:\n{}"
-                .format(json.dumps(device_info['devices'], indent=2)))
+        log.info("CUDA code will be compiled for the following devices:\n{}"
+                    .format(json.dumps(device_info['devices'], indent=2)))
 
-    # Download and install cub
-    install_cub(mb_inc_path)
+        # Download and install cub
+        install_cub(mb_inc_path)
 
-except InspectCudaException as e:
-    # Can't find a reasonable NVCC/CUDA install. Go with the CPU version
-    log.info("CUDA not found: {}. ".format(str(e)))
-    log.info("Installing tensorflow CPU")
+    except InspectCudaException as e:
+        # Can't find a reasonable NVCC/CUDA install. Go with the CPU version
+        log.exception("CUDA not found: {}. ".format(str(e)))
+        raise
 
+    except InstallCubException as e:
+        # This shouldn't happen and the user should
+        # fix it based on the exception
+        log.exception("NVIDIA cub install failed.")
+        raise
+else:
     device_info, nvcc_settings = {}, { 'cuda_available' : False }
-    tensorflow_package = 'tensorflow'
-except InstallCubException as e:
-    # This shouldn't happen and the user should fix it based on the exception
-    log.exception("NVIDIA cub install failed.")
-    raise
 
 def readme():
     """ Return README.rst contents """
@@ -148,7 +162,6 @@ else:
         'numpy >= 1.11.3',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
-        "{} == 1.8.0".format(tensorflow_package),
     ]
 
     from install.tensorflow_ops_ext import (BuildCommand,
