@@ -16,7 +16,7 @@ try:
 except ImportError:
     import toolz
 import xarray as xr
-from xarray_ms import xds_from_ms, xds_from_table
+from xarrayms import xds_from_ms, xds_from_table
 
 import montblanc
 from montblanc.src_types import source_types
