@@ -148,7 +148,7 @@ else:
         'numpy >= 1.11.3',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
-        "{} == 1.4.0".format(tensorflow_package),
+        "{} == 1.8.0".format(tensorflow_package),
     ]
 
     from install.tensorflow_ops_ext import (BuildCommand,
