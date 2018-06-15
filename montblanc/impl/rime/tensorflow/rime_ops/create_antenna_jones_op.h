@@ -19,7 +19,7 @@ MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_BEGIN
 template <typename Device, typename FT, typename CT> class CreateAntennaJones {};
 
 // Number of polarisations handled by this kernel
-constexpr int CREATE_ANTENNA_JONES_NPOL = 4;
+constexpr int CREATE_ANTENNA_JONES_NCORR = 4;
 
 MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_STOP
 MONTBLANC_NAMESPACE_STOP

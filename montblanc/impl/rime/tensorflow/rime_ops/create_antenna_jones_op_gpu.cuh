@@ -3,12 +3,14 @@
 #ifndef RIME_CREATE_ANTENNA_JONES_OP_GPU_CUH
 #define RIME_CREATE_ANTENNA_JONES_OP_GPU_CUH
 
-#include "create_antenna_jones_op.h"
 #include <montblanc/abstraction.cuh>
 #include <montblanc/jones.cuh>
 
 // Required in order for Eigen::GpuDevice to be an actual type
 #define EIGEN_USE_GPU
+
+#include "create_antenna_jones_op.h"
+#include "shapes.h"
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -51,35 +53,35 @@ __global__ void rime_create_antenna_jones(
     const typename Traits::CT * feed_rotation,
     const typename Traits::CT * ddes,
     typename Traits::CT * ant_jones,
-    int nsrc, int ntime, int na, int nchan, int npol)
+    int nsrc, int ntime, int na, int nchan, int ncorr)
 {
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
     using LTr = LaunchTraits<FT>;
     using Po = typename montblanc::kernel_policies<FT>;
 
-    int polchan = blockIdx.x*blockDim.x + threadIdx.x;
-    int chan = polchan / npol;
-    int pol = polchan & (npol-1);
+    int corrchan = blockIdx.x*blockDim.x + threadIdx.x;
+    int chan = corrchan / ncorr;
+    int corr = corrchan & (ncorr-1);
     int ant = blockIdx.y*blockDim.y + threadIdx.y;
     int time = blockIdx.z*blockDim.z + threadIdx.z;
-    int npolchan = nchan*npol;
+    int ncorrchan = nchan*ncorr;
 
-    if(time > ntime || ant >= na || polchan > npolchan)
+    if(time > ntime || ant >= na || corrchan > ncorrchan)
         { return; }
 
     int i;
 
     __shared__ struct {
-        CT fr[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][CREATE_ANTENNA_JONES_NPOL];
+        CT fr[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][CREATE_ANTENNA_JONES_NCORR];
     } shared;
 
     // Feed rotation varies by time, antenna and polarisation
     // Polarisation is baked into the X dimension, so use the
-    // first npol threads to load polarisation info
-    if(feed_rotation != nullptr && threadIdx.x < npol)
+    // first ncorr threads to load polarisation info
+    if(feed_rotation != nullptr && threadIdx.x < ncorr)
     {
-        i = (time*na + ant)*npol + pol;
+        i = (time*na + ant)*ncorr + corr;
         shared.fr[threadIdx.z][threadIdx.y][threadIdx.x] = feed_rotation[i];
     }
 
@@ -92,12 +94,12 @@ __global__ void rime_create_antenna_jones(
     {
         CT buf[2];
         int a = 0, in = 1;
-        bool initialised = 0;
+        bool initialised = false;
 
         if(bsqrt != nullptr)
         {
             // Load and multiply the brightness square root
-            i = (src*ntime + time)*npolchan + polchan;
+            i = (src*ntime + time)*ncorrchan + corrchan;
             buf[in] = bsqrt[i];
             if(initialised)
                 { jones_multiply_4x4_in_place<FT>(buf[in], buf[a]); }
@@ -121,7 +123,7 @@ __global__ void rime_create_antenna_jones(
         if(feed_rotation != nullptr)
         {
             // Load and multiply the feed rotation
-            buf[in] = shared.fr[threadIdx.z][threadIdx.y][pol];
+            buf[in] = shared.fr[threadIdx.z][threadIdx.y][corr];
             if(initialised)
                 { jones_multiply_4x4_in_place<FT>(buf[in], buf[a]); }
             else
@@ -129,7 +131,7 @@ __global__ void rime_create_antenna_jones(
             device_swap(a, in);
         }
 
-        i = ((src*ntime + time)*na + ant)*npolchan + polchan;
+        i = ((src*ntime + time)*na + ant)*ncorrchan + corrchan;
 
         if(ddes != nullptr)
         {
@@ -156,104 +158,119 @@ template <typename FT, typename CT>
 class CreateAntennaJones<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 private:
-    bool have_bsqrt;
-    bool have_complex_phase;
-    bool have_feed_rotation;
-    bool have_ddes;
+    std::string bsqrt_schema;
+    std::string complex_phase_schema;
+    std::string feed_rotation_schema;
+    std::string ddes_schema;
 
 public:
     explicit CreateAntennaJones(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context),
-        have_bsqrt(false),
-        have_complex_phase(false),
-        have_feed_rotation(false),
-        have_ddes(false)
+        tensorflow::OpKernel(context)
     {
-        OP_REQUIRES_OK(context, context->GetAttr("have_bsqrt",
-                                                 &have_bsqrt));
-        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase",
-                                                 &have_complex_phase));
-        OP_REQUIRES_OK(context, context->GetAttr("have_feed_rotation",
-                                                 &have_feed_rotation));
-        OP_REQUIRES_OK(context, context->GetAttr("have_ddes",
-                                                 &have_ddes));
+        namespace tf = tensorflow;
+        using tensorflow::errors::InvalidArgument;
+
+        OP_REQUIRES_OK(context, context->GetAttr("bsqrt_schema",
+                                                 &bsqrt_schema));
+        OP_REQUIRES_OK(context, context->GetAttr("complex_phase_schema",
+                                                 &complex_phase_schema));
+        OP_REQUIRES_OK(context, context->GetAttr("feed_rotation_schema",
+                                                 &feed_rotation_schema));
+        OP_REQUIRES_OK(context, context->GetAttr("ddes_schema",
+                                                 &ddes_schema));
+
+        int have;
+
+        OP_REQUIRES_OK(context, context->GetAttr("have_bsqrt", &have));
+        OP_REQUIRES(context, have <= 1,
+                    InvalidArgument("have_bsqrt > 1"));
+
+        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase", &have));
+        OP_REQUIRES(context, have <= 1,
+                    InvalidArgument("have_complex_phase > 1"));
+
+        OP_REQUIRES_OK(context, context->GetAttr("have_feed_rotation", &have));
+        OP_REQUIRES(context, have <= 1,
+                    InvalidArgument("have_feed_rotation > 1"));
+
+        OP_REQUIRES_OK(context, context->GetAttr("have_ddes", &have));
+        OP_REQUIRES(context, have <= 1,
+                    InvalidArgument("have_ddes > 1"));
     }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
         namespace tf = tensorflow;
+        using tensorflow::errors::InvalidArgument;
 
-        // Sanity check the input tensors
-        const tf::Tensor & in_bsqrt = context->input(0);
-        const tf::Tensor & in_complex_phase = context->input(1);
-        const tf::Tensor & in_feed_rotation = context->input(2);
-        const tf::Tensor & in_ddes = context->input(3);
+        ComputeInputDimSizes input_dim_sizes;
 
-        int nsrc = -1, ntime = -1, na = -1, nchan = -1, npol = -1;
+        tf::OpInputList bsqrt_list;
+        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
+                                      "bsqrt",
+                                      bsqrt_schema,
+                                      input_dim_sizes,
+                                      bsqrt_list));
 
-        auto update_dim = [](int & old_size,
-                            const tf::Tensor & tensor,
-                            int dim) -> tf::Status
-        {
-            auto new_size = tensor.dim_size(dim);
+        tf::OpInputList complex_phase_list;
+        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
+                                      "complex_phase",
+                                      complex_phase_schema,
+                                      input_dim_sizes,
+                                      complex_phase_list));
 
-            if(old_size == -1)
-            {
-                old_size = new_size;
-            }
-            else if(old_size != new_size)
-            {
-                return tf::Status(tf::errors::InvalidArgument(
-                        "Previously set dimension size '",  old_size,
-                        "' does not equal new size '", new_size, "'"));
-            }
+        tf::OpInputList feed_rotation_list;
+        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
+                                      "feed_rotation",
+                                      feed_rotation_schema,
+                                      input_dim_sizes,
+                                      feed_rotation_list));
 
-            return tf::Status::OK();
-        };
+        tf::OpInputList ddes_list;
+        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
+                                      "ddes",
+                                      ddes_schema,
+                                      input_dim_sizes,
+                                      ddes_list));
 
-        if(have_bsqrt)
-        {
-            OP_REQUIRES_OK(context, update_dim(nsrc, in_bsqrt, 0));
-            OP_REQUIRES_OK(context, update_dim(ntime, in_bsqrt, 1));
-            OP_REQUIRES_OK(context, update_dim(nchan, in_bsqrt, 2));
-            OP_REQUIRES_OK(context, update_dim(npol, in_bsqrt, 3));
-        }
+        ComputeDimSizes dim_sizes;
+        OP_REQUIRES_OK(context, merge_input_dims(input_dim_sizes, dim_sizes));
 
-        if(have_complex_phase)
-        {
-            OP_REQUIRES_OK(context, update_dim(nsrc, in_complex_phase, 0));
-            OP_REQUIRES_OK(context, update_dim(ntime, in_complex_phase, 1));
-            OP_REQUIRES_OK(context, update_dim(na, in_complex_phase, 2));
-            OP_REQUIRES_OK(context, update_dim(nchan, in_complex_phase, 3));
-        }
+        ComputeDimSizes::const_iterator it;
+        ComputeDimSizes::const_iterator end = dim_sizes.end();
 
-        if(have_feed_rotation)
-        {
-            OP_REQUIRES_OK(context, update_dim(ntime, in_feed_rotation, 0));
-            OP_REQUIRES_OK(context, update_dim(na, in_feed_rotation, 1));
-        }
+        OP_REQUIRES(context, (it = dim_sizes.find("source")) != end,
+                    InvalidArgument("No source dimension found"));
+        int nsrc = it->second;
 
-        if(have_ddes)
-        {
-            OP_REQUIRES_OK(context, update_dim(nsrc, in_ddes, 0));
-            OP_REQUIRES_OK(context, update_dim(ntime, in_ddes, 1));
-            OP_REQUIRES_OK(context, update_dim(na, in_ddes, 2));
-            OP_REQUIRES_OK(context, update_dim(nchan, in_ddes, 3));
-            OP_REQUIRES_OK(context, update_dim(npol, in_ddes, 4));
-        }
+        OP_REQUIRES(context, (it = dim_sizes.find("time")) != end,
+                    InvalidArgument("No time dimension found"));
+        int ntime = it->second;
 
-        //GPU kernel above requires this hard-coded number
-        OP_REQUIRES(context, npol == CREATE_ANTENNA_JONES_NPOL,
-            tf::errors::InvalidArgument("Number of polarisations '",
-                npol, "' does not equal '", CREATE_ANTENNA_JONES_NPOL, "'."));
+        OP_REQUIRES(context, (it = dim_sizes.find("ant")) != end,
+                    InvalidArgument("No ant dimension found"));
+        int na = it->second;
 
-        tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
+        OP_REQUIRES(context, (it = dim_sizes.find("chan")) != end,
+                    InvalidArgument("No chan dimension found"));
+        int nchan = it->second;
 
-        // Allocate an output tensor
+        OP_REQUIRES(context, (it = dim_sizes.find("corr")) != end,
+                    InvalidArgument("No corr dimension found"));
+        int ncorr = it->second;
+
+        // //GPU kernel above requires this hard-coded number
+        OP_REQUIRES(context, ncorr == CREATE_ANTENNA_JONES_NCORR,
+            InvalidArgument("Number of correlations '",
+                ncorr, "' does not equal '",
+                CREATE_ANTENNA_JONES_NCORR, "'."));
+
+        tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, ncorr});
+
+        // Allocate the output tensor
         tf::Tensor * ant_jones_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
             0, ant_jones_shape, &ant_jones_ptr));
-
 
         using LTr = LaunchTraits<FT>;
         using Tr =  montblanc::kernel_traits<FT>;
@@ -261,33 +278,33 @@ public:
         // Set up our CUDA thread block and grid
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
-            npol*nchan, na, ntime);
-        dim3 grid(montblanc::grid_from_thread_block(
-            block, npol*nchan, na, ntime));
+            ncorr*nchan, na, ntime);
+        dim3 grid(montblanc::grid_from_thread_block(block,
+            ncorr*nchan, na, ntime));
 
         // Get the GPU device
         const auto & device = context->eigen_device<GPUDevice>();
 
-        // Get pointers to flattened tensor data buffers
-        auto bsqrt = reinterpret_cast<const typename Tr::CT *>(
-            in_bsqrt.flat<CT>().data());
-        auto complex_phase = reinterpret_cast<const typename Tr::CT *>(
-            in_complex_phase.flat<CT>().data());
-        auto feed_rotation = reinterpret_cast<const typename Tr::CT *>(
-            in_feed_rotation.flat<CT>().data());
-        auto ddes = reinterpret_cast<const typename Tr::CT *>(
-            in_ddes.flat<CT>().data());
-        auto ant_jones = reinterpret_cast<typename Tr::CT *>(
-            ant_jones_ptr->flat<CT>().data());
-
         // Call the rime_create_antenna_jones CUDA kernel
-        rime_create_antenna_jones<Tr><<<grid, block, 0, device.stream()>>>(
-            have_bsqrt ? bsqrt : nullptr,
-            have_complex_phase ? complex_phase : nullptr,
-            have_feed_rotation ? feed_rotation : nullptr,
-            have_ddes ? ddes : nullptr,
-            ant_jones,
-            nsrc, ntime, na, nchan, npol);
+        rime_create_antenna_jones<Tr> <<<grid, block, 0, device.stream()>>>(
+            input_ptr<CT, typename Tr::CT>(bsqrt_list),
+            input_ptr<CT, typename Tr::CT>(complex_phase_list),
+            input_ptr<CT, typename Tr::CT>(feed_rotation_list),
+            input_ptr<CT, typename Tr::CT>(ddes_list),
+            reinterpret_cast<typename Tr::CT *>
+                            (ant_jones_ptr->flat<CT>().data()),
+            nsrc, ntime, na, nchan, ncorr);
+    }
+
+    template <typename TFType, typename GPUType>
+    const GPUType *
+    input_ptr(const tensorflow::OpInputList & in_list)
+    {
+        if(in_list.size() == 0)
+            { return nullptr; }
+
+        auto tensor_ptr = in_list[0].flat<TFType>().data();
+        return reinterpret_cast<const GPUType *>(tensor_ptr);
     }
 };
 

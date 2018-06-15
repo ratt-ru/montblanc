@@ -2,6 +2,7 @@
 #define RIME_CREATE_ANTENNA_JONES_OP_CPU_H
 
 #include "create_antenna_jones_op.h"
+#include "shapes.h"
 
 // Required in order for Eigen::ThreadPoolDevice to be an actual type
 #define EIGEN_USE_THREADS
@@ -12,117 +13,150 @@
 MONTBLANC_NAMESPACE_BEGIN
 MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_BEGIN
 
+
 // For simpler partial specialisation
 typedef Eigen::ThreadPoolDevice CPUDevice;
+
+
 
 // Specialise the CreateAntennaJones op for CPUs
 template <typename FT, typename CT>
 class CreateAntennaJones<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 private:
-    bool have_bsqrt;
-    bool have_complex_phase;
-    bool have_feed_rotation;
-    bool have_ddes;
+    std::string bsqrt_schema;
+    std::string complex_phase_schema;
+    std::string feed_rotation_schema;
+    std::string ddes_schema;
+    tensorflow::Tensor dummy_CT_tensor;
 
 public:
     explicit CreateAntennaJones(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context),
-        have_bsqrt(false),
-        have_complex_phase(false),
-        have_feed_rotation(false),
-        have_ddes(false)
+        tensorflow::OpKernel(context)
     {
-        OP_REQUIRES_OK(context, context->GetAttr("have_bsqrt",
-                                                 &have_bsqrt));
-        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase",
-                                                 &have_complex_phase));
-        OP_REQUIRES_OK(context, context->GetAttr("have_feed_rotation",
-                                                 &have_feed_rotation));
-        OP_REQUIRES_OK(context, context->GetAttr("have_ddes",
-                                                 &have_ddes));
+        namespace tf = tensorflow;
+        using tensorflow::errors::InvalidArgument;
+
+        OP_REQUIRES_OK(context, context->GetAttr("bsqrt_schema", &bsqrt_schema));
+        OP_REQUIRES_OK(context, context->GetAttr("complex_phase_schema", &complex_phase_schema));
+        OP_REQUIRES_OK(context, context->GetAttr("feed_rotation_schema", &feed_rotation_schema));
+        OP_REQUIRES_OK(context, context->GetAttr("ddes_schema", &ddes_schema));
+
+        int have;
+
+        OP_REQUIRES_OK(context, context->GetAttr("have_bsqrt", &have));
+        OP_REQUIRES(context, have <= 1, InvalidArgument("have_bsqrt > 1"));
+        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase", &have));
+        OP_REQUIRES(context, have <= 1, InvalidArgument("have_complex_phase > 1"));
+        OP_REQUIRES_OK(context, context->GetAttr("have_feed_rotation", &have));
+        OP_REQUIRES(context, have <= 1, InvalidArgument("have_feed_rotation > 1"));
+        OP_REQUIRES_OK(context, context->GetAttr("have_ddes", &have));
+        OP_REQUIRES(context, have <= 1, InvalidArgument("have_ddes > 1"));
+
+        // Create a dummy tensor representing non-existent inputs
+        tf::TensorShape dummy_shape({1});
+
+        OP_REQUIRES_OK(context, context->allocate_temp(
+            tf::DataTypeToEnum<CT>::value,
+            dummy_shape,
+            &dummy_CT_tensor));
     }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
         namespace tf = tensorflow;
+        using tensorflow::errors::InvalidArgument;
 
-        // Sanity check the input tensors
-        const tf::Tensor & in_bsqrt = context->input(0);
-        const tf::Tensor & in_complex_phase = context->input(1);
-        const tf::Tensor & in_feed_rotation = context->input(2);
-        const tf::Tensor & in_ddes = context->input(3);
+        ComputeInputDimSizes input_dim_sizes;
 
-        int nsrc = -1, ntime = -1, na = -1, nchan = -1, npol = -1;
+        tf::OpInputList bsqrt_list;
+        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
+                                      "bsqrt",
+                                      bsqrt_schema,
+                                      input_dim_sizes,
+                                      bsqrt_list));
 
-        auto update_dim = [](int & old_size,
-                            const tf::Tensor & tensor,
-                            int dim) -> tf::Status
-        {
-            auto new_size = tensor.dim_size(dim);
+        tf::OpInputList complex_phase_list;
+        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
+                                      "complex_phase",
+                                      complex_phase_schema,
+                                      input_dim_sizes,
+                                      complex_phase_list));
 
-            if(old_size == -1)
-            {
-                old_size = new_size;
-            }
-            else if(old_size != new_size)
-            {
-                return tf::Status(tf::errors::InvalidArgument(
-                        "Previously set dimension size '",  old_size,
-                        "' does not equal new size '", new_size, "'"));
-            }
+        tf::OpInputList feed_rotation_list;
+        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
+                                      "feed_rotation",
+                                      feed_rotation_schema,
+                                      input_dim_sizes,
+                                      feed_rotation_list));
 
-            return tf::Status::OK();
-        };
+        tf::OpInputList ddes_list;
+        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
+                                      "ddes",
+                                      ddes_schema,
+                                      input_dim_sizes,
+                                      ddes_list));
 
-        if(have_bsqrt)
-        {
-            OP_REQUIRES_OK(context, update_dim(nsrc, in_bsqrt, 0));
-            OP_REQUIRES_OK(context, update_dim(ntime, in_bsqrt, 1));
-            OP_REQUIRES_OK(context, update_dim(nchan, in_bsqrt, 2));
-            OP_REQUIRES_OK(context, update_dim(npol, in_bsqrt, 3));
-        }
+        ComputeDimSizes dim_sizes;
+        OP_REQUIRES_OK(context, merge_input_dims(input_dim_sizes, dim_sizes));
 
-        if(have_complex_phase)
-        {
-            OP_REQUIRES_OK(context, update_dim(nsrc, in_complex_phase, 0));
-            OP_REQUIRES_OK(context, update_dim(ntime, in_complex_phase, 1));
-            OP_REQUIRES_OK(context, update_dim(na, in_complex_phase, 2));
-            OP_REQUIRES_OK(context, update_dim(nchan, in_complex_phase, 3));
-        }
+        ComputeDimSizes::const_iterator it;
+        ComputeDimSizes::const_iterator end = dim_sizes.end();
 
-        if(have_feed_rotation)
-        {
-            OP_REQUIRES_OK(context, update_dim(ntime, in_feed_rotation, 0));
-            OP_REQUIRES_OK(context, update_dim(na, in_feed_rotation, 1));
-        }
+        OP_REQUIRES(context, (it = dim_sizes.find("source")) != end,
+                    InvalidArgument("No source dimension found"));
+        int nsrc = it->second;
 
-        if(have_ddes)
-        {
-            OP_REQUIRES_OK(context, update_dim(nsrc, in_ddes, 0));
-            OP_REQUIRES_OK(context, update_dim(ntime, in_ddes, 1));
-            OP_REQUIRES_OK(context, update_dim(na, in_ddes, 2));
-            OP_REQUIRES_OK(context, update_dim(nchan, in_ddes, 3));
-            OP_REQUIRES_OK(context, update_dim(npol, in_ddes, 4));
-        }
+        OP_REQUIRES(context, (it = dim_sizes.find("time")) != end,
+                    InvalidArgument("No time dimension found"));
+        int ntime = it->second;
 
-        //GPU kernel above requires this hard-coded number
-        OP_REQUIRES(context, npol == CREATE_ANTENNA_JONES_NPOL,
-            tf::errors::InvalidArgument("Number of polarisations '",
-                npol, "' does not equal '", CREATE_ANTENNA_JONES_NPOL, "'."));
+        OP_REQUIRES(context, (it = dim_sizes.find("ant")) != end,
+                    InvalidArgument("No ant dimension found"));
+        int na = it->second;
 
-        tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, npol});
+        OP_REQUIRES(context, (it = dim_sizes.find("chan")) != end,
+                    InvalidArgument("No chan dimension found"));
+        int nchan = it->second;
+
+        OP_REQUIRES(context, (it = dim_sizes.find("corr")) != end,
+                    InvalidArgument("No corr dimension found"));
+        int ncorr = it->second;
+
+        // //GPU kernel above requires this hard-coded number
+        OP_REQUIRES(context, ncorr == CREATE_ANTENNA_JONES_NCORR,
+            InvalidArgument("Number of correlations '",
+                ncorr, "' does not equal '",
+                CREATE_ANTENNA_JONES_NCORR, "'."));
+
+        tf::TensorShape ant_jones_shape({nsrc, ntime, na, nchan, ncorr});
 
         // Allocate an output tensor
         tf::Tensor * ant_jones_ptr = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(
             0, ant_jones_shape, &ant_jones_ptr));
 
-        // Get pointers to flattened tensor data buffers
-        auto bsqrt = in_bsqrt.flat<CT>();
-        auto complex_phase = in_complex_phase.flat<CT>();
-        auto feed_rotation = in_feed_rotation.tensor<CT, 3>();
-        auto ddes = in_ddes.tensor<CT, 5>();
+        bool have_bsqrt = bsqrt_list.size() > 0;
+        bool have_complex_phase = complex_phase_list.size() > 0;
+        bool have_feed_rotation = feed_rotation_list.size() > 0;
+        bool have_ddes = ddes_list.size() > 0;
+
+        const tf::Tensor & dummy_CT = dummy_CT_tensor;
+
+        // Get flattened inputs
+        auto bsqrt = have_bsqrt ?
+                            bsqrt_list[0].flat<CT>() :
+                            dummy_CT.flat<CT>();
+        auto complex_phase = have_complex_phase ?
+                            complex_phase_list[0].flat<CT>() :
+                            dummy_CT.flat<CT>();
+        auto feed_rotation = have_feed_rotation ?
+                            feed_rotation_list[0].flat<CT>() :
+                            dummy_CT.flat<CT>();
+        auto ddes = have_ddes ?
+                            ddes_list[0].flat<CT>() :
+                            dummy_CT.flat<CT>();
+
         auto ant_jones = ant_jones_ptr->tensor<CT, 5>();
 
         #pragma omp parallel for collapse(3)
@@ -147,7 +181,7 @@ public:
                         if(have_bsqrt)
                         {
                             // Reference brightness square root
-                            const int index = ((src*ntime + time)*nchan + chan)*npol;
+                            const int index = ((src*ntime + time)*nchan + chan)*ncorr;
                             const CT & b0 = bsqrt(index + 0);
                             const CT & b1 = bsqrt(index + 1);
                             const CT & b2 = bsqrt(index + 2);
@@ -201,7 +235,7 @@ public:
                         if(have_feed_rotation)
                         {
                             // Reference feed rotation matrix
-                            const int index = (time*na + ant)*npol;
+                            const int index = (time*na + ant)*ncorr;
                             const CT & l0 = feed_rotation(index + 0);
                             const CT & l1 = feed_rotation(index + 1);
                             const CT & l2 = feed_rotation(index + 2);
@@ -231,7 +265,7 @@ public:
                         {
                             // Reference ddes matrix
                             int index = ((src*ntime + time)*na + ant);
-                            index = (index*nchan + chan)*npol;
+                            index = (index*nchan + chan)*ncorr;
                             const CT & e0 = ddes(index + 0);
                             const CT & e1 = ddes(index + 1);
                             const CT & e2 = ddes(index + 2);

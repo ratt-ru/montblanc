@@ -1,3 +1,6 @@
+#ifndef MONTBLANC_SHAPES_H_
+#define MONTBLANC_SHAPES_H
+
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -14,7 +17,6 @@ using InferenceInputDimSizes = std::unordered_map<std::string, InferenceDimSizes
 
 using ComputeDimSizes = std::unordered_map<std::string, int>;
 using ComputeInputDimSizes = std::unordered_map<std::string, ComputeDimSizes>;
-
 
 tensorflow::Status get_input_and_schema_for_compute(
                          tensorflow::OpKernelContext * c,
@@ -39,3 +41,5 @@ tensorflow::Status merge_input_dims(
 tensorflow::Status merge_input_dims(
                         const ComputeInputDimSizes & input_dim_sizes,
                         ComputeDimSizes & input_dims);
+
+#endif // #ifndef

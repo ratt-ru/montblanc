@@ -81,18 +81,17 @@ class TestCreateAntennaJones(unittest.TestCase):
                    feed_rotation, ddes]
         arg_names = ["bsqrt", "complex_phase",
                      "feed_rotation", "ddes"]
+        exists = [have_bsqrt, have_complex_phase,
+                    have_feed_rotation, have_ddes]
 
-        tf_args = [tf.Variable(v, name=n) for v, n
-                    in zip(np_args, arg_names)]
+        tf_args = [[tf.Variable(v, name=n)] if e == True else []
+                    for v, n, e
+                    in zip(np_args, arg_names, exists)]
 
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return create_antenna_jones_op(*tf_args, FT=FT,
-                                have_bsqrt=have_bsqrt,
-                                have_complex_phase=have_complex_phase,
-                                have_feed_rotation=have_feed_rotation,
-                                have_ddes=have_ddes)
+                return create_antenna_jones_op(*tf_args, FT=FT)
 
         # Pin operation to CPU
         cpu_op = _pin_op('/cpu:0', *tf_args)
@@ -106,7 +105,7 @@ class TestCreateAntennaJones(unittest.TestCase):
         with tf.Session() as S:
             S.run(init_op)
 
-            # Get the CPU sincos
+            # Get the CPU result
             cpu_aj = S.run(cpu_op)
 
             # Only test against numpy if we have all the terms
