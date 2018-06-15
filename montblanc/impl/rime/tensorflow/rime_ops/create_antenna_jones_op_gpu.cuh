@@ -289,17 +289,6 @@ public:
                             (ant_jones_ptr->flat<CT>().data()),
             nsrc, ntime, na, nchan, ncorr);
     }
-
-    template <typename TFType, typename GPUType>
-    const GPUType *
-    input_ptr(const tensorflow::OpInputList & in_list)
-    {
-        if(in_list.size() == 0)
-            { return nullptr; }
-
-        auto tensor_ptr = in_list[0].flat<TFType>().data();
-        return reinterpret_cast<const GPUType *>(tensor_ptr);
-    }
 };
 
 MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_STOP

@@ -161,17 +161,18 @@ class TensorflowInputFacade<TFShapeInference>
 private:
     using DimType = tensorflow::shape_inference::DimensionHandle;
     using DimSizes = std::unordered_map<std::string, DimType>;
+    using ShapeHandle = tensorflow::shape_inference::ShapeHandle;
+    using ShapeHandles = std::vector<ShapeHandle>;
 
 private:
     tensorflow::shape_inference::InferenceContext * context;
     std::unordered_map<std::string, DimSizes> input_dim_sizes;
-    std::unordered_map<std::string, tensorflow::OpInputList> inputs;
+    std::unordered_map<std::string, std::vector<ShapeHandle>> inputs;
     DimSizes input_dims;
 
     tensorflow::Status inspect_inputs(const std::string & name)
     {
-        using ShapeHandle = tensorflow::shape_inference::ShapeHandle;
-        std::vector<ShapeHandle> input_vector;
+        auto input_vector = inputs[name];
         TF_RETURN_WITH_CONTEXT_IF_ERROR(context->input(name, &input_vector),
             "Unable to obtain input " + name);
 
@@ -286,7 +287,7 @@ public:
 
     tensorflow::Status get_tensor(const std::string & name,
                                   int index,
-                                  const tensorflow::Tensor ** tensor)
+                                  const ShapeHandle ** shape_handle)
     {
         auto it = inputs.find(name);
 
@@ -296,7 +297,7 @@ public:
                 name, " at index ", index, " not found.");
         }
 
-        *tensor = &it->second[index];
+        *shape_handle = &it->second[index];
         return tensorflow::Status::OK();
     }
 
