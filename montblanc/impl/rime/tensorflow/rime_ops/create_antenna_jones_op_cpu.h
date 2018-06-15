@@ -82,61 +82,20 @@ public:
         namespace tf = tensorflow;
         using tensorflow::errors::InvalidArgument;
 
-        ComputeInputDimSizes input_dim_sizes;
+        TensorflowInputFacade<TFOpKernel> in_facade(context);
 
-        tf::OpInputList bsqrt_list;
-        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
-                                      "bsqrt",
-                                      bsqrt_schema,
-                                      input_dim_sizes,
-                                      bsqrt_list));
+        OP_REQUIRES_OK(context, in_facade.inspect(
+                            {{"bsqrt", bsqrt_schema},
+                             {"complex_phase", complex_phase_schema},
+                             {"feed_rotation", feed_rotation_schema},
+                             {"ddes", ddes_schema}}));
 
-        tf::OpInputList complex_phase_list;
-        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
-                                      "complex_phase",
-                                      complex_phase_schema,
-                                      input_dim_sizes,
-                                      complex_phase_list));
-
-        tf::OpInputList feed_rotation_list;
-        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
-                                      "feed_rotation",
-                                      feed_rotation_schema,
-                                      input_dim_sizes,
-                                      feed_rotation_list));
-
-        tf::OpInputList ddes_list;
-        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
-                                      "ddes",
-                                      ddes_schema,
-                                      input_dim_sizes,
-                                      ddes_list));
-
-        ComputeDimSizes dim_sizes;
-        OP_REQUIRES_OK(context, merge_input_dims(input_dim_sizes, dim_sizes));
-
-        ComputeDimSizes::const_iterator it;
-        ComputeDimSizes::const_iterator end = dim_sizes.end();
-
-        OP_REQUIRES(context, (it = dim_sizes.find("source")) != end,
-                    InvalidArgument("No source dimension found"));
-        int nsrc = it->second;
-
-        OP_REQUIRES(context, (it = dim_sizes.find("time")) != end,
-                    InvalidArgument("No time dimension found"));
-        int ntime = it->second;
-
-        OP_REQUIRES(context, (it = dim_sizes.find("ant")) != end,
-                    InvalidArgument("No ant dimension found"));
-        int na = it->second;
-
-        OP_REQUIRES(context, (it = dim_sizes.find("chan")) != end,
-                    InvalidArgument("No chan dimension found"));
-        int nchan = it->second;
-
-        OP_REQUIRES(context, (it = dim_sizes.find("corr")) != end,
-                    InvalidArgument("No corr dimension found"));
-        int ncorr = it->second;
+        int nsrc, ntime, na, nchan, ncorr;
+        OP_REQUIRES_OK(context, in_facade.get_dim("source", &nsrc));
+        OP_REQUIRES_OK(context, in_facade.get_dim("time", &ntime));
+        OP_REQUIRES_OK(context, in_facade.get_dim("ant", &na));
+        OP_REQUIRES_OK(context, in_facade.get_dim("chan", &nchan));
+        OP_REQUIRES_OK(context, in_facade.get_dim("corr", &ncorr));
 
         // //GPU kernel above requires this hard-coded number
         OP_REQUIRES(context, ncorr == CREATE_ANTENNA_JONES_NCORR,
@@ -151,26 +110,32 @@ public:
         OP_REQUIRES_OK(context, context->allocate_output(
             0, ant_jones_shape, &ant_jones_ptr));
 
-        bool have_bsqrt = bsqrt_list.size() > 0;
-        bool have_complex_phase = complex_phase_list.size() > 0;
-        bool have_feed_rotation = feed_rotation_list.size() > 0;
-        bool have_ddes = ddes_list.size() > 0;
+        const tf::Tensor * bsqrt_ptr;
+        const tf::Tensor * complex_phase_ptr;
+        const tf::Tensor * feed_rotation_ptr;
+        const tf::Tensor * ddes_ptr;
+
+        bool have_bsqrt =
+            in_facade.get_tensor("bsqrt", 0, &bsqrt_ptr).ok();
+        bool have_complex_phase =
+            in_facade.get_tensor("complex_phase", 0, &complex_phase_ptr).ok();
+        bool have_feed_rotation =
+            in_facade.get_tensor("feed_rotation", 0, &feed_rotation_ptr).ok();
+        bool have_ddes = in_facade.get_tensor("ddes", 0, &ddes_ptr).ok();
 
         const tf::Tensor & dummy_CT = dummy_CT_tensor;
 
         // Get flattened inputs
-        auto bsqrt = have_bsqrt ?
-                            bsqrt_list[0].flat<CT>() :
-                            dummy_CT.flat<CT>();
+        auto bsqrt = have_bsqrt ? bsqrt_ptr->flat<CT>() :
+                                dummy_CT.flat<CT>();
         auto complex_phase = have_complex_phase ?
-                            complex_phase_list[0].flat<CT>() :
-                            dummy_CT.flat<CT>();
+                                complex_phase_ptr->flat<CT>() :
+                                dummy_CT.flat<CT>();
         auto feed_rotation = have_feed_rotation ?
-                            feed_rotation_list[0].flat<CT>() :
-                            dummy_CT.flat<CT>();
-        auto ddes = have_ddes ?
-                            ddes_list[0].flat<CT>() :
-                            dummy_CT.flat<CT>();
+                                feed_rotation_ptr->flat<CT>() :
+                                dummy_CT.flat<CT>();
+        auto ddes = have_ddes ? ddes_ptr->flat<CT>() :
+                                dummy_CT.flat<CT>();
 
         auto ant_jones = ant_jones_ptr->tensor<CT, 5>();
 

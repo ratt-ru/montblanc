@@ -212,61 +212,20 @@ public:
         namespace tf = tensorflow;
         using tensorflow::errors::InvalidArgument;
 
-        ComputeInputDimSizes input_dim_sizes;
+        TensorflowInputFacade<TFOpKernel> in_facade(context);
 
-        tf::OpInputList bsqrt_list;
-        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
-                                      "bsqrt",
-                                      bsqrt_schema,
-                                      input_dim_sizes,
-                                      bsqrt_list));
+        OP_REQUIRES_OK(context, in_facade.inspect(
+                            {{"bsqrt", bsqrt_schema},
+                             {"complex_phase", complex_phase_schema},
+                             {"feed_rotation", feed_rotation_schema},
+                             {"ddes", ddes_schema}}));
 
-        tf::OpInputList complex_phase_list;
-        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
-                                      "complex_phase",
-                                      complex_phase_schema,
-                                      input_dim_sizes,
-                                      complex_phase_list));
-
-        tf::OpInputList feed_rotation_list;
-        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
-                                      "feed_rotation",
-                                      feed_rotation_schema,
-                                      input_dim_sizes,
-                                      feed_rotation_list));
-
-        tf::OpInputList ddes_list;
-        OP_REQUIRES_OK(context, get_input_and_schema_for_compute(context,
-                                      "ddes",
-                                      ddes_schema,
-                                      input_dim_sizes,
-                                      ddes_list));
-
-        ComputeDimSizes dim_sizes;
-        OP_REQUIRES_OK(context, merge_input_dims(input_dim_sizes, dim_sizes));
-
-        ComputeDimSizes::const_iterator it;
-        ComputeDimSizes::const_iterator end = dim_sizes.end();
-
-        OP_REQUIRES(context, (it = dim_sizes.find("source")) != end,
-                    InvalidArgument("No source dimension found"));
-        int nsrc = it->second;
-
-        OP_REQUIRES(context, (it = dim_sizes.find("time")) != end,
-                    InvalidArgument("No time dimension found"));
-        int ntime = it->second;
-
-        OP_REQUIRES(context, (it = dim_sizes.find("ant")) != end,
-                    InvalidArgument("No ant dimension found"));
-        int na = it->second;
-
-        OP_REQUIRES(context, (it = dim_sizes.find("chan")) != end,
-                    InvalidArgument("No chan dimension found"));
-        int nchan = it->second;
-
-        OP_REQUIRES(context, (it = dim_sizes.find("corr")) != end,
-                    InvalidArgument("No corr dimension found"));
-        int ncorr = it->second;
+        int nsrc, ntime, na, nchan, ncorr;
+        OP_REQUIRES_OK(context, in_facade.get_dim("source", &nsrc));
+        OP_REQUIRES_OK(context, in_facade.get_dim("time", &ntime));
+        OP_REQUIRES_OK(context, in_facade.get_dim("ant", &na));
+        OP_REQUIRES_OK(context, in_facade.get_dim("chan", &nchan));
+        OP_REQUIRES_OK(context, in_facade.get_dim("corr", &ncorr));
 
         // //GPU kernel above requires this hard-coded number
         OP_REQUIRES(context, ncorr == CREATE_ANTENNA_JONES_NCORR,
@@ -291,15 +250,41 @@ public:
         dim3 grid(montblanc::grid_from_thread_block(block,
             ncorr*nchan, na, ntime));
 
+        const tf::Tensor * bsqrt;
+        const tf::Tensor * complex_phase;
+        const tf::Tensor * feed_rotation;
+        const tf::Tensor * ddes;
+
+        bool have_bsqrt =
+            in_facade.get_tensor("bsqrt", 0, &bsqrt).ok();
+        bool have_complex_phase =
+            in_facade.get_tensor("complex_phase", 0, &complex_phase).ok();
+        bool have_feed_rotation =
+            in_facade.get_tensor("feed_rotation", 0, &feed_rotation).ok();
+        bool have_ddes = in_facade.get_tensor("ddes", 0, &ddes).ok();
+
+        auto bsqrt_ptr = have_bsqrt ?
+                        bsqrt->flat<CT>().data() :
+                        nullptr;
+        auto complex_phase_ptr = have_complex_phase ?
+                        complex_phase->flat<CT>().data() :
+                        nullptr;
+        auto feed_rotation_ptr = have_feed_rotation ?
+                        feed_rotation->flat<CT>().data() :
+                        nullptr;
+        auto ddes_ptr = have_ddes ?
+                        ddes->flat<CT>().data() :
+                        nullptr;
+
         // Get the GPU device
         const auto & device = context->eigen_device<GPUDevice>();
 
         // Call the rime_create_antenna_jones CUDA kernel
         rime_create_antenna_jones<Tr> <<<grid, block, 0, device.stream()>>>(
-            input_ptr<CT, typename Tr::CT>(bsqrt_list),
-            input_ptr<CT, typename Tr::CT>(complex_phase_list),
-            input_ptr<CT, typename Tr::CT>(feed_rotation_list),
-            input_ptr<CT, typename Tr::CT>(ddes_list),
+            reinterpret_cast<const typename Tr::CT *>(bsqrt_ptr),
+            reinterpret_cast<const typename Tr::CT *>(complex_phase_ptr),
+            reinterpret_cast<const typename Tr::CT *>(feed_rotation_ptr),
+            reinterpret_cast<const typename Tr::CT *>(ddes_ptr),
             reinterpret_cast<typename Tr::CT *>
                             (ant_jones_ptr->flat<CT>().data()),
             nsrc, ntime, na, nchan, ncorr);

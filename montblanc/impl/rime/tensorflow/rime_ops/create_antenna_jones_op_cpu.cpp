@@ -21,47 +21,25 @@ auto create_antenna_jones_shape_function = [](InferenceContext* c) {
     // Dummies for tests
     ShapeHandle input;
     DimensionHandle d;
-    InferenceInputDimSizes input_dim_sizes;
-    InferenceDimSizes dim_sizes;
 
-    // Get input shapes
-    TF_RETURN_IF_ERROR(get_input_and_schema_for_inference(c, "bsqrt", input_dim_sizes));
-    TF_RETURN_IF_ERROR(get_input_and_schema_for_inference(c, "complex_phase", input_dim_sizes));
-    TF_RETURN_IF_ERROR(get_input_and_schema_for_inference(c, "feed_rotation", input_dim_sizes));
-    TF_RETURN_IF_ERROR(get_input_and_schema_for_inference(c, "ddes", input_dim_sizes));
+    TensorflowInputFacade<TFShapeInference> in_facade(c);
 
-    TF_RETURN_IF_ERROR(merge_input_dims(c, input_dim_sizes, dim_sizes));
+    TF_RETURN_IF_ERROR(in_facade.inspect({"bsqrt", "complex_phase",
+                                        "feed_rotation", "ddes"}));
 
-    InferenceDimSizes::const_iterator it;
-    InferenceDimSizes::const_iterator end = dim_sizes.end();
-
-    if((it = dim_sizes.find("source")) == end)
-        { return InvalidArgument("No source dimension found"); };
-    auto nsrc = it->second;
-
-    if((it = dim_sizes.find("time")) == end)
-        { return InvalidArgument("No time dimension found"); };
-    auto ntime = it->second;
-
-    if((it = dim_sizes.find("ant")) == end)
-        { return InvalidArgument("No ant dimension found"); };
-    auto na = it->second;
-
-    if((it = dim_sizes.find("chan")) == end)
-        { return InvalidArgument("No chan dimension found"); };
-    auto nchan = it->second;
-
-    if((it = dim_sizes.find("corr")) == end)
-        { return InvalidArgument("No corr dimension found"); };
-    auto ncorr = it->second;
-
+    DimensionHandle nsrc, ntime, na, nchan, ncorr;
+    TF_RETURN_IF_ERROR(in_facade.get_dim("source", &nsrc));
+    TF_RETURN_IF_ERROR(in_facade.get_dim("time", &ntime));
+    TF_RETURN_IF_ERROR(in_facade.get_dim("ant", &na));
+    TF_RETURN_IF_ERROR(in_facade.get_dim("chan", &nchan));
+    TF_RETURN_IF_ERROR(in_facade.get_dim("corr", &ncorr));
 
     ShapeHandle ant_jones = c->MakeShape({
         nsrc, ntime, na, nchan, ncorr});
     // Set the output shape
     c->set_output(0, ant_jones);
 
-    return Status::OK();
+    return tensorflow::Status::OK();
 };
 
 
