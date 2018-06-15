@@ -32,12 +32,32 @@ auto create_antenna_jones_shape_function = [](InferenceContext* c) {
 
     TF_RETURN_IF_ERROR(merge_input_dims(c, input_dim_sizes, dim_sizes));
 
+    InferenceDimSizes::const_iterator it;
+    InferenceDimSizes::const_iterator end = dim_sizes.end();
+
+    if((it = dim_sizes.find("source")) == end)
+        { return InvalidArgument("No source dimension found"); };
+    auto nsrc = it->second;
+
+    if((it = dim_sizes.find("time")) == end)
+        { return InvalidArgument("No time dimension found"); };
+    auto ntime = it->second;
+
+    if((it = dim_sizes.find("ant")) == end)
+        { return InvalidArgument("No ant dimension found"); };
+    auto na = it->second;
+
+    if((it = dim_sizes.find("chan")) == end)
+        { return InvalidArgument("No chan dimension found"); };
+    auto nchan = it->second;
+
+    if((it = dim_sizes.find("corr")) == end)
+        { return InvalidArgument("No corr dimension found"); };
+    auto ncorr = it->second;
+
+
     ShapeHandle ant_jones = c->MakeShape({
-        dim_sizes["source"],
-        dim_sizes["time"],
-        dim_sizes["ant"],
-        dim_sizes["chan"],
-        dim_sizes["corr"]});
+        nsrc, ntime, na, nchan, ncorr});
     // Set the output shape
     c->set_output(0, ant_jones);
 
