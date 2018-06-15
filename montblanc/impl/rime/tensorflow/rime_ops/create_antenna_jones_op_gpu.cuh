@@ -14,6 +14,7 @@
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/framework/types.h"
 
 MONTBLANC_NAMESPACE_BEGIN
 MONTBLANC_CREATE_ANTENNA_JONES_NAMESPACE_BEGIN
@@ -179,24 +180,32 @@ public:
         OP_REQUIRES_OK(context, context->GetAttr("ddes_schema",
                                                  &ddes_schema));
 
-        int have;
+        // Sanity check the output type vs the input types
+        tf::DataType dtype;
+        OP_REQUIRES_OK(context, context->GetAttr("CT", &dtype));
 
-        OP_REQUIRES_OK(context, context->GetAttr("have_bsqrt", &have));
-        OP_REQUIRES(context, have <= 1,
-                    InvalidArgument("have_bsqrt > 1"));
+        std::vector<std::string> type_attrs = {"bsqrt_type",
+                                                "complex_phase_type",
+                                                "feed_rotation_type",
+                                                "ddes_type"};
 
-        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase", &have));
-        OP_REQUIRES(context, have <= 1,
-                    InvalidArgument("have_complex_phase > 1"));
+        for(const auto & type_attr: type_attrs)
+        {
+            tf::DataTypeVector dtypes;
+            OP_REQUIRES_OK(context, context->GetAttr(type_attr, &dtypes));
+            OP_REQUIRES(context, dtypes.size() <= 1,
+                InvalidArgument(type_attr, " length > 1"));
 
-        OP_REQUIRES_OK(context, context->GetAttr("have_feed_rotation", &have));
-        OP_REQUIRES(context, have <= 1,
-                    InvalidArgument("have_feed_rotation > 1"));
-
-        OP_REQUIRES_OK(context, context->GetAttr("have_ddes", &have));
-        OP_REQUIRES(context, have <= 1,
-                    InvalidArgument("have_ddes > 1"));
-    }
+            if(dtypes.size() == 1)
+            {
+                OP_REQUIRES(context, dtypes[0] == dtype,
+                    InvalidArgument(type_attr, " ",
+                        tf::DataTypeString(dtypes[0]),
+                        " != output type ",
+                        tf::DataTypeString(dtype)));
+            }
+        }
+  }
 
     void Compute(tensorflow::OpKernelContext * context) override
     {

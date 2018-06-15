@@ -91,7 +91,7 @@ class TestCreateAntennaJones(unittest.TestCase):
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return create_antenna_jones_op(*tf_args, FT=FT)
+                return create_antenna_jones_op(*tf_args, FT=FT, CT=CT)
 
         # Pin operation to CPU
         cpu_op = _pin_op('/cpu:0', *tf_args)

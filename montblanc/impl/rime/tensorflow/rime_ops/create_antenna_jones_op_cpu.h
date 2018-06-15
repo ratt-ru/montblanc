@@ -42,16 +42,31 @@ public:
         OP_REQUIRES_OK(context, context->GetAttr("feed_rotation_schema", &feed_rotation_schema));
         OP_REQUIRES_OK(context, context->GetAttr("ddes_schema", &ddes_schema));
 
-        int have;
+        // Sanity check the output type vs the input types
+        tf::DataType dtype;
+        OP_REQUIRES_OK(context, context->GetAttr("CT", &dtype));
 
-        OP_REQUIRES_OK(context, context->GetAttr("have_bsqrt", &have));
-        OP_REQUIRES(context, have <= 1, InvalidArgument("have_bsqrt > 1"));
-        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase", &have));
-        OP_REQUIRES(context, have <= 1, InvalidArgument("have_complex_phase > 1"));
-        OP_REQUIRES_OK(context, context->GetAttr("have_feed_rotation", &have));
-        OP_REQUIRES(context, have <= 1, InvalidArgument("have_feed_rotation > 1"));
-        OP_REQUIRES_OK(context, context->GetAttr("have_ddes", &have));
-        OP_REQUIRES(context, have <= 1, InvalidArgument("have_ddes > 1"));
+        std::vector<std::string> type_attrs = {"bsqrt_type",
+                                                "complex_phase_type",
+                                                "feed_rotation_type",
+                                                "ddes_type"};
+
+        for(const auto & type_attr: type_attrs)
+        {
+            tf::DataTypeVector dtypes;
+            OP_REQUIRES_OK(context, context->GetAttr(type_attr, &dtypes));
+            OP_REQUIRES(context, dtypes.size() <= 1,
+                InvalidArgument(type_attr, " length > 1"));
+
+            if(dtypes.size() == 1)
+            {
+                OP_REQUIRES(context, dtypes[0] == dtype,
+                    InvalidArgument(type_attr, " ",
+                        tf::DataTypeString(dtypes[0]),
+                        " != output type ",
+                        tf::DataTypeString(dtype)));
+            }
+        }
 
         // Create a dummy tensor representing non-existent inputs
         tf::TensorShape dummy_shape({1});
