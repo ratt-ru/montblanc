@@ -365,11 +365,11 @@ private:
         const std::vector<PartialTensorShape> & output_shapes() const override
             { return queue_resource_->output_shapes(); }
 
-        string DebugString()
+        string DebugString() const
             { return "SimpleQueueDataset"; }
 
         std::unique_ptr<IteratorBase>
-        MakeIterator(const string & prefix) const override
+        MakeIteratorInternal(const string & prefix) const override
         {
             return std::unique_ptr<IteratorBase>(new Iterator(
               {this, strings::StrCat(prefix, "::SimpleQueueDataset")}));

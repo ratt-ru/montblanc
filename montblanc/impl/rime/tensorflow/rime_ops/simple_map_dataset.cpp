@@ -408,11 +408,11 @@ private:
         const std::vector<PartialTensorShape> & output_shapes() const override
             { return map_resource_->output_shapes(); }
 
-        string DebugString()
+        string DebugString() const
             { return "SimpleMapDataset"; }
 
         std::unique_ptr<IteratorBase>
-        MakeIterator(const string & prefix) const override
+        MakeIteratorInternal(const string & prefix) const override
         {
             return std::unique_ptr<IteratorBase>(new Iterator(
               {this, strings::StrCat(prefix, "::SimpleMapDataset")}));
@@ -436,9 +436,13 @@ private:
 
         public:
             explicit Iterator(const Params & params)
-                : DatasetIterator<Dataset>(params),
-                input_impl_(params.dataset->input_->MakeIterator(params.prefix))
+                : DatasetIterator<Dataset>(params) {}
+
+            Status Initialize(IteratorContext * ctx) override
             {
+                return dataset()->input_->MakeIterator(ctx,
+                                            prefix(),
+                                            &input_impl_);
             }
 
             virtual Status GetNextInternal(IteratorContext * ctx,
