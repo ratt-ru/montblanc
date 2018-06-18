@@ -406,7 +406,7 @@ class FakeIterator(object):
 
     @property
     def initializer(self):
-        return None
+        return mock.MagicMock()
 
     def get_next(self):
         return self._var_dict
