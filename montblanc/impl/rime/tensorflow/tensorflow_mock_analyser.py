@@ -20,51 +20,6 @@ from montblanc.impl.rime.tensorflow.tensorflow_ops import (op_defs,
 
 mock = tf.test.mock
 
-def cmp_dicts(dict_1, dict_2, dict_1_name, dict_2_name, path=""):
-    """Compare two dictionaries recursively to find non matching elements
-
-    Parameters
-    ----------
-    dict_1: dict
-    dict_2: dict
-
-    Returns
-    -------
-    str
-        If different, returns a string describing this difference.
-        Otherwise returns an empty string.
-
-    """
-    err = ''
-    key_err = ''
-    value_err = ''
-    old_path = path
-
-    for k in dict_1.keys():
-        path = old_path + "[%s]" % k
-
-        if not dict_2.has_key(k):
-            key_err += ("Key %s%s not in %s\n" % (dict_2_name, path,
-                                                  dict_2_name))
-        else:
-            if isinstance(dict_1[k], dict) and isinstance(dict_2[k], dict):
-                err += cmp_dicts(dict_1[k],dict_2[k],'d1','d2', path)
-            else:
-                if dict_1[k] != dict_2[k]:
-                    value_err += ("Value of %s%s (%s) not same as %s%s (%s)\n"
-                        % (dict_1_name, path, dict_1[k],
-                           dict_2_name, path, dict_2[k]))
-
-    for k in dict_2.keys():
-        path = old_path + "[%s]" % k
-
-        if not dict_1.has_key(k):
-            key_err += ("Key %s%s not in %s\n" % (dict_2_name, path,
-                                                  dict_1_name))
-
-    return key_err + value_err + err
-
-
 class KnownVariable(object):
     """ Indicates a variable which we know about """
     pass
