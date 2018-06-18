@@ -4,6 +4,8 @@ import unittest
 import numpy as np
 import tensorflow as tf
 
+from tensorflow.contrib.data import prefetch_to_device
+
 from montblanc.impl.rime.tensorflow.map_dataset import (TensorMap,
                                                         MapDataset)
 
@@ -27,7 +29,7 @@ class TestMapTensorDataset(unittest.TestCase):
                 tensor_map = TensorMap(dtypes, tf.TensorShape([]))
                 key_ds = tf.data.Dataset.from_tensor_slices(keys_ph)
                 ds = MapDataset(key_ds, tensor_map)
-                ds = ds.apply(tf.contrib.data.prefetch_to_device(device, buffer_size=1))
+                ds = ds.apply(prefetch_to_device(device, buffer_size=1))
 
                 insert_op = tensor_map.insert(key_ph, value_ph)
                 close_op = tensor_map.close()
