@@ -388,7 +388,7 @@ def create_datasets(dataset_inputs, dataset_ph_info, ds_type="map"):
                     raise ValueError("Unhandled input %s" % name)
 
                 # Create placeholder for internal input
-                dtypes[name] = dtype = tf.int32
+                dtypes[name] = dtype = tf.int64
                 shapes[name] = shape = tf.TensorShape((None,))
                 ds_ph[name] = ph = tf.placeholder(dtype=dtype, shape=shape,
                                                   name=name.lstrip("_"))
