@@ -84,7 +84,7 @@ class TestCreateAntennaJones(unittest.TestCase):
         exists = [have_bsqrt, have_complex_phase,
                     have_feed_rotation, have_ddes]
 
-        tf_args = [[tf.Variable(v, name=n)] if e == True else []
+        tf_args = [[tf.Variable(v, name=n)] if e else []
                     for v, n, e
                     in zip(np_args, arg_names, exists)]
 

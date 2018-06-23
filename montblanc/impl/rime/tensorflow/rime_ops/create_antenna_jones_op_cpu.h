@@ -1,11 +1,11 @@
 #ifndef RIME_CREATE_ANTENNA_JONES_OP_CPU_H
 #define RIME_CREATE_ANTENNA_JONES_OP_CPU_H
 
-#include "create_antenna_jones_op.h"
-#include "shapes.h"
-
 // Required in order for Eigen::ThreadPoolDevice to be an actual type
 #define EIGEN_USE_THREADS
+
+#include "create_antenna_jones_op.h"
+#include "shapes.h"
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -28,19 +28,16 @@ private:
     std::string complex_phase_schema;
     std::string feed_rotation_schema;
     std::string ddes_schema;
-    tensorflow::Tensor dummy_CT_tensor;
-
+    TensorflowInputFacade<TFOpKernel> in_facade;
 public:
     explicit CreateAntennaJones(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context)
+        tensorflow::OpKernel(context),
+        in_facade({"bsqrt", "complex_phase", "feed_rotation", "ddes"})
     {
         namespace tf = tensorflow;
         using tensorflow::errors::InvalidArgument;
 
-        OP_REQUIRES_OK(context, context->GetAttr("bsqrt_schema", &bsqrt_schema));
-        OP_REQUIRES_OK(context, context->GetAttr("complex_phase_schema", &complex_phase_schema));
-        OP_REQUIRES_OK(context, context->GetAttr("feed_rotation_schema", &feed_rotation_schema));
-        OP_REQUIRES_OK(context, context->GetAttr("ddes_schema", &ddes_schema));
+        OP_REQUIRES_OK(context, in_facade.inspect(context));
 
         // Sanity check the output type vs the input types
         tf::DataType dtype;
@@ -68,13 +65,6 @@ public:
             }
         }
 
-        // Create a dummy tensor representing non-existent inputs
-        tf::TensorShape dummy_shape({1});
-
-        OP_REQUIRES_OK(context, context->allocate_temp(
-            tf::DataTypeToEnum<CT>::value,
-            dummy_shape,
-            &dummy_CT_tensor));
     }
 
     void Compute(tensorflow::OpKernelContext * context) override
@@ -82,13 +72,7 @@ public:
         namespace tf = tensorflow;
         using tensorflow::errors::InvalidArgument;
 
-        TensorflowInputFacade<TFOpKernel> in_facade(context);
-
-        OP_REQUIRES_OK(context, in_facade.inspect(
-                            {{"bsqrt", bsqrt_schema},
-                             {"complex_phase", complex_phase_schema},
-                             {"feed_rotation", feed_rotation_schema},
-                             {"ddes", ddes_schema}}));
+        OP_REQUIRES_OK(context, in_facade.inspect(context));
 
         int nsrc, ntime, na, nchan, ncorr;
         OP_REQUIRES_OK(context, in_facade.get_dim("source", &nsrc));
@@ -110,10 +94,10 @@ public:
         OP_REQUIRES_OK(context, context->allocate_output(
             0, ant_jones_shape, &ant_jones_ptr));
 
-        const tf::Tensor * bsqrt_ptr;
-        const tf::Tensor * complex_phase_ptr;
-        const tf::Tensor * feed_rotation_ptr;
-        const tf::Tensor * ddes_ptr;
+        const tf::Tensor * bsqrt_ptr = nullptr;
+        const tf::Tensor * complex_phase_ptr = nullptr;
+        const tf::Tensor * feed_rotation_ptr = nullptr;
+        const tf::Tensor * ddes_ptr = nullptr;
 
         bool have_bsqrt =
             in_facade.get_tensor("bsqrt", 0, &bsqrt_ptr).ok();
@@ -123,7 +107,8 @@ public:
             in_facade.get_tensor("feed_rotation", 0, &feed_rotation_ptr).ok();
         bool have_ddes = in_facade.get_tensor("ddes", 0, &ddes_ptr).ok();
 
-        const tf::Tensor & dummy_CT = dummy_CT_tensor;
+        // Create a dummy tensor representing non-existent inputs
+        const tf::Tensor dummy_CT(tf::DataTypeToEnum<CT>::value, {1});
 
         // Get flattened inputs
         auto bsqrt = have_bsqrt ? bsqrt_ptr->flat<CT>() :

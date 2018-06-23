@@ -163,22 +163,16 @@ private:
     std::string complex_phase_schema;
     std::string feed_rotation_schema;
     std::string ddes_schema;
-
+    TensorflowInputFacade<TFOpKernel> in_facade;
 public:
     explicit CreateAntennaJones(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context)
+        tensorflow::OpKernel(context),
+        in_facade({"bsqrt", "complex_phase", "feed_rotation", "ddes"})
     {
         namespace tf = tensorflow;
         using tensorflow::errors::InvalidArgument;
 
-        OP_REQUIRES_OK(context, context->GetAttr("bsqrt_schema",
-                                                 &bsqrt_schema));
-        OP_REQUIRES_OK(context, context->GetAttr("complex_phase_schema",
-                                                 &complex_phase_schema));
-        OP_REQUIRES_OK(context, context->GetAttr("feed_rotation_schema",
-                                                 &feed_rotation_schema));
-        OP_REQUIRES_OK(context, context->GetAttr("ddes_schema",
-                                                 &ddes_schema));
+        OP_REQUIRES_OK(context, in_facade.inspect(context));
 
         // Sanity check the output type vs the input types
         tf::DataType dtype;
@@ -212,13 +206,7 @@ public:
         namespace tf = tensorflow;
         using tensorflow::errors::InvalidArgument;
 
-        TensorflowInputFacade<TFOpKernel> in_facade(context);
-
-        OP_REQUIRES_OK(context, in_facade.inspect(
-                            {{"bsqrt", bsqrt_schema},
-                             {"complex_phase", complex_phase_schema},
-                             {"feed_rotation", feed_rotation_schema},
-                             {"ddes", ddes_schema}}));
+        OP_REQUIRES_OK(context, in_facade.inspect(context));
 
         int nsrc, ntime, na, nchan, ncorr;
         OP_REQUIRES_OK(context, in_facade.get_dim("source", &nsrc));
