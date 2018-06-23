@@ -60,14 +60,16 @@ class TestSumCoherencies(unittest.TestCase):
         # Argument string name list
         arg_names = ['time_index', 'antenna1', 'antenna2', 'shape', 'ant_jones',
             'sgn_brightness', 'complex_phase', 'base_coherencies']
+        is_list = [False, False, False, False, False, True, True, True]
         # Constructor tensorflow variables
-        tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
-        tf_kwargs = {'have_complex_phase': have_complex_phase}
+        tf_args = [[tf.Variable(v, name=n)] if l else tf.Variable(v, name=n)
+                    for v, n, l
+                    in zip(np_args, arg_names, is_list)]
 
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return sum_coherencies_op(*tf_args, **tf_kwargs)
+                return sum_coherencies_op(*tf_args)
 
         # Pin operation to CPU
         cpu_op = _pin_op('/cpu:0', *tf_args)

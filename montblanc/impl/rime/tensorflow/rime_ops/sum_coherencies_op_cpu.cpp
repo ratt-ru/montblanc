@@ -1,4 +1,5 @@
 #include "sum_coherencies_op_cpu.h"
+#include "shapes.h"
 
 #include "tensorflow/core/framework/shape_inference.h"
 
@@ -15,64 +16,24 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
     ShapeHandle input;
     DimensionHandle d;
 
-    bool have_complex_phase = false;
-    c->GetAttr("have_complex_phase", &have_complex_phase);
+    TensorflowInputFacade<TFShapeInference> in_facade(c);
 
-    // Get input shapes
-    ShapeHandle time_index = c->input(0);
-    ShapeHandle antenna1 = c->input(1);
-    ShapeHandle antenna2 = c->input(2);
-    ShapeHandle shape = c->input(3);
-    ShapeHandle ant_jones = c->input(4);
-    ShapeHandle sgn_brightness = c->input(5);
-    ShapeHandle complex_phase = c->input(6);
-    ShapeHandle base_coherencies = c->input(7);
+    TF_RETURN_IF_ERROR(in_facade.inspect({"time_index",
+                                        "antenna1",
+                                        "antenna2",
+                                        "shape",
+                                        "ant_jones",
+                                        "sgn_brightness",
+                                        "complex_phase",
+                                        "base_coherencies"}));
 
-    // time_index
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(time_index, 1, &input),
-        "time_index shape must be [nvrows] but is " + c->DebugString(time_index));
+    DimensionHandle nrow, nchan, ncorr;
+    TF_RETURN_IF_ERROR(in_facade.get_dim("row", &nrow));
+    TF_RETURN_IF_ERROR(in_facade.get_dim("chan", &nchan));
+    TF_RETURN_IF_ERROR(in_facade.get_dim("corr", &ncorr));
 
-    // antenna1
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna1, 1, &input),
-        "antenna1 shape must be [nvrows] but is " + c->DebugString(antenna1));
-
-    // antenna2
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(antenna2, 1, &input),
-        "antenna2 shape must be [nvrows] but is " + c->DebugString(antenna2));
-
-    // shape
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(shape, 3, &input),
-        "shape shape must be [nsrc, nvrows, nchan] but is " +
-        c->DebugString(shape));
-
-    // ant_jones
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(ant_jones, 5, &input),
-        "ant_jones shape must be [nsrc, ntime, na, nchan, 4] but is " +
-        c->DebugString(ant_jones));
-
-    // sgn_brightness
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(sgn_brightness, 2, &input),
-        "sgn_brightness shape must be [nsrc, ntime] but is " +
-        c->DebugString(sgn_brightness));
-
-    // complex phase
-    if(have_complex_phase)
-    {
-        TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(complex_phase, 3, &input),
-            "complex_phase shape must be [nsrc, nvrows, nchan] but is " +
-            c->DebugString(complex_phase));
-    }
-
-    // base_coherencies
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(base_coherencies, 3, &input),
-        "base_coherencies shape must be [nvrows, nchan, 4] but is " +
-        c->DebugString(base_coherencies));
-
-    // Coherency output is (nvrows, nchan, 4)
-    ShapeHandle coherencies = c->MakeShape({
-        c->Dim(base_coherencies, 0),
-        c->Dim(base_coherencies, 1),
-        c->Dim(base_coherencies, 2)});
+    // Coherency output is (row, chan, corr)
+    ShapeHandle coherencies = c->MakeShape({nrow, nchan, ncorr});
 
     // Set the output shape
     c->set_output(0, coherencies);
@@ -88,16 +49,19 @@ REGISTER_OP("SumCoherencies")
     .Input("antenna2: int32")
     .Input("shape: FT")
     .Input("ant_jones: CT")
-    .Input("sgn_brightness: int8")
-    .Input("complex_phase: CT")
-    .Input("base_coherencies: CT")
+    .Input("sgn_brightness: have_sgn_brightness*int8")
+    .Input("complex_phase: have_complex_phase*CT")
+    .Input("base_coherencies: have_base_coherencies*CT")
     .Output("coherencies: CT")
     .Attr("FT: {double, float} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
-    .Attr("have_complex_phase: bool = true")
+    .Attr("have_sgn_brightness: int >= 0")
+    .Attr("have_complex_phase: int >= 0")
+    .Attr("have_base_coherencies: int >= 0")
     .Attr("time_index_schema: string = '(row,)'")
     .Attr("antenna1_schema: string = '(row,)'")
     .Attr("antenna2_schema: string = '(row,)'")
+    .Attr("ant_jones_schema: string = '(source,time,ant,chan,corr)'")
     .Attr("base_coherencies_schema: string = '(row, chan, corr)'")
     .SetShapeFn(sum_coherencies_shape_function);
 

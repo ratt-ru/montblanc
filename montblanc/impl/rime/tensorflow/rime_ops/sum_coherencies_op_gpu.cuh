@@ -128,84 +128,109 @@ template <typename FT, typename CT>
 class SumCoherencies<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 private:
-    bool have_complex_phase;
+    TensorflowInputFacade<TFOpKernel> in_facade;
 
 public:
-    explicit SumCoherencies(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context),
-        have_complex_phase(false)
+    explicit SumCoherencies(tensorflow::OpKernelConstruction * ctx) :
+        tensorflow::OpKernel(ctx),
+        in_facade({"time_index", "antenna1", "antenna2", "shape",
+                   "ant_jones", "sgn_brightness", "complex_phase",
+                   "base_coherencies"})
     {
-        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase",
-                                                 &have_complex_phase));
+        OP_REQUIRES_OK(ctx, in_facade.inspect(ctx));
     }
 
-    void Compute(tensorflow::OpKernelContext * context) override
+    void Compute(tensorflow::OpKernelContext * ctx) override
     {
         namespace tf = tensorflow;
 
-        const tf::Tensor & in_time_index = context->input(0);
-        const tf::Tensor & in_antenna1 = context->input(1);
-        const tf::Tensor & in_antenna2 = context->input(2);
-        const tf::Tensor & in_shape = context->input(3);
-        const tf::Tensor & in_ant_jones = context->input(4);
-        const tf::Tensor & in_sgn_brightness = context->input(5);
-        const tf::Tensor & in_complex_phase = context->input(6);
-        const tf::Tensor & in_base_coherencies = context->input(7);
+        OP_REQUIRES_OK(ctx, in_facade.inspect(ctx));
 
-        int nvrow = in_time_index.dim_size(0);
-        int ntime = in_ant_jones.dim_size(1);
-        int nsrc = in_shape.dim_size(0);
-        int nchan = in_shape.dim_size(2);
-        int na = in_ant_jones.dim_size(2);
-        int npol = in_ant_jones.dim_size(4);
-        int npolchan = nchan*npol;
+        int nvrow, nsrc, ntime, na, nchan, ncorr;
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("row", &nvrow));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("source", &nsrc));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("time", &ntime));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("ant", &na));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("chan", &nchan));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("corr", &ncorr));
+
+        int ncorrchan = nchan*ncorr;
 
         // Allocate an output tensor
         tf::Tensor * coherencies_ptr = nullptr;
         tf::TensorShape coherencies_shape = tf::TensorShape({
-            nvrow, nchan, npol });
-        OP_REQUIRES_OK(context, context->allocate_output(
+            nvrow, nchan, ncorr });
+        OP_REQUIRES_OK(ctx, ctx->allocate_output(
             0, coherencies_shape, &coherencies_ptr));
 
         // Cast input into CUDA types defined within the Traits class
         using Tr = montblanc::kernel_traits<FT>;
         using LTr = LaunchTraits<FT>;
 
+        const tf::Tensor * time_index_ptr = nullptr;
+        const tf::Tensor * antenna1_ptr = nullptr;
+        const tf::Tensor * antenna2_ptr = nullptr;
+        const tf::Tensor * shape_ptr = nullptr;
+        const tf::Tensor * ant_jones_ptr = nullptr;
+        const tf::Tensor * complex_phase_ptr = nullptr;
+        const tf::Tensor * sgn_brightness_ptr = nullptr;
+        const tf::Tensor * base_coherencies_ptr = nullptr;
+
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("time_index", 0,
+                                                 &time_index_ptr));
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("antenna1", 0,
+                                                 &antenna1_ptr));
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("antenna2", 0,
+                                                 &antenna2_ptr));
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("shape", 0,
+                                                 &shape_ptr));
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("ant_jones", 0,
+                                                 &ant_jones_ptr));
+        bool have_complex_phase = in_facade.get_tensor("complex_phase", 0,
+                                                 &complex_phase_ptr).ok();
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("sgn_brightness", 0,
+                                                 &sgn_brightness_ptr));
+        bool have_base = in_facade.get_tensor("base_coherencies", 0,
+                                                 &base_coherencies_ptr).ok();
+
+
         auto time_index = reinterpret_cast<const int *>(
-            in_time_index.flat<int>().data());
+            time_index_ptr->flat<int>().data());
         auto antenna1 = reinterpret_cast<const typename Tr::antenna_type *>(
-            in_antenna1.flat<int>().data());
+            antenna1_ptr->flat<int>().data());
         auto antenna2 = reinterpret_cast<const typename Tr::antenna_type *>(
-            in_antenna2.flat<int>().data());
+            antenna2_ptr->flat<int>().data());
         auto shape = reinterpret_cast<const typename Tr::FT *>(
-            in_shape.flat<FT>().data());
+            shape_ptr->flat<FT>().data());
         auto ant_jones = reinterpret_cast<const typename Tr::ant_jones_type *>(
-            in_ant_jones.flat<CT>().data());
-        auto sgn_brightness = reinterpret_cast<const typename Tr::sgn_brightness_type *>(
-            in_sgn_brightness.flat<tf::int8>().data());
-        auto complex_phase = reinterpret_cast<const typename Tr::CT *>(
-            in_complex_phase.flat<CT>().data());
-        auto base_coherencies = reinterpret_cast<const typename Tr::vis_type *>(
-            in_base_coherencies.flat<CT>().data());
+            ant_jones_ptr->flat<CT>().data());
+        auto sgn_brightness =  reinterpret_cast<const typename Tr::sgn_brightness_type *>(
+                        sgn_brightness_ptr->flat<tf::int8>().data());
+        auto complex_phase = !have_complex_phase ? nullptr :
+                    reinterpret_cast<const typename Tr::CT *>(
+                        complex_phase_ptr->flat<CT>().data());
+        auto base_coherencies = !have_base ? nullptr :
+                    reinterpret_cast<const typename Tr::vis_type *>(
+                        base_coherencies_ptr->flat<CT>().data());
+
         auto coherencies = reinterpret_cast<typename Tr::vis_type *>(
-            coherencies_ptr->flat<CT>().data());
+                        coherencies_ptr->flat<CT>().data());
 
         // Set up our CUDA thread block and grid
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
-            npolchan, nvrow, 1);
-        dim3 grid(montblanc::grid_from_thread_block(
-            block, npolchan, nvrow, 1));
+            ncorrchan, nvrow, 1);
+        dim3 grid(montblanc::grid_from_thread_block(block,
+            ncorrchan, nvrow, 1));
 
         // Get the GPU device
-        const auto & device = context->eigen_device<GPUDevice>();
+        const auto & device = ctx->eigen_device<GPUDevice>();
 
         // Call the rime_sum_coherencies CUDA kernel
         rime_sum_coherencies<Tr><<<grid, block, 0, device.stream()>>>(
             time_index, antenna1, antenna2, shape, ant_jones,
-            sgn_brightness, have_complex_phase ? complex_phase : nullptr,
-            base_coherencies, coherencies,
-            nsrc, ntime, nvrow, na, nchan, npolchan);
+            sgn_brightness, complex_phase, base_coherencies, coherencies,
+            nsrc, ntime, nvrow, na, nchan, ncorrchan);
     }
 };
 

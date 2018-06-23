@@ -1,10 +1,11 @@
 #ifndef RIME_SUM_COHERENCIES_OP_CPU_H
 #define RIME_SUM_COHERENCIES_OP_CPU_H
 
-#include "sum_coherencies_op.h"
-
 // Required in order for Eigen::ThreadPoolDevice to be an actual type
 #define EIGEN_USE_THREADS
+
+#include "sum_coherencies_op.h"
+#include "shapes.h"
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -20,53 +21,85 @@ template <typename FT, typename CT>
 class SumCoherencies<CPUDevice, FT, CT> : public tensorflow::OpKernel
 {
 private:
-    bool have_complex_phase;
+    TensorflowInputFacade<TFOpKernel> in_facade;
 
 public:
-    explicit SumCoherencies(tensorflow::OpKernelConstruction * context) :
-        tensorflow::OpKernel(context),
-        have_complex_phase(false)
+    explicit SumCoherencies(tensorflow::OpKernelConstruction * ctx) :
+        tensorflow::OpKernel(ctx),
+        in_facade({"time_index", "antenna1", "antenna2", "shape",
+                   "ant_jones", "sgn_brightness", "complex_phase",
+                   "base_coherencies"})
     {
-        OP_REQUIRES_OK(context, context->GetAttr("have_complex_phase",
-                                                 &have_complex_phase));
+        OP_REQUIRES_OK(ctx, in_facade.inspect(ctx));
     }
 
-    void Compute(tensorflow::OpKernelContext * context) override
+    void Compute(tensorflow::OpKernelContext * ctx) override
     {
         namespace tf = tensorflow;
 
-        const tf::Tensor & in_time_index = context->input(0);
-        const tf::Tensor & in_antenna1 = context->input(1);
-        const tf::Tensor & in_antenna2 = context->input(2);
-        const tf::Tensor & in_shape = context->input(3);
-        const tf::Tensor & in_ant_jones = context->input(4);
-        const tf::Tensor & in_sgn_brightness = context->input(5);
-        const tf::Tensor & in_complex_phase = context->input(6);
-        const tf::Tensor & in_base_coherencies = context->input(7);
+        OP_REQUIRES_OK(ctx, in_facade.inspect(ctx));
 
-        int nvrow = in_time_index.dim_size(0);
-        int nsrc = in_shape.dim_size(0);
-        int nchan = in_shape.dim_size(2);
-        int na = in_ant_jones.dim_size(2);
-        int npol = in_ant_jones.dim_size(4);
-        int npolchan = nchan*npol;
+        int nvrow, nsrc, ntime, na, nchan, ncorr;
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("row", &nvrow));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("source", &nsrc));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("time", &ntime));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("ant", &na));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("chan", &nchan));
+        OP_REQUIRES_OK(ctx, in_facade.get_dim("corr", &ncorr));
+
+        int ncorrchan = nchan*ncorr;
 
         // Allocate an output tensor
         tf::Tensor * coherencies_ptr = nullptr;
         tf::TensorShape coherencies_shape = tf::TensorShape({
-            nvrow, nchan, npol });
-        OP_REQUIRES_OK(context, context->allocate_output(
+            nvrow, nchan, ncorr });
+        OP_REQUIRES_OK(ctx, ctx->allocate_output(
             0, coherencies_shape, &coherencies_ptr));
 
-        auto time_index = in_time_index.tensor<int,1>();
-        auto antenna1 = in_antenna1.tensor<int,1>();
-        auto antenna2 = in_antenna2.tensor<int,1>();
-        auto shape = in_shape.tensor<FT, 3>();
-        auto ant_jones = in_ant_jones.tensor<CT, 5>();
-        auto sgn_brightness = in_sgn_brightness.tensor<tf::int8, 2>();
-        auto complex_phase = in_complex_phase.flat<CT>();
-        auto base_coherencies = in_base_coherencies.tensor<CT, 3>();
+        const tf::Tensor * time_index_ptr = nullptr;
+        const tf::Tensor * antenna1_ptr = nullptr;
+        const tf::Tensor * antenna2_ptr = nullptr;
+        const tf::Tensor * shape_ptr = nullptr;
+        const tf::Tensor * ant_jones_ptr = nullptr;
+        const tf::Tensor * complex_phase_ptr = nullptr;
+        const tf::Tensor * sgn_brightness_ptr = nullptr;
+        const tf::Tensor * base_coherencies_ptr = nullptr;
+
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("time_index", 0,
+                                                 &time_index_ptr));
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("antenna1", 0,
+                                                 &antenna1_ptr));
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("antenna2", 0,
+                                                 &antenna2_ptr));
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("shape", 0,
+                                                 &shape_ptr));
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("ant_jones", 0,
+                                                 &ant_jones_ptr));
+        bool have_complex_phase = in_facade.get_tensor("complex_phase", 0,
+                                                 &complex_phase_ptr).ok();
+        OP_REQUIRES_OK(ctx, in_facade.get_tensor("sgn_brightness", 0,
+                                                 &sgn_brightness_ptr));
+        bool have_base = in_facade.get_tensor("base_coherencies", 0,
+                                                 &base_coherencies_ptr).ok();
+
+        // Dummy variables to handle the absence of inputs
+        const tf::Tensor dummy_phase(tf::DataTypeToEnum<CT>::value, {1});
+        const tf::Tensor dummy_base(tf::DataTypeToEnum<CT>::value, {1,1,1});
+
+        auto time_index = time_index_ptr->tensor<int,1>();
+        auto antenna1 = antenna1_ptr->tensor<int,1>();
+        auto antenna2 = antenna2_ptr->tensor<int,1>();
+        auto shape = shape_ptr->tensor<FT, 3>();
+        auto ant_jones = ant_jones_ptr->tensor<CT, 5>();
+        auto sgn_brightness = sgn_brightness_ptr->tensor<tf::int8, 2>();
+        auto complex_phase = have_complex_phase ?
+                        complex_phase_ptr->flat<CT>() :
+                        dummy_phase.flat<CT>();
+        auto base_coherencies = have_base ?
+                        base_coherencies_ptr->tensor<CT, 3>() :
+                        dummy_base.tensor<CT, 3>();
         auto coherencies = coherencies_ptr->tensor<CT, 3>();
+
 
         #pragma omp parallel for
         for(int vrow=0; vrow<nvrow; ++vrow)
@@ -79,10 +112,10 @@ public:
             for(int chan=0; chan<nchan; ++chan)
             {
                 // Load in the input model visibilities
-                CT s0 = base_coherencies(vrow, chan, 0);
-                CT s1 = base_coherencies(vrow, chan, 1);
-                CT s2 = base_coherencies(vrow, chan, 2);
-                CT s3 = base_coherencies(vrow, chan, 3);
+                CT s0 = have_base ? base_coherencies(vrow, chan, 0) : 0;
+                CT s1 = have_base ? base_coherencies(vrow, chan, 1) : 0;
+                CT s2 = have_base ? base_coherencies(vrow, chan, 2) : 0;
+                CT s3 = have_base ? base_coherencies(vrow, chan, 3) : 0;
 
                 for(int src=0; src<nsrc; ++src)
                 {
