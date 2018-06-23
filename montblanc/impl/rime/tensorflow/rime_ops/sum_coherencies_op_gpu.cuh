@@ -3,12 +3,14 @@
 #ifndef RIME_SUM_COHERENCIES_OP_GPU_CUH
 #define RIME_SUM_COHERENCIES_OP_GPU_CUH
 
-#include "sum_coherencies_op.h"
-#include <montblanc/abstraction.cuh>
-#include <montblanc/jones.cuh>
-
 // Required in order for Eigen::GpuDevice to be an actual type
 #define EIGEN_USE_GPU
+
+#include "sum_coherencies_op.h"
+#include "shapes.h"
+
+#include <montblanc/abstraction.cuh>
+#include <montblanc/jones.cuh>
 
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -26,14 +28,14 @@ template <typename FT> struct LaunchTraits {};
 template <> struct LaunchTraits<float>
 {
     static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 32;
+    static constexpr int BLOCKDIMY = 24;
     static constexpr int BLOCKDIMZ = 1;
 };
 
 template <> struct LaunchTraits<double>
 {
     static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 32;
+    static constexpr int BLOCKDIMY = 24;
     static constexpr int BLOCKDIMZ = 1;
 };
 
@@ -76,7 +78,6 @@ __global__ void rime_sum_coherencies(
     // Sum over visibilities
     for(int src=0; src < nsrc; ++src)
     {
-
         int base = src*ntime + time;
 
         // Load in antenna 1 jones
