@@ -11,8 +11,11 @@
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
+
 tensorflow::Status parse_shape_schema(const std::string & schema,
                                       std::vector<std::string> & result);
+
+
 
 class TFOpKernel;
 class TFShapeInference;
@@ -26,10 +29,143 @@ class TensorflowInputFacade<TFOpKernel>
 {
 public:
     using DimSizes = std::unordered_map<std::string, int>;
+    using InputDimSizes = std::unordered_map<std::string, DimSizes>;
+
+    using SchemaParts = std::vector<std::string>;
+    using InputSchemas = std::unordered_map<std::string, SchemaParts>;
+
+    using InputLists = std::unordered_map<std::string, tensorflow::OpInputList>;
+
+    class OpInputData
+    {
+    public:
+        DimSizes dim_sizes;
+        InputLists input_lists;
+
+        OpInputData() = default;
+
+        tensorflow::Status merge(const InputDimSizes & input_dim_sizes)
+        {
+            namespace tf = tensorflow;
+
+            for(const auto & ids: input_dim_sizes)
+            {
+                const auto & input_name = ids.first;
+                const auto & dims = ids.second;
+
+                for(const auto & d: dims)
+                {
+                    const auto & dim_name = d.first;
+                    const auto & dim_value = d.second;
+
+                    // Is this dimension present in the output?
+                    auto it = dim_sizes.find(dim_name);
+
+                    // No, insert
+                    if(it == dim_sizes.end())
+                    {
+                        dim_sizes.insert(d);
+                    }
+                    else if(dim_value != it->second)
+                    {
+                        return tensorflow::errors::InvalidArgument(
+                            "Input ", input_name,
+                            " dimension ", dim_name,
+                            " size ", dim_value,
+                            " disagrees with new value ", it->second);
+                    }
+                }
+            }
+
+            return tensorflow::Status::OK();
+        }
+
+
+        tensorflow::Status construct(tensorflow::OpKernelContext * ctx,
+                                    const std::vector<std::string> & input_names,
+                                    const InputSchemas & schemas)
+        {
+            InputDimSizes input_dim_sizes;
+
+            for(const auto & input_name : input_names)
+            {
+                auto & input_list = input_lists[input_name];
+                TF_RETURN_IF_ERROR(ctx->input_list(input_name, &input_list));
+
+                // An empty list is valid
+                if(input_list.size() == 0)
+                    { continue; }
+
+                const tensorflow::Tensor & tensor = input_list[0];
+
+                auto it = schemas.find(input_name);
+
+                // No schema exists for this input, so we can't
+                // deduce symbolic dimensions
+                if(it == schemas.end())
+                    { continue; }
+
+                auto & schema_parts = it->second;
+
+                if(schema_parts.size() != tensor.dims())
+                {
+                    return tensorflow::errors::InvalidArgument(
+                                "Number of shape schema parts (",
+                                schema_parts.size(),
+                                ") do not match input rank (",
+                                tensor.dims(),
+                                ") for input ", input_name);
+                }
+
+                // Dimension Sizes
+                auto & dim_sizes = input_dim_sizes[input_name];
+
+                // Assign
+                for(std::size_t i = 0; i < schema_parts.size(); ++i)
+                    { dim_sizes.insert({schema_parts[i], tensor.dim_size(i)}); }
+            }
+
+            TF_RETURN_IF_ERROR(merge(input_dim_sizes));
+            return tensorflow::Status::OK();
+        }
+
+        tensorflow::Status get_dim(const std::string & dim, int * size)
+        {
+            auto it = dim_sizes.find(dim);
+
+            if(it == dim_sizes.end())
+            {
+                return tensorflow::errors::InvalidArgument("Dimension ",
+                                                           dim, " not found.");
+            }
+
+            *size = it->second;
+            return tensorflow::Status::OK();
+        }
+
+        tensorflow::Status get_tensor(const std::string & name,
+                                      int index,
+                                      const tensorflow::Tensor ** tensor)
+        {
+            auto it = input_lists.find(name);
+
+            if(it == input_lists.end() || index >= it->second.size())
+            {
+                return tensorflow::errors::InvalidArgument("Input ",
+                    name, " at index ", index, " not found.");
+            }
+
+            *tensor = &it->second[index];
+            return tensorflow::Status::OK();
+        }
+
+    };
+
+
 
 private:
     std::vector<std::string> input_names;
-    std::unordered_map<std::string, std::string> schemas;
+    InputSchemas schemas;
     std::unordered_map<std::string, DimSizes> input_dim_sizes;
     std::unordered_map<std::string, tensorflow::OpInputList> inputs;
     DimSizes input_dims;
@@ -91,90 +227,22 @@ public:
             if(it != schemas.end())
             {
                 return tensorflow::errors::InvalidArgument(
-                    "Schema for input ", input_name, " already exists "
-                    "with value ", it->second, " (new value ", schema, ")");
+                    "Schema for input ", input_name, " already exists ");
             }
-
-            schemas.insert({input_name, schema});
-        }
-
-        return tensorflow::Status::OK();
-    }
-
-    tensorflow::Status inspect(tensorflow::OpKernelContext * ctx)
-    {
-        for(const std::string & input_name : input_names)
-        {
-            auto & input_list = inputs[input_name];
-            TF_RETURN_IF_ERROR(ctx->input_list(input_name, &input_list));
-
-            // An empty list is valid
-            if(input_list.size() == 0)
-                { continue; }
-
-            const tensorflow::Tensor & tensor = input_list[0];
-
-            auto it = schemas.find(input_name);
-
-            // No schema exists for this input, so we can't
-            // deduce symbolic dimensions
-            if(it == schemas.end())
-                { continue; }
 
             std::vector<std::string> schema_parts;
-            TF_RETURN_IF_ERROR(parse_shape_schema(it->second, schema_parts));
+            TF_RETURN_IF_ERROR(parse_shape_schema(schema, schema_parts));
 
-            if(schema_parts.size() != tensor.dims())
-            {
-                return tensorflow::errors::InvalidArgument(
-                            "Number of shape schema parts (",
-                            schema_parts.size(),
-                            ") do not match input rank (",
-                            tensor.dims(),
-                            ") for input ", input_name);
-            }
-
-            // Dimension Sizes
-            auto & dim_sizes = input_dim_sizes[input_name];
-
-            // Assign
-            for(std::size_t i = 0; i < schema_parts.size(); ++i)
-                { dim_sizes.insert({schema_parts[i], tensor.dim_size(i)}); }
-
+            schemas.insert({input_name, std::move(schema_parts)});
         }
 
-        TF_RETURN_IF_ERROR(merge());
         return tensorflow::Status::OK();
     }
 
-
-    tensorflow::Status get_dim(const std::string & dim, int * size)
+    tensorflow::Status inspect(tensorflow::OpKernelContext * ctx,
+                            OpInputData * op_input_data)
     {
-        auto it = input_dims.find(dim);
-
-        if(it == input_dims.end())
-        {
-            return tensorflow::errors::InvalidArgument("Dimension ",
-                                                       dim, " not found.");
-        }
-
-        *size = it->second;
-        return tensorflow::Status::OK();
-    }
-
-    tensorflow::Status get_tensor(const std::string & name,
-                                  int index,
-                                  const tensorflow::Tensor ** tensor)
-    {
-        auto it = inputs.find(name);
-
-        if(it == inputs.end() || index >= it->second.size())
-        {
-            return tensorflow::errors::InvalidArgument("Input ",
-                name, " at index ", index, " not found.");
-        }
-
-        *tensor = &it->second[index];
+        TF_RETURN_IF_ERROR(op_input_data->construct(ctx, input_names, schemas));
         return tensorflow::Status::OK();
     }
 };

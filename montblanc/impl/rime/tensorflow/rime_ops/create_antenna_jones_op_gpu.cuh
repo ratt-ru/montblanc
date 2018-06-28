@@ -206,14 +206,15 @@ public:
         namespace tf = tensorflow;
         using tensorflow::errors::InvalidArgument;
 
-        OP_REQUIRES_OK(context, in_facade.inspect(context));
+        typename TensorflowInputFacade<TFOpKernel>::OpInputData op_data;
+        OP_REQUIRES_OK(context, in_facade.inspect(context, &op_data));
 
         int nsrc, ntime, na, nchan, ncorr;
-        OP_REQUIRES_OK(context, in_facade.get_dim("source", &nsrc));
-        OP_REQUIRES_OK(context, in_facade.get_dim("time", &ntime));
-        OP_REQUIRES_OK(context, in_facade.get_dim("ant", &na));
-        OP_REQUIRES_OK(context, in_facade.get_dim("chan", &nchan));
-        OP_REQUIRES_OK(context, in_facade.get_dim("corr", &ncorr));
+        OP_REQUIRES_OK(context, op_data.get_dim("source", &nsrc));
+        OP_REQUIRES_OK(context, op_data.get_dim("time", &ntime));
+        OP_REQUIRES_OK(context, op_data.get_dim("ant", &na));
+        OP_REQUIRES_OK(context, op_data.get_dim("chan", &nchan));
+        OP_REQUIRES_OK(context, op_data.get_dim("corr", &ncorr));
 
         // //GPU kernel above requires this hard-coded number
         OP_REQUIRES(context, ncorr == CREATE_ANTENNA_JONES_NCORR,
@@ -244,12 +245,12 @@ public:
         const tf::Tensor * ddes;
 
         bool have_bsqrt =
-            in_facade.get_tensor("bsqrt", 0, &bsqrt).ok();
+            op_data.get_tensor("bsqrt", 0, &bsqrt).ok();
         bool have_complex_phase =
-            in_facade.get_tensor("complex_phase", 0, &complex_phase).ok();
+            op_data.get_tensor("complex_phase", 0, &complex_phase).ok();
         bool have_feed_rotation =
-            in_facade.get_tensor("feed_rotation", 0, &feed_rotation).ok();
-        bool have_ddes = in_facade.get_tensor("ddes", 0, &ddes).ok();
+            op_data.get_tensor("feed_rotation", 0, &feed_rotation).ok();
+        bool have_ddes = op_data.get_tensor("ddes", 0, &ddes).ok();
 
         auto bsqrt_ptr = have_bsqrt ?
                         bsqrt->flat<CT>().data() :

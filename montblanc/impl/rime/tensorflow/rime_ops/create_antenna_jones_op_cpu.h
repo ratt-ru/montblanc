@@ -72,14 +72,15 @@ public:
         namespace tf = tensorflow;
         using tensorflow::errors::InvalidArgument;
 
-        OP_REQUIRES_OK(context, in_facade.inspect(context));
+        typename TensorflowInputFacade<TFOpKernel>::OpInputData op_data;
+        OP_REQUIRES_OK(context, in_facade.inspect(context, &op_data));
 
         int nsrc, ntime, na, nchan, ncorr;
-        OP_REQUIRES_OK(context, in_facade.get_dim("source", &nsrc));
-        OP_REQUIRES_OK(context, in_facade.get_dim("time", &ntime));
-        OP_REQUIRES_OK(context, in_facade.get_dim("ant", &na));
-        OP_REQUIRES_OK(context, in_facade.get_dim("chan", &nchan));
-        OP_REQUIRES_OK(context, in_facade.get_dim("corr", &ncorr));
+        OP_REQUIRES_OK(context, op_data.get_dim("source", &nsrc));
+        OP_REQUIRES_OK(context, op_data.get_dim("time", &ntime));
+        OP_REQUIRES_OK(context, op_data.get_dim("ant", &na));
+        OP_REQUIRES_OK(context, op_data.get_dim("chan", &nchan));
+        OP_REQUIRES_OK(context, op_data.get_dim("corr", &ncorr));
 
         // //GPU kernel above requires this hard-coded number
         OP_REQUIRES(context, ncorr == CREATE_ANTENNA_JONES_NCORR,
@@ -100,12 +101,12 @@ public:
         const tf::Tensor * ddes_ptr = nullptr;
 
         bool have_bsqrt =
-            in_facade.get_tensor("bsqrt", 0, &bsqrt_ptr).ok();
+            op_data.get_tensor("bsqrt", 0, &bsqrt_ptr).ok();
         bool have_complex_phase =
-            in_facade.get_tensor("complex_phase", 0, &complex_phase_ptr).ok();
+            op_data.get_tensor("complex_phase", 0, &complex_phase_ptr).ok();
         bool have_feed_rotation =
-            in_facade.get_tensor("feed_rotation", 0, &feed_rotation_ptr).ok();
-        bool have_ddes = in_facade.get_tensor("ddes", 0, &ddes_ptr).ok();
+            op_data.get_tensor("feed_rotation", 0, &feed_rotation_ptr).ok();
+        bool have_ddes = op_data.get_tensor("ddes", 0, &ddes_ptr).ok();
 
         // Create a dummy tensor representing non-existent inputs
         const tf::Tensor dummy_CT(tf::DataTypeToEnum<CT>::value, {1});

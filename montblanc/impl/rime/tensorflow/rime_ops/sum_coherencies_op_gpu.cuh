@@ -144,15 +144,16 @@ public:
     {
         namespace tf = tensorflow;
 
-        OP_REQUIRES_OK(ctx, in_facade.inspect(ctx));
+        typename TensorflowInputFacade<TFOpKernel>::OpInputData op_data;
+        OP_REQUIRES_OK(ctx, in_facade.inspect(ctx, &op_data));
 
         int nvrow, nsrc, ntime, na, nchan, ncorr;
-        OP_REQUIRES_OK(ctx, in_facade.get_dim("row", &nvrow));
-        OP_REQUIRES_OK(ctx, in_facade.get_dim("source", &nsrc));
-        OP_REQUIRES_OK(ctx, in_facade.get_dim("time", &ntime));
-        OP_REQUIRES_OK(ctx, in_facade.get_dim("ant", &na));
-        OP_REQUIRES_OK(ctx, in_facade.get_dim("chan", &nchan));
-        OP_REQUIRES_OK(ctx, in_facade.get_dim("corr", &ncorr));
+        OP_REQUIRES_OK(ctx, op_data.get_dim("row", &nvrow));
+        OP_REQUIRES_OK(ctx, op_data.get_dim("source", &nsrc));
+        OP_REQUIRES_OK(ctx, op_data.get_dim("time", &ntime));
+        OP_REQUIRES_OK(ctx, op_data.get_dim("ant", &na));
+        OP_REQUIRES_OK(ctx, op_data.get_dim("chan", &nchan));
+        OP_REQUIRES_OK(ctx, op_data.get_dim("corr", &ncorr));
 
         int ncorrchan = nchan*ncorr;
 
@@ -176,21 +177,21 @@ public:
         const tf::Tensor * sgn_brightness_ptr = nullptr;
         const tf::Tensor * base_coherencies_ptr = nullptr;
 
-        OP_REQUIRES_OK(ctx, in_facade.get_tensor("time_index", 0,
+        OP_REQUIRES_OK(ctx, op_data.get_tensor("time_index", 0,
                                                  &time_index_ptr));
-        OP_REQUIRES_OK(ctx, in_facade.get_tensor("antenna1", 0,
+        OP_REQUIRES_OK(ctx, op_data.get_tensor("antenna1", 0,
                                                  &antenna1_ptr));
-        OP_REQUIRES_OK(ctx, in_facade.get_tensor("antenna2", 0,
+        OP_REQUIRES_OK(ctx, op_data.get_tensor("antenna2", 0,
                                                  &antenna2_ptr));
-        OP_REQUIRES_OK(ctx, in_facade.get_tensor("shape", 0,
+        OP_REQUIRES_OK(ctx, op_data.get_tensor("shape", 0,
                                                  &shape_ptr));
-        OP_REQUIRES_OK(ctx, in_facade.get_tensor("ant_jones", 0,
+        OP_REQUIRES_OK(ctx, op_data.get_tensor("ant_jones", 0,
                                                  &ant_jones_ptr));
-        bool have_complex_phase = in_facade.get_tensor("complex_phase", 0,
+        bool have_complex_phase = op_data.get_tensor("complex_phase", 0,
                                                  &complex_phase_ptr).ok();
-        OP_REQUIRES_OK(ctx, in_facade.get_tensor("sgn_brightness", 0,
+        OP_REQUIRES_OK(ctx, op_data.get_tensor("sgn_brightness", 0,
                                                  &sgn_brightness_ptr));
-        bool have_base = in_facade.get_tensor("base_coherencies", 0,
+        bool have_base = op_data.get_tensor("base_coherencies", 0,
                                                  &base_coherencies_ptr).ok();
 
 
