@@ -71,6 +71,7 @@ class MeasurementSet(Dataset):
         # Calculate dimension sizes and chunks for each group
         self._dim_sizes = [{
                 'time': len(counts),
+                'ant': dims['antenna'],
                 'row': dims['row'],
                 'corr': dims['corr'],
                 'chan': dims['chan'],
@@ -79,6 +80,7 @@ class MeasurementSet(Dataset):
 
         self._dim_chunks = [{
                 'time': (1,) * len(counts),
+                'ant': (dims['antenna'],),
                 'row': tuple(counts),
                 'corr': (dims['corr'],),
                 'chan': (dims['chan'],),
