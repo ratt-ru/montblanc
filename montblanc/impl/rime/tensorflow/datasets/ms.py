@@ -8,6 +8,7 @@ from xarrayms import xds_from_ms, xds_from_table
 
 from montblanc.impl.rime.tensorflow.datasets.dataset import Dataset
 
+
 class MeasurementSet(Dataset):
     def __init__(self, ms, **kwargs):
         self._ms = ms
@@ -62,7 +63,7 @@ class MeasurementSet(Dataset):
         # We use the counts (number of occurrences of a unique time
         # over consecutive rows) as the row chunking strategy
         utime_counts = [da.unique(ds.TIME.data, return_counts=True)
-                                                    for ds in xds]
+                        for ds in xds]
         utime_counts = da.compute(utime_counts)[0]
 
         # Dimensions for each group
@@ -93,7 +94,7 @@ class MeasurementSet(Dataset):
             for dim in sizes.keys():
                 if not sum(chunks[dim]) == sizes[dim]:
                     raise ValueError("%s sum(%s) != %d" %
-                                (dim, sum(chunks[dim]), sizes[dim]))
+                                     (dim, sum(chunks[dim]), sizes[dim]))
 
     def dim_sizes(self):
         # Get sizes lazily
@@ -134,6 +135,7 @@ class MeasurementSet(Dataset):
 
         return list(xds_from_ms(self._ms, **kwargs))
 
+
 if __name__ == "__main__":
     import argparse
 
@@ -146,5 +148,5 @@ if __name__ == "__main__":
     from pprint import pprint
 
     # pprint(ds.dim_sizes())
-    # print(ds.dim_chunks())
+    print([{k: sum(v) for k, v in elem.items()} for elem in ds.dim_chunks()])
     print(ds.dataset())
