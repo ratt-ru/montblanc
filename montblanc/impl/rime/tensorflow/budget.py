@@ -49,6 +49,7 @@ def budget(schemas, dims, mem_budget, reduce_fn):
         .. code-block:: python
 
             def red_gen():
+                yield [('source', 50)]
                 yield [('time', 100), ('row', 10000)]
                 yield [('time', 50), ('row', 1000)]
                 yield [('time', 20), ('row', 100)]
@@ -67,7 +68,7 @@ def budget(schemas, dims, mem_budget, reduce_fn):
 
     array_details = {n: (a['dims'], np.dtype(a['dtype']))
                      for schema in schemas
-                     for n, a in schema.items() }
+                     for n, a in schema.items()}
 
     applied_reductions = {}
 
@@ -87,8 +88,5 @@ def budget(schemas, dims, mem_budget, reduce_fn):
             bytes_required = get_bytes(dims, array_details)
         else:
             break
-
-    if len(applied_reductions) == 0:
-        return bytes_required, dims
 
     return bytes_required, applied_reductions
