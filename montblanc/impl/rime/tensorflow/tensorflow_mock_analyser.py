@@ -6,19 +6,19 @@ from collections import namedtuple
 import contextlib
 from functools import partial
 import inspect
-import types
-
-try:
-    from cytoolz import merge
-except ImportError:
-    from toolz import merge
 
 import tensorflow as tf
 
 from montblanc.impl.rime.tensorflow.tensorflow_ops import (op_defs,
-                                                          parse_shape_schema)
+                                                           parse_shape_schema)
+from montblanc.impl.rime.tensorflow.map_dataset import (TensorMap,
+                                                        MapDataset)
+from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue,
+                                                          QueueDataset)
+
 
 mock = tf.test.mock
+
 
 class KnownVariable(object):
     """ Indicates a variable which we know about """
@@ -33,7 +33,6 @@ class UnknownVariable(object):
 class PlaceholderVariable(object):
     """ Indicates a placeholder variable """
     pass
-
 
 
 def get_tf_placeholders(op_def, call_args):
@@ -88,7 +87,7 @@ def get_tf_placeholders(op_def, call_args):
             continue
             raise ValueError("Input '%s' to function '%s' was not derived "
                              "from an established input (%s)"
-                                % (input_name, fn_name, var_type))
+                             % (input_name, fn_name, var_type))
 
         ph_name = arg.var_name
 
@@ -110,7 +109,7 @@ def get_tf_placeholders(op_def, call_args):
             raise ValueError("Type Lists not handled")
         else:
             raise TypeError("Couldn't infer type "
-                            "of missing input %s" % name)
+                            "of missing input %s" % input_name)
 
         arg_ph_info = {
             'dataset': arg.dataset,
@@ -161,6 +160,7 @@ def _while(cond, body, loop_vars, **kwargs):
     cond(*loop_vars)
     return body(*loop_vars)
 
+
 def _cond(pred, true_fn, false_fn, **kwargs):
     """
     Ensure that the predicate and both branches of the tensorflow
@@ -174,6 +174,7 @@ def _cond(pred, true_fn, false_fn, **kwargs):
         return true_res
     else:
         return false_res
+
 
 def _case(pred_fn_pairs, *args, **kwargs):
     """
@@ -191,6 +192,7 @@ def _case(pred_fn_pairs, *args, **kwargs):
             ret = val
 
     return ret
+
 
 def _inspect_tf_op_call(*args, **kwargs):
     """
@@ -226,7 +228,7 @@ def _inspect_tf_op_call(*args, **kwargs):
     # Integrate missing into op placeholders,
     # checking against any existing values
     for k, new in missing_ph.items():
-        dataset =  op_ph.setdefault(new.pop('dataset'), {})
+        dataset = op_ph.setdefault(new.pop('dataset'), {})
 
         try:
             old = dataset[k]
@@ -240,8 +242,7 @@ def _inspect_tf_op_call(*args, **kwargs):
             if new[attr] != old[attr]:
                 raise ValueError("old['%s']['%s'] (%s) != "
                                  "new['%s']['%s'] (%s)" %
-                                    (k, attr, new[attr],
-                                     k, attr, old[attr]))
+                                 (k, attr, new[attr], k, attr, old[attr]))
 
         # We allow schema's to be optional
         new_schema = new.get('schema', None)
@@ -256,7 +257,7 @@ def _inspect_tf_op_call(*args, **kwargs):
         # Old and new schema's should exist
         elif new_schema != old_schema:
             raise ValueError("old['schema'] (%s) != new['schema'] (%s)" %
-                                (old_schema, new_schema))
+                             (old_schema, new_schema))
 
         # Add this op to the set of ops requiring this input placeholder
         old['ops'].update(new['ops'])
@@ -266,20 +267,12 @@ def _inspect_tf_op_call(*args, **kwargs):
                  for name in op_def.outputs.keys())
 
 
-
-from montblanc.impl.rime.tensorflow.map_dataset import (TensorMap,
-                                                        MapDataset)
-from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue,
-                                                        QueueDataset)
-
-
 MapDatasetInfo = namedtuple("MapDatasetInfo", ["placeholders", "tensor_map",
-                                                "dataset", "map_keys",
-                                                "put", "put_key", "close"] )
+                                               "dataset", "map_keys",
+                                               "put", "put_key", "close"])
 
 QueueDatasetInfo = namedtuple("QueueDatasetInfo", ["placeholders", "tensor_queue",
-                                                "dataset", "put", "close"])
-
+                                                   "dataset", "put", "close"])
 
 
 def tensor_map(ds_name, ds_ph, dtypes, shapes):
@@ -297,7 +290,8 @@ def tensor_map(ds_name, ds_ph, dtypes, shapes):
     close = tensor_map.close()
 
     return MapDatasetInfo(ds_ph, tensor_map, map_dataset,
-                           map_keys, put, put_key, close)
+                          map_keys, put, put_key, close)
+
 
 def tensor_queue(ds_name, ds_ph, dtypes, shapes):
     """
@@ -309,6 +303,7 @@ def tensor_queue(ds_name, ds_ph, dtypes, shapes):
     close = tensor_queue.close()
     return QueueDatasetInfo(ds_ph, tensor_queue, tensor_dataset,
                             put, close)
+
 
 def create_datasets(dataset_inputs, dataset_ph_info, ds_type="map"):
     """
@@ -377,7 +372,6 @@ def create_datasets(dataset_inputs, dataset_ph_info, ds_type="map"):
     return dataset_info
 
 
-
 class VariableDict(dict):
     """
     Dictionary that creates :class:`mock.MagicMock` objects
@@ -386,7 +380,6 @@ class VariableDict(dict):
     def __init__(self, name, *args, **kwargs):
         self.name = name
         super(VariableDict, self).__init__(*args, **kwargs)
-
 
     def __getitem__(self, key):
         try:
@@ -415,10 +408,10 @@ class FakeIterator(object):
 class FakeDataset(object):
     # Methods which return a dataset
     ds_methods = ['apply', 'batch', 'cache', 'concatenate', 'filter',
-                    'flat_map', 'from_generator', 'from_sparse_tensor_slices',
-                    'from_tensor_slices', 'from_tensors', 'interleave',
-                    'list_files', 'map', 'padded_batch', 'prefetch', 'range',
-                    'repeat', 'shard', 'shuffle', 'skip', 'take', 'zip']
+                  'flat_map', 'from_generator', 'from_sparse_tensor_slices',
+                  'from_tensor_slices', 'from_tensors', 'interleave',
+                  'list_files', 'map', 'padded_batch', 'prefetch', 'range',
+                  'repeat', 'shard', 'shuffle', 'skip', 'take', 'zip']
 
     def __fake_dataset__(self, *args, **kwargs):
         return self
@@ -519,8 +512,10 @@ def analyse_tensorflow_function(fn, cfg, device):
 
         mocks.append(patch(target, side_effect=side_effect))
 
+    # These objects fake Datasets and TensorMaps
     datasets = DatasetsDict()
     maps = TensorMapDict(datasets)
+
     device = tf.DeviceSpec(device)
 
     # Main input dataset
@@ -529,12 +524,4 @@ def analyse_tensorflow_function(fn, cfg, device):
     with contextlib.nested(*mocks):
         fn(cfg, device, input_ds, maps)
 
-    # Extract the main input dataset definitions
-    input_ds = {"inputs": datasets.pop("inputs")}
-
-    # Now create source datasets composed of maps
-    # and main input dataset composed of a queue
-    src_ds = create_datasets(datasets, placeholders, "map")
-    input_ds = create_datasets(input_ds, placeholders, "queue")
-
-    return merge(input_ds, src_ds)
+    return datasets, placeholders
