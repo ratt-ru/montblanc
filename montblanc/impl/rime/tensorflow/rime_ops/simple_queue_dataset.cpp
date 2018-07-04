@@ -1,4 +1,5 @@
 #include <deque>
+#include <unordered_map>
 
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/common_shape_fns.h"
@@ -17,16 +18,22 @@ using namespace tensorflow;
 
 class QueueResource : public ResourceBase
 {
+public:
+    using Tuple = std::vector<Tensor>;
+    using Queue = std::deque<Tuple>;
+    using QueueMap = std::unordered_map<std::size_t, Queue>;
+
 private:
     mutex mu_;
 
     condition_variable cv_ GUARDED_BY(mu_);
-    std::deque<std::vector<Tensor>> entries_ GUARDED_BY(mu_);
+    QueueMap queues GUARDED_BY(mu_);
     bool closed_ GUARDED_BY(mu_);
 
     DataTypeVector dtypes_;
     std::vector<PartialTensorShape> shapes_;
 
+public:
 public:
     explicit QueueResource(const DataTypeVector & dtypes,
                            const std::vector<PartialTensorShape> & shapes)
@@ -40,61 +47,6 @@ public:
         // printf("Destroying QueueResource %p\n", (void *) this);
     }
 
-    void close(void) LOCKS_EXCLUDED(mu_)
-    {
-        {
-            mutex_lock l(mu_);
-            closed_ = true;
-        }
-
-        // Notify all waiting consumers
-        cv_.notify_all();
-    }
-
-    Status insert(std::vector<Tensor> tensors) LOCKS_EXCLUDED(mu_)
-    {
-        {
-            mutex_lock l(mu_);
-
-            if(closed_)
-                { return errors::OutOfRange("Queue is closed"); }
-
-            entries_.push_back(std::move(tensors));
-        }
-
-        // Notify a waiting consumer
-        cv_.notify_one();
-
-        return Status::OK();
-    }
-
-    Status pop(std::vector<Tensor> * out) LOCKS_EXCLUDED(mu_)
-    {
-        mutex_lock l(mu_);
-
-        // Wait if empty and not closed
-        while(entries_.empty() && !closed_)
-            { cv_.wait(l); }
-
-        // Bail if empty and closed
-        if(entries_.empty() && closed_)
-            { return errors::OutOfRange("Queue is closed"); }
-
-        // Pop the first entry and return it
-        *out = std::move(entries_.front());
-        entries_.pop_front();
-
-        return Status::OK();
-    }
-
-
-    std::size_t size(void) LOCKS_EXCLUDED(mu_)
-    {
-        mutex_lock l(mu_);
-
-        return entries_.size();
-    }
-
     const DataTypeVector &
     output_dtypes() const
       { return dtypes_; }
@@ -106,6 +58,103 @@ public:
     string DebugString() override
       { return "QueueResource"; }
 
+    void close(void) LOCKS_EXCLUDED(mu_)
+    {
+        {
+            mutex_lock l(mu_);
+            closed_ = true;
+        }
+
+        // Notify all waiting consumers
+        cv_.notify_all();
+    }
+
+    Status insert(const Tuple & data)
+    {
+        mutex_lock l(mu_);
+
+        if(closed_)
+            { return errors::OutOfRange("Queue is closed"); }
+
+        // Insert tuple into all registered queues
+        for(auto & queue : queues)
+            { queue.second.push_back(data); }
+
+        // Notify waiting consumers
+        cv_.notify_all();
+
+        return Status::OK();
+    }
+
+    Status pop(std::size_t id, Tuple * out)
+    {
+        mutex_lock l(mu_);
+
+        auto it = queues.end();
+
+        while(true)
+        {
+            it = queues.find(id);
+
+            if(it == queues.end())
+            {
+                return errors::InvalidArgument("Dataset ", id,
+                                               " not registered "
+                                               "for pop operation.");
+            }
+
+            // Quit if closed or we have entries
+            if(closed_ || !it->second.empty())
+                { break; }
+
+            // Otherwise wait for more fortuitous conditions
+            cv_.wait(l);
+        }
+
+
+        auto & entries_ = it->second;
+
+        // Bail if closed and empty
+        if(closed_  && entries_.empty())
+            { return errors::OutOfRange("Queue is closed"); }
+
+        // Pop the first entry and return it
+        *out = std::move(entries_.front());
+        entries_.pop_front();
+
+        return Status::OK();
+    }
+
+    Status size(std::vector<int> * sizes)
+    {
+        mutex_lock l(mu_);
+
+        sizes->clear();
+
+        for(auto & queue: queues)
+            { sizes->push_back(queue.second.size()); }
+
+        return Status::OK();
+    }
+
+    Status register_dataset(std::size_t id)
+    {
+        mutex_lock l(mu_);
+
+        // Create if doesn't exist
+        if(queues.find(id) == queues.end())
+            { queues.insert({id, Queue()}); }
+
+        return Status::OK();
+    }
+
+    Status deregister_dataset(std::size_t id)
+    {
+        mutex_lock l(mu_);
+        // Erase
+        queues.erase(id);
+        return Status::OK();
+    }
 };
 
 class DatasetQueueHandleOp : public OpKernel
@@ -288,12 +337,19 @@ public:
 
         core::ScopedUnref unref_queue(queue_resource);
 
-        // Allocate size output tensor
-        Tensor* size = nullptr;
-        OP_REQUIRES_OK(ctx, ctx->allocate_output(0, TensorShape({}), &size));
+        std::vector<int> sizes;
+        OP_REQUIRES_OK(ctx, queue_resource->size(&sizes));
 
-            // Set it to the actual size
-        size->scalar<int32>().setConstant(queue_resource->size());
+        // Allocate size output tensor
+        Tensor* size_ptr = nullptr;
+        OP_REQUIRES_OK(ctx, ctx->allocate_output(0,
+                            TensorShape({int(sizes.size())}), &size_ptr));
+
+        auto size = size_ptr->tensor<int, 1>();
+
+        for(int i=0; i < sizes.size(); ++i)
+            { size(i) = sizes[i]; }
+
     }
 };
 
@@ -304,7 +360,7 @@ REGISTER_OP("DatasetQueueSize")
     .Attr("shared_name: string = ''")
     .SetIsStateful()  // Source dataset ops must be marked
                       // stateful to inhibit constant folding.
-    .SetShapeFn(shape_inference::ScalarShape);
+    .SetShapeFn(shape_inference::UnknownShape);
 
 REGISTER_KERNEL_BUILDER(Name("DatasetQueueSize")
                         .Device(DEVICE_CPU),
@@ -342,12 +398,16 @@ private:
     {
     public:
         QueueResource * queue_resource_;
+        std::size_t id;
 
         explicit Dataset(OpKernelContext * ctx, QueueResource * queue_resource)
-                : GraphDatasetBase(ctx), queue_resource_(queue_resource)
+                : GraphDatasetBase(ctx), queue_resource_(queue_resource),
+                  id(std::hash<Dataset *>{}(this))
         {
             queue_resource_->Ref();
-            // printf("Creating QueueDatset %p\n", (void *) this);
+            // We deregister at EOF in GetNextInternal
+            queue_resource_->register_dataset(id);
+            // printf("Creating QueueDataset %p\n", (void *) this);
         }
 
         Dataset(const Dataset & rhs) = delete;
@@ -356,7 +416,7 @@ private:
         ~Dataset() override
         {
             queue_resource_->Unref();
-            // printf("Destroying QueueDatset %p\n", (void *) this);
+            // printf("Destroying QueueDataset %p\n", (void *) this);
         }
 
         const DataTypeVector & output_dtypes() const override
@@ -394,17 +454,33 @@ private:
                         std::vector<Tensor> * out_tensors,
                         bool * end_of_sequence) override
             {
-                *end_of_sequence = !dataset()->queue_resource_
-                                             ->pop(out_tensors).ok();
+                auto & queue = dataset()->queue_resource_;
+
+                Status status = queue->pop(dataset()->id, out_tensors);
+
+                if(!status.ok())
+                {
+                    // We can't get any more data from the queue. EOF
+                    *end_of_sequence = true;
+
+                    // Stop subscribing to the queue
+                    queue->deregister_dataset(dataset()->id);
+
+                }
+
                 return Status::OK();
             }
         protected:
           Status SaveInternal(IteratorStateWriter* writer) override
-            { return errors::InvalidArgument("Not Implemented"); }
+            {
+                return errors::InvalidArgument("Not Implemented");
+            }
 
           Status RestoreInternal(IteratorContext * ctx,
                                 IteratorStateReader * reader) override
-            { return errors::InvalidArgument("Not Implemented"); }
+            {
+                return errors::InvalidArgument("Not Implemented");
+            }
         }; // class Iterator
     };     // class Dataset
 };         // class SimpleQueueDatasetOp
