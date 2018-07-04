@@ -137,7 +137,7 @@ public:
         return Status::OK();
     }
 
-    Status register_dataset(std::size_t id)
+    Status register_iterator(std::size_t id)
     {
         mutex_lock l(mu_);
 
@@ -148,7 +148,7 @@ public:
         return Status::OK();
     }
 
-    Status deregister_dataset(std::size_t id)
+    Status deregister_iterator(std::size_t id)
     {
         mutex_lock l(mu_);
         // Erase
@@ -398,16 +398,12 @@ private:
     {
     public:
         QueueResource * queue_resource_;
-        std::size_t id;
 
         explicit Dataset(OpKernelContext * ctx, QueueResource * queue_resource)
-                : GraphDatasetBase(ctx), queue_resource_(queue_resource),
-                  id(std::hash<Dataset *>{}(this))
+                : GraphDatasetBase(ctx), queue_resource_(queue_resource)
         {
-            queue_resource_->Ref();
-            // We deregister at EOF in GetNextInternal
-            queue_resource_->register_dataset(id);
             // printf("Creating QueueDataset %p\n", (void *) this);
+            queue_resource_->Ref();
         }
 
         Dataset(const Dataset & rhs) = delete;
@@ -415,8 +411,8 @@ private:
 
         ~Dataset() override
         {
-            queue_resource_->Unref();
             // printf("Destroying QueueDataset %p\n", (void *) this);
+            queue_resource_->Unref();
         }
 
         const DataTypeVector & output_dtypes() const override
@@ -446,9 +442,20 @@ private:
     private:
         class Iterator : public DatasetIterator<Dataset>
         {
+        private:
+            std::size_t id;
         public:
             explicit Iterator(const Params & params)
-                : DatasetIterator<Dataset>(params) {}
+                : DatasetIterator<Dataset>(params),
+                  id(std::hash<Iterator *>{}(this))
+            {
+                // We deregister at EOF in GetNextInternal
+                dataset()->queue_resource_->register_iterator(id);
+                // printf("Creating QueueDataset::Iterator %p\n", (void *) this);
+            }
+
+            // ~Iterator() override
+            //      { printf("Destroying QueueDataset::Iterator %p\n", (void *) this); }
 
             virtual Status GetNextInternal(IteratorContext * ctx,
                         std::vector<Tensor> * out_tensors,
@@ -456,7 +463,7 @@ private:
             {
                 auto & queue = dataset()->queue_resource_;
 
-                Status status = queue->pop(dataset()->id, out_tensors);
+                Status status = queue->pop(id, out_tensors);
 
                 if(!status.ok())
                 {
@@ -464,7 +471,7 @@ private:
                     *end_of_sequence = true;
 
                     // Stop subscribing to the queue
-                    queue->deregister_dataset(dataset()->id);
+                    queue->deregister_iterator(id);
 
                 }
 
