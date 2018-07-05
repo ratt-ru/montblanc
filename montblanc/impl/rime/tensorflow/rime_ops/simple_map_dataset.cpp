@@ -159,9 +159,6 @@ public:
                 // Return the entry
                 *out = std::move(map_it->second);
 
-                std::cout << "Got " << key.scalar<int64>() << " "
-                          << out->operator[](0).flat<int64>()(0) << std::endl;
-
                 entries.erase(map_it);
                 return Status::OK();
             }
