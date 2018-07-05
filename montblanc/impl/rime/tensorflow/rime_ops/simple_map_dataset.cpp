@@ -43,13 +43,15 @@ private:
     using KeyType = Tensor;
     using MapType = std::unordered_map<KeyType, Tuple,
                                         KeyTensorHash, KeyTensorEqual>;
+    using MapRegister = std::unordered_map<std::size_t, MapType>;
 
 private:
     mutex mu_;
 
     condition_variable cv_ GUARDED_BY(mu_);
     bool closed_ GUARDED_BY(mu_);
-    MapType map_ GUARDED_BY(mu_);
+    MapRegister maps_ GUARDED_BY(mu_);
+    MapType stash GUARDED_BY(mu_);
 
     DataTypeVector dtypes_;
     std::vector<PartialTensorShape> shapes_;
@@ -65,6 +67,14 @@ public:
     ~MapResource() override
     {
         // printf("Destroying MapResource %p\n", (void *) this);
+
+        if(maps_.size() > 0)
+        {
+            VLOG(2) << maps_.size()
+                    << " iterators still registered "
+                    << "while destroying map.";
+        }
+
     }
 
     void close(void) LOCKS_EXCLUDED(mu_)
@@ -78,49 +88,132 @@ public:
         cv_.notify_all();
     }
 
-    Status insert(const KeyType & key, std::vector<Tensor> tensors) LOCKS_EXCLUDED(mu_)
+    Status insert(const KeyType & key,
+                  const Tuple & tensors) LOCKS_EXCLUDED(mu_)
     {
+        // Slightly more optimal to release the lock
+        // before the notify
         {
             mutex_lock l(mu_);
 
             if(closed_)
                 { return errors::OutOfRange("Map is closed"); }
 
-            map_.insert({key, tensors});
+            // No Iterators registered, dump into the stash
+            if(maps_.size() == 0)
+                { stash.insert({key, tensors}); }
+            else
+            {
+                // Insert into each registered map
+                for(auto & map : maps_)
+                    { map.second.insert({key, tensors}); }
+            }
+
         }
 
         // Notify a waiting consumer
-        cv_.notify_one();
+        cv_.notify_all();
 
         return Status::OK();
     }
 
-    Status pop(const KeyType & key, std::vector<Tensor> * out) LOCKS_EXCLUDED(mu_)
+    Status pop(std::size_t id,
+               const KeyType & key,
+               std::vector<Tensor> * out) LOCKS_EXCLUDED(mu_)
     {
         mutex_lock l(mu_);
 
-        typename MapType::iterator it;
+        typename MapRegister::iterator reg_it;
+        typename MapType::iterator map_it;
 
-        // Wait until the element with the requested key is present
-        while(((it = map_.find(key)) == map_.end()) && !closed_)
-            { cv_.wait(l); }
 
-        if(it == map_.end() && closed_)
-            { return errors::OutOfRange("Map is closed"); }
+        while(true)
+        {
+            // Decant stash contents into the maps
+            if(stash.size() > 0)
+            {
+                for(auto it = maps_.begin(); it != maps_.end(); ++it)
+                {
+                    for(auto & entry: stash)
+                        { it->second.insert(entry); }
+                }
 
-        *out  = std::move(it->second);
-        map_.erase(it);
+                stash.clear();
+            }
+
+            reg_it = maps_.find(id);
+
+            if(reg_it == maps_.end())
+            {
+                return errors::InvalidArgument("Iterator ", id,
+                               " not registered "
+                               "for pop operation.");
+
+            }
+
+            auto & entries = reg_it->second;
+            map_it = entries.find(key);
+
+            if(map_it != entries.end())
+            {
+                // Return the entry
+                *out = std::move(map_it->second);
+
+                std::cout << "Got " << key.scalar<int64>() << " "
+                          << out->operator[](0).flat<int64>()(0) << std::endl;
+
+                entries.erase(map_it);
+                return Status::OK();
+            }
+            else if(closed_)
+            {
+                return errors::OutOfRange("Map is closed and empty");
+            }
+
+            // Wait for better conditions
+            cv_.wait(l);
+        }
+
+        return errors::Internal("Should never exit pop while loop");
+    }
+
+
+    Status size(std::vector<int> * sizes) LOCKS_EXCLUDED(mu_)
+    {
+        mutex_lock l(mu_);
+
+        sizes->clear();
+
+        for(auto & map: maps_)
+            { sizes->push_back(map.second.size()); }
 
         return Status::OK();
     }
 
 
-    std::size_t size(void) LOCKS_EXCLUDED(mu_)
+    Status register_iterator(std::size_t id) LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
-        return map_.size();
+        {
+            mutex_lock l(mu_);
+
+            // Create if doesn't exist
+            if(maps_.find(id) == maps_.end())
+                { maps_.insert({id, MapType()}); }
+        }
+
+        cv_.notify_all();
+
+        return Status::OK();
     }
 
+
+    Status deregister_iterator(std::size_t id) LOCKS_EXCLUDED(mu_)
+    {
+        mutex_lock l(mu_);
+        // Erase
+        maps_.erase(id);
+        return Status::OK();
+    }
 
     const DataTypeVector &
     output_dtypes() const
@@ -201,7 +294,7 @@ public:
 };
 
 REGISTER_OP("DatasetMapHandle")
-    .Output("map_handle: resource")
+    .Output("maps_handle: resource")
     .Attr("Toutput_types: list(type) >= 1")
     .Attr("Toutput_shapes: list(shape) >= 1")
     .Attr("container: string = ''")
@@ -249,7 +342,7 @@ public:
 };
 
 REGISTER_OP("DatasetMapInsert")
-    .Input("map_handle: resource")
+    .Input("maps_handle: resource")
     .Input("key: int64")
     .Input("components: Toutput_types")
     .Attr("Toutput_types: list(type) >= 1")
@@ -288,7 +381,7 @@ public:
 };
 
 REGISTER_OP("DatasetMapClose")
-    .Input("map_handle: resource")
+    .Input("maps_handle: resource")
     .Attr("container: string = ''")
     .Attr("shared_name: string = ''")
     .SetIsStateful()  // Source dataset ops must be marked
@@ -320,22 +413,29 @@ public:
         core::ScopedUnref unref_map(map_resource);
 
         // Allocate size output tensor
-        Tensor* size = nullptr;
-        OP_REQUIRES_OK(ctx, ctx->allocate_output(0, TensorShape({}), &size));
+        std::vector<int> sizes;
+        OP_REQUIRES_OK(ctx, map_resource->size(&sizes));
 
-        // Set it to the actual size
-        size->scalar<int32>().setConstant(map_resource->size());
+        // Allocate size output tensor
+        Tensor* size_ptr = nullptr;
+        OP_REQUIRES_OK(ctx, ctx->allocate_output(0,
+                            TensorShape({int(sizes.size())}), &size_ptr));
+
+        auto size = size_ptr->tensor<int, 1>();
+
+        for(int i=0; i < sizes.size(); ++i)
+            { size(i) = sizes[i]; }
     }
 };
 
 REGISTER_OP("DatasetMapSize")
-    .Input("map_handle: resource")
+    .Input("maps_handle: resource")
     .Output("size: int32")
     .Attr("container: string = ''")
     .Attr("shared_name: string = ''")
     .SetIsStateful()  // Source dataset ops must be marked
                       // stateful to inhibit constant folding.
-    .SetShapeFn(shape_inference::ScalarShape);
+    .SetShapeFn(shape_inference::UnknownShape);
 
 REGISTER_KERNEL_BUILDER(Name("DatasetMapSize")
                         .Device(DEVICE_CPU),
@@ -431,12 +531,24 @@ private:
         {
         private:
             mutex mu_;
-
             std::unique_ptr<IteratorBase> input_impl_ GUARDED_BY(mu_);
+            std::size_t id;
 
         public:
             explicit Iterator(const Params & params)
-                : DatasetIterator<Dataset>(params) {}
+                : DatasetIterator<Dataset>(params),
+                  id(std::hash<Iterator *>{}(this))
+            {
+                // printf("Creating MapDataset::Iterator %p\n", (void *) this);
+                // printf("Registering MapDataset::Iterator %d\n", id);
+                dataset()->map_resource_->register_iterator(id);
+            }
+
+            ~Iterator() override
+            {
+                // printf("Destroying MapDataset::Iterator %p\n", (void *) this);
+                dataset()->map_resource_->deregister_iterator(id);
+            }
 
             Status Initialize(IteratorContext * ctx) override
             {
@@ -449,14 +561,21 @@ private:
                         std::vector<Tensor> * out_tensors,
                         bool * end_of_sequence) override
             {
+                Status status;
                 std::vector<Tensor> keys;
+                auto map_resource = dataset()->map_resource_;
 
                 TF_RETURN_IF_ERROR(input_impl_->GetNext(ctx, &keys,
                                                     end_of_sequence));
 
+                // Nothing left in the input iterator
                 if(*end_of_sequence)
-                    { return Status::OK(); }
+                {
+                    map_resource->deregister_iterator(id);
+                    return Status::OK();
+                }
 
+                // Insist on a single key
                 if(keys.size() != 1)
                 {
                     return errors::InvalidArgument("Got multiple keys (",
@@ -464,10 +583,26 @@ private:
                                                     "), expected 1.");
                 }
 
-                *end_of_sequence = !dataset()->map_resource_
-                                      ->pop(keys[0], out_tensors).ok();
+                // Retrieve tensors from the map
+                status = map_resource->pop(id, keys[0], out_tensors);
+
+                if(!status.ok())
+                {
+                    if(errors::IsOutOfRange(status))
+                    {
+                        map_resource->deregister_iterator(id);
+                        *end_of_sequence = true;
+                        return Status::OK();
+                    }
+                    else
+                    {
+                        return status;
+                    }
+                }
+
                 return Status::OK();
             }
+
         protected:
           Status SaveInternal(IteratorStateWriter* writer) override
             { return errors::InvalidArgument("Not Implemented"); }
@@ -481,7 +616,7 @@ private:
 
 REGISTER_OP("SimpleMapDataset")
     .Input("key_dataset: variant")
-    .Input("map_handle: resource")
+    .Input("maps_handle: resource")
     .Output("handle: variant")
     .SetIsStateful()  // Source dataset ops must be marked
                       // stateful to inhibit constant folding.

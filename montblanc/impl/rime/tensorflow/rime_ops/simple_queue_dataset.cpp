@@ -21,13 +21,14 @@ class QueueResource : public ResourceBase
 public:
     using Tuple = std::vector<Tensor>;
     using Queue = std::deque<Tuple>;
-    using QueueMap = std::unordered_map<std::size_t, Queue>;
+    using QueueRegister = std::unordered_map<std::size_t, Queue>;
 
 private:
     mutex mu_;
 
     condition_variable cv_ GUARDED_BY(mu_);
-    QueueMap queues GUARDED_BY(mu_);
+    QueueRegister queues GUARDED_BY(mu_);
+    Queue stash GUARDED_BY(mu_);
     bool closed_ GUARDED_BY(mu_);
 
     DataTypeVector dtypes_;
@@ -44,6 +45,12 @@ public:
 
     ~QueueResource() override
     {
+        if(queues.size() > 0)
+        {
+            VLOG(2) << queues.size()
+                    << " iterators still registered "
+                    << "while destroying queue.";
+        }
         // printf("Destroying QueueResource %p\n", (void *) this);
     }
 
@@ -69,16 +76,26 @@ public:
         cv_.notify_all();
     }
 
-    Status insert(const Tuple & data)
+    Status insert(const Tuple & data) LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
+        // Slightly more optimal to unlock the mutex
+        // before the notify
+        {
+            mutex_lock l(mu_);
 
-        if(closed_)
-            { return errors::OutOfRange("Queue is closed"); }
+            if(closed_)
+                { return errors::OutOfRange("Queue is closed"); }
 
-        // Insert tuple into all registered queues
-        for(auto & queue : queues)
-            { queue.second.push_back(data); }
+            if(queues.size() == 0)
+                { stash.push_back(data); }
+            else
+            {
+                // Insert tuple into all registered queues
+                for(auto & queue : queues)
+                    { queue.second.push_back(data); }
+            }
+
+        }
 
         // Notify waiting consumers
         cv_.notify_all();
@@ -86,7 +103,7 @@ public:
         return Status::OK();
     }
 
-    Status pop(std::size_t id, Tuple * out)
+    Status pop(std::size_t id, Tuple * out) LOCKS_EXCLUDED(mu_)
     {
         mutex_lock l(mu_);
 
@@ -94,38 +111,49 @@ public:
 
         while(true)
         {
+            // Decant stash contents into the maps
+            if(stash.size() > 0)
+            {
+                for(auto it = queues.begin(); it != queues.end(); ++it)
+                {
+                    for(auto & entry: stash)
+                        { it->second.push_back(entry); }
+                }
+
+                stash.clear();
+            }
+
+            // Searching for the registered queue on each iteration
+            // is probably overkill, but correct
             it = queues.find(id);
 
             if(it == queues.end())
             {
-                return errors::InvalidArgument("Dataset ", id,
+                return errors::InvalidArgument("Iterator ", id,
                                                " not registered "
                                                "for pop operation.");
             }
 
-            // Quit if closed or we have entries
-            if(closed_ || !it->second.empty())
-                { break; }
+            auto & queue = it->second;
 
-            // Otherwise wait for more fortuitous conditions
+            if(!queue.empty())
+            {
+                // Pop the first entry and return it
+                *out = std::move(queue.front());
+                queue.pop_front();
+                return Status::OK();
+            }
+            else if (closed_)
+                { return errors::OutOfRange("Queue is closed and empty"); }
+
+            // Wait for better conditions
             cv_.wait(l);
         }
 
-
-        auto & entries_ = it->second;
-
-        // Bail if closed and empty
-        if(closed_  && entries_.empty())
-            { return errors::OutOfRange("Queue is closed"); }
-
-        // Pop the first entry and return it
-        *out = std::move(entries_.front());
-        entries_.pop_front();
-
-        return Status::OK();
+        return errors::Internal("Should never exit pop while loop");
     }
 
-    Status size(std::vector<int> * sizes)
+    Status size(std::vector<int> * sizes) LOCKS_EXCLUDED(mu_)
     {
         mutex_lock l(mu_);
 
@@ -137,18 +165,23 @@ public:
         return Status::OK();
     }
 
-    Status register_iterator(std::size_t id)
+    Status register_iterator(std::size_t id) LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
+        {
+            mutex_lock l(mu_);
 
-        // Create if doesn't exist
-        if(queues.find(id) == queues.end())
-            { queues.insert({id, Queue()}); }
+            // Create if doesn't exist
+            if(queues.find(id) == queues.end())
+                { queues.insert({id, Queue()}); }
+        }
+
+        // Notify waiting consumers
+        cv_.notify_all();
 
         return Status::OK();
     }
 
-    Status deregister_iterator(std::size_t id)
+    Status deregister_iterator(std::size_t id) LOCKS_EXCLUDED(mu_)
     {
         mutex_lock l(mu_);
         // Erase
@@ -454,8 +487,11 @@ private:
                 // printf("Creating QueueDataset::Iterator %p\n", (void *) this);
             }
 
-            // ~Iterator() override
-            //      { printf("Destroying QueueDataset::Iterator %p\n", (void *) this); }
+            ~Iterator() override
+            {
+                // printf("Destroying QueueDataset::Iterator %p\n", (void *) this);
+                dataset()->queue_resource_->deregister_iterator(id);
+            }
 
             virtual Status GetNextInternal(IteratorContext * ctx,
                         std::vector<Tensor> * out_tensors,
