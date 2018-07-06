@@ -9,6 +9,7 @@ from tensorflow.contrib.data import prefetch_to_device
 from montblanc.impl.rime.tensorflow.map_dataset import (TensorMap,
                                                         MapDataset)
 
+
 class TestMapTensorDataset(unittest.TestCase):
 
     def test_dataset_in_graph_while_loop(self):
@@ -82,7 +83,7 @@ class TestMapTensorDataset(unittest.TestCase):
                     _, vals = S.run([it.initializer, loop],
                                     feed_dict={keys_ph: keys})
 
-                    # Clear the keys out in two batchs
+                    # Clear the keys out in two batches
                     clear_keys_1 = clear_keys[:len(clear_keys)//2]
                     clear_keys_2 = clear_keys[len(clear_keys)//2:]
                     S.run(clear_op, feed_dict={clear_key_ph: clear_keys_1})
@@ -92,9 +93,6 @@ class TestMapTensorDataset(unittest.TestCase):
                     S.run(clear_op, feed_dict={clear_key_ph: clear_keys_2})
                     self.assertTrue(S.run(size_op) == 0)
 
-                # self.assertTrue(S.run(size_op) == nkeys*N)
-                # S.run(clear_op)
-                # self.assertTrue(S.run(size_op) == 0)
                 S.run(close_op)
 
     def test_numpy_conversion(self):
