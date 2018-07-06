@@ -15,34 +15,12 @@ namespace {
 
 using namespace tensorflow;
 
-// Partial Ordering Comparator for Tensor keys containing scalar int64's
-struct KeyTensorLess {
-  bool operator()(const Tensor& lhs, const Tensor& rhs) const {
-    return std::less<int64>{}(lhs.scalar<int64>()(), rhs.scalar<int64>()());
-  }
-};
-
-// Key Equality operator for Tensor keys containing scalar int64's
-struct KeyTensorEqual {
-  bool operator()(const Tensor& lhs, const Tensor& rhs) const {
-    return std::equal_to<int64>{}(lhs.scalar<int64>()(), rhs.scalar<int64>()());
-  }
-};
-
-// Hash for Tensor keys containing scalar int64's
-struct KeyTensorHash {
-  std::size_t operator()(const Tensor& key) const {
-    return std::hash<int64>{}(key.scalar<int64>()());
-  }
-};
-
 class MapResource : public ResourceBase
 {
 private:
     using Tuple = std::vector<Tensor>;
-    using KeyType = Tensor;
-    using MapType = std::unordered_map<KeyType, Tuple,
-                                        KeyTensorHash, KeyTensorEqual>;
+    using KeyType = int64;
+    using MapType = std::unordered_map<KeyType, Tuple>;
 
 private:
     mutex mu_;
@@ -81,9 +59,11 @@ public:
         cv_.notify_all();
     }
 
-    Status insert(const KeyType & key,
+    Status insert(const Tensor & tensor_key,
                   const Tuple & tensors) LOCKS_EXCLUDED(mu_)
     {
+        int64 key = tensor_key.scalar<int64>()();
+
         // Slightly more optimal to release the lock
         // before the notify
         {
@@ -101,9 +81,11 @@ public:
         return Status::OK();
     }
 
-    Status pop(const KeyType & key,
+    Status pop(const Tensor & tensor_key,
                std::vector<Tensor> * out) LOCKS_EXCLUDED(mu_)
     {
+        int64 key = tensor_key.scalar<int64>()();
+
         mutex_lock l(mu_);
 
         while(true)
@@ -156,24 +138,26 @@ public:
         keys->clear();
 
         for(auto & value : maps_)
-            { keys->push_back(value.first.scalar<int64>()()); }
+            { keys->push_back(value.first); }
 
         return Status::OK();
     }
 
 
-    Status clear(const Tensor & keys) LOCKS_EXCLUDED(mu_)
+    Status clear(const Tensor & tensor_keys) LOCKS_EXCLUDED(mu_)
     {
         mutex_lock l(mu_);
 
-        if(keys.dims() == 0)
+        if(tensor_keys.dims() == 0)
         {
             maps_.clear();
             return Status::OK();
         }
 
-        for(int i=0; i < keys.NumElements(); ++i)
-            { maps_.erase(keys.Slice(i, i+1)); }
+        auto keys = tensor_keys.tensor<int64, 1>();
+
+        for(int i=0; i < tensor_keys.dim_size(0); ++i)
+            { maps_.erase(keys(i)); }
 
         return Status::OK();
     }
@@ -478,8 +462,7 @@ public:
 
         core::ScopedUnref unref_map(map_resource);
 
-        auto keys = ctx->input(0);
-        OP_REQUIRES_OK(ctx, map_resource->clear(keys));
+        OP_REQUIRES_OK(ctx, map_resource->clear(ctx->input(1)));
     }
 };
 

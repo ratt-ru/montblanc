@@ -35,7 +35,9 @@ class TestMapTensorDataset(unittest.TestCase):
                 ds = ds.apply(prefetch_to_device(device, buffer_size=1))
 
                 insert_op = tensor_map.insert(key_ph, value_ph)
-                clear_op = tensor_map.clear()
+                clear_key_ph = tf.placeholder(tf.int64, name="clear_keys",
+                                              shape=(None,))
+                clear_op = tensor_map.clear(keys=clear_key_ph)
                 close_op = tensor_map.close()
                 keys_op = tensor_map.keys()
                 size_op = tensor_map.size()
@@ -66,22 +68,33 @@ class TestMapTensorDataset(unittest.TestCase):
 
                 for i in range(N):
                     keys = i*nkeys + np.arange(nkeys, dtype=np.int64)
+                    clear_keys = keys
 
                     for j, key in enumerate(keys):
                         S.run(insert_op, feed_dict={
                                             key_ph: key,
                                             value_ph: j+i})
 
-                    map_keys = np.sort(S.run(keys_op))[-nkeys:]
+                    map_keys = np.sort(S.run(keys_op))
                     self.assertTrue(np.all(map_keys == keys))
 
                     keys = keys.reshape((nkeys, 1))
                     _, vals = S.run([it.initializer, loop],
                                     feed_dict={keys_ph: keys})
 
-                self.assertTrue(S.run(size_op) == nkeys*N)
-                S.run(clear_op)
-                self.assertTrue(S.run(size_op) == 0)
+                    # Clear the keys out in two batchs
+                    clear_keys_1 = clear_keys[:len(clear_keys)//2]
+                    clear_keys_2 = clear_keys[len(clear_keys)//2:]
+                    S.run(clear_op, feed_dict={clear_key_ph: clear_keys_1})
+                    remaining_keys = np.sort(S.run(keys_op))
+                    self.assertTrue((remaining_keys == clear_keys_2).all())
+                    self.assertTrue(S.run(size_op) == len(clear_keys_2))
+                    S.run(clear_op, feed_dict={clear_key_ph: clear_keys_2})
+                    self.assertTrue(S.run(size_op) == 0)
+
+                # self.assertTrue(S.run(size_op) == nkeys*N)
+                # S.run(clear_op)
+                # self.assertTrue(S.run(size_op) == 0)
                 S.run(close_op)
 
     def test_numpy_conversion(self):

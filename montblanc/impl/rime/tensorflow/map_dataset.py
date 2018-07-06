@@ -105,7 +105,9 @@ class TensorMap(object):
 
     def clear(self, keys=None, name=None):
         if keys is None:
-            keys = tf.constant([],dtype=tf.int64)
+            keys = tf.constant([], dtype=tf.int64)
+        else:
+            keys = ops.convert_to_tensor(keys, dtype=tf.int64)
 
         return dataset_map_clear(self.handle, keys, name=name)
 
