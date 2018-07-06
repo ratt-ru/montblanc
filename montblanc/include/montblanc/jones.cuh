@@ -56,7 +56,7 @@ void jones_multiply_4x4_in_place(
     // 1 2 1 2 5 6 5 6 9 10 9 10 13 14 13 14
     int shfl_idx = _MONTBLANC_VIS_BASE_IDX + 1 + _MONTBLANC_IS_ODD_POL;
     // Load in the value to multiply.
-    typename Tr::CT shfl_K = cub::ShuffleIndex(K, shfl_idx);
+    typename Tr::CT shfl_K = cub::ShuffleIndex<32>(K, shfl_idx, 0xffffffff);
 
     // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
     // a = J.x, b=J.y, c=shfl_K.x, d = shfl_K.y
@@ -68,13 +68,13 @@ void jones_multiply_4x4_in_place(
     // This will produce indexes with the following pattern
     // 1 0 3 2 5 4 7 6 9 8 11 10 13 12 15 14
     shfl_idx = cub::LaneId() + 1 + -2*_MONTBLANC_IS_ODD_POL;
-    sum = cub::ShuffleIndex(sum, shfl_idx);
+    sum = cub::ShuffleIndex<32>(sum, shfl_idx, 0xffffffff);
 
     // This will produce indexes with the following pattern
     // 0 3 0 3 4 7 4 7 8 11 8 11 12 15 12 15
     shfl_idx = _MONTBLANC_VIS_BASE_IDX + 3*_MONTBLANC_IS_ODD_POL;
     // Load in the polarisation to multiply.
-    shfl_K = cub::ShuffleIndex(K, shfl_idx);
+    shfl_K = cub::ShuffleIndex<32>(K, shfl_idx, 0xffffffff);
     sum.x += J.x*shfl_K.x - J.y*shfl_K.y;
     sum.y += J.x*shfl_K.y + J.y*shfl_K.x;
 
@@ -97,7 +97,7 @@ void jones_multiply_4x4_hermitian_transpose_in_place(
     // 2 1 2 1 6 5 6 5 10 9 10 9 14 13 14 13
     int shfl_idx = _MONTBLANC_VIS_BASE_IDX + 1 + _MONTBLANC_IS_EVEN_POL;
     // Load in the value to multiply.
-    typename Tr::CT shfl_K = cub::ShuffleIndex(K, shfl_idx);
+    typename Tr::CT shfl_K = cub::ShuffleIndex<32>(K, shfl_idx, 0xffffffff);
 
     // (a+bi)*conj(c+di) = (a+bi)*(c-di) = (ac+bd) + (-ad+bc)i
     // a = J.x, b=J.y, c=shfl_K.x, d = shfl_K.y
@@ -109,14 +109,14 @@ void jones_multiply_4x4_hermitian_transpose_in_place(
     // This will produce indexes with the following pattern
     // 1 0 3 2 5 4 7 6 9 8 11 10 13 12 15 14
     shfl_idx = cub::LaneId() + 1 + -2*_MONTBLANC_IS_ODD_POL;
-    sum = cub::ShuffleIndex(sum, shfl_idx);
+    sum = cub::ShuffleIndex<32>(sum, shfl_idx, 0xffffffff);
 
     // This will produce indexes with the following pattern
     // 0 3 0 3 4 7 4 7 8 11 8 11 12 15 12 15
     shfl_idx = _MONTBLANC_VIS_BASE_IDX + 3*_MONTBLANC_IS_ODD_POL;
 
     // Load in the polarisation to multiply.
-    shfl_K = cub::ShuffleIndex(K, shfl_idx);
+    shfl_K = cub::ShuffleIndex<32>(K, shfl_idx, 0xffffffff);
     // (a+bi)*conj(c+di) = (a+bi)*(c-di) = (ac+bd) + (-ad+bc)i
     sum.x +=  J.x*shfl_K.x + J.y*shfl_K.y;
     sum.y += -J.x*shfl_K.y + J.y*shfl_K.x;
