@@ -47,7 +47,7 @@ public:
     {
         if(queues.size() > 0)
         {
-            VLOG(2) << queues.size()
+            VLOG(ERROR) << queues.size()
                     << " iterators still registered "
                     << "while destroying queue.";
         }
