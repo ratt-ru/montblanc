@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue,
-                                                        QueueDataset)
+                                                          QueueDataset)
 
 class TestQueueTensorDataset(unittest.TestCase):
 
@@ -14,14 +14,14 @@ class TestQueueTensorDataset(unittest.TestCase):
             ci = tf.placeholder(dtype=tf.int64)
             cf = tf.placeholder(dtype=tf.float64)
 
-            dtypes = { 'i': ci.dtype, 'sub' : {'f': cf.dtype}}
-            hundred_floats = np.full((10,10), 2.0, dtype=np.float64)
+            dtypes = {'i': ci.dtype, 'sub': {'f': cf.dtype}}
+            hundred_floats = np.full((10, 10), 2.0, dtype=np.float64)
 
             queue = TensorQueue(dtypes)
             ds = QueueDataset(queue)
 
             put_op = queue.put({'i': np.int64(23),
-                                'sub' : {'f': hundred_floats}})
+                                'sub': {'f': hundred_floats}})
             close_op = queue.close()
 
             it = ds.make_initializable_iterator()
@@ -38,18 +38,17 @@ class TestQueueTensorDataset(unittest.TestCase):
             self.assertTrue(23 == result['i'])
             S.run(close_op)
 
-
     def test_nest_dtype_only(self):
         with tf.Graph().as_default() as graph:
             ci = tf.placeholder(dtype=tf.int64)
             cf = tf.placeholder(dtype=tf.float64)
 
-            dtypes = { 'i': ci.dtype, 'sub' : {'f': cf.dtype}}
+            dtypes = {'i': ci.dtype, 'sub': {'f': cf.dtype}}
 
             queue = TensorQueue(dtypes)
             ds = QueueDataset(queue)
 
-            put_op = queue.put({'i': ci, 'sub' : {'f': cf}})
+            put_op = queue.put({'i': ci, 'sub': {'f': cf}})
             close_op = queue.close()
 
             it = ds.make_initializable_iterator()
@@ -60,7 +59,7 @@ class TestQueueTensorDataset(unittest.TestCase):
         with tf.Session(graph=graph) as S:
             S.run([global_init_op, it.initializer])
 
-            hundred_floats = np.full((10,10), 2.0, dtype=np.float64)
+            hundred_floats = np.full((10, 10), 2.0, dtype=np.float64)
 
             S.run(put_op, feed_dict={ci: 23, cf: hundred_floats})
 
@@ -75,13 +74,13 @@ class TestQueueTensorDataset(unittest.TestCase):
             cf = tf.placeholder(dtype=tf.float64)
 
             # dtypes and shapes must have the same structure
-            dtypes = { 'i': ci.dtype, 'sub' : {'f': cf.dtype}}
-            shapes = { 'i': None, 'sub' : {'f': [10, 10]}}
+            dtypes = {'i': ci.dtype, 'sub': {'f': cf.dtype}}
+            shapes = {'i': None, 'sub': {'f': [10, 10]}}
 
             queue = TensorQueue(dtypes, shapes)
             ds = QueueDataset(queue)
 
-            put_op = queue.put({'i': ci, 'sub' : {'f': cf}})
+            put_op = queue.put({'i': ci, 'sub': {'f': cf}})
             close_op = queue.close()
 
             it = ds.make_initializable_iterator()
@@ -92,7 +91,7 @@ class TestQueueTensorDataset(unittest.TestCase):
         with tf.Session(graph=graph) as S:
             S.run([global_init_op, it.initializer])
 
-            hundred_floats = np.full((10,10), 2.0, dtype=np.float64)
+            hundred_floats = np.full((10, 10), 2.0, dtype=np.float64)
 
             S.run(put_op, feed_dict={ci: 23, cf: hundred_floats})
 
@@ -125,7 +124,7 @@ class TestQueueTensorDataset(unittest.TestCase):
             S.run([global_init_op, it.initializer])
 
             def _enqueue(n):
-                for i in  range(1, n+1):
+                for i in range(1, n+1):
                     S.run(put_op, feed_dict={ci: [i]*i, cf: [i]*i})
 
                 S.run(close_op)
@@ -144,11 +143,11 @@ class TestQueueTensorDataset(unittest.TestCase):
                 self.assertTrue(np.all(np_ints+1 == tf_ints))
                 self.assertTrue(np.all(np_floats*2 == tf_floats))
 
-
-            with self.assertRaises(tf.errors.OutOfRangeError) as cm:
+            with self.assertRaises(tf.errors.OutOfRangeError):
                 S.run(next_op)
 
             t.join()
+
 
 if __name__ == "__main__":
     unittest.main()
