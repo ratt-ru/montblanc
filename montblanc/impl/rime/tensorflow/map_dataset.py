@@ -1,24 +1,25 @@
 import tensorflow as tf
 
 from tensorflow.python.data.util import nest
-from tensorflow.python.data.util import sparse
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import sparse_tensor as sparse_tensor_lib
 from tensorflow.python.framework import tensor_shape
-from tensorflow.python.framework import tensor_util
 
-from montblanc.impl.rime.tensorflow.tensorflow_ops import (simple_map_dataset as mds,
-                                                        dataset_map_handle,
-                                                        dataset_map_insert,
-                                                        dataset_map_close,
-                                                        dataset_map_size)
+from montblanc.impl.rime.tensorflow.tensorflow_ops import (
+                                            simple_map_dataset as mds,
+                                            dataset_map_handle,
+                                            dataset_map_insert,
+                                            dataset_map_close,
+                                            dataset_map_clear,
+                                            dataset_map_keys,
+                                            dataset_map_size)
+
 
 class TensorMap(object):
     """
     A Map of tensors.
     """
 
-    def __init__(self, dtypes, shapes=None, shared_name=None):
+    def __init__(self, dtypes, shapes=None, store=False, shared_name=None):
         """
         Constructs a simple map accepting ``put`` operations
         of tensors with the specified ``dtypes`` and ``shapes``.
@@ -45,10 +46,23 @@ class TensorMap(object):
         dtypes : nested dicts or nested tuples
             A nested collection of dicts or tuples
             containing dtypes
-        shapes : nested dicts or nested tuples
+
+        shapes : nested dicts or nested tuples, optional
             A nested collection of dicts or tuples
             containing shapes associated with ``dtypes``.
-            Must have the same structure as ``dtypes``
+            Must have the same structure as ``dtypes``.
+            If ``None``, a nested collection of unknown
+            shapes with the same structure as ``dtypes``
+            is used.
+
+        store : bool
+
+            - If ``True``, the map is treated as a store
+              **and data must be manually removed** with
+              :meth:`TensorMap.clear`
+            - If ``False``, data is removed from the map when
+              requested.
+
         shared_name : str, optional
             Shared resource name if this Map is to be
             shared amongst multiple tensorflow Sesssions.
@@ -65,11 +79,14 @@ class TensorMap(object):
 
             flat_classes = tuple(ops.Tensor for dt in flat_dtypes)
 
+        self.store = store
         self.output_types = dtypes
         self.output_shapes = nest.pack_sequence_as(dtypes, flat_shapes)
         self.output_classes = nest.pack_sequence_as(dtypes, flat_classes)
         self.handle = dataset_map_handle(flat_dtypes, flat_shapes,
-                                           name=scope, shared_name=shared_name)
+                                         name=scope,
+                                         store=store,
+                                         shared_name=shared_name)
 
     def insert(self, key, tensors, name=None):
         if name is None:
@@ -79,40 +96,51 @@ class TensorMap(object):
         flat_dtypes = nest.flatten(self.output_types)
         key = ops.convert_to_tensor(key, dtype=tf.int64, name="%s_key" % name)
         tensors = tuple(ops.convert_to_tensor(t, dtype=dt,
-                                    name="%s_component_%i" % (name, i))
-            for i, (t, dt)
-            in enumerate(zip(nest.flatten(tensors), flat_dtypes)))
+                                              name="%s_component_%i"
+                                              % (name, i))
+                        for i, (t, dt)
+                        in enumerate(zip(nest.flatten(tensors), flat_dtypes)))
 
         return dataset_map_insert(self.handle, key, tensors, name=name)
+
+    def clear(self, keys=None, name=None):
+        if keys is None:
+            keys = tf.constant([],dtype=tf.int64)
+
+        return dataset_map_clear(self.handle, keys, name=name)
 
     def close(self, name=None):
         return dataset_map_close(self.handle, name=name)
 
+    def keys(self, name=None):
+        return dataset_map_keys(self.handle, name=name)
+
     def size(self, name=None):
         return dataset_map_size(self.handle, name=name)
 
+
 class MapDataset(tf.data.Dataset):
-  """
-  A `Dataset` consuming elements from a `TensorMap`
-  """
-  def __init__(self, key_dataset, tensor_map, name=None):
-    super(MapDataset, self).__init__()
-    self._key_dataset = key_dataset
-    self._map = tensor_map
-    self._name = name
+    """
+    A `Dataset` consuming elements from a `TensorMap`
+    """
+    def __init__(self, key_dataset, tensor_map, name=None):
+        super(MapDataset, self).__init__()
+        self._key_dataset = key_dataset
+        self._map = tensor_map
+        self._name = name
 
-  def _as_variant_tensor(self):
-    return mds(self._key_dataset._as_variant_tensor(),
-                self._map.handle, name=self._name)
+    def _as_variant_tensor(self):
+        return mds(self._key_dataset._as_variant_tensor(),
+                   self._map.handle, name=self._name)
 
-  @property
-  def output_shapes(self):
-    return self._map.output_shapes
+    @property
+    def output_shapes(self):
+        return self._map.output_shapes
 
-  @property
-  def output_types(self):
-    return self._map.output_types
+    @property
+    def output_types(self):
+        return self._map.output_types
 
-  @property
-  def output_classes(self):
-    return self._map.output_classes
+    @property
+    def output_classes(self):
+        return self._map.output_classes
