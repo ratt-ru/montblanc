@@ -78,8 +78,7 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
         # Create dependencies on checks if debugging
-        deps = [] if not debug else [phase_real, phase_imag,
-                                     bsqrt_real, bsqrt_imag]
+        deps = [] if not debug else [bsqrt_real, bsqrt_imag]
 
         # Combine the brightness square root, complex phase,
         # feed rotation and beam dde's
