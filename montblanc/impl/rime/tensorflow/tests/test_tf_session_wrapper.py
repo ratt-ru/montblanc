@@ -1,15 +1,19 @@
+import cloudpickle
+import pytest
+
 from montblanc.impl.rime.tensorflow.tf_session_wrapper import (
                                             TensorflowSessionWrapper)
 from montblanc.impl.rime.tensorflow.rimes.basic import (
-                                            create_tf_expr)
+                                            create_tf_expr as basic)
+
+from montblanc.impl.rime.tensorflow.rimes.ddes import (
+                                            create_tf_expr as ddes)
 
 
-import cloudpickle
-
-
-def test_session_wrapper():
+@pytest.mark.parametrize("expr", [basic, ddes])
+def test_session_wrapper(expr):
     cfg = {'polarisation_type': 'linear'}
-    w = TensorflowSessionWrapper(create_tf_expr, cfg)
+    w = TensorflowSessionWrapper(expr, cfg)
 
     # Test that pickling and unpickling works
     w2 = cloudpickle.loads(cloudpickle.dumps(w))
