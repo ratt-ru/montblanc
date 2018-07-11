@@ -28,9 +28,10 @@ class TensorflowSessionWrapper(object):
             requested_device = "GPU"
 
         with tf.Session() as S:
-            device_map = defaultdict(list)
+            tf_device_list = S.list_devices()
+            device_map = {d.device_type: [] for d in tf_device_list}
 
-            for d in S.list_devices():
+            for d in tf_device_list:
                 device_map[d.device_type].append(d)
 
         try:
@@ -42,6 +43,9 @@ class TensorflowSessionWrapper(object):
                 device_list = device_map["CPU"]
             except KeyError:
                 raise ValueError("No CPU devices where found")
+
+        if len(device_list) == 0:
+            raise ValueError("No devices found %s" % device_map)
 
         return device_list
 
@@ -100,21 +104,23 @@ class TensorflowSessionWrapper(object):
             # No, recurse and check the op's inputs
             return any(_depends_on_input_ds(i.op) for i in op.inputs)
 
-        # Find the op responsible for initialising the main dataset iterator
-        input_init_op = [op for op in graph.get_operations()
-                         if op.op_def.name == "MakeIterator"
-                         and _depends_on_input_ds(op)]
+        self._inits = []
+        self._closes = []
 
-        # No input dataset?
-        if len(input_init_op) == 0:
+        for op in graph.get_operations():
+            # Find the op responsible for initialising
+            # the main dataset iterator
+            if op.op_def.name == "MakeIterator" and _depends_on_input_ds(op):
+                self._inits.append(op)
+            # Dataset close operations
+            elif op.op_def.name in ("DatasetQueueClose", "DatasetMapClose"):
+                self._closes.append(op)
+
+        # # No input dataset?
+        if len(self._inits) == 0:
             raise ValueError("No input dataset iterator was created!")
 
-        self._inits = [global_init] + input_init_op
-
-        # Dataset close operations
-        self._closes = [op for op in graph.get_operations()
-                        if op.op_def.name
-                        in ("DatasetMapClose", "DatasetQueueClose")]
+        self._inits.insert(0, global_init)
 
         self._graph = graph
         self._session = tf.Session(graph=graph)
