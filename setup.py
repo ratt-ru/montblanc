@@ -19,42 +19,41 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import json
-import logging
 import os
 from os.path import join as pjoin
-import sys
-
-#==============
-# Setup logging
-#==============
-
-from install.install_log import log
-
-mb_path = 'montblanc'
-mb_inc_path = pjoin(mb_path, 'include')
-
-#===================
-# Detect readthedocs
-#====================
-
-on_rtd = os.environ.get('READTHEDOCS') == 'True'
-
-import versioneer
-
-#===================
-# setuptools imports
-#===================
 
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
 from setuptools.dist import Distribution
 
-#=======================
+import versioneer
+
+from install.install_log import log
+from install.cuda import inspect_cuda, InspectCudaException
+from install.cub import install_cub, InstallCubException
+
+
+# ==============
+# Setup logging
+# ==============
+
+
+mb_path = 'montblanc'
+mb_inc_path = pjoin(mb_path, 'include')
+
+# ===================
+# Detect readthedocs
+# ====================
+
+on_rtd = os.environ.get('READTHEDOCS') == 'True'
+
+# =======================
 # Monkeypatch distutils
-#=======================
+# =======================
 
 # Save the original command for use within the monkey-patched version
 _DISTUTILS_REINIT = Distribution.reinitialize_command
+
 
 def reinitialize_command(self, command, reinit_subcommands):
     """
@@ -73,17 +72,29 @@ def reinitialize_command(self, command, reinit_subcommands):
 
     return cmd_obj
 
+
 # Replace original command with monkey-patched version
 Distribution.reinitialize_command = reinitialize_command
 
-#============================
+TF_VERSION = "1.9.0"
+
+try:
+    import tensorflow as tf
+except ImportError:
+    raise ImportError("Please 'pip install tensorflow==%s' or "
+                      "'pip install tensorflow-gpu==%s' prior to "
+                      "installation if you require CPU or GPU "
+                      "support, respectively" % (TF_VERSION, TF_VERSION))
+else:
+    use_tf_cuda = tf.test.is_built_with_cuda()
+
+
+# ============================
 # Detect CUDA and GPU Devices
-#============================
+# ============================
 
 # See if CUDA is installed and if any NVIDIA devices are available
 # Choose the tensorflow flavour to install (CPU or GPU)
-from install.cuda import inspect_cuda, InspectCudaException
-from install.cub import install_cub, InstallCubException
 
 try:
     # Look for CUDA devices and NVCC/CUDA installation
@@ -92,34 +103,33 @@ try:
 
     cuda_version = device_info['cuda_version']
     log.info("CUDA '{}' found. "
-        "Installing tensorflow GPU".format(cuda_version))
-
+             "Installing tensorflow GPU".format(cuda_version))
 
     log.info("CUDA installation settings:\n{}"
-                .format(json.dumps(nvcc_settings, indent=2)))
+             .format(json.dumps(nvcc_settings, indent=2)))
 
     log.info("CUDA code will be compiled for the following devices:\n{}"
-                .format(json.dumps(device_info['devices'], indent=2)))
+             .format(json.dumps(device_info['devices'], indent=2)))
 
     # Download and install cub
     install_cub(mb_inc_path)
 
 except InspectCudaException as e:
     # Can't find a reasonable NVCC/CUDA install. Go with the CPU version
-    log.info("CUDA not found: {}. ".format(str(e)))
-    log.info("Installing tensorflow CPU")
+    log.exception("CUDA not found")
+    raise
 
-    device_info, nvcc_settings = {}, { 'cuda_available' : False }
-    tensorflow_package = 'tensorflow'
 except InstallCubException as e:
     # This shouldn't happen and the user should fix it based on the exception
     log.exception("NVIDIA cub install failed.")
     raise
 
+
 def readme():
     """ Return README.rst contents """
     with open('README.rst') as f:
         return f.read()
+
 
 install_requires = [
     'attrdict >= 2.0.0',
@@ -133,10 +143,10 @@ install_requires = [
     'xarray-ms >= 0.0.1',
 ]
 
-#===================================
+# ===================================
 # Avoid binary packages and compiles
 # on readthedocs
-#===================================
+# ===================================
 
 if on_rtd:
     cmdclass = {}
@@ -152,47 +162,46 @@ else:
         'pybind11 >= 2.2.0',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
-        "{} == 1.9.0rc1".format(tensorflow_package),
     ]
 
     from install.tensorflow_ops_ext import (BuildCommand,
-        tensorflow_extension_name)
+                                            tensorflow_extension_name)
 
-    cmdclass = { 'build_ext' : BuildCommand }
+    cmdclass = {'build_ext': BuildCommand}
     # tensorflow_ops_ext.BuildCommand.run will
     # expand this dummy extension to its full portential
     ext_modules = [Extension(tensorflow_extension_name, ['rime.cu'])]
     # Pass NVCC and CUDA settings through to the build extension
     ext_options = {
-        'build_ext' : {
-            'nvcc_settings' : nvcc_settings,
-            'cuda_devices' : device_info,
+        'build_ext': {
+            'nvcc_settings': nvcc_settings,
+            'cuda_devices': device_info,
         },
     }
 
 log.info('install_requires={}'.format(install_requires))
 
 setup(name='montblanc',
-    version=versioneer.get_version(),
-    description='GPU-accelerated RIME implementations.',
-    long_description=readme(),
-    url='http://github.com/ska-sa/montblanc',
-    classifiers=[
-        "Development Status :: 3 - Alpha",
-        "Intended Audience :: Developers",
-        "License :: Other/Proprietary License",
-        "Operating System :: OS Independent",
-        "Programming Language :: Python",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-        "Topic :: Scientific/Engineering :: Astronomy",
-    ],
-    author='Simon Perkins',
-    author_email='simon.perkins@gmail.com',
-    cmdclass=versioneer.get_cmdclass(cmdclass),
-    ext_modules=ext_modules,
-    options=ext_options,
-    license='GPL2',
-    install_requires=install_requires,
-    packages=find_packages(),
-    include_package_data=True,
-    zip_safe=False)
+      version=versioneer.get_version(),
+      description='GPU-accelerated RIME implementations.',
+      long_description=readme(),
+      url='http://github.com/ska-sa/montblanc',
+      classifiers=[
+          "Development Status :: 3 - Alpha",
+          "Intended Audience :: Developers",
+          "License :: Other/Proprietary License",
+          "Operating System :: OS Independent",
+          "Programming Language :: Python",
+          "Topic :: Software Development :: Libraries :: Python Modules",
+          "Topic :: Scientific/Engineering :: Astronomy",
+      ],
+      author='Simon Perkins',
+      author_email='simon.perkins@gmail.com',
+      cmdclass=versioneer.get_cmdclass(cmdclass),
+      ext_modules=ext_modules,
+      options=ext_options,
+      license='GPL2',
+      install_requires=install_requires,
+      packages=find_packages(),
+      include_package_data=True,
+      zip_safe=False)
