@@ -89,6 +89,19 @@ class TensorflowSessionWrapper(object):
         self._session = tf.Session(graph=graph)
         self._session.run(self._inits)
 
+    def __del__(self):
+        S = getattr(self, "_session", None)
+
+        if S is not None:
+            # Run any resource close operations
+            S.run(self._closes)
+            # Close the session
+            S.close()
+            del self._session
+            del self._graph
+            del self._closes
+            del self._inits
+
     def __setstate__(self, args):
         self.__init__(*args)
 
