@@ -2,10 +2,14 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from collections import defaultdict
+
 try:
     from cytoolz import merge
 except ImportError:
     from toolz import merge
+
+import montblanc
 
 
 class TensorflowSessionWrapper(object):
@@ -14,23 +18,50 @@ class TensorflowSessionWrapper(object):
         self._cfg = cfg
         self._create_session()
 
+    def _get_device_list(self):
+        """ Get a list of the preferred devices """
+        import tensorflow as tf
+
+        try:
+            requested_device = self._cfg["device_type"]
+        except KeyError:
+            requested_device = "GPU"
+
+        with tf.Session() as S:
+            device_map = defaultdict(list)
+
+            for d in S.list_devices():
+                device_map[d.device_type].append(d)
+
+        try:
+            device_list = device_map[requested_device]
+        except KeyError:
+            montblanc.log.info("Couldn't find any %s devices. "
+                               "Reverting to CPU." % requested_device)
+            try:
+                device_list = device_map["CPU"]
+            except KeyError:
+                raise ValueError("No CPU devices where found")
+
+        return device_list
+
     def _create_session(self):
+        """ Create a tensorflow session """
         import tensorflow as tf
         from montblanc.impl.rime.tensorflow.tensorflow_mock_analyser import (
             analyse_tensorflow_function,
             create_datasets)
 
-        with tf.Session() as S:
-            device_list = S.list_devices()
+        device_list = self._get_device_list()
 
-        with tf.Graph().as_default() as fake_graph:
+        with tf.Graph().as_default():
             device = tf.DeviceSpec.from_string('/cpu:0')
             datasets, placeholders = analyse_tensorflow_function(self._fn,
                                                                  self._cfg,
                                                                  device)
 
-            # Extract the main input dataset definitions
-            input_ds = {"inputs": datasets.pop("inputs")}
+        # Extract the main input dataset definitions
+        input_ds = {"inputs": datasets.pop("inputs")}
 
         with tf.Graph().as_default() as graph:
             # Now create source datasets composed of maps
