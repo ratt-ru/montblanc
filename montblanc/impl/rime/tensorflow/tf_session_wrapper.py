@@ -54,6 +54,10 @@ class TensorflowSessionWrapper(object):
                 expr = self._fn(self._cfg, device, in_ds, src_maps)
                 exprs.append(expr)
 
+            global_init = tf.global_variables_initializer()
+
+            graph.finalize()
+
         def _depends_on_input_ds(op):
             """ Does the supplied op depend on the input dataset? """
             for i in op.inputs:
@@ -74,7 +78,7 @@ class TensorflowSessionWrapper(object):
         if len(input_init_op) == 0:
             raise ValueError("No input dataset iterator was created!")
 
-        self._inits = [tf.global_variables_initializer()] + input_init_op
+        self._inits = [global_init] + input_init_op
 
         # Dataset close operations
         self._closes = [op for op in graph.get_operations()
@@ -83,6 +87,7 @@ class TensorflowSessionWrapper(object):
 
         self._graph = graph
         self._session = tf.Session(graph=graph)
+        self._session.run(self._inits)
 
     def __setstate__(self, args):
         self.__init__(*args)
