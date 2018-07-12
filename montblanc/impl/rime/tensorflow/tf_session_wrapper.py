@@ -4,6 +4,8 @@ from __future__ import print_function
 
 from collections import defaultdict
 
+from dask.sizeof import sizeof, getsizeof
+
 try:
     from cytoolz import merge
 except ImportError:
@@ -80,6 +82,7 @@ class TensorflowSessionWrapper(object):
             # Create an expression for each device
             exprs = []
 
+            # Get the main input dataset
             in_ds = dataset_info["inputs"].dataset
 
             # Shard the dataset over each device
@@ -126,7 +129,7 @@ class TensorflowSessionWrapper(object):
         self._session = tf.Session(graph=graph)
         self._session.run(self._inits)
 
-    def __del__(self):
+    def close(self):
         S = getattr(self, "_session", None)
 
         if S is not None:
@@ -134,13 +137,25 @@ class TensorflowSessionWrapper(object):
             S.run(self._closes)
             # Close the session
             S.close()
-            del self._session
-            del self._graph
-            del self._closes
-            del self._inits
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, etype, evalue, etraceback):
+        self.close()
+        return True
+
+    def __del__(self):
+        self.close()
 
     def __setstate__(self, args):
         self.__init__(*args)
 
     def __getstate__(self):
         return (self._fn, self._cfg)
+
+
+@sizeof.register(TensorflowSessionWrapper)
+def sizeof_tf_session_wrapper(o):
+    """ Size derived from function and config dictionary *only* """
+    return getsizeof(self._fn) + getsizeof(self._cfg)
