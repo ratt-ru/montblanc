@@ -252,11 +252,6 @@ class TestMapTensorDataset(unittest.TestCase):
             pop_key = tf.placeholder(dtype=tf.int64)
 
             tensor_map = TensorMap((tf.int64, tf.float64))
-            key_ds = tf.data.Dataset.range(1, N+1)
-            ds = MapDataset(key_ds, tensor_map)
-            ds = ds.map(lambda i, f: (i+1, f*2), num_parallel_calls=3)
-            ds = ds.prefetch(1)
-
             insert_op = tensor_map.insert(ck, (ci, cf))
             close_op = tensor_map.close()
             size_op = tensor_map.size()
@@ -290,11 +285,6 @@ class TestMapTensorDataset(unittest.TestCase):
             pop_key = tf.placeholder(dtype=tf.int64)
 
             tensor_map = TensorMap((tf.int64, tf.float64), store=True)
-            key_ds = tf.data.Dataset.range(1, N+1)
-            ds = MapDataset(key_ds, tensor_map)
-            ds = ds.map(lambda i, f: (i+1, f*2), num_parallel_calls=3)
-            ds = ds.prefetch(1)
-
             insert_op = tensor_map.insert(ck, (ci, cf))
             close_op = tensor_map.close()
             size_op = tensor_map.size()
