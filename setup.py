@@ -19,41 +19,45 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 import json
-import logging
 import os
-import sys
 
-#==============
+# =============
 # Setup logging
-#==============
+# =============
 
 from install.install_log import log
+from install.cuda import inspect_cuda, InspectCudaException
+from install.cub import install_cub, InstallCubException
 
-mb_path = 'montblanc'
-mb_inc_path = os.path.join(mb_path, 'include')
 
-#===================
-# Detect readthedocs
-#====================
-
-on_rtd = os.environ.get('READTHEDOCS') == 'True'
-
-import versioneer
-
-#===================
+# ==================
 # setuptools imports
-#===================
+# ==================
 
+from distutils.version import LooseVersion
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
 from setuptools.dist import Distribution
 
-#=======================
+import versioneer
+
+
+mb_path = 'montblanc'
+mb_inc_path = os.path.join(mb_path, 'include')
+
+# =================
+# Detect readthedocs
+# ==================
+
+on_rtd = os.environ.get('READTHEDOCS') == 'True'
+
+# =====================
 # Monkeypatch distutils
-#=======================
+# =====================
 
 # Save the original command for use within the monkey-patched version
 _DISTUTILS_REINIT = Distribution.reinitialize_command
+
 
 def reinitialize_command(self, command, reinit_subcommands):
     """
@@ -72,33 +76,34 @@ def reinitialize_command(self, command, reinit_subcommands):
 
     return cmd_obj
 
+
 # Replace original command with monkey-patched version
 Distribution.reinitialize_command = reinitialize_command
 
-TF_VERSION = "1.8.0"
+REQ_TF_VERSION = LooseVersion("1.8.0")
 
+# Inspect previous tensorflow installs
 try:
     import tensorflow as tf
 except ImportError:
-    if not on_rtd:
-        raise ImportError("Please 'pip install tensorflow==%s' or "
-                          "'pip install tensorflow-gpu==%s' prior to "
-                          "installation if you require CPU or GPU "
-                          "support, respectively" % (TF_VERSION, TF_VERSION))
-
+    tf_installed = False
     use_tf_cuda = False
 else:
+    found_version = LooseVersion(tf.__version__)
+
+    if found_version < REQ_TF_VERSION:
+        raise ValueError("Installed version of tensorflow is %s "
+                         "but %s is required" %
+                         (found_version, REQ_TF_VERSION))
+
+    tf_installed = True
     use_tf_cuda = tf.test.is_built_with_cuda()
 
-#============================
+# ===========================
 # Detect CUDA and GPU Devices
-#============================
+# ===========================
 
 # See if CUDA is installed and if any NVIDIA devices are available
-# Choose the tensorflow flavour to install (CPU or GPU)
-from install.cuda import inspect_cuda, InspectCudaException
-from install.cub import install_cub, InstallCubException
-
 if use_tf_cuda:
     try:
         # Look for CUDA devices and NVCC/CUDA installation
@@ -107,14 +112,13 @@ if use_tf_cuda:
 
         cuda_version = device_info['cuda_version']
         log.info("CUDA '{}' found. "
-            "Installing tensorflow GPU".format(cuda_version))
-
+                 "Installing tensorflow GPU".format(cuda_version))
 
         log.info("CUDA installation settings:\n{}"
-                    .format(json.dumps(nvcc_settings, indent=2)))
+                 .format(json.dumps(nvcc_settings, indent=2)))
 
         log.info("CUDA code will be compiled for the following devices:\n{}"
-                    .format(json.dumps(device_info['devices'], indent=2)))
+                 .format(json.dumps(device_info['devices'], indent=2)))
 
         # Download and install cub
         install_cub(mb_inc_path)
@@ -130,12 +134,14 @@ if use_tf_cuda:
         log.exception("NVIDIA cub install failed.")
         raise
 else:
-    device_info, nvcc_settings = {}, { 'cuda_available' : False }
+    device_info, nvcc_settings = {}, {'cuda_available': False}
+
 
 def readme():
     """ Return README.rst contents """
     with open('README.rst') as f:
         return f.read()
+
 
 install_requires = [
     'attrdict >= 2.0.0',
@@ -146,10 +152,10 @@ install_requires = [
     'hypercube == 0.3.3',
 ]
 
-#===================================
+# ==================================
 # Avoid binary packages and compiles
 # on readthedocs
-#===================================
+# ==================================
 
 if on_rtd:
     cmdclass = {}
@@ -167,18 +173,24 @@ else:
         'ruamel.yaml >= 0.15.22',
     ]
 
-    from install.tensorflow_ops_ext import (BuildCommand,
-        tensorflow_extension_name)
+    if not tf_installed:
+        log.info("No previous version of tensorflow discovered. "
+                 "The CPU version will be installed.")
 
-    cmdclass = { 'build_ext' : BuildCommand }
+        install_requires.append("tensorflow == %s" % REQ_TF_VERSION)
+
+    from install.tensorflow_ops_ext import (BuildCommand,
+                                            tensorflow_extension_name)
+
+    cmdclass = {'build_ext': BuildCommand}
     # tensorflow_ops_ext.BuildCommand.run will
     # expand this dummy extension to its full portential
     ext_modules = [Extension(tensorflow_extension_name, ['rime.cu'])]
     # Pass NVCC and CUDA settings through to the build extension
     ext_options = {
-        'build_ext' : {
-            'nvcc_settings' : nvcc_settings,
-            'cuda_devices' : device_info,
+        'build_ext': {
+            'nvcc_settings': nvcc_settings,
+            'cuda_devices': device_info,
         },
     }
 
