@@ -242,6 +242,82 @@ class TestMapTensorDataset(unittest.TestCase):
 
             t.join()
 
+    def test_tensor_map_pop(self):
+        N = 12
+
+        with tf.Graph().as_default() as graph:
+            ck = tf.placeholder(dtype=tf.int64)
+            ci = tf.placeholder(dtype=tf.int64)
+            cf = tf.placeholder(dtype=tf.float64)
+            pop_key = tf.placeholder(dtype=tf.int64)
+
+            tensor_map = TensorMap((tf.int64, tf.float64))
+            key_ds = tf.data.Dataset.range(1, N+1)
+            ds = MapDataset(key_ds, tensor_map)
+            ds = ds.map(lambda i, f: (i+1, f*2), num_parallel_calls=3)
+            ds = ds.prefetch(1)
+
+            insert_op = tensor_map.insert(ck, (ci, cf))
+            close_op = tensor_map.close()
+            size_op = tensor_map.size()
+            pop_op = tensor_map.pop(pop_key)
+
+            graph.finalize()
+
+        with tf.Session(graph=graph) as S:
+            for i in range(1, N+1):
+                S.run(insert_op, feed_dict={ck: i, ci: [i]*i, cf: [i]*i})
+
+            self.assertTrue(S.run(size_op) == N)
+
+            for i in range(1, N+1):
+                val = S.run(pop_op, feed_dict={pop_key: i})
+                expected = [np.repeat(i, i), np.repeat(float(i), i)]
+
+                for v, e in zip(val, expected):
+                    self.assertTrue(np.all(v == e))
+
+            self.assertTrue(S.run(size_op) == 0)
+            S.run(close_op)
+
+    def test_tensor_map_pop_store(self):
+        N = 12
+
+        with tf.Graph().as_default() as graph:
+            ck = tf.placeholder(dtype=tf.int64)
+            ci = tf.placeholder(dtype=tf.int64)
+            cf = tf.placeholder(dtype=tf.float64)
+            pop_key = tf.placeholder(dtype=tf.int64)
+
+            tensor_map = TensorMap((tf.int64, tf.float64), store=True)
+            key_ds = tf.data.Dataset.range(1, N+1)
+            ds = MapDataset(key_ds, tensor_map)
+            ds = ds.map(lambda i, f: (i+1, f*2), num_parallel_calls=3)
+            ds = ds.prefetch(1)
+
+            insert_op = tensor_map.insert(ck, (ci, cf))
+            close_op = tensor_map.close()
+            size_op = tensor_map.size()
+            pop_op = tensor_map.pop(pop_key)
+
+            graph.finalize()
+
+        with tf.Session(graph=graph) as S:
+            for i in range(1, N+1):
+                S.run(insert_op, feed_dict={ck: i, ci: [i]*i, cf: [i]*i})
+
+            self.assertTrue(S.run(size_op) == N)
+
+            for i in range(1, N+1):
+                val = S.run(pop_op, feed_dict={pop_key: i})
+                expected = [np.repeat(i, i), np.repeat(float(i), i)]
+
+                for v, e in zip(val, expected):
+                    self.assertTrue(np.all(v == e))
+
+            self.assertTrue(S.run(size_op) == N)
+            S.run(close_op)
+
 
 if __name__ == "__main__":
     unittest.main()

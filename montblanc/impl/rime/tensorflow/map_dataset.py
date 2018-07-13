@@ -10,6 +10,7 @@ from montblanc.impl.rime.tensorflow.tensorflow_ops import (
                                             dataset_map_insert,
                                             dataset_map_close,
                                             dataset_map_clear,
+                                            dataset_map_pop,
                                             dataset_map_keys,
                                             dataset_map_size)
 
@@ -110,6 +111,12 @@ class TensorMap(object):
             keys = ops.convert_to_tensor(keys, dtype=tf.int64)
 
         return dataset_map_clear(self.handle, keys, name=name)
+
+    def pop(self, key, name=None):
+        key = ops.convert_to_tensor(key, dtype=tf.int64)
+        return dataset_map_pop(self.handle, key,
+                               Toutput_types=self.output_types,
+                               name=name)
 
     def close(self, name=None):
         return dataset_map_close(self.handle, name=name)

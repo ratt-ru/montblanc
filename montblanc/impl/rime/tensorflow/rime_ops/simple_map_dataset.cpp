@@ -306,6 +306,53 @@ REGISTER_KERNEL_BUILDER(Name("DatasetMapInsert")
                         DatasetMapInsertOp);
 
 
+class DatasetMapPopOp : public OpKernel
+{
+private:
+    mutex mu_;
+
+public:
+    explicit DatasetMapPopOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
+
+    void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
+    {
+        mutex_lock l(mu_);
+
+        MapResource * map_resource;
+        OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
+                                          &map_resource));
+
+        core::ScopedUnref unref_map(map_resource);
+
+        const Tensor * key_tensor;
+        OP_REQUIRES_OK(ctx, ctx->input("key", &key_tensor));
+
+        std::vector<Tensor> output;
+
+        OP_REQUIRES_OK(ctx, map_resource->pop(*key_tensor, &output));
+
+        for(int i = 0; i < output.size(); ++i)
+            { ctx->set_output(i, std::move(output[i])); }
+    }
+};
+
+REGISTER_OP("DatasetMapPop")
+    .Input("maps_handle: resource")
+    .Input("key: int64")
+    .Output("components: Toutput_types")
+    .Attr("Toutput_types: list(type) >= 1")
+    .Attr("container: string = ''")
+    .Attr("shared_name: string = ''")
+    .SetIsStateful()  // Source dataset ops must be marked
+                      // stateful to inhibit constant folding.
+    .SetShapeFn(shape_inference::UnknownShape);
+
+
+REGISTER_KERNEL_BUILDER(Name("DatasetMapPop")
+                        .Device(DEVICE_CPU),
+                        DatasetMapPopOp);
+
+
 class MapCloseOp : public OpKernel
 {
 private:
