@@ -69,6 +69,11 @@ def test_session_enqueue(rime_cfg):
         assert w._session.run(in_ds.size) == 0
 
         # Map is not empty, we need to manually clear it
-        assert w._session.run(w._datasets["point_inputs"].size) == 1
+        assert w._session.run(pt_ds.size) == 1
         w._session.run(pt_ds.clear, feed_dict={pt_ds.clear_key: [pt_key]})
-        assert w._session.run(w._datasets["point_inputs"].size) == 0
+        assert w._session.run(pt_ds.size) == 0
+
+        # Close queues and maps to signal EOF to any GPU prefetch
+        # operations which may block
+        w._session.run(pt_ds.close)
+        w._session.run(in_ds.close)
