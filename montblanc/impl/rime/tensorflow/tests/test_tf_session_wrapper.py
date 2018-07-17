@@ -12,10 +12,14 @@ from montblanc.impl.rime.tensorflow.rimes.ddes import (
                                             create_tf_expr as ddes)
 
 
+@pytest.fixture
+def rime_cfg():
+    return {'polarisation_type': 'linear'}
+
+
 @pytest.mark.parametrize("expr", [basic, ddes])
-def test_session_wrapper(expr):
-    cfg = {'polarisation_type': 'linear'}
-    w = TensorflowSessionWrapper(expr, cfg)
+def test_session_wrapper(expr, rime_cfg):
+    w = TensorflowSessionWrapper(expr, rime_cfg)
 
     # Test that pickling and unpickling works
     w2 = cloudpickle.loads(cloudpickle.dumps(w))
@@ -27,22 +31,18 @@ def test_session_wrapper(expr):
 
 
 @pytest.mark.parametrize("expr", [basic, ddes])
-def test_session_with(expr):
-    cfg = {'polarisation_type': 'linear'}
-
-    with TensorflowSessionWrapper(expr, cfg):
+def test_session_with(expr, rime_cfg):
+    with TensorflowSessionWrapper(expr, rime_cfg):
         pass
 
 
-def test_session_enqueue():
-    cfg = {'polarisation_type': 'linear'}
-
+def test_session_enqueue(rime_cfg):
     def _dummy_data(ph):
         """ Generate some dummy data given a tensorflow placeholder """
         shape = tuple(2 if s is None else s for s in ph.shape.as_list())
         return np.ones(shape, dtype=ph.dtype.as_numpy_dtype())*0.001
 
-    with TensorflowSessionWrapper(basic, cfg) as w:
+    with TensorflowSessionWrapper(basic, rime_cfg) as w:
         in_ds = w._datasets["inputs"]
         pt_ds = w._datasets["point_inputs"]
         pt_key = 1
