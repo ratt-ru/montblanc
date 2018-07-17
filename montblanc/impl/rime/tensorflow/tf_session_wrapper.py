@@ -55,6 +55,8 @@ class TensorflowSessionWrapper(object):
     def _create_session(self):
         """ Create a tensorflow session """
         import tensorflow as tf
+        from tensorflow.contrib.framework import nest
+
         from montblanc.impl.rime.tensorflow.tensorflow_mock_analyser import (
             analyse_tensorflow_function,
             create_datasets)
@@ -66,6 +68,16 @@ class TensorflowSessionWrapper(object):
             datasets, placeholders = analyse_tensorflow_function(self._fn,
                                                                  self._cfg,
                                                                  device)
+
+        # Add in a chunk_key uniquely identifying the chunk of data
+        datasets["inputs"].variables()["chunk_key"]
+        placeholders["inputs"]["chunk_key"] = {
+            'allowed_types': [tf.int64],
+            'default': tf.int64,
+            'default_type_name': 'int64',
+            'ops': [],
+            'schema': (),
+        }
 
         # Extract the main input dataset definitions
         input_ds = {"inputs": datasets.pop("inputs")}
@@ -82,6 +94,7 @@ class TensorflowSessionWrapper(object):
 
             # Create an expression for each device
             exprs = []
+            key_idx = []
 
             # Get the main input dataset
             in_ds = dataset_info["inputs"].dataset
@@ -89,6 +102,15 @@ class TensorflowSessionWrapper(object):
             # Shard the dataset over each device
             for shard, device in enumerate(device_list):
                 in_ds = in_ds.shard(len(device_list), shard)
+
+                out_types = in_ds.output_types
+                out_types = nest.flatten_with_joined_string_paths(out_types)
+
+                # Identify the chunk key
+                # This could get dodgy at some point
+                key_idx.append([i for i, (n, t) in enumerate(out_types)
+                               if n == "chunk_key"][0])
+
                 device = tf.DeviceSpec.from_string(device.name)
 
                 with tf.name_scope("shard_%s" % shard):
@@ -115,6 +137,8 @@ class TensorflowSessionWrapper(object):
         self._inits = []
         self._closes = []
 
+        shard_it_keys = [None] * len(device_list)
+
         for op in graph.get_operations():
             # Find the op responsible for initialising
             # the main dataset iterator
@@ -123,6 +147,15 @@ class TensorflowSessionWrapper(object):
             # Dataset close operations
             elif op.op_def.name in ("DatasetQueueClose", "DatasetMapClose"):
                 self._closes.append(op)
+            # Iterator gets, get the chunk_key output tensor
+            elif op.op_def.name.endswith("GetNext"):
+                shard_str = op.name.split('/')
+
+                if len(shard_str) == 2 and shard_str[-1].endswith("GetNext"):
+                    scope, op_name = shard_str
+                    shard_it_keys[int(scope[-1])] = op.outputs[key_idx[shard]]
+
+        assert all(ik is not None for ik in shard_it_keys)
 
         # # No input dataset?
         if len(self._inits) == 0:
@@ -131,6 +164,7 @@ class TensorflowSessionWrapper(object):
         self._inits.insert(0, global_init)
         self._datasets = dataset_info
         self._exprs = exprs
+        self._keys = shard_it_keys
 
         self._graph = graph
         self._session = tf.Session(graph=graph)
@@ -168,7 +202,7 @@ class TensorflowSessionWrapper(object):
 
     def evaluate_expr(self):
         try:
-            self._session.run(self._exprs)
+            self._session.run(list(zip(self._keys, self._exprs)))
         except tf.errors.OutOfRangeError:
             pass
 
