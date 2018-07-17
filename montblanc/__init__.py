@@ -47,10 +47,6 @@ class MontblancConstants(object):
 # Create a constants object
 constants = MontblancConstants()
 
-from montblanc.impl.rime.tensorflow.dask_rime import Rime
-from montblanc.impl.rime.tensorflow.dataset import (default_dataset,
-    montblanc_dataset, dataset_from_ms, rechunk_to_budget)
-
 from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
