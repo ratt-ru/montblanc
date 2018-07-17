@@ -5,6 +5,7 @@ from __future__ import print_function
 from collections import defaultdict
 
 from dask.sizeof import sizeof, getsizeof
+import tensorflow as tf
 
 try:
     from cytoolz import merge
@@ -161,7 +162,6 @@ class TensorflowSessionWrapper(object):
         feed_dict[ds.put_key] = key
         self._session.run([ds.put], feed_dict=feed_dict)
 
-
     def evaluate_expr(self):
         try:
             self._session.run(self._exprs)
@@ -179,7 +179,7 @@ class TensorflowSessionWrapper(object):
 
     def __exit__(self, etype, evalue, etraceback):
         self.close()
-        return etype == None
+        return etype is None
 
     def __del__(self):
         self.close()
