@@ -90,7 +90,10 @@ class TensorflowSessionWrapper(object):
             for shard, device in enumerate(device_list):
                 in_ds = in_ds.shard(len(device_list), shard)
                 device = tf.DeviceSpec.from_string(device.name)
-                expr = self._fn(self._cfg, device, in_ds, src_maps)
+
+                with tf.name_scope("shard_%s" % shard):
+                    expr = self._fn(self._cfg, device, in_ds, src_maps)
+
                 exprs.append(expr)
 
             global_init = tf.global_variables_initializer()
@@ -100,7 +103,8 @@ class TensorflowSessionWrapper(object):
         def _depends_on_input_ds(op):
             """ Does the supplied op depend on the input dataset? """
             for i in op.inputs:
-                if (i.op.name.startswith("inputs") and
+                if (i.op.name.startswith("shard_") and
+                        i.op.name.endswith("/inputs") and
                         i.op.op_def.name == "SimpleQueueDataset"):
 
                     return True
