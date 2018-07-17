@@ -36,7 +36,7 @@ def test_session_with(expr, rime_cfg):
         pass
 
 
-def test_session_enqueue(rime_cfg):
+def test_session_run(rime_cfg):
     def _dummy_data(ph):
         """ Generate some dummy data given a tensorflow placeholder """
         shape = tuple(2 if s is None else s for s in ph.shape.as_list())
