@@ -269,28 +269,38 @@ def _inspect_tf_op_call(*args, **kwargs):
 
 MapDatasetInfo = namedtuple("MapDatasetInfo", ["placeholders", "tensor_map",
                                                "dataset", "map_keys",
-                                               "put", "put_key", "close"])
+                                               "put", "put_key", "close",
+                                               "clear", "clear_key",
+                                               "size"])
 
-QueueDatasetInfo = namedtuple("QueueDatasetInfo", ["placeholders", "tensor_queue",
-                                                   "dataset", "put", "close"])
+
+QueueDatasetInfo = namedtuple("QueueDatasetInfo", ["placeholders",
+                                                   "tensor_queue", "dataset",
+                                                   "put", "close", "size"])
 
 
 def tensor_map(ds_name, ds_ph, dtypes, shapes):
     """
     Creates TensorMap dataset
     """
-    tensor_map = TensorMap(dtypes, shapes)
-    map_keys = tf.placeholder(tf.int64, shape=(None,1),
+    tensor_map = TensorMap(dtypes, shapes, store=True)
+    map_keys = tf.placeholder(tf.int64, shape=(None, 1),
                               name="%s_map_keys" % ds_name)
     put_key = tf.placeholder(tf.int64, shape=(),
                              name="%s_put_key" % ds_name)
     key_ds = tf.data.Dataset.from_tensor_slices(map_keys)
     map_dataset = MapDataset(key_ds, tensor_map, name=ds_name)
     put = tensor_map.insert(put_key, ds_ph)
+    clear_keys = tf.placeholder(tf.int64, shape=(None,),
+                                name="%s_clear_keys" % ds_name)
+    clear = tensor_map.clear(clear_keys)
+
     close = tensor_map.close()
+    size = tensor_map.size()
 
     return MapDatasetInfo(ds_ph, tensor_map, map_dataset,
-                          map_keys, put, put_key, close)
+                          map_keys, put, put_key, close,
+                          clear, clear_keys, size)
 
 
 def tensor_queue(ds_name, ds_ph, dtypes, shapes):
@@ -301,8 +311,9 @@ def tensor_queue(ds_name, ds_ph, dtypes, shapes):
     tensor_dataset = QueueDataset(tensor_queue, name=ds_name)
     put = tensor_queue.put(ds_ph)
     close = tensor_queue.close()
+    size = tensor_queue.size()
     return QueueDatasetInfo(ds_ph, tensor_queue, tensor_dataset,
-                            put, close)
+                            put, close, size)
 
 
 def create_datasets(dataset_inputs, dataset_ph_info, ds_type="map"):
