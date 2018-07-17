@@ -194,4 +194,4 @@ class TensorflowSessionWrapper(object):
 @sizeof.register(TensorflowSessionWrapper)
 def sizeof_tf_session_wrapper(o):
     """ Size derived from function and config dictionary *only* """
-    return getsizeof(self._fn) + getsizeof(self._cfg)
+    return getsizeof(o._fn) + getsizeof(o._cfg)
