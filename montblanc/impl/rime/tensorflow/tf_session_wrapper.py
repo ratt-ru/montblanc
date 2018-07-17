@@ -124,26 +124,62 @@ class TensorflowSessionWrapper(object):
             raise ValueError("No input dataset iterator was created!")
 
         self._inits.insert(0, global_init)
+        self._datasets = dataset_info
+        self._exprs = exprs
 
         self._graph = graph
         self._session = tf.Session(graph=graph)
         self._session.run(self._inits)
 
-    def close(self):
-        S = getattr(self, "_session", None)
+    def enqueue(self, data):
+        """ Enqueue data on the main dataset """
+        dataset = "inputs"
 
-        if S is not None:
-            # Run any resource close operations
-            S.run(self._closes)
-            # Close the session
-            S.close()
+        try:
+            ds = self._datasets[dataset]
+        except KeyError:
+            raise ValueError("Unknown dataset %s. "
+                             "Valid datasets %s" %
+                             (dataset, self._datasets.keys()))
+
+        ph = ds.placeholders
+        feed_dict = {ph[k]: v for k, v in data.items()}
+        self._session.run([ds.put], feed_dict=feed_dict)
+
+    def enqueue_source(self, source, key, data):
+        dataset = "%s_inputs" % source
+
+        try:
+            ds = self._datasets[dataset]
+        except KeyError:
+            raise ValueError("Unknown dataset %s. "
+                             "Valid datasets %s" %
+                             (dataset, self._datasets.keys()))
+
+        ph = ds.placeholders
+        feed_dict = {ph[k]: v for k, v in data.items()}
+        feed_dict[ds.put_key] = key
+        self._session.run([ds.put], feed_dict=feed_dict)
+
+
+    def evaluate_expr(self):
+        try:
+            self._session.run(self._exprs)
+        except tf.errors.OutOfRangeError:
+            pass
+
+    def close(self):
+        # Dodgy but avoids reclosing
+        if getattr(self._session, "_closed", True):
+            self._session.run(self._closes)
+            self._session.close()
 
     def __enter__(self):
         return self
 
     def __exit__(self, etype, evalue, etraceback):
         self.close()
-        return True
+        return etype == None
 
     def __del__(self):
         self.close()
