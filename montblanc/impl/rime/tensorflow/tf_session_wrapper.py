@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from collections import defaultdict
+from threading import Thread
 
 from dask.sizeof import sizeof, getsizeof
 import tensorflow as tf
@@ -20,6 +20,9 @@ class TensorflowSessionWrapper(object):
         self._fn = fn
         self._cfg = cfg
         self._create_session()
+
+        self._eval_thread = Thread(target=self.evaluate_expr)
+        self._eval_thread.start()
 
     def _get_device_list(self):
         """ Get a list of the preferred devices """
@@ -201,15 +204,27 @@ class TensorflowSessionWrapper(object):
         self._session.run([ds.put], feed_dict=feed_dict)
 
     def evaluate_expr(self):
-        try:
-            self._session.run(list(zip(self._keys, self._exprs)))
-        except tf.errors.OutOfRangeError:
-            pass
+        while True:
+            try:
+                self._session.run(list(zip(self._keys, self._exprs)))
+            except tf.errors.OutOfRangeError:
+                # Try run each of the key expression pairs
+                # individually to fully clear the entries out
+                for k, e in zip(self._keys, self._exprs):
+                    try:
+                        self._session.run([k, e])
+                    except tf.errors.OutOfRangeError:
+                        pass
+
+                break
 
     def close(self):
-        # Dodgy but avoids reclosing
-        if getattr(self._session, "_closed", True):
+        if not self._session._closed:
+            # Close all queues/maps
             self._session.run(self._closes)
+            # Wait for the evaluation thread to join
+            self._eval_thread.join()
+            # Close the session
             self._session.close()
 
     def __enter__(self):
