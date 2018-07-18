@@ -137,7 +137,8 @@ class TensorflowSessionWrapper(object):
             # No, recurse and check the op's inputs
             return any(_depends_on_input_ds(i.op) for i in op.inputs)
 
-        self._inits = []
+        self._global_init = global_init
+        self._iterator_inits = []
         self._closes = []
 
         shard_it_keys = [None] * len(device_list)
@@ -146,7 +147,7 @@ class TensorflowSessionWrapper(object):
             # Find the op responsible for initialising
             # the main dataset iterator
             if op.op_def.name == "MakeIterator" and _depends_on_input_ds(op):
-                self._inits.append(op)
+                self._iterator_inits.append(op)
             # Dataset close operations
             elif op.op_def.name in ("DatasetQueueClose", "DatasetMapClose"):
                 self._closes.append(op)
@@ -161,17 +162,18 @@ class TensorflowSessionWrapper(object):
         assert all(ik is not None for ik in shard_it_keys)
 
         # # No input dataset?
-        if len(self._inits) == 0:
+        if len(self._iterator_inits) == 0:
             raise ValueError("No input dataset iterator was created!")
 
-        self._inits.insert(0, global_init)
         self._datasets = dataset_info
         self._exprs = exprs
         self._keys = shard_it_keys
 
         self._graph = graph
         self._session = tf.Session(graph=graph)
-        self._session.run(self._inits)
+
+        # Run initialisation
+        self._session.run([self._global_init, self._iterator_inits])
 
     def enqueue(self, data):
         """ Enqueue data on the main dataset """
