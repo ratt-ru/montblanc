@@ -136,6 +136,8 @@ REGISTER_OP("PostProcessVisibilities")
     .Output("chi_squared: FT")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
+
+    // Input array schemas
     .Attr("time_index_schema: string = '(row,)'")
     .Attr("antenna1_schema: string = '(row,)'")
     .Attr("antenna2_schema: string = '(row,)'")
@@ -145,6 +147,10 @@ REGISTER_OP("PostProcessVisibilities")
     .Attr("weight_schema: string = '(row, chan, corr)'")
     .Attr("base_vis_schema: string = '(row, chan, corr)'")
     .Attr("observed_vis_schema: string = '(row, chan, corr)'")
+
+    // Output array schemas
+    .Attr("final_vis_schema: string = '(row, chan, corr)'")
+    .Attr("chi_squared_schema: string = '()'")
     .Doc(R"doc(Post Processes Visibilities)doc")
     .SetShapeFn(shape_function);
 

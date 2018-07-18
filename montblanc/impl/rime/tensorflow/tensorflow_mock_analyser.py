@@ -35,6 +35,50 @@ class PlaceholderVariable(object):
     pass
 
 
+def arg_type_info(arg_def, op_def):
+    """ Figure out argument type information """
+    if arg_def.type:
+        # Fixed type, easy
+        dtype = tf.as_dtype(arg_def.type)
+        type_name = dtype.name
+        allowed = [dtype]
+    elif arg_def.type_attr:
+        # If a polymorphic type, there'll be an attribute
+        # with a default type associated
+        type_name = arg_def.type_attr
+        type_attr = op_def.attr[arg_def.type_attr]
+        allowed = type_attr.allowed_values.list
+        allowed = [tf.as_dtype(dt) for dt in allowed.type]
+        dtype = tf.as_dtype(type_attr.default_value.type)
+    elif arg_def.type_list_attr:
+        # Implement me
+        raise ValueError("Type Lists not handled")
+    else:
+        raise TypeError("Couldn't infer type "
+                        "of argument %s" % arg_def.name)
+
+    return {
+        'allowed_types': allowed,
+        'default': dtype,
+        'default_type_name': type_name,
+    }
+
+
+def arg_schema(schema_name, op_def):
+    """ Find a schema, if any in the given op_def """
+
+    # If nothing is supplied, check if a default schema
+    # exists in the op attributes
+    try:
+        attr = op_def.attr[schema_name]
+    except KeyError:
+        return None
+    else:
+        if attr.type == "string":
+            return attr.default_value.s
+
+        return None
+
 def get_tf_placeholders(op_def, call_args):
     """
     Get the tensorflow placeholder definitions derived from
@@ -63,7 +107,8 @@ def get_tf_placeholders(op_def, call_args):
     """
     fn = op_def.function
     fn_name = fn.__name__
-    ph_info = {}
+    in_ph_info = []
+    out_ph_info = []
 
     for input_name, input_def in op_def.inputs.items():
         arg = call_args[input_name]
@@ -91,33 +136,8 @@ def get_tf_placeholders(op_def, call_args):
 
         ph_name = arg.var_name
 
-        if input_def.type:
-            # Fixed type, easy
-            dtype = tf.as_dtype(input_def.type)
-            type_name = dtype.name
-            allowed = [dtype]
-        elif input_def.type_attr:
-            # If a polymorphic type, there'll be an attribute
-            # with a default type associated
-            type_name = input_def.type_attr
-            type_attr = op_def.attr[input_def.type_attr]
-            allowed = type_attr.allowed_values.list
-            allowed = [tf.as_dtype(dt) for dt in allowed.type]
-            dtype = tf.as_dtype(type_attr.default_value.type)
-        elif input_def.type_list_attr:
-            # Implement me
-            raise ValueError("Type Lists not handled")
-        else:
-            raise TypeError("Couldn't infer type "
-                            "of missing input %s" % input_name)
-
-        arg_ph_info = {
-            'dataset': arg.dataset,
-            'ops': set([fn_name]),
-            'allowed_types': allowed,
-            'default_type_name': type_name,
-            'default': dtype,
-        }
+        arg_ph_info = arg_type_info(input_def, op_def)
+        arg_ph_info.update({'dataset': arg.dataset, 'ops': set([fn_name])})
 
         # This input may have a dimension schema associated with it
         # which we can use to infer the shape
@@ -127,27 +147,26 @@ def get_tf_placeholders(op_def, call_args):
             # Try find something living in the kwargs
             schema = call_args[schema_name]
         except KeyError:
-            schema = None
-
-        # If nothing is supplied, check if a default schema
-        # exists in the op attributes
-        if schema is None:
-            try:
-                attr = op_def.attr[schema_name]
-                if attr.type == "string":
-                    schema = attr.default_value.s
-                else:
-                    schema = None
-            except KeyError:
-                schema = None
+            schema = arg_schema(schema_name, op_def)
 
         if schema is not None:
             arg_ph_info['schema'] = parse_shape_schema(schema)
 
         # Assign the placeholder info for this argument
-        ph_info[ph_name] = arg_ph_info
+        in_ph_info.append((ph_name, arg_ph_info))
 
-    return ph_info
+    for output_name, output_def in op_def.outputs.items():
+        arg_ph_info = arg_type_info(output_def, op_def)
+        arg_ph_info.update({'ops': set([fn_name])})
+
+        schema = arg_schema(output_name + "_schema", op_def)
+
+        if schema is not None:
+            arg_ph_info['schema'] = schema
+
+        out_ph_info.append((output_name, arg_ph_info))
+
+    return in_ph_info, out_ph_info
 
 
 def _while(cond, body, loop_vars, **kwargs):
@@ -223,11 +242,11 @@ def _inspect_tf_op_call(*args, **kwargs):
     call_args = inspect.getcallargs(op_def.function, *args, **kwargs)
 
     # Find the missing placeholder definitions
-    missing_ph = get_tf_placeholders(op_def, call_args)
+    input_ph, output_ph = get_tf_placeholders(op_def, call_args)
 
     # Integrate missing into op placeholders,
     # checking against any existing values
-    for k, new in missing_ph.items():
+    for k, new in input_ph:
         dataset = op_ph.setdefault(new.pop('dataset'), {})
 
         try:
@@ -263,8 +282,12 @@ def _inspect_tf_op_call(*args, **kwargs):
         old['ops'].update(new['ops'])
 
     # Create KnownVariable for each output
-    return tuple(mock.MagicMock(var_name=name, var_type=KnownVariable)
-                 for name in op_def.outputs.keys())
+    outputs = tuple(mock.MagicMock(var_name=name,
+                                   var_type=KnownVariable,
+                                   var_info=info)
+                    for name, info in output_ph)
+
+    return outputs
 
 
 MapDatasetInfo = namedtuple("MapDatasetInfo", ["placeholders", "tensor_map",
@@ -491,7 +514,7 @@ class TensorMapDict(dict):
 
 def analyse_tensorflow_function(fn, cfg, device):
     """
-    Finds the inputs required to feed tensorflow function ``fn``
+    Finds the inputs and outputs required to feed tensorflow function ``fn``
     """
     mod = fn.__module__
     patch = mock.patch
@@ -533,6 +556,12 @@ def analyse_tensorflow_function(fn, cfg, device):
     input_ds = datasets["inputs"]
 
     with contextlib.nested(*mocks):
-        fn(cfg, device, input_ds, maps)
+        out = fn(cfg, device, input_ds, maps)
 
-    return datasets, placeholders
+    outputs = tuple((o.var_name, o.var_info) for o in out)
+
+    for name, info in outputs:
+        if "schema" not in info:
+            raise ValueError("Schema is missing for output %s" % name)
+
+    return datasets, placeholders, outputs
