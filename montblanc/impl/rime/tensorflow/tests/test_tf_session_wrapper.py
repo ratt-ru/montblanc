@@ -63,14 +63,10 @@ def test_session_run(rime_cfg):
 
         # Insert general queue data
         assert w._session.run(in_ds.size) == 0
-        w.enqueue(in_data)
-        # assert w._session.run(in_ds.size) == 1
+        w.enqueue(100, in_data)
 
-        # Evaluate expression
-        #w.evaluate_expr()
-
-        # Queue is empty now
-        #assert w._session.run(in_ds.size) == 0
+        # Now wait for the result
+        w.dequeue(100)
 
         # Map is not empty, we need to manually clear it
         assert w._session.run(pt_ds.size) == 1

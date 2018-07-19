@@ -13,6 +13,20 @@ except ImportError:
     from toolz import merge
 
 import montblanc
+from montblanc.impl.rime.tensorflow.map_dataset import TensorMap
+
+
+def _depends_on_input_ds(op):
+    """ Does the supplied op depend on the input dataset? """
+    for i in op.inputs:
+        if (i.op.name.startswith("shard_") and
+                i.op.name.endswith("/inputs") and
+                i.op.op_def.name == "SimpleQueueDataset"):
+
+            return True
+
+    # No, recurse and check the op's inputs
+    return any(_depends_on_input_ds(i.op) for i in op.inputs)
 
 
 class TensorflowSessionWrapper(object):
@@ -104,6 +118,10 @@ class TensorflowSessionWrapper(object):
             # Get the main input dataset
             in_ds = dataset_info["inputs"].dataset
 
+            output_map = TensorMap(tuple(o['type'] for _, o in outputs))
+            self._output_map_pop_key = tf.placeholder(tf.int64)
+            self._output_map_pop = output_map.pop(self._output_map_pop_key)
+
             # Shard the dataset over each device
             for shard, device in enumerate(device_list):
                 in_ds = in_ds.shard(len(device_list), shard)
@@ -123,52 +141,46 @@ class TensorflowSessionWrapper(object):
 
                 exprs.append(expr)
 
-            global_init = tf.global_variables_initializer()
+            shard_it_keys = [None] * len(device_list)
+            close_ops = ("DatasetQueueClose", "DatasetMapClose")
+
+            self._iterator_inits = []
+            self._closes = []
+
+            for op in graph.get_operations():
+                # Find the op responsible for initialising
+                # the main dataset iterator
+                if op.op_def.name == "MakeIterator" and _depends_on_input_ds(op):
+                    self._iterator_inits.append(op)
+                # Dataset close operations
+                elif op.op_def.name in close_ops:
+                    self._closes.append(op)
+                # Iterator gets, get the chunk_key output tensor
+                elif op.op_def.name.endswith("GetNext"):
+                    shard_str = op.name.split('/')
+
+                    if len(shard_str) == 2 and shard_str[-1].endswith("GetNext"):
+                        scope, op_name = shard_str
+                        chunk_key_i = key_idx[shard]
+                        shard_it_keys[int(scope[-1])] = op.outputs[chunk_key_i]
+
+            assert all(ik is not None for ik in shard_it_keys)
+
+            # # No input dataset?
+            if len(self._iterator_inits) == 0:
+                raise ValueError("No input dataset iterator was created!")
+
+            map_inserts = []
+
+            for key, expr in zip(shard_it_keys, exprs):
+                map_inserts.append(output_map.insert(key, expr))
+
+            self._global_init = tf.global_variables_initializer()
 
             graph.finalize()
 
-        def _depends_on_input_ds(op):
-            """ Does the supplied op depend on the input dataset? """
-            for i in op.inputs:
-                if (i.op.name.startswith("shard_") and
-                        i.op.name.endswith("/inputs") and
-                        i.op.op_def.name == "SimpleQueueDataset"):
-
-                    return True
-
-            # No, recurse and check the op's inputs
-            return any(_depends_on_input_ds(i.op) for i in op.inputs)
-
-        self._global_init = global_init
-        self._iterator_inits = []
-        self._closes = []
-
-        shard_it_keys = [None] * len(device_list)
-
-        for op in graph.get_operations():
-            # Find the op responsible for initialising
-            # the main dataset iterator
-            if op.op_def.name == "MakeIterator" and _depends_on_input_ds(op):
-                self._iterator_inits.append(op)
-            # Dataset close operations
-            elif op.op_def.name in ("DatasetQueueClose", "DatasetMapClose"):
-                self._closes.append(op)
-            # Iterator gets, get the chunk_key output tensor
-            elif op.op_def.name.endswith("GetNext"):
-                shard_str = op.name.split('/')
-
-                if len(shard_str) == 2 and shard_str[-1].endswith("GetNext"):
-                    scope, op_name = shard_str
-                    shard_it_keys[int(scope[-1])] = op.outputs[key_idx[shard]]
-
-        assert all(ik is not None for ik in shard_it_keys)
-
-        # # No input dataset?
-        if len(self._iterator_inits) == 0:
-            raise ValueError("No input dataset iterator was created!")
-
         self._datasets = dataset_info
-        self._exprs = exprs
+        self._exprs = map_inserts
         self._keys = shard_it_keys
 
         self._graph = graph
@@ -177,7 +189,7 @@ class TensorflowSessionWrapper(object):
         # Run initialisation
         self._session.run([self._global_init, self._iterator_inits])
 
-    def enqueue(self, data):
+    def enqueue(self, key, data):
         """ Enqueue data on the main dataset """
         dataset = "inputs"
 
@@ -190,6 +202,7 @@ class TensorflowSessionWrapper(object):
 
         ph = ds.placeholders
         feed_dict = {ph[k]: v for k, v in data.items()}
+        feed_dict[ph["chunk_key"]] = key
         self._session.run([ds.put], feed_dict=feed_dict)
 
     def enqueue_source(self, source, key, data):
@@ -207,16 +220,20 @@ class TensorflowSessionWrapper(object):
         feed_dict[ds.put_key] = key
         self._session.run([ds.put], feed_dict=feed_dict)
 
+    def dequeue(self, key):
+        feed_dict = { self._output_map_pop_key: key}
+        return self._session.run(self._output_map_pop, feed_dict=feed_dict)
+
     def evaluate_expr(self):
         while True:
             try:
-                self._session.run(list(zip(self._keys, self._exprs)))
+                self._session.run(self._exprs)
             except tf.errors.OutOfRangeError:
                 # Try run each of the key expression pairs
                 # individually to fully clear the entries out
-                for k, e in zip(self._keys, self._exprs):
+                for e in self._exprs:
                     try:
-                        self._session.run([k, e])
+                        self._session.run(e)
                     except tf.errors.OutOfRangeError:
                         pass
 
