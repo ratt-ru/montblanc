@@ -58,12 +58,12 @@ def test_session_run(rime_cfg):
 
         # Insert point source data
         assert w._session.run(pt_ds.size) == 0
-        w.enqueue_source("point", pt_key, pt_data)
+        w.enqueue("point_inputs", pt_key, pt_data)
         assert w._session.run(pt_ds.size) == 1
 
         # Insert general queue data
         assert w._session.run(in_ds.size) == 0
-        w.enqueue(100, in_data)
+        w.enqueue("inputs", 100, in_data)
 
         # Now wait for the result
         w.dequeue(100)

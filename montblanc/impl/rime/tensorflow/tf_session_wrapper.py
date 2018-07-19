@@ -14,6 +14,11 @@ except ImportError:
 
 import montblanc
 from montblanc.impl.rime.tensorflow.map_dataset import TensorMap
+from montblanc.impl.rime.tensorflow.tensorflow_mock_analyser import (
+    analyse_tensorflow_function,
+    create_datasets,
+    MapDatasetInfo,
+    QueueDatasetInfo)
 
 
 def _depends_on_input_ds(op):
@@ -73,10 +78,6 @@ class TensorflowSessionWrapper(object):
         """ Create a tensorflow session """
         import tensorflow as tf
         from tensorflow.contrib.framework import nest
-
-        from montblanc.impl.rime.tensorflow.tensorflow_mock_analyser import (
-            analyse_tensorflow_function,
-            create_datasets)
 
         device_list = self._get_device_list()
 
@@ -189,10 +190,8 @@ class TensorflowSessionWrapper(object):
         # Run initialisation
         self._session.run([self._global_init, self._iterator_inits])
 
-    def enqueue(self, key, data):
+    def enqueue(self, dataset, key, data):
         """ Enqueue data on the main dataset """
-        dataset = "inputs"
-
         try:
             ds = self._datasets[dataset]
         except KeyError:
@@ -202,26 +201,19 @@ class TensorflowSessionWrapper(object):
 
         ph = ds.placeholders
         feed_dict = {ph[k]: v for k, v in data.items()}
-        feed_dict[ph["chunk_key"]] = key
-        self._session.run([ds.put], feed_dict=feed_dict)
 
-    def enqueue_source(self, source, key, data):
-        dataset = "%s_inputs" % source
+        if isinstance(ds, QueueDatasetInfo):
+            if not dataset == "inputs":
+                raise ValueError("Must be inputs dataset")
 
-        try:
-            ds = self._datasets[dataset]
-        except KeyError:
-            raise ValueError("Unknown dataset %s. "
-                             "Valid datasets %s" %
-                             (dataset, self._datasets.keys()))
+            feed_dict[ph["chunk_key"]] = key
+        elif isinstance(ds, MapDatasetInfo):
+            feed_dict[ds.put_key] = key
 
-        ph = ds.placeholders
-        feed_dict = {ph[k]: v for k, v in data.items()}
-        feed_dict[ds.put_key] = key
         self._session.run([ds.put], feed_dict=feed_dict)
 
     def dequeue(self, key):
-        feed_dict = { self._output_map_pop_key: key}
+        feed_dict = {self._output_map_pop_key: key}
         return self._session.run(self._output_map_pop, feed_dict=feed_dict)
 
     def evaluate_expr(self):
