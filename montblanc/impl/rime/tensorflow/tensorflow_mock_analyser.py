@@ -6,6 +6,7 @@ from collections import namedtuple
 import contextlib
 from functools import partial
 import inspect
+import logging
 
 import tensorflow as tf
 
@@ -18,6 +19,8 @@ from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue,
 
 
 mock = tf.test.mock
+
+log = logging.getLogger("__name__")
 
 
 class KnownVariable(object):
@@ -348,7 +351,6 @@ def create_datasets(dataset_inputs, dataset_ph_info, ds_type="map"):
     """
 
     _dims = {"(u,v,w)": 3, "(l,m)": 2, "(x,y,z)": 3, "corr": 4}
-    hardcoded_types = {"FT": tf.float64, "CT": tf.complex128}
     dataset_info = {}
 
     # For each individual dataset
@@ -377,9 +379,13 @@ def create_datasets(dataset_inputs, dataset_ph_info, ds_type="map"):
                 ds_ph[name] = ph = tf.placeholder(dtype=dtype, shape=shape,
                                                   name=name.lstrip("_"))
             else:
+
                 # Create a placeholder for this input
-                dtype = hardcoded_types.get(ph_info['default_type_name'],
-                                            ph_info['default'])
+                try:
+                    dtype = ph_info['type']
+                except KeyError:
+                    raise ValueError("Type was not derived for input '%s' "
+                                     "with definition '%s'" % (name, ph_info))
 
                 try:
                     schema = ph_info['schema']
@@ -512,6 +518,34 @@ class TensorMapDict(dict):
         return data
 
 
+def _float_types(cfg):
+    try:
+        precision = cfg['dtype']
+    except KeyError:
+        log.info("Defaulting to double floating point precision")
+        precision = "double"
+
+    if precision == "float":
+        return {"FT": tf.float32, "CT": tf.complex64}
+    elif precision == "double":
+        return {"FT": tf.float64, "CT": tf.complex128}
+
+    raise ValueError("Invalid precision %s" % precision)
+
+
+def _set_placeholder_type(placeholder, float_types):
+    ph = placeholder.copy()
+    ph['type'] = float
+    ph['type'] = float_types.get(ph['default_type_name'], ph['default'])
+    return ph
+
+
+def _set_placeholder_types(placeholders, float_types):
+    return {ds: {n: _set_placeholder_type(ph, float_types)
+                 for n, ph in ds_ph.items()}
+            for ds, ds_ph in placeholders.items()}
+
+
 def analyse_tensorflow_function(fn, cfg, device):
     """
     Finds the inputs and outputs required to feed tensorflow function ``fn``
@@ -563,5 +597,12 @@ def analyse_tensorflow_function(fn, cfg, device):
     for name, info in outputs:
         if "schema" not in info:
             raise ValueError("Schema is missing for output %s" % name)
+
+    # Convert any floating point templates (FT, CT)
+    # into concrete types
+    float_types = _float_types(cfg)
+    placeholders = _set_placeholder_types(placeholders, float_types)
+    outputs = ((n, _set_placeholder_type(ph, float_types))
+               for n, ph in outputs)
 
     return datasets, placeholders, outputs

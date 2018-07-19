@@ -79,6 +79,7 @@ class TensorflowSessionWrapper(object):
             'allowed_types': [tf.int64],
             'default': tf.int64,
             'default_type_name': 'int64',
+            'type': tf.int64,
             'ops': [],
             'schema': (),
         }
