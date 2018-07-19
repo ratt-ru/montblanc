@@ -66,9 +66,8 @@ def test_session_run(rime_cfg):
         w.enqueue("inputs", 100, in_data)
 
         # Now wait for the result
-        w.dequeue(100)
+        w.dequeue({"inputs": 100, "point_inputs": [pt_key]})
 
-        # Map is not empty, we need to manually clear it
-        assert w._session.run(pt_ds.size) == 1
-        w._session.run(pt_ds.clear, feed_dict={pt_ds.clear_key: [pt_key]})
+        # Check that input queue + map is clear
+        assert w._session.run(in_ds.size) == 0
         assert w._session.run(pt_ds.size) == 0
