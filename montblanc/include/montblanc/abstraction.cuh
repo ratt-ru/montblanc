@@ -50,6 +50,7 @@ public:
 
     // Input array types
     typedef float2 lm_type;
+    typedef float2 radec_type;
     typedef float3 uvw_type;
     typedef float frequency_type;
     typedef float2 complex_phase_type;
@@ -199,6 +200,7 @@ public:
     } visibility_type;
 
     // Input array types
+    typedef double2 radec_type;
     typedef double2 lm_type;
     typedef double3 uvw_type;
     typedef double frequency_type;
