@@ -951,21 +951,23 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         feed_rotation = rime.feed_rotation(pa_sin, pa_cos, CT=CT,
                                            feed_type=polarisation_type)
 
-    def antenna_jones(lm, stokes):
+    def antenna_jones(radec, stokes):
         """
         Compute the jones terms for each antenna.
 
         lm, stokes and alpha are the source variables.
         """
 
+        lm = rime.radec_to_lm(radec, D.phase_centre)
+
         # Compute the complex phase
         cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
 
         # Check for nans/infs in the complex phase
         phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
-                    "for all your lm coordinates. This is required "
-                    "for 'n = sqrt(1 - l**2 - m**2) - 1' "
-                    "to be finite.")
+                     "for all your lm coordinates. This is required "
+                     "for 'n = sqrt(1 - l**2 - m**2) - 1' "
+                     "to be finite.")
 
         phase_real = tf.check_numerics(tf.real(cplx_phase), phase_msg)
         phase_imag = tf.check_numerics(tf.imag(cplx_phase), phase_msg)
@@ -986,7 +988,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
         # Compute the direction dependent effects from the beam
-        ejones = rime.e_beam(lm, D.frequency,
+        ejones = rime.e_beam(radec, D.frequency,
             D.pointing_errors, D.antenna_scaling,
             pa_sin, pa_cos,
             D.beam_extents, D.beam_freq_map, D.ebeam)
