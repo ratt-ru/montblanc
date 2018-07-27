@@ -979,19 +979,19 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
         # Check for nans/infs in the bsqrt
         bsqrt_msg = ("Check that your stokes parameters "
-                    "satisfy I**2 >= Q**2 + U**2 + V**2. "
-                    "Montblanc performs a cholesky decomposition "
-                    "of the brightness matrix and the above must "
-                    "hold for this to produce valid values.")
+                     "satisfy I**2 >= Q**2 + U**2 + V**2. "
+                     "Montblanc performs a cholesky decomposition "
+                     "of the brightness matrix and the above must "
+                     "hold for this to produce valid values.")
 
         bsqrt_real = tf.check_numerics(tf.real(bsqrt), bsqrt_msg)
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
         # Compute the direction dependent effects from the beam
-        ejones = rime.e_beam(radec, D.frequency,
-            D.pointing_errors, D.antenna_scaling,
-            pa_sin, pa_cos,
-            D.beam_extents, D.beam_freq_map, D.ebeam)
+        ejones = rime.e_beam(radec - D.phase_centre, D.frequency,
+                             D.pointing_errors, D.antenna_scaling,
+                             pa_sin, pa_cos,
+                             D.beam_extents, D.beam_freq_map, D.ebeam)
 
         deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag]
         deps = [] # Do nothing for now
@@ -1000,7 +1000,8 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         # feed rotation and beam dde's
         with tf.control_dependencies(deps):
             antenna_jones = rime.create_antenna_jones(bsqrt, cplx_phase,
-                                                    feed_rotation, ejones, FT=FT)
+                                                      feed_rotation, ejones,
+                                                      FT=FT)
             return antenna_jones, sgn_brightness
 
     # While loop condition for each point source type
