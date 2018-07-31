@@ -45,7 +45,7 @@ def parallactic_angles(times, antenna_positions, field_centre, offsets=None):
             column of MS ANTENNA sub-table
         field_centre : ndarray of shape (2,)
             Field centre, should be obtained from MS PHASE_DIR
-        offsets: ndarray of shape (nant, ntime, 2) or None
+        offsets: ndarray of shape (ntime, na, 2) or None
             Containing time-variable offsets in ra, dec from
             pointing centre per antenna. If None is passed offsets
             of zero are assumed.
@@ -74,13 +74,13 @@ def parallactic_angles(times, antenna_positions, field_centre, offsets=None):
     na = antenna_positions.shape[0]
     nt = times.shape[0]
     if offsets is None:
-        offsets = np.zeros((na, nt, 2))
+        offsets = np.zeros((nt, na, 2))
 
     fc_rad = np.asarray([[pm.direction('J2000',
-                            pq.quantity(field_centre[0] + offsets[a, t, 0], 'rad'),
-                            pq.quantity(field_centre[1] + offsets[a, t, 1], 'rad'))
-                          for t in xrange(nt)]
-                         for a in xrange(na)])
+                            pq.quantity(field_centre[0] + offsets[t, a, 0], 'rad'),
+                            pq.quantity(field_centre[1] + offsets[t, a, 1], 'rad'))
+                          for t in xrange(na)]
+                         for a in xrange(nt)])
 
     return np.asarray([
             # Set current time as the reference frame
