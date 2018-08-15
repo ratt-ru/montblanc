@@ -19,19 +19,13 @@ def rime_cfg():
 
 @pytest.mark.parametrize("expr", [basic, ddes])
 def test_session_wrapper(expr, rime_cfg):
-    w = TensorflowSessionWrapper(expr, rime_cfg)
-
-    # Test that pickling and unpickling works
-    w2 = cloudpickle.loads(cloudpickle.dumps(w))
-
-    assert w._fn == w2._fn
-    assert w._cfg == w2._cfg
-    assert w._graph != w2._graph
-    assert w._session != w2._session
-
-    # Must close else test cases will hang
-    w.close()
-    w2.close()
+    with TensorflowSessionWrapper(expr, rime_cfg) as w:
+        # Test that pickling and unpickling works
+        with cloudpickle.loads(cloudpickle.dumps(w)) as w2:
+            assert w._fn == w2._fn
+            assert w._cfg == w2._cfg
+            assert w._graph != w2._graph
+            assert w._session != w2._session
 
 
 @pytest.mark.parametrize("expr", [basic, ddes])
