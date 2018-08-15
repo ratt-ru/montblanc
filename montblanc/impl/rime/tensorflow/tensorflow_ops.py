@@ -11,6 +11,7 @@ import tensorflow as tf
 _first_cap_re = re.compile('(.)([A-Z][a-z]+)')
 _all_cap_re = re.compile('([a-z0-9])([A-Z])')
 
+
 def to_snake_case(name):
     s1 = _first_cap_re.sub(r'\1_\2', name)
     return _all_cap_re.sub(r'\1_\2', s1).lower()
@@ -21,13 +22,14 @@ if True:
     _rime_lib_path = pkg_resources.resource_filename("montblanc", "ext")
 else:
     # Development library location
-    _rime_lib_path = pkg_resources.resource_filename("montblanc",
-                            pjoin('impl', 'rime', 'tensorflow', 'rime_ops'))
+    path_offset = pjoin('impl', 'rime', 'tensorflow', 'rime_ops')
+    _rime_lib_path = pkg_resources.resource_filename("montblanc", path_offset)
 
 _rime_so = tf.load_op_library(pjoin(_rime_lib_path, 'rime.so'))
 
 __OP_TUPLE = namedtuple("__OP_TUPLE", ["inputs", "attr", "outputs",
-                                    "orig_op_def", "function"])
+                                       "orig_op_def", "function"])
+
 
 def _xform_op_list(op_list):
     """
@@ -50,6 +52,7 @@ def _xform_op_list(op_list):
 op_defs = _xform_op_list(_rime_so.OP_LIST.op)
 globals().update({n: getattr(_rime_so, n) for n in op_defs.keys()})
 
+
 def parse_shape_schema(schema):
     idx = []
     depth = 1
@@ -64,7 +67,7 @@ def parse_shape_schema(schema):
             depth += 1
         elif schema[i] == ')':
             depth -= 1
-        elif depth ==1 and schema[i] == ',':
+        elif depth == 1 and schema[i] == ',':
             idx.append(i)
 
     idx.append(len(schema)-1)
