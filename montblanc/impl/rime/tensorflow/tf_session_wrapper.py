@@ -42,6 +42,7 @@ class TensorflowSessionWrapper(object):
         self._create_session()
 
         self._eval_thread = Thread(target=self.evaluate_expr)
+        self._eval_thread.setDaemon(True)
         self._eval_thread.start()
 
     def _get_device_list(self):
@@ -192,7 +193,7 @@ class TensorflowSessionWrapper(object):
         self._session.run([self._global_init, self._iterator_inits])
 
     def enqueue(self, dataset, key, data):
-        """ Enqueue data on the main dataset """
+        """ Enqueue ``data`` with ``key`` in the specified ``dataset`` """
         try:
             ds = self._datasets[dataset]
         except KeyError:
