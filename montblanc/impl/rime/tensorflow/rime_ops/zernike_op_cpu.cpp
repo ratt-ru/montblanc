@@ -89,24 +89,6 @@ REGISTER_KERNEL_BUILDER(
     Zernike<CPUDevice, float, tensorflow::complex64>);
 
 // Register a CPU kernel for Zernike
-// handling permutation ['float', 'tensorflow::complex128']
-REGISTER_KERNEL_BUILDER(
-    Name("Zernike")
-    .TypeConstraint<float>("FT")
-    .TypeConstraint<tensorflow::complex128>("CT")
-    .Device(tensorflow::DEVICE_CPU),
-    Zernike<CPUDevice, float, tensorflow::complex128>);
-
-// Register a CPU kernel for Zernike
-// handling permutation ['double', 'tensorflow::complex64']
-REGISTER_KERNEL_BUILDER(
-    Name("Zernike")
-    .TypeConstraint<double>("FT")
-    .TypeConstraint<tensorflow::complex64>("CT")
-    .Device(tensorflow::DEVICE_CPU),
-    Zernike<CPUDevice, double, tensorflow::complex64>);
-
-// Register a CPU kernel for Zernike
 // handling permutation ['double', 'tensorflow::complex128']
 REGISTER_KERNEL_BUILDER(
     Name("Zernike")
