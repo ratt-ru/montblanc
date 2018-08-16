@@ -22,7 +22,7 @@ from montblanc.impl.rime.tensorflow.tensorflow_mock_analyser import (
     QueueDatasetInfo)
 
 
-def _depends_on_input_ds(op):
+def _requires_input_ds(op):
     """ Does the supplied op depend on the input dataset? """
     for i in op.inputs:
         if (i.op.name.startswith("shard_") and
@@ -32,7 +32,7 @@ def _depends_on_input_ds(op):
             return True
 
     # No, recurse and check the op's inputs
-    return any(_depends_on_input_ds(i.op) for i in op.inputs)
+    return any(_requires_input_ds(i.op) for i in op.inputs)
 
 
 class TensorflowSessionWrapper(object):
@@ -153,7 +153,7 @@ class TensorflowSessionWrapper(object):
             for op in graph.get_operations():
                 # Find the op responsible for initialising
                 # the main dataset iterator
-                if op.op_def.name == "MakeIterator" and _depends_on_input_ds(op):
+                if op.op_def.name == "MakeIterator" and _requires_input_ds(op):
                     self._iterator_inits.append(op)
                 # Dataset close operations
                 elif op.op_def.name in close_ops:
