@@ -2,9 +2,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from collections import namedtuple
-from pprint import pprint
-
 import tensorflow as tf
 
 from tensorflow.contrib.data import prefetch_to_device
@@ -64,15 +61,16 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         # Compute the square root of the brightness matrix
         # (as well as the sign)
         bsqrt, sgn_brightness = ops.b_sqrt(stokes, alpha,
-            inputs['frequency'], ref_freq, CT=CT,
-            polarisation_type=polarisation_type)
+                                           inputs['frequency'],
+                                           ref_freq, CT=CT,
+                                           polarisation_type=polarisation_type)
 
         # Check for nans/infs in the bsqrt
         bsqrt_msg = ("Check that your stokes parameters "
-                    "satisfy I**2 >= Q**2 + U**2 + V**2. "
-                    "Montblanc performs a cholesky decomposition "
-                    "of the brightness matrix and the above must "
-                    "hold for this to produce valid values.")
+                     "satisfy I**2 >= Q**2 + U**2 + V**2. "
+                     "Montblanc performs a cholesky decomposition "
+                     "of the brightness matrix and the above must "
+                     "hold for this to produce valid values.")
 
         bsqrt_real = tf.check_numerics(tf.real(bsqrt), bsqrt_msg)
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
@@ -83,7 +81,8 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         # Combine the brightness square root, complex phase,
         # feed rotation and beam dde's
         with tf.control_dependencies(deps):
-            antenna_jones = ops.create_antenna_jones([bsqrt],
+            antenna_jones = ops.create_antenna_jones(
+                                            [bsqrt],
                                             [],
                                             [feed_rotation],
                                             [],
@@ -91,34 +90,30 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
 
         return antenna_jones, sgn_brightness
 
-
     def point_body(points, base_coherencies):
         point_inputs = point_inputs_it.get_next()
         lm = point_inputs['point_lm']
         nsrc = tf.shape(lm)[0]
 
         # Point source shape terms are unity
-        shape = tf.ones(shape=[nsrc,nrow,nchan], dtype=FT)
+        shape = tf.ones(shape=[nsrc, nrow, nchan], dtype=FT)
 
-        ant_jones, sgn_brightness = antenna_jones(lm,
+        ant_jones, sgn_brightness = antenna_jones(
+                                        lm,
                                         point_inputs['point_stokes'],
                                         point_inputs['point_alpha'],
                                         point_inputs['point_ref_freq'])
 
-        complex_phase = ops.phase(lm,
-                            inputs['uvw'],
-                            inputs['frequency'],
-                            uvw_schema="(row,(u,v,w))",
-                            CT=CT)
+        complex_phase = ops.phase(lm, inputs['uvw'], inputs['frequency'],
+                                  uvw_schema="(row,(u,v,w))", CT=CT)
 
         phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
-                    "for all your lm coordinates. This is required "
-                    "for 'n = sqrt(1 - l**2 - m**2) - 1' "
-                    "to be finite.")
+                     "for all your lm coordinates. This is required "
+                     "for 'n = sqrt(1 - l**2 - m**2) - 1' "
+                     "to be finite.")
 
         phase_real = tf.check_numerics(tf.real(complex_phase), phase_msg)
         phase_imag = tf.check_numerics(tf.imag(complex_phase), phase_msg)
-
 
         coherencies = ops.sum_coherencies(
                         inputs['time_index'],
@@ -132,7 +127,6 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
 
         return points+1, coherencies
 
-
     # point dataset iterator  must be initialised
     deps = [point_inputs_it.initializer]
 
@@ -143,9 +137,8 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
                                               point_body,
                                               [0, base_coherencies])
 
-
-
-        # Post process visibilities to produce model visibilities and chi squared
+        # Post process visibilities to produce
+        # model visibilities and chi squared
         model_vis, chi_squared = ops.post_process_visibilities(
             inputs["time_index"], inputs["antenna1"], inputs["antenna2"],
             inputs["direction_independent_effects"], inputs["flag"],
