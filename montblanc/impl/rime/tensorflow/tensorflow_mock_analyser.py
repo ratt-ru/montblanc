@@ -82,6 +82,7 @@ def arg_schema(schema_name, op_def):
 
         return None
 
+
 def get_tf_placeholders(op_def, call_args):
     """
     Get the tensorflow placeholder definitions derived from
@@ -376,8 +377,8 @@ def create_datasets(dataset_inputs, dataset_ph_info, ds_type="map"):
                 # Create placeholder for internal input
                 dtypes[name] = dtype = tf.int64
                 shapes[name] = shape = tf.TensorShape((None,))
-                ds_ph[name] = ph = tf.placeholder(dtype=dtype, shape=shape,
-                                                  name=name.lstrip("_"))
+                ds_ph[name] = tf.placeholder(dtype=dtype, shape=shape,
+                                             name=name.lstrip("_"))
             else:
 
                 # Create a placeholder for this input
@@ -405,7 +406,8 @@ def create_datasets(dataset_inputs, dataset_ph_info, ds_type="map"):
         if ds_type == "map":
             dataset_info[ds_name] = tensor_map(ds_name, ds_ph, dtypes, shapes)
         elif ds_type == "queue":
-            dataset_info[ds_name] = tensor_queue(ds_name, ds_ph, dtypes, shapes)
+            dataset_info[ds_name] = tensor_queue(ds_name, ds_ph,
+                                                 dtypes, shapes)
         else:
             raise ValueError("Wrong dataset type %s" % ds_type)
 
@@ -558,11 +560,14 @@ def analyse_tensorflow_function(fn, cfg, device):
     # the tensorflow control flow functions to ensure that
     # all their functions are called
     mocks.append(patch(".".join((mod, "tf"))))
-    mocks.append(patch(".".join((mod, "tf.case")), side_effect=_case))
-    mocks.append(patch(".".join((mod, "tf.cond")), side_effect=_cond))
-    mocks.append(patch(".".join((mod, "tf.while_loop")), side_effect=_while))
-
-    mocks.append(patch(".".join((mod, "MapDataset")), side_effect=FakeMapDataset))
+    mocks.append(patch(".".join((mod, "tf.case")),
+                       side_effect=_case))
+    mocks.append(patch(".".join((mod, "tf.cond")),
+                       side_effect=_cond))
+    mocks.append(patch(".".join((mod, "tf.while_loop")),
+                       side_effect=_while))
+    mocks.append(patch(".".join((mod, "MapDataset")),
+                       side_effect=FakeMapDataset))
 
     # Mock each RIME tensorflow function
     tfops_mod = "montblanc.impl.rime.tensorflow.tensorflow_ops"
