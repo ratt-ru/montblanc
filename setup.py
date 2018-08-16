@@ -21,6 +21,7 @@
 import json
 import os
 from os.path import join as pjoin
+import sys
 
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
@@ -76,15 +77,18 @@ def reinitialize_command(self, command, reinit_subcommands):
 # Replace original command with monkey-patched version
 Distribution.reinitialize_command = reinitialize_command
 
-TF_VERSION = "1.9.0"
+TF_VERSION = "1.10.0"
 
 try:
     import tensorflow as tf
-except ImportError:
-    raise ImportError("Please 'pip install tensorflow==%s' or "
-                      "'pip install tensorflow-gpu==%s' prior to "
-                      "installation if you require CPU or GPU "
-                      "support, respectively" % (TF_VERSION, TF_VERSION))
+except ImportError as e:
+    ex = ImportError("Tensorflow import failed: %s "
+                     "Please 'pip install tensorflow==%s' or "
+                     "'pip install tensorflow-gpu==%s' prior to "
+                     "installation if you require CPU or GPU "
+                     "support, respectively" % (e, TF_VERSION, TF_VERSION))
+    raise (ex, None, sys.exc_info()[2])
+
 else:
     use_tf_cuda = tf.test.is_built_with_cuda()
 
