@@ -84,11 +84,10 @@ class TensorflowSessionWrapper(object):
         device_list = self._get_device_list()
 
         with tf.Graph().as_default():
-            device = tf.DeviceSpec.from_string('/cpu:0')
             datasets, placeholders, outputs = analyse_tensorflow_function(
                                                                 self._fn,
                                                                 self._cfg,
-                                                                device)
+                                                                'fake')
 
         # Add in a chunk_key uniquely identifying the chunk of data
         datasets["inputs"].variables()["chunk_key"]
