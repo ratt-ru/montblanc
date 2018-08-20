@@ -159,10 +159,10 @@ class TensorflowSessionWrapper(object):
                     self._closes.append(op)
                 # Iterator gets, get the chunk_key output tensor
                 elif op.op_def.name.endswith("GetNext"):
-                    shard_str = op.name.split('/')
+                    op_str = op.name.split('/')
 
-                    if len(shard_str) == 2 and shard_str[-1].endswith("GetNext"):
-                        scope, op_name = shard_str
+                    if len(op_str) == 2 and op_str[-1].endswith("GetNext"):
+                        scope, op_name = op_str
                         chunk_key_i = key_idx[shard]
                         shard_it_keys[int(scope[-1])] = op.outputs[chunk_key_i]
 
