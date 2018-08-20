@@ -26,35 +26,18 @@ template <typename FT, typename CT> struct LaunchTraits {};
 // but this works because this header is included only once
 template <> struct LaunchTraits<float, tensorflow::complex64>
 {
-    static constexpr int BLOCKDIMX = 1024;
-    static constexpr int BLOCKDIMY = 1;
+    static constexpr int BLOCKDIMX = 32;
+    static constexpr int BLOCKDIMY = 32;
     static constexpr int BLOCKDIMZ = 1;
 };
-// Specialise for float, tensorflow::complex128
-// Should really be .cu file as this is a concrete type
-// but this works because this header is included only once
-template <> struct LaunchTraits<float, tensorflow::complex128>
-{
-    static constexpr int BLOCKDIMX = 1024;
-    static constexpr int BLOCKDIMY = 1;
-    static constexpr int BLOCKDIMZ = 1;
-};
-// Specialise for double, tensorflow::complex64
-// Should really be .cu file as this is a concrete type
-// but this works because this header is included only once
-template <> struct LaunchTraits<double, tensorflow::complex64>
-{
-    static constexpr int BLOCKDIMX = 1024;
-    static constexpr int BLOCKDIMY = 1;
-    static constexpr int BLOCKDIMZ = 1;
-};
+
 // Specialise for double, tensorflow::complex128
 // Should really be .cu file as this is a concrete type
 // but this works because this header is included only once
 template <> struct LaunchTraits<double, tensorflow::complex128>
 {
-    static constexpr int BLOCKDIMX = 1024;
-    static constexpr int BLOCKDIMY = 1;
+    static constexpr int BLOCKDIMX = 32;
+    static constexpr int BLOCKDIMY = 32;
     static constexpr int BLOCKDIMZ = 1;
 };
 
@@ -65,7 +48,8 @@ __global__ void zernike_dde_zernike(
     const FT * in_coords,
     const CT * in_coeffs,
     const FT * in_noll_index,
-    CT * out_zernike_value)
+    CT * out_zernike_value,
+    const int nsrc, const int ntime, const int na, const int nchan)
     
 {
     // Shared memory usage unnecesssary, but demonstrates use of
@@ -73,10 +57,13 @@ __global__ void zernike_dde_zernike(
     using LTr = LaunchTraits<FT, CT>;
     __shared__ int buffer[LTr::BLOCKDIMX];
 
-    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    int src = blockIdx.x*blockDim.x + threadIdx.x;
+    int time = blockIdx.y*blockDim.y + threadIdx.y;
 
     if(i >= LTr::BLOCKDIMX)
         { return; }
+
+    out_zernike_value(0,0,0,0) = 0;
 
     // Set shared buffer to thread index
     buffer[i] = i;
@@ -92,6 +79,7 @@ public:
 
     void Compute(tensorflow::OpKernelContext * context) override
     {
+        std::cout << "I am here \n";
         namespace tf = tensorflow;
 
         // Create variables for input tensors
@@ -100,10 +88,20 @@ public:
         const auto & in_noll_index = context->input(2);
         
 
+        const int nsrc = in_coords.dim_size(1);
+        const int ntime = in_coords.dim_size(2);
+        const int na = in_coords.dim_size(3);
+        const int nchan = in_coords.dim_size(4);
+        const int npoly = in_coeffs.dim_size(2);
+
         // Allocate output tensors
         // Allocate space for output tensor 'zernike_value'
         tf::Tensor * zernike_value_ptr = nullptr;
-        tf::TensorShape zernike_value_shape = tf::TensorShape({ 1, 1, 1, 1 });
+        tf::TensorShape zernike_value_shape = tf::TensorShape({ 
+            nsrc, 
+            ntime, 
+            na, 
+            nchan });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, zernike_value_shape, &zernike_value_ptr));
         
@@ -111,8 +109,11 @@ public:
         using LTr = LaunchTraits<FT, CT>;
 
         // Set up our CUDA thread block and grid
-        dim3 block(LTr::BLOCKDIMX);
-        dim3 grid(1);
+        dim3 block = montblanc::shrink_small_dims(
+            dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
+            nsrc, ntime, na);
+        dim3 grid(montblanc::grid_from_thread_block(
+            block, nsrc, ntime, na));
 
         // Get pointers to flattened tensor data buffers
         const auto fin_coords = in_coords.flat<FT>().data();
@@ -130,7 +131,8 @@ public:
                 fin_coords,
                 fin_coeffs,
                 fin_noll_index,
-                fout_zernike_value);
+                fout_zernike_value,
+                nsrc, ntime, na, nchan);
                 
     }
 };

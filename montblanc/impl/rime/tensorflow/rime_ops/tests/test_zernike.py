@@ -79,7 +79,8 @@ def _impl_test_zernike(FT, CT, zernike_dde, gpu_devs, coeff_nn, noll_index_nn, t
         cpu_data = S.run(cpu_op)
         cpu_data = cpu_data[:, 0, 0, 0].reshape((npix, npix))
         assert np.allclose(cpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
-       #S.run(gpu_ops)
+        print("about to run gpu")
+        S.run(gpu_ops)
     
 @pytest.fixture
 def zernike_dde():
