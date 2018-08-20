@@ -95,11 +95,13 @@ void create_brightness(
     create_brightness_mask<T>(result);
     int shfl_idx = brightness_pol_2_shfl_idx();
     // Get the second polarisation value and multiply it with the mask
-    T second_pol = cub::ShuffleIndex(pol, shfl_idx);
+    T second_pol = cub::ShuffleIndex<CUB_PTX_WARP_THREADS>(pol, shfl_idx,
+                                                           0xffffffff);
     result.x *= second_pol;
     result.y *= second_pol;
     // Add the first polarisation to the real component
-    result.x += cub::ShuffleIndex(pol, shfl_idx-1);
+    result.x += cub::ShuffleIndex<CUB_PTX_WARP_THREADS>(pol, shfl_idx-1,
+                                                        0xffffffff);
 }
 
 
@@ -126,18 +128,22 @@ void create_brightness_sqrt(
     int shfl_idx = (cub::LaneId() >> 2) << 2;
 
     // det = I^2 - Q^2 - U^2 - V^2
-    typename Tr::FT I = cub::ShuffleIndex(pol, shfl_idx);
+    typename Tr::FT I = cub::ShuffleIndex<CUB_PTX_WARP_THREADS>(pol, shfl_idx,
+                                                                0xffffffff);
     typename Tr::FT trace = two*I;
     typename Tr::FT I_squared = I*I;
     typename Tr::FT det = I_squared;
 
-    typename Tr::FT Q = cub::ShuffleIndex(pol, ++shfl_idx);
+    typename Tr::FT Q = cub::ShuffleIndex<CUB_PTX_WARP_THREADS>(pol, ++shfl_idx,
+                                                                0xffffffff);
     det -= Q*Q;
 
-    typename Tr::FT U = cub::ShuffleIndex(pol, ++shfl_idx);
+    typename Tr::FT U = cub::ShuffleIndex<CUB_PTX_WARP_THREADS>(pol, ++shfl_idx,
+                                                                0xffffffff);
     det -= U*U;
 
-    typename Tr::FT V = cub::ShuffleIndex(pol, ++shfl_idx);
+    typename Tr::FT V = cub::ShuffleIndex<CUB_PTX_WARP_THREADS>(pol, ++shfl_idx,
+                                                                0xffffffff);
     det -= V*V;
 
     // This gives us 2 0 0 2 2 0 0 2 2 0 0 2
