@@ -50,21 +50,18 @@ public:
         const tf::Tensor & in_uvw = context->input(1);
         const tf::Tensor & in_frequency = context->input(2);
 
-        // Extract problem dimensions
-        int nsrc = in_lm.dim_size(0);
-        int nchan = in_frequency.dim_size(0);
-
-        // Are our uvw coordinates (ntime, na, 3) or (nrow, 3) ?
-        // If the latter, ntime = 1, na = nrow
-        bool is_row = in_uvw.dims() == 2;
-        int ntime = in_uvw.dim_size(0);
-        int na = is_row ? 1 : in_uvw.dim_size(1);
-        int nrow = ntime*na;
+        auto lm_shape = in_lm.shape();
+        auto uvw_shape = in_uvw.shape();
+        auto freq_shape = in_frequency.shape();
 
         // Reason about our output shape
-        tf::TensorShape complex_phase_shape =
-            is_row ? tf::TensorShape({nsrc, nrow, nchan})
-                   : tf::TensorShape({nsrc, ntime, na, nchan});
+        // Remove lm and uvw coordinate components
+        lm_shape.RemoveLastDims(1);
+        uvw_shape.RemoveLastDims(1);
+
+        tf::TensorShape complex_phase_shape = lm_shape;
+        complex_phase_shape.AppendShape(uvw_shape);
+        complex_phase_shape.AppendShape(freq_shape);
 
         // Create a pointer for the complex_phase result
         tf::Tensor * complex_phase_ptr = nullptr;
@@ -77,13 +74,17 @@ public:
             { return; }
 
         // Access the underlying tensors, proper
-        // Here we shape the uvw complex_phase tensors
-        // into a row-based form
-        auto lm = in_lm.tensor<FT, 2>();
-        auto uvw = in_uvw.shaped<FT, 2>({nrow, 3});
+        auto lm = in_lm.flat_inner_dims<FT, 2>();
+        auto uvw = in_uvw.flat_inner_dims<FT, 2>();
         auto frequency = in_frequency.tensor<FT, 1>();
+
+        auto nsrc = lm.dimension(0);
+        auto nuvw = uvw.dimension(0);
+        auto nchan = frequency.dimension(0);
+
         auto complex_phase = complex_phase_ptr->shaped<CT, 3>(
-                                    {nsrc, nrow, nchan});
+                                    {nsrc, nuvw, nchan});
+
 
         // Constant
         constexpr FT lightspeed = 299792458.0;
@@ -99,11 +100,11 @@ public:
             FT m = lm(src,1);
             FT n = std::sqrt(1.0 - l*l - m*m) - 1.0;
 
-            for(int row=0; row<nrow; ++row)
+            for(int uvi=0; uvi<nuvw; ++uvi)
             {
-                FT u = uvw(row,0);
-                FT v = uvw(row,1);
-                FT w = uvw(row,2);
+                FT u = uvw(uvi,0);
+                FT v = uvw(uvi,1);
+                FT w = uvw(uvi,2);
 
                 FT real_phase_base = minus_two_pi_over_c*(l*u + m*v + n*w);
 
@@ -114,7 +115,7 @@ public:
                     // std::exp<complex<FT>> and just
                     // compute the cos and sin
                     FT real_phase = real_phase_base*frequency(chan);
-                    complex_phase(src,row,chan) = {
+                    complex_phase(src,uvi,chan) = {
                                     std::cos(real_phase),
                                     std::sin(real_phase) };
                 }

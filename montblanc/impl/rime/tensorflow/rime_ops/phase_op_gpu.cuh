@@ -23,14 +23,14 @@ template <> class LaunchTraits<float>
 {
 public:
     static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 8;
-    static constexpr int BLOCKDIMZ = 2;
+    static constexpr int BLOCKDIMY = 16;
+    static constexpr int BLOCKDIMZ = 1;
 
-    static dim3 block_size(int nchan, int na, int ntime)
+    static dim3 block_size(int nchan, int nuvw)
     {
         return montblanc::shrink_small_dims(
             dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
-            nchan, na, ntime);
+            nchan, nuvw, 1);
     }
 };
 
@@ -42,11 +42,11 @@ public:
     static constexpr int BLOCKDIMY = 4;
     static constexpr int BLOCKDIMZ = 1;
 
-    static dim3 block_size(int nchan, int na, int ntime)
+    static dim3 block_size(int nchan, int nuvw)
     {
         return montblanc::shrink_small_dims(
             dim3(BLOCKDIMX, BLOCKDIMY, BLOCKDIMZ),
-            nchan, na, ntime);
+            nchan, nuvw, 1);
     }
 };
 
@@ -59,13 +59,12 @@ __global__ void rime_phase(
     const typename Traits::uvw_type * uvw,
     const typename Traits::frequency_type * frequency,
     typename Traits::complex_phase_type * complex_phase,
-    int nsrc, int ntime, int na, int nchan)
+    int nsrc, int nuvw, int nchan)
 {
     int chan = blockIdx.x*blockDim.x + threadIdx.x;
-    int ant = blockIdx.y*blockDim.y + threadIdx.y;
-    int time = blockIdx.z*blockDim.z + threadIdx.z;
+    int uvi = blockIdx.y*blockDim.y + threadIdx.y;
 
-    if(chan >= nchan || ant >= na || time >= ntime)
+    if(chan >= nchan || uvi >= nuvw)
         { return; }
 
     // Simpler float and complex types
@@ -79,17 +78,15 @@ __global__ void rime_phase(
     constexpr FT lightspeed = 299792458;
     constexpr FT two_pi_over_c = FT(-2.0*M_PI/lightspeed);
 
-    __shared__ typename Traits::uvw_type
-        s_uvw[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];
-    __shared__ typename Traits::frequency_type
-        s_freq[LTr::BLOCKDIMX];
+    __shared__ typename Traits::uvw_type s_uvw[LTr::BLOCKDIMY];
+    __shared__ typename Traits::frequency_type s_freq[LTr::BLOCKDIMX];
 
-    // UVW coordinates vary by antenna and time, but not channel
+    // UVW coordinates don't vary by channel
     if(threadIdx.x == 0)
-        { s_uvw[threadIdx.z][threadIdx.y] = uvw[time*na + ant]; }
+        { s_uvw[threadIdx.y] = uvw[uvi]; }
 
-    // Wavelengths vary by channel, not by time and antenna
-    if(threadIdx.y == 0 && threadIdx.z == 0)
+    // Wavelengths vary by channel, not by uvw
+    if(threadIdx.y == 0)
         { s_freq[threadIdx.x] = frequency[chan]; }
 
     __syncthreads();
@@ -99,20 +96,19 @@ __global__ void rime_phase(
     {
         // Calculate the n coordinate
         typename Traits::lm_type r_lm = lm[src];
-        FT n = Po::sqrt(FT(1.0) - r_lm.x*r_lm.x - r_lm.y*r_lm.y)
-            - FT(1.0);
+        FT n = Po::sqrt(FT(1.0) - r_lm.x*r_lm.x - r_lm.y*r_lm.y) - FT(1.0);
 
         // Calculate the real phase term
-        FT real_phase = s_uvw[threadIdx.z][threadIdx.y].z*n
-            + s_uvw[threadIdx.z][threadIdx.y].y*r_lm.y
-            + s_uvw[threadIdx.z][threadIdx.y].x*r_lm.x;
+        FT real_phase = s_uvw[threadIdx.y].z*n +
+                        s_uvw[threadIdx.y].y*r_lm.y +
+                        s_uvw[threadIdx.y].x*r_lm.x;
 
         real_phase *= two_pi_over_c*s_freq[threadIdx.x];
 
         CT cplx_phase;
         Po::sincos(real_phase, &cplx_phase.y, &cplx_phase.x);
 
-        int i = ((src*ntime + time)*na + ant)*nchan + chan;
+        int i = (src*nuvw + uvi)*nchan + chan;
         complex_phase[i] = cplx_phase;
     }
 }
@@ -133,21 +129,18 @@ public:
         const tf::Tensor & in_uvw = context->input(1);
         const tf::Tensor & in_frequency = context->input(2);
 
-        // Extract problem dimensions
-        int nsrc = in_lm.dim_size(0);
-        int nchan = in_frequency.dim_size(0);
-
-        // Are our uvw coordinates (ntime, na, 3) or (nrow, 3) ?
-        // If the latter, ntime = 1, na = nrow
-        bool is_row = in_uvw.dims() == 2;
-        int ntime = is_row ? 1 : in_uvw.dim_size(0);
-        int na = is_row ? in_uvw.dim_size(0) : in_uvw.dim_size(1);;
-        int nrow = ntime*na;
+        auto lm_shape = in_lm.shape();
+        auto uvw_shape = in_uvw.shape();
+        auto freq_shape = in_frequency.shape();
 
         // Reason about our output shape
-        tf::TensorShape complex_phase_shape =
-            is_row ? tf::TensorShape({nsrc, nrow, nchan})
-                   : tf::TensorShape({nsrc, ntime, na, nchan});
+        // Remove lm and uvw coordinate components
+        lm_shape.RemoveLastDims(1);
+        uvw_shape.RemoveLastDims(1);
+
+        tf::TensorShape complex_phase_shape = lm_shape;
+        complex_phase_shape.AppendShape(uvw_shape);
+        complex_phase_shape.AppendShape(freq_shape);
 
         // Create a pointer for the complex_phase result
         tf::Tensor * complex_phase_ptr = nullptr;
@@ -159,14 +152,19 @@ public:
         if (complex_phase_ptr->NumElements() == 0)
             { return; }
 
+        // Figure out the dimensions
+        auto nsrc = in_lm.flat_inner_dims<FT, 2>().dimension(0);
+        auto nuvw = in_uvw.flat_inner_dims<FT, 2>().dimension(0);
+        auto nchan = in_frequency.tensor<FT, 1>().dimension(0);
+
         // Cast input into CUDA types defined within the Traits class
         typedef montblanc::kernel_traits<FT> Tr;
         typedef typename montblanc::phase::LaunchTraits<FT> LTr;
 
         // Set up our kernel dimensions
-        dim3 blocks(LTr::block_size(nchan, na, ntime));
+        dim3 blocks(LTr::block_size(nchan, nuvw));
         dim3 grid(montblanc::grid_from_thread_block(
-            blocks, nchan, na, ntime));
+            blocks, nchan, nuvw, 1));
 
         //printf("Threads per block: X %d Y %d Z %d\n",
         //    blocks.x, blocks.y, blocks.z);
@@ -180,7 +178,7 @@ public:
         auto uvw = reinterpret_cast<const typename Tr::uvw_type *>(
             in_uvw.flat<FT>().data());
         auto frequency = reinterpret_cast<const typename Tr::frequency_type *>(
-            in_frequency.flat<FT>().data());
+                in_frequency.flat<FT>().data());
         auto complex_phase = reinterpret_cast<
             typename Tr::complex_phase_type *>(
                 complex_phase_ptr->flat<CT>().data());
@@ -191,7 +189,7 @@ public:
         // Invoke the kernel
         rime_phase<Tr> <<<grid, blocks, 0, stream>>>(
             lm, uvw, frequency, complex_phase,
-            nsrc, ntime, na, nchan);
+            nsrc, nuvw, nchan);
     }
 };
 
