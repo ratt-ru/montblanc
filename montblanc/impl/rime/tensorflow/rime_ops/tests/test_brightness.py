@@ -4,6 +4,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
+from montblanc.impl.rime.tensorflow.tensorflow_ops import (
+                                brightness as brightness_op)
+
 
 def numpy_brightness(stokes):
     I = stokes[..., 0]
@@ -32,8 +35,6 @@ class TestBrightness(unittest.TestCase):
     """ Tests the Brightness operator """
 
     def setUp(self):
-        # Load the custom operation library
-        self.rime = tf.load_op_library('rime.so')
         # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
         self.gpu_devs = [d.name for d in device_lib.list_local_devices()
                          if d.device_type == 'GPU']
@@ -65,7 +66,7 @@ class TestBrightness(unittest.TestCase):
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return self.rime.brightness(*tf_args, CT=CT)
+                return brightness_op(*tf_args, CT=CT)
 
         # Pin operation to CPU
         cpu_op = _pin_op('/cpu:0', *tf_args)
