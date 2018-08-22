@@ -45,16 +45,16 @@ __global__ void rime_sum_coherencies(
     const int * time_index,
     const typename Traits::antenna_type * antenna1,
     const typename Traits::antenna_type * antenna2,
-    const typename Traits::FT * shape,
-    const typename Traits::ant_jones_type * ant_jones,
-    const typename Traits::sgn_brightness_type * sgn_brightness,
-    const typename Traits::CT * complex_phase,
+    const typename Traits::CT * ant_scalar_1,
+    const typename Traits::ant_jones_type * ant_jones_1,
+    const typename Traits::CT * baseline_scalar,
+    const typename Traits::ant_jones_type * baseline_jones,
+    const typename Traits::CT * ant_scalar_2,
+    const typename Traits::ant_jones_type * ant_jones_2,
     const typename Traits::vis_type * base_coherencies,
     typename Traits::vis_type * coherencies,
     int nsrc, int ntime, int nvrow, int na, int nchan, int npolchan)
 {
-    // Shared memory usage unnecesssary, but demonstrates use of
-    // constant Trait members to create kernel shared memory.
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
     using LTr = LaunchTraits<FT>;
@@ -71,9 +71,13 @@ __global__ void rime_sum_coherencies(
     int ant2 = antenna2[vrow];
     int time = time_index[vrow];
 
+    int i;
+
+    CT coherency = {0.0, 0.0};
+
     // Load in model visibilities
-    int i = vrow*npolchan + polchan;
-    CT coherency = base_coherencies[i];
+    if(base_coherencies != nullptr)
+        { coherency = base_coherencies[vrow*npolchan + polchan]; }
 
     // Sum over visibilities
     for(int src=0; src < nsrc; ++src)
@@ -82,40 +86,59 @@ __global__ void rime_sum_coherencies(
 
         // Load in antenna 1 jones
         i = (base*na + ant1)*npolchan + polchan;
-        CT J1 = ant_jones[i];
+        CT AJ1 = ant_jones_1[i];
 
-        // Load in shape value and complex phase
-        i = (src*nvrow + vrow)*nchan + chan;
-        FT shape_ = shape[i];
-        // Multiply shape factor into antenna 1 jones
-        J1.x *= shape_; J1.y *= shape_;
-
-        // Multiply in the complex phase if it's available
-        if(complex_phase != nullptr)
+        if(ant_scalar_1 != nullptr)
         {
-            CT cp = complex_phase[i];
-            CT J1tmp = J1;
-            J1.x = J1tmp.x*cp.x - J1tmp.y*cp.y,
-            J1.y = J1tmp.x*cp.y + J1tmp.y*cp.x;
+            CT AS1 = ant_scalar_1[i];
+            montblanc::complex_multiply_in_place<FT>(AJ1, AS1);
+        }
+
+        // May the CUDA gods forgive me for this if-else ladder
+        // in a for-loop...
+        if(baseline_scalar != nullptr && baseline_jones != nullptr)
+        {
+            i = (src*nvrow + vrow)*npolchan + polchan;
+            // Naming scheme is back to front, but this is done
+            // so that BLJ holds the result...
+            CT BLJ = baseline_scalar[i];
+            CT BS = baseline_jones[i];
+            montblanc::complex_multiply_in_place<FT>(BLJ, BS);
+            montblanc::jones_multiply_4x4_in_place<FT>(AJ1, BLJ);
+        }
+        else if(baseline_scalar != nullptr && baseline_jones == nullptr)
+        {
+            i = (src*nvrow + vrow)*npolchan + polchan;
+            CT BLJ = baseline_scalar[i];
+            montblanc::jones_multiply_4x4_in_place<FT>(AJ1, BLJ);
+        }
+        else if(baseline_scalar == nullptr && baseline_jones != nullptr)
+        {
+            i = (src*nvrow + vrow)*npolchan + polchan;
+            CT BLJ = baseline_jones[i];
+            montblanc::jones_multiply_4x4_in_place<FT>(AJ1, BLJ);
+        }
+        else
+        {
+            // No baseline terms to multiply in
         }
 
         // Load antenna 2 jones
         i = (base*na + ant2)*npolchan + polchan;
-        CT J2 = ant_jones[i];
+        CT AJ2 = ant_jones_2[i];
 
-        // Multiply jones matrices, result into J1
-        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<FT>(
-            J1, J2);
+        // Multiply in antenna 2 jones
+        if(ant_scalar_2 != nullptr)
+        {
+            CT AS2 = ant_scalar_2[i];
+            montblanc::complex_multiply_in_place<FT>(AJ2, AS2);
+        }
 
-        // Load in and apply in sign inversions stemming from
-        // cholesky decompositions that must be applied.
-        FT sign = FT(sgn_brightness[base]);
-        J1.x *= sign;
-        J1.y *= sign;
+        montblanc::jones_multiply_4x4_hermitian_transpose_in_place<FT>(AJ1, AJ2);
 
         // Sum source coherency into model visibility
-        coherency.x += J1.x;
-        coherency.y += J1.y;
+        coherency.x += AJ1.x;
+        coherency.y += AJ1.y;
     }
 
     i = vrow*npolchan + polchan;
@@ -133,8 +156,10 @@ private:
 public:
     explicit SumCoherencies(tensorflow::OpKernelConstruction * ctx) :
         tensorflow::OpKernel(ctx),
-        in_facade({"time_index", "antenna1", "antenna2", "shape",
-                   "ant_jones", "sgn_brightness", "complex_phase",
+        in_facade({"time_index", "antenna1", "antenna2",
+                   "ant_scalar_1", "ant_jones_1",
+                   "baseline_scalar", "baseline_jones",
+                   "ant_scalar_2", "ant_jones_2",
                    "base_coherencies"})
     {
         OP_REQUIRES_OK(ctx, in_facade.inspect(ctx));
@@ -171,10 +196,12 @@ public:
         const tf::Tensor * time_index_ptr = nullptr;
         const tf::Tensor * antenna1_ptr = nullptr;
         const tf::Tensor * antenna2_ptr = nullptr;
-        const tf::Tensor * shape_ptr = nullptr;
-        const tf::Tensor * ant_jones_ptr = nullptr;
-        const tf::Tensor * complex_phase_ptr = nullptr;
-        const tf::Tensor * sgn_brightness_ptr = nullptr;
+        const tf::Tensor * ant_scalar_1_ptr = nullptr;
+        const tf::Tensor * ant_jones_1_ptr = nullptr;
+        const tf::Tensor * baseline_scalar_ptr = nullptr;
+        const tf::Tensor * baseline_jones_ptr = nullptr;
+        const tf::Tensor * ant_scalar_2_ptr = nullptr;
+        const tf::Tensor * ant_jones_2_ptr = nullptr;
         const tf::Tensor * base_coherencies_ptr = nullptr;
 
         OP_REQUIRES_OK(ctx, op_data.get_tensor("time_index", 0,
@@ -183,14 +210,18 @@ public:
                                                  &antenna1_ptr));
         OP_REQUIRES_OK(ctx, op_data.get_tensor("antenna2", 0,
                                                  &antenna2_ptr));
-        OP_REQUIRES_OK(ctx, op_data.get_tensor("shape", 0,
-                                                 &shape_ptr));
-        OP_REQUIRES_OK(ctx, op_data.get_tensor("ant_jones", 0,
-                                                 &ant_jones_ptr));
-        bool have_complex_phase = op_data.get_tensor("complex_phase", 0,
-                                                 &complex_phase_ptr).ok();
-        OP_REQUIRES_OK(ctx, op_data.get_tensor("sgn_brightness", 0,
-                                                 &sgn_brightness_ptr));
+        bool have_ant_1_scalar = op_data.get_tensor("ant_scalar_1", 0,
+                                                 &ant_scalar_1_ptr).ok();
+        OP_REQUIRES_OK(ctx, op_data.get_tensor("ant_jones_1", 0,
+                                                 &ant_jones_1_ptr));
+        bool have_bl_scalar = op_data.get_tensor("baseline_scalar", 0,
+                                                 &baseline_scalar_ptr).ok();
+        bool have_bl_jones = op_data.get_tensor("baseline_jones", 0,
+                                                 &baseline_jones_ptr).ok();
+        bool have_ant_2_scalar = op_data.get_tensor("ant_scalar_2", 0,
+                                                 &ant_scalar_2_ptr).ok();
+        OP_REQUIRES_OK(ctx, op_data.get_tensor("ant_jones_2", 0,
+                                                 &ant_jones_2_ptr));
         bool have_base = op_data.get_tensor("base_coherencies", 0,
                                                  &base_coherencies_ptr).ok();
 
@@ -201,19 +232,25 @@ public:
             antenna1_ptr->flat<int>().data());
         auto antenna2 = reinterpret_cast<const typename Tr::antenna_type *>(
             antenna2_ptr->flat<int>().data());
-        auto shape = reinterpret_cast<const typename Tr::FT *>(
-            shape_ptr->flat<FT>().data());
-        auto ant_jones = reinterpret_cast<const typename Tr::ant_jones_type *>(
-            ant_jones_ptr->flat<CT>().data());
-        auto sgn_brightness =  reinterpret_cast<const typename Tr::sgn_brightness_type *>(
-                        sgn_brightness_ptr->flat<tf::int8>().data());
-        auto complex_phase = !have_complex_phase ? nullptr :
+        auto ant_scalar_1 = !have_ant_1_scalar ? nullptr :
                     reinterpret_cast<const typename Tr::CT *>(
-                        complex_phase_ptr->flat<CT>().data());
+                        ant_scalar_1_ptr->flat<CT>().data());
+        auto ant_jones_1 = reinterpret_cast<const typename Tr::ant_jones_type *>(
+            ant_jones_1_ptr->flat<CT>().data());
+        auto baseline_scalar = !have_bl_scalar ? nullptr :
+                    reinterpret_cast<const typename Tr::CT *>(
+                        baseline_scalar_ptr->flat<CT>().data());
+        auto baseline_jones = !have_bl_jones ? nullptr :
+                    reinterpret_cast<const typename Tr::ant_jones_type *>(
+                        baseline_jones_ptr->flat<CT>().data());
+        auto ant_scalar_2 = !have_ant_2_scalar ? nullptr :
+                    reinterpret_cast<const typename Tr::CT *>(
+                        ant_scalar_2_ptr->flat<CT>().data());
+        auto ant_jones_2 = reinterpret_cast<const typename Tr::ant_jones_type *>(
+            ant_jones_2_ptr->flat<CT>().data());
         auto base_coherencies = !have_base ? nullptr :
                     reinterpret_cast<const typename Tr::vis_type *>(
                         base_coherencies_ptr->flat<CT>().data());
-
         auto coherencies = reinterpret_cast<typename Tr::vis_type *>(
                         coherencies_ptr->flat<CT>().data());
 
@@ -229,8 +266,11 @@ public:
 
         // Call the rime_sum_coherencies CUDA kernel
         rime_sum_coherencies<Tr><<<grid, block, 0, device.stream()>>>(
-            time_index, antenna1, antenna2, shape, ant_jones,
-            sgn_brightness, complex_phase, base_coherencies, coherencies,
+            time_index, antenna1, antenna2,
+            ant_scalar_1, ant_jones_1,
+            baseline_scalar, baseline_jones,
+            ant_scalar_2, ant_jones_2,
+            base_coherencies, coherencies,
             nsrc, ntime, nvrow, na, nchan, ncorrchan);
     }
 };

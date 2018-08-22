@@ -63,14 +63,14 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         """
         # Compute the complex phase
         cplx_phase = ops.phase(lm, inputs['antenna_uvw'],
-                                    inputs['frequency'],
-                                    CT=CT)
+                               inputs['frequency'],
+                               CT=CT)
 
         # Check for nans/infs in the complex phase
         phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
-                    "for all your lm coordinates. This is required "
-                    "for 'n = sqrt(1 - l**2 - m**2) - 1' "
-                    "to be finite.")
+                     "for all your lm coordinates. This is required "
+                     "for 'n = sqrt(1 - l**2 - m**2) - 1' "
+                     "to be finite.")
 
         phase_real = tf.check_numerics(tf.real(cplx_phase), phase_msg)
         phase_imag = tf.check_numerics(tf.imag(cplx_phase), phase_msg)
@@ -78,28 +78,29 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         # Compute the square root of the brightness matrix
         # (as well as the sign)
         bsqrt, sgn_brightness = ops.b_sqrt(stokes, alpha,
-            inputs['frequency'], ref_freq, CT=CT,
-            polarisation_type=polarisation_type)
+                                           inputs['frequency'], ref_freq,
+                                           CT=CT,
+                                           polarisation_type=polarisation_type)
 
         # Check for nans/infs in the bsqrt
         bsqrt_msg = ("Check that your stokes parameters "
-                    "satisfy I**2 >= Q**2 + U**2 + V**2. "
-                    "Montblanc performs a cholesky decomposition "
-                    "of the brightness matrix and the above must "
-                    "hold for this to produce valid values.")
+                     "satisfy I**2 >= Q**2 + U**2 + V**2. "
+                     "Montblanc performs a cholesky decomposition "
+                     "of the brightness matrix and the above must "
+                     "hold for this to produce valid values.")
 
         bsqrt_real = tf.check_numerics(tf.real(bsqrt), bsqrt_msg)
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
         # Compute the direction dependent effects from the beam
         ddes = ops.e_beam(lm,
-            inputs['frequency'],
-            inputs['pointing_errors'],
-            inputs['antenna_scaling'],
-            pa_sin, pa_cos,
-            inputs['beam_extents'],
-            inputs['beam_freq_map'],
-            inputs['ebeam'])
+                          inputs['frequency'],
+                          inputs['pointing_errors'],
+                          inputs['antenna_scaling'],
+                          pa_sin, pa_cos,
+                          inputs['beam_extents'],
+                          inputs['beam_freq_map'],
+                          inputs['ebeam'])
 
         ejones_msg = ("Invalid beam values")
 
@@ -115,39 +116,43 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         # feed rotation and beam dde's
         with tf.control_dependencies(deps):
             antenna_jones = ops.create_antenna_jones([bsqrt],
-                                            [cplx_phase],
-                                            [feed_rotation],
-                                            [ddes],
-                                            FT=FT, CT=CT)
+                                                     [cplx_phase],
+                                                     [feed_rotation],
+                                                     [ddes],
+                                                     FT=FT, CT=CT)
 
         return antenna_jones, sgn_brightness
 
-
     def point_body(points, base_coherencies):
         point_inputs = point_inputs_it.get_next()
-        lm = point_inputs['point_lm']
-        nsrc = tf.shape(lm)[0]
 
-        # Point source shape terms are unity
-        shape = tf.ones(shape=[nsrc,nrow,nchan], dtype=FT)
-
-        ant_jones, sgn_brightness = antenna_jones(lm,
+        ant_jones, sgn_brightness = antenna_jones(
+                                        point_inputs['point_lm'],
                                         point_inputs['point_stokes'],
                                         point_inputs['point_alpha'],
                                         point_inputs['point_ref_freq'])
+
+        ajs = tf.shape(ant_jones)
+        nsrc, ntime, na = ajs[0], ajs[1], ajs[2]
+
+        # Cast to complex and broadcast up
+        sgn_brightness = tf.cast(sgn_brightness, CT)[:, :, None, None, None]
+        sgn_brightness = tf.broadcast_to(sgn_brightness,
+                                         [nsrc, ntime, na, nchan, ncorr])
 
         coherencies = ops.sum_coherencies(
                         inputs['time_index'],
                         inputs['antenna1'],
                         inputs['antenna2'],
-                        shape,
-                        ant_jones,
                         [sgn_brightness],
+                        ant_jones,
                         [],
-                        [base_coherencies])
+                        [],
+                        [],
+                        ant_jones,
+                        [base_coherencies], FT=FT)
 
         return points+1, coherencies
-
 
     # point dataset iterator  must be initialised
     deps = [point_inputs_it.initializer]

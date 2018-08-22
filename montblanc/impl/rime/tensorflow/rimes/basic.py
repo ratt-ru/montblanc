@@ -92,19 +92,20 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
 
     def point_body(points, base_coherencies):
         point_inputs = point_inputs_it.get_next()
-        lm = point_inputs['point_lm']
-        nsrc = tf.shape(lm)[0]
-
-        # Point source shape terms are unity
-        shape = tf.ones(shape=[nsrc, nrow, nchan], dtype=FT)
+        stokes = point_inputs['point_stokes']
 
         ant_jones, sgn_brightness = antenna_jones(
-                                        lm,
+                                        point_inputs['point_lm'],
                                         point_inputs['point_stokes'],
                                         point_inputs['point_alpha'],
                                         point_inputs['point_ref_freq'])
 
-        complex_phase = ops.phase(lm, inputs['uvw'], inputs['frequency'],
+        ajs = tf.shape(ant_jones)
+        nsrc, ntime, na = ajs[0], ajs[1], ajs[2]
+
+        complex_phase = ops.phase(point_inputs['point_lm'],
+                                  inputs['uvw'],
+                                  inputs['frequency'],
                                   uvw_schema="(row,(u,v,w))", CT=CT)
 
         phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
@@ -115,15 +116,22 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         phase_real = tf.check_numerics(tf.real(complex_phase), phase_msg)
         phase_imag = tf.check_numerics(tf.imag(complex_phase), phase_msg)
 
+        # Cast to complex and broadcast up
+        sgn_brightness = tf.cast(sgn_brightness, CT)[:, :, None, None, None]
+        sgn_brightness = tf.broadcast_to(sgn_brightness,
+                                         [nsrc, ntime, na, nchan, ncorr])
+
         coherencies = ops.sum_coherencies(
                         inputs['time_index'],
                         inputs['antenna1'],
                         inputs['antenna2'],
-                        shape,
-                        ant_jones,
                         [sgn_brightness],
-                        [complex_phase],
-                        [base_coherencies])
+                        ant_jones,
+                        [],
+                        [],
+                        [],
+                        ant_jones,
+                        [base_coherencies], FT=FT)
 
         return points+1, coherencies
 

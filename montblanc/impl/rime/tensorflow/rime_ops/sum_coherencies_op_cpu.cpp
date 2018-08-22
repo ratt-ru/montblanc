@@ -21,10 +21,12 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
     TF_RETURN_IF_ERROR(in_facade.inspect({"time_index",
                                         "antenna1",
                                         "antenna2",
-                                        "shape",
-                                        "ant_jones",
-                                        "sgn_brightness",
-                                        "complex_phase",
+                                        "ant_scalar_1",
+                                        "ant_jones_1",
+                                        "baseline_scalar",
+                                        "baseline_jones",
+                                        "ant_scalar_2",
+                                        "ant_jones_2",
                                         "base_coherencies"}));
 
     DimensionHandle nrow, nchan, ncorr;
@@ -47,21 +49,30 @@ REGISTER_OP("SumCoherencies")
     .Input("time_index: int32")
     .Input("antenna1: int32")
     .Input("antenna2: int32")
-    .Input("shape: FT")
-    .Input("ant_jones: CT")
-    .Input("sgn_brightness: have_sgn_brightness*int8")
-    .Input("complex_phase: have_complex_phase*CT")
-    .Input("base_coherencies: have_base_coherencies*CT")
+    .Input("ant_scalar_1: ant_scalar_1_type")
+    .Input("ant_jones_1: CT")
+    .Input("baseline_scalar: baseline_scalar_type")
+    .Input("baseline_jones: baseline_jones_type")
+    .Input("ant_scalar_2: ant_scalar_2_type")
+    .Input("ant_jones_2: CT")
+    .Input("base_coherencies: base_coherencies_type")
     .Output("coherencies: CT")
     .Attr("FT: {double, float} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
-    .Attr("have_sgn_brightness: int >= 0")
-    .Attr("have_complex_phase: int >= 0")
-    .Attr("have_base_coherencies: int >= 0")
+    .Attr("ant_scalar_1_type: list({complex64, complex128}) >= 0")
+    .Attr("ant_scalar_2_type: list({complex64, complex128}) >= 0")
+    .Attr("baseline_scalar_type: list({complex64, complex128}) >= 0")
+    .Attr("baseline_jones_type: list({complex64, complex128}) >= 0")
+    .Attr("base_coherencies_type: list({complex64, complex128}) >= 0")
     .Attr("time_index_schema: string = '(row,)'")
     .Attr("antenna1_schema: string = '(row,)'")
     .Attr("antenna2_schema: string = '(row,)'")
-    .Attr("ant_jones_schema: string = '(source,time,ant,chan,corr)'")
+    .Attr("ant_scalar_1_schema: string = '(source,time,ant,chan,corr)'")
+    .Attr("ant_jones_1_schema: string = '(source,time,ant,chan,corr)'")
+    .Attr("baseline_scalar_schema: string = '(source,row,chan,corr)'")
+    .Attr("baseline_jones_schema: string = '(source,row,chan,corr)'")
+    .Attr("ant_scalar_2_schema: string = '(source,time,ant,chan,corr)'")
+    .Attr("ant_jones_2_schema: string = '(source,time,ant,chan,corr)'")
     .Attr("base_coherencies_schema: string = '(row, chan, corr)'")
     .SetShapeFn(sum_coherencies_shape_function);
 
