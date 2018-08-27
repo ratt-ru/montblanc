@@ -214,15 +214,31 @@ class TensorflowSessionWrapper(object):
         self._session.run([ds.put], feed_dict=feed_dict)
 
     def dequeue(self, keys):
-        ops = []
-        feed_dict = {}
-        pop_index = None
-
         if isinstance(keys, (int, np.integer)):
-            feed_dict[self._output_map_pop_key] = keys
-            pop_index = len(ops)
-            ops.append(self._output_map_pop)
+            return self._session.run(self._output_map_pop, feed_dict={
+                                     self._output_map_pop_key: keys})
         elif isinstance(keys, dict):
+            # Retrieve results from the inputs dataset first
+            # TODO(sjperkins)
+            # Running this concurrently with the map dataset clears below
+            # can produce conditions where required input gets cleared
+            # before tensorflow can retrieve it for execution.
+            # It would be nice to use tf.control_dependencies
+            # and submit it all in one session run
+            try:
+                ds_keys = keys.pop("inputs")
+            except KeyError:
+                raise ValueError("No inputs dataset")
+            else:
+                if isinstance(ds_keys, (int, np.integer)):
+                    res = self._session.run(self._output_map_pop, feed_dict={
+                                            self._output_map_pop_key: ds_keys})
+                else:
+                    raise ValueError("Queue key %s must be "
+                                     "scalar integer" % (ds_keys,))
+
+            # Now clear out the input datasets
+            ops = []
             feed_dict = {}
 
             for dataset, ds_keys in keys.items():
@@ -234,25 +250,16 @@ class TensorflowSessionWrapper(object):
                                      (dataset, self._datasets.keys()))
 
                 if isinstance(ds, QueueDatasetInfo):
-                    if dataset != "inputs":
-                        raise ValueError("Only inputs queue allowed")
-                    elif isinstance(ds_keys, (int, np.integer)):
-                        feed_dict[self._output_map_pop_key] = ds_keys
-                        pop_index = len(ops)
-                        ops.append(self._output_map_pop)
-                    else:
-                        raise ValueError("Queue key %s must be "
-                                         "scalar integer" % ds_keys)
+                    raise ValueError("Only inputs queue allowed")
                 elif isinstance(ds, MapDatasetInfo):
                     ops.append(ds.clear)
                     feed_dict[ds.clear_key] = ds_keys
                 else:
                     raise ValueError("Invalid dataset type")
 
-        if pop_index is None:
-            raise ValueError("No key for 'inputs' dataset was supplied")
+            self._session.run(ops, feed_dict=feed_dict)
 
-        return self._session.run(ops, feed_dict=feed_dict)[pop_index]
+        return res
 
     def evaluate_expr(self):
         while True:
