@@ -988,7 +988,14 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
         # Compute the direction dependent effects from the beam
-        ejones = rime.e_beam(radec - D.phase_centre, D.frequency,
+        #radec_prime = radec * tf.cast(tf.stack([-1.0, 1.0]), radec.dtype)
+        #phase_centre_prime = D.phase_centre * tf.cast(tf.stack([-1.0, 1.0]), D.phase_centre.dtype)
+        #def normang(val):
+        #    """ Normalizes angle between [-pi, pi) """
+        #    return ( val + np.pi) % ( 2 * np.pi ) - np.pi
+        #cube_pos = normang(normang(radec_prime) - normang(phase_centre_prime))
+
+        ejones = rime.e_beam(lm, D.frequency,
                              D.pointing_errors, D.antenna_scaling,
                              pa_sin, pa_cos,
                              D.beam_extents, D.beam_freq_map, D.ebeam)
