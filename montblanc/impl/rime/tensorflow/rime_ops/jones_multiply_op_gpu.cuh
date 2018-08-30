@@ -106,7 +106,7 @@ __global__ void rime_jones_multiply(
 
         for(uint32_t j=0; j<ntensors; ++j)
         {
-            // Dimensions of this tensors
+            // Dimensions of this tensor
             const uint32_t & nisrc = tensor_sizes[j*ntensor_elements + 0];
             const uint32_t & nitime = tensor_sizes[j*ntensor_elements + 1];
             const uint32_t & niant = tensor_sizes[j*ntensor_elements + 2];
@@ -166,7 +166,6 @@ public:
     {
         namespace tf = tensorflow;
 
-        std::unordered_map<std::string, int> output_sizes;
         tensorflow::OpInputList in_list;
         context->input_list("in", & in_list);
 
@@ -186,70 +185,12 @@ public:
 
         std::vector<std::vector<tf::int64>> reshapes;
         reshapes.reserve(in_list.size());
+        std::unordered_map<std::string, int> output_sizes;
 
-        for(int i=0; i<in_list.size(); ++i)
-        {
-            // Get the tensor shape
-            const tf::TensorShape shape = in_list[i].shape();
-
-            // Get the associated shape schema
-            std::vector<std::string> schema;
-            OP_REQUIRES_OK(context, parse_shape_schema(schemas[i], schema));
-
-            // Number of elements in shape and schema must match
-            OP_REQUIRES(context, schema.size() == shape.dims(),
-                tf::errors::InvalidArgument("schema ", schemas[i], " "
-                                            "shape does not match "
-                                            "in[", i, "].shape of ",
-                                            shape.DebugString()));
-
-            // Work out the dimension sizes needed to reshape
-            // the tensor rank up to that of the output schema.
-            // Introduce 1's for missing dimensions
-            std::vector<tf::int64> reshape;
-            reshape.reserve(output_schema.size());
-
-            // Start out with all 1.
-            for(int j=0; j<output_schema.size(); ++j)
-                { reshape.push_back(1); }
-
-            for(int j=0; j<schema.size(); ++j)
-            {
-                // Either set the output size for this
-                // schema dimension or check that it matches
-                // a previously found value
-                auto size_it = output_sizes.find(schema[j]);
-
-                if(size_it == output_sizes.end())
-                {
-                    output_sizes.insert({schema[j], shape.dim_size(j)});
-                }
-                else
-                {
-                    OP_REQUIRES(context,
-                       size_it->second == shape.dim_size(j),
-                       tf::errors::InvalidArgument("Existing size ",
-                           size_it->second, " for dimension ", schema[j],
-                           " does not match ", shape.dim_size(j),
-                           " found in input tensor ", i));
-                }
-
-
-                // Find index of schema dimension in output schema
-                auto it = output_index.find(schema[j]);
-
-                OP_REQUIRES(context, it != output_index.end(),
-                    tf::errors::InvalidArgument(schema[j], " is not part "
-                                                "of the output schema ",
-                                                str_output_schema));
-
-                // Set the dimension size at the output index
-                // to the shape size
-                reshape[it->second] = shape.dim_size(j);
-            }
-
-            reshapes.emplace_back(reshape);
-        }
+        OP_REQUIRES_OK(context, infer_dimensionality(in_list,
+                                 schemas, str_output_schema,
+                                 output_schema, output_index, reshapes,
+                                 output_sizes));
 
 
         // Get pointers to flattened tensor data buffers
