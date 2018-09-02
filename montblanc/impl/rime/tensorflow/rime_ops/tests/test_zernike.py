@@ -4,31 +4,33 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
+from montblanc.impl.rime.tensorflow.tensorflow_ops import zernike
+
 
 @pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
-def test_zernike_xx(zernike_dde, gpu_devs, coeff_xx, noll_index_xx, eidos_data_xx, FT, CT):
+def test_zernike_xx(gpu_devs, coeff_xx, noll_index_xx, eidos_data_xx, FT, CT):
     """ Test the Zernike operator """
     # Run test with the type combinations above
-    _impl_test_zernike(FT, CT, zernike_dde, gpu_devs, coeff_xx, noll_index_xx, 15, eidos_data_xx)
+    _impl_test_zernike(FT, CT, gpu_devs, coeff_xx, noll_index_xx, 15, eidos_data_xx)
 
 @pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
-def test_zernike_xy(zernike_dde, gpu_devs, coeff_xy, noll_index_xy, eidos_data_xy, FT, CT):
+def test_zernike_xy(gpu_devs, coeff_xy, noll_index_xy, eidos_data_xy, FT, CT):
     """ Test the Zernike operator """
-    _impl_test_zernike(FT, CT, zernike_dde, gpu_devs, coeff_xy, noll_index_xy, 8, eidos_data_xy)
+    _impl_test_zernike(FT, CT, gpu_devs, coeff_xy, noll_index_xy, 8, eidos_data_xy)
 
 @pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
-def test_zernike_yx(zernike_dde, gpu_devs, coeff_yx, noll_index_yx, eidos_data_yx, FT, CT):
+def test_zernike_yx(gpu_devs, coeff_yx, noll_index_yx, eidos_data_yx, FT, CT):
     """ Test the Zernike operator """
     # List of type constraint for testing this operator
-    _impl_test_zernike(FT, CT, zernike_dde, gpu_devs, coeff_yx, noll_index_yx, 8, eidos_data_yx)
+    _impl_test_zernike(FT, CT, gpu_devs, coeff_yx, noll_index_yx, 8, eidos_data_yx)
 
 @pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
-def test_zernike_yy(zernike_dde, gpu_devs, coeff_yy, noll_index_yy, eidos_data_yy, FT, CT):
+def test_zernike_yy(gpu_devs, coeff_yy, noll_index_yy, eidos_data_yy, FT, CT):
     """ Test the Zernike operator """
-    _impl_test_zernike(FT, CT, zernike_dde, gpu_devs, coeff_yy, noll_index_yy, 15, eidos_data_yy)
+    _impl_test_zernike(FT, CT, gpu_devs, coeff_yy, noll_index_yy, 15, eidos_data_yy)
 
 
-def _impl_test_zernike(FT, CT, zernike_dde, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_data_nn):
+def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_data_nn):
     """ Implementation of the Zernike operator test """
     npix = 17
     nsrc = npix ** 2
@@ -64,7 +66,7 @@ def _impl_test_zernike(FT, CT, zernike_dde, gpu_devs, coeff_nn, noll_index_nn, t
     def _pin_op(device, *tf_args):
         """ Pin operation to device """
         with tf.device(device):
-            return zernike_dde.zernike(*tf_args)
+            return zernike(*tf_args)
 
     # Pin operation to CPU
     cpu_op = _pin_op('/cpu:0', *tf_args)
@@ -82,9 +84,6 @@ def _impl_test_zernike(FT, CT, zernike_dde, gpu_devs, coeff_nn, noll_index_nn, t
         print("about to run gpu")
         S.run(gpu_ops)
     
-@pytest.fixture
-def zernike_dde():
-    return tf.load_op_library('./zernike_dde.so')
 
 @pytest.fixture
 def gpu_devs():
