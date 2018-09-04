@@ -20,14 +20,18 @@ Analysis = namedtuple("Analysis", ["tf_shape", "tf_schema",
     (np.float32, np.complex64),
     (np.float64, np.complex128),
 ])
-@pytest.mark.parametrize("jones_shapes", [
-    [("stafij", "tfjk", "sakl"), ("stafil",)],
-    [("stafij", "tafjk", "sakl"), ("stafil",)],
-    [("afij", "tfjk", "sakl"), ("stafil",)],
-    [("ij", "tfjk", "sakl"), ("stafil",)],
-    [("ij", "tfjk", "sakl", "staflm"), ("stafim",)],
+@pytest.mark.parametrize("in_shape, out_shape, squeeze", [
+    [("stafij", "tfjk", "sakl"), ("stafil",), False],
+    [("stafij", "tafjk", "sakl"), ("stafil",), True],
+    [("afij", "tfjk", "sakl"), ("stafil",), False],
+    [("ij", "tfjk", "sakl"), ("stafil",), True],
+    [("ij", "tfjk", "sakl", "staflm"), ("stafim",), False],
+    [("ij", "tfjk"), ("tfik",), True],
+    [("aij", "tjk"), ("taik",), True],
+    [("rij", "srfjk"), ("srfik",), True]
 ])
-def test_jones_multiply(FT, CT, jones_shapes, tensorflow_gpu_devices):
+def test_jones_multiply(FT, CT, in_shape, out_shape, squeeze,
+                        tensorflow_gpu_devices):
     """ Implementation of the JonesMultiply operator test """
 
     def rf(*args, **kwargs):
@@ -49,6 +53,7 @@ def test_jones_multiply(FT, CT, jones_shapes, tensorflow_gpu_devices):
     dim_sizes = {
         's': 5,
         't': 10,
+        'r': 4,
         'a': 7,
         'f': 16,
     }
@@ -58,6 +63,7 @@ def test_jones_multiply(FT, CT, jones_shapes, tensorflow_gpu_devices):
 
     einsum_dim_to_schema = [
         ('s', 'source'),
+        ('r', 'row'),
         ('t', 'time'),
         ('a', 'ant'),
         ('f', 'chan'),
@@ -96,10 +102,8 @@ def test_jones_multiply(FT, CT, jones_shapes, tensorflow_gpu_devices):
             yield Analysis(tuple(tf_shape), schema,
                            tuple(einsum_shape), einsum_schema)
 
-    inputs, outputs = jones_shapes
-
-    input_analysis = list(_analyse(inputs))
-    output_analysis = list(_analyse(outputs))
+    input_analysis = list(_analyse(in_shape))
+    output_analysis = list(_analyse(out_shape))
 
     # Create input variables
     # Argument list
@@ -109,7 +113,8 @@ def test_jones_multiply(FT, CT, jones_shapes, tensorflow_gpu_devices):
     # Argument string name list
     # Constructor tensorflow variables
     tf_args = [[tf.Variable(v) for v in np_args]]
-    tf_kwargs = {'schemas': schemas, 'FT': FT}
+    tf_kwargs = {'schemas': schemas, 'FT': FT, 'squeeze': squeeze,
+                 'output_schema': output_analysis[0].tf_schema}
 
     def _pin_op(device, *tf_args, **tf_kwargs):
         """ Pin operation to device """

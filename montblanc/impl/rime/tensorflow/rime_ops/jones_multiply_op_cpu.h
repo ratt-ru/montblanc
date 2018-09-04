@@ -25,16 +25,17 @@ private:
     std::vector<std::string> schemas;
     std::vector<std::string> output_schema;
     std::unordered_map<std::string, int> output_index;
+    bool squeeze;
     int N;
 
 public:
     explicit JonesMultiply(tensorflow::OpKernelConstruction * context)
-        : tensorflow::OpKernel(context),
-          str_output_schema("(source,time,ant,chan,corr)")
+        : tensorflow::OpKernel(context)
     {
-        OP_REQUIRES_OK(context, context->GetAttr("schemas",
-                                                 &schemas));
+        OP_REQUIRES_OK(context, context->GetAttr("schemas", &schemas));
         OP_REQUIRES_OK(context, context->GetAttr("N", &N));
+        OP_REQUIRES_OK(context, context->GetAttr("squeeze", &squeeze));
+        OP_REQUIRES_OK(context, context->GetAttr("output_schema", &str_output_schema));
 
 
         OP_REQUIRES_OK(context,
@@ -49,7 +50,7 @@ public:
         namespace tf = tensorflow;
 
         tensorflow::OpInputList in_list;
-        context->input_list("in", & in_list);
+        context->input_list("jones_in", & in_list);
 
         OP_REQUIRES(context, in_list.size() == schemas.size(),
             tf::errors::InvalidArgument("Number of schemas ", schemas.size(),
@@ -65,18 +66,42 @@ public:
                                  output_schema, output_index, reshapes,
                                  output_sizes));
 
-        // Determine output tensor shape
+        // Determine output tensor shape, this may be < MAX_TENSOR_NDIM
         tf::TensorShape output_shape;
+        // Reshape output tensor to MAX_TENSOR_NDIM
+        std::vector<tf::int64> out_reshape;
 
-        for(int i=0; i<output_schema.size(); ++i)
+        OP_REQUIRES(context, MAX_TENSOR_NDIM - output_schema.size() >= 0,
+                tf::errors::InvalidArgument("Output schema size ",
+                    output_schema.size(), " exceeds ", MAX_TENSOR_NDIM));
+
+        for(int i=0; i < MAX_TENSOR_NDIM - output_schema.size(); ++i)
         {
+            out_reshape.push_back(1);
+            //output_shape.AddDim(1);
+        }
+
+        for(int i=0; i < output_schema.size(); ++i)
+        {
+            // Was this output dimension in the inputs?
             auto it = output_sizes.find(output_schema[i]);
 
-            // Set to 1 if we couldn't infer the size
+            // No
             if(it == output_sizes.end())
-                { output_shape.AddDim(1); }
+            {
+                out_reshape.push_back(1);
+
+                // Ignore if we're squeezing else set to 1
+                if(squeeze)
+                    { continue; }
+
+                output_shape.AddDim(1);
+            }
             else
-                { output_shape.AddDim(it->second); }
+            {
+                out_reshape.push_back(it->second);
+                output_shape.AddDim(it->second);
+            }
         }
 
         // Allocate an output tensor
@@ -84,8 +109,10 @@ public:
         OP_REQUIRES_OK(context, context->allocate_output(
             0, output_shape, &output_ptr));
 
+        OP_REQUIRES(context, out_reshape.size() == MAX_TENSOR_NDIM,
+            tf::errors::InvalidArgument("Mismatch"));
 
-        auto out = output_ptr->tensor<CT, 5>();
+        auto out = output_ptr->shaped<CT, MAX_TENSOR_NDIM>(out_reshape);
 
         // Set the output tensor to identity
         #pragma omp parallel for collapse(4)
@@ -109,7 +136,7 @@ public:
         for(int i=0; i<in_list.size(); ++i)
         {
             const tf::Tensor & tensor = in_list[i];
-            auto data = tensor.shaped<CT, 5>(reshapes[i]);
+            auto data = tensor.shaped<CT, MAX_TENSOR_NDIM>(reshapes[i]);
 
             int isrc_inc = data.dimension(0) == out.dimension(0) ? 1 : 0;
             int itime_inc = data.dimension(1) == out.dimension(1) ? 1 : 0;

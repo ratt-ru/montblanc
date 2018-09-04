@@ -36,10 +36,17 @@ tensorflow::Status infer_dimensionality(const tensorflow::OpInputList & in_list,
         // the tensor rank up to that of the output schema.
         // Introduce 1's for missing dimensions
         std::vector<tf::int64> reshape;
-        reshape.reserve(output_schema.size());
+        reshape.reserve(MAX_TENSOR_NDIM);
 
-        // Start out with all 1.
-        for(int j=0; j<output_schema.size(); ++j)
+        if(output_schema.size() > MAX_TENSOR_NDIM)
+        {
+            return tf::errors::InvalidArgument("Output schema ",
+                                output_schema.size(), " is greater than "
+                                "the maximum number of tensor dimensions ",
+                                MAX_TENSOR_NDIM);
+        }
+
+        for(int j=0; j<MAX_TENSOR_NDIM; ++j)
             { reshape.push_back(1); }
 
         for(int j=0; j<schema.size(); ++j)

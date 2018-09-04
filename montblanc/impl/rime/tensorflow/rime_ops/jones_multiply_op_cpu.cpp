@@ -24,12 +24,16 @@ auto shape_function = [](InferenceContext* c)
     std::unordered_map<std::string, DimensionHandle> dim_sizes;
 
     std::vector<ShapeHandle> input_shapes;
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->input("in", &input_shapes),
-        "Unable to obtain input in");
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->input("jones_in", &input_shapes),
+        "Unable to obtain input jones_in");
 
     std::vector<std::string> str_schemas;
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->GetAttr("schemas", &str_schemas),
         "Unable to obtain schemas");
+
+    bool squeeze;
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->GetAttr("squeeze", &squeeze),
+        "Unable to obtain squeeze");
 
     std::string str_output_schema;
     TF_RETURN_WITH_CONTEXT_IF_ERROR(
@@ -86,8 +90,24 @@ auto shape_function = [](InferenceContext* c)
 
     for(auto & name: output_schema)
     {
+        // Was the given dimension in the input?
         auto it = dim_sizes.find(name);
-        out_dims.push_back(it == dim_sizes.end() ? c->MakeDim(1) : it->second);
+
+        // No
+        if(it == dim_sizes.end())
+        {
+            // Ignore it if we're squeezing
+            if(squeeze)
+                { continue; }
+
+            // Otherwise add a singleton dimension
+            out_dims.push_back(c->MakeDim(1));
+        }
+        // Yes
+        else
+        {
+            out_dims.push_back(it->second);
+        }
     }
 
     c->set_output(0, c->MakeShape(out_dims));
@@ -97,13 +117,14 @@ auto shape_function = [](InferenceContext* c)
 
 // Register the JonesMultiply operator.
 REGISTER_OP("JonesMultiply")
-    .Input("in: N * CT")
+    .Input("jones_in: N * CT")
     .Output("out: CT")
     .Attr("N: int >= 1")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
     .Attr("schemas: list(string)")
     .Attr("output_schema: string = '(source,time,ant,chan,corr)'")
+    .Attr("squeeze: bool = false")
     .Doc(R"doc(Jones Matrix Multiplication)doc")
     .SetShapeFn(shape_function);
 

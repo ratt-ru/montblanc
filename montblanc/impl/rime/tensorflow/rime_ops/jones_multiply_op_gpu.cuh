@@ -48,7 +48,6 @@ template <> struct LaunchTraits<double>
 };
 
 constexpr int MAX_TENSORS = 10;
-constexpr int MAX_TENSOR_ELEMENTS = 5;
 
 // Get the current correlation from the thread ID
 __device__ __forceinline__ int _jones_corr()
@@ -72,7 +71,7 @@ __global__ void rime_jones_multiply(
     using LTr = LaunchTraits<FT>;
 
     __shared__ const CT * tensor_ptrs[MAX_TENSORS];
-    __shared__ uint32_t tensor_sizes[MAX_TENSORS*MAX_TENSOR_ELEMENTS];
+    __shared__ uint32_t tensor_sizes[MAX_TENSORS*MAX_TENSOR_NDIM];
 
     uint32_t i;
 
@@ -143,16 +142,17 @@ private:
     std::vector<std::string> schemas;
     std::vector<std::string> output_schema;
     std::unordered_map<std::string, int> output_index;
+    bool squeeze;
     int N;
 
 public:
     explicit JonesMultiply(tensorflow::OpKernelConstruction * context)
-        : tensorflow::OpKernel(context),
-          str_output_schema("(source,time,ant,chan,corr)")
+        : tensorflow::OpKernel(context)
     {
-        OP_REQUIRES_OK(context, context->GetAttr("schemas",
-                                                 &schemas));
+        OP_REQUIRES_OK(context, context->GetAttr("schemas", &schemas));
         OP_REQUIRES_OK(context, context->GetAttr("N", &N));
+        OP_REQUIRES_OK(context, context->GetAttr("squeeze", &squeeze));
+        OP_REQUIRES_OK(context, context->GetAttr("output_schema", &str_output_schema));
 
 
         OP_REQUIRES_OK(context,
@@ -167,7 +167,7 @@ public:
         namespace tf = tensorflow;
 
         tensorflow::OpInputList in_list;
-        context->input_list("in", & in_list);
+        context->input_list("jones_in", & in_list);
 
         OP_REQUIRES(context, in_list.size() == schemas.size(),
             tf::errors::InvalidArgument("Number of schemas ", schemas.size(),
@@ -178,8 +178,8 @@ public:
             tf::errors::InvalidArgument("Only ", MAX_TENSORS,
                                         " Jones matrices supported"));
 
-        OP_REQUIRES(context, output_schema.size() <= MAX_TENSOR_ELEMENTS,
-            tf::errors::InvalidArgument("Only ", MAX_TENSOR_ELEMENTS,
+        OP_REQUIRES(context, output_schema.size() <= MAX_TENSOR_NDIM,
+            tf::errors::InvalidArgument("Only ", MAX_TENSOR_NDIM,
                                         " output_schema elements supported"));
 
 
@@ -197,20 +197,42 @@ public:
         using Tr = montblanc::kernel_traits<FT>;
         using LTr = LaunchTraits<FT>;
 
-        // Determine output tensor shape
+        // Determine output tensor shape, this may be < MAX_TENSOR_NDIM
         tf::TensorShape output_shape;
+        // Reshape output tensor to MAX_TENSOR_NDIM
+        std::vector<tf::int64> out_reshape;
+
+        OP_REQUIRES(context, MAX_TENSOR_NDIM - output_schema.size() >= 0,
+                tf::errors::InvalidArgument("Output schema size ",
+                    output_schema.size(), " exceeds ", MAX_TENSOR_NDIM));
+
+        for(int i=0; i < MAX_TENSOR_NDIM - output_schema.size(); ++i)
+        {
+            out_reshape.push_back(1);
+        }
 
         for(int i=0; i<output_schema.size(); ++i)
         {
+            // Was this output dimension in the inputs?
             auto it = output_sizes.find(output_schema[i]);
 
-            // Set to 1 if we couldn't infer the size
+            // No
             if(it == output_sizes.end())
-                { output_shape.AddDim(1); }
-            else
-                { output_shape.AddDim(it->second); }
-        }
+            {
+                out_reshape.push_back(1);
 
+                // Ignore if we're squeezing else set to 1
+                if(squeeze)
+                    { continue; }
+
+                output_shape.AddDim(1);
+            }
+            else
+            {
+                out_reshape.push_back(it->second);
+                output_shape.AddDim(it->second);
+            }
+        }
 
         // Allocate an output tensor
         tf::Tensor * output_ptr = nullptr;

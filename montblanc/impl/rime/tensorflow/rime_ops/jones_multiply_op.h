@@ -18,6 +18,8 @@
 MONTBLANC_NAMESPACE_BEGIN
 MONTBLANC_JONES_MULTIPLY_NAMESPACE_BEGIN
 
+constexpr int MAX_TENSOR_NDIM = 5;
+
 // General definition of the JonesMultiply op, which will be specialised in:
 //   - jones_multiply_op_cpu.h for CPUs
 //   - jones_multiply_op_gpu.cuh for CUDA devices
