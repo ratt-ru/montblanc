@@ -32,17 +32,21 @@ public:
         const auto & in_coords = context->input(0);
         const auto & in_coeffs = context->input(1);
         const auto & in_noll_index = context->input(2);
+        const auto & in_pointing_error = context->input(3);
+        const auto & in_antenna_scaling = context->input(4);
         
 
         // Extract Eigen tensors
-        auto coords = in_coords.tensor<FT, 5>();
+        auto coords = in_coords.tensor<FT, 2>();
         auto coeffs = in_coeffs.tensor<CT, 3>();
         auto noll_index = in_noll_index.tensor<FT, 3>();
+        auto pointing_error = in_pointing_error.tensor<FT, 4>();
+        auto antenna_scaling = in_antenna_scaling.tensor<FT, 3>();
 
-        int nsrc = in_coords.dim_size(1);
-        int ntime = in_coords.dim_size(2);
-        int na = in_coords.dim_size(3);
-        int nchan = in_coords.dim_size(4);
+        int nsrc = in_coords.dim_size(0);
+        int ntime = in_pointing_error.dim_size(0);
+        int na = in_coeffs.dim_size(0);
+        int nchan = in_coeffs.dim_size(1);
         int npoly = in_coeffs.dim_size(2);
         
 
@@ -58,20 +62,19 @@ public:
             0, zernike_value_shape, &zernike_value_ptr));
         // Create output tensor
         auto zernike_value = zernike_value_ptr->tensor<CT, 4>();
-
+        
         for(int src = 0; src < nsrc ; src++){
+            // Get (l, m) coordinates
+            FT l = coords(src, 0);
+            FT m = coords(src, 1);
+
+            // Convert from (l, m) coordinates to polar coordinates
+            FT rho = sqrt((l * l)+(m * m));
+            FT phi = atan2(l, m);
+
             for(int time = 0; time < ntime; time++){
                 for(int ant = 0; ant < na; ant++){
                     for(int chan = 0; chan < nchan; chan++){
-                        // Get (l,m,freq) coordinates
-                        FT l = coords(0, src, time, ant, chan);
-                        FT m = coords(1, src, time, ant, chan);
-                        FT freq = coords(2, src, time, ant, chan);
-
-                        // Convert from (l, m) coordinates to polar coordinates
-                        FT rho = sqrt((l * l)+(m * m));
-                        FT phi = atan2(l, m);
-                        
                         CT zernike_sum = 0;
                         for(int poly = 0; poly < npoly; poly++){
                             zernike_sum+= coeffs(ant, chan, poly) * zernike(noll_index(ant, chan, poly), rho, phi);
@@ -80,10 +83,8 @@ public:
                     }
                 }
             }
-        }
-        
+        }        
     }
-
 
 private:
 

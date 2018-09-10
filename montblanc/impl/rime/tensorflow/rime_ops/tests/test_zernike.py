@@ -3,6 +3,7 @@ import pytest
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
+import matplotlib.pyplot as plt
 
 from montblanc.impl.rime.tensorflow.tensorflow_ops import zernike
 
@@ -44,22 +45,23 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
 
     lm = np.vstack((ll.flatten(), mm.flatten())).T
     # Create input variables
-    coords = np.empty((3, nsrc, ntime, na, nchan)).astype(FT)
+    coords = np.empty((nsrc, 2)).astype(FT)
     coeffs = np.empty((na, nchan, thresh)).astype(CT)
-    noll_index = np.empty((na, nchan, thresh)).astype(FT)
+    noll_index = np.zeros((na, nchan, thresh)).astype(FT)
+    pointing_error = np.empty((ntime, na, nchan, 2)).astype(FT)
+    antenna_scaling = np.empty((na, nchan, 2)).astype(FT)
     
     coeffs[0,0,:] = coeff_nn[:thresh]
     noll_index[0,0,:] = noll_index_nn[:thresh]
 
-    coords[0, 0:nsrc, 0, 0, 0] = lm[0:nsrc, 0]
-    coords[1, 0:nsrc, 0, 0, 0] = lm[0:nsrc, 1]
-    coords[2, 0:nsrc, 0, 0, 0] = 0
+    coords[0:nsrc, 0] = lm[0:nsrc, 0]
+    coords[0:nsrc, 1] = lm[0:nsrc, 1]
 
 
     # Argument list
-    np_args = [coords, coeffs, noll_index]
+    np_args = [coords, coeffs, noll_index, pointing_error, antenna_scaling]
     # Argument string name list
-    arg_names = ['coords', 'coeffs', 'noll_index']
+    arg_names = ['coords', 'coeffs', 'noll_index', 'pointing_error', 'antenna_scaling']
     # Constructor tensorflow variables
     tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
@@ -81,9 +83,10 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
         cpu_data = S.run(cpu_op)
         cpu_data = cpu_data[:, 0, 0, 0].reshape((npix, npix))
         assert np.allclose(cpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
-        print("about to run gpu")
-        S.run(gpu_ops)
-    
+        gpu_data = np.array(S.run(gpu_ops))
+        print(gpu_data.shape)
+        gpu_data = gpu_data[0, :, 0, 0, 0].reshape((npix,npix))
+        assert np.allclose(gpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
 
 @pytest.fixture
 def gpu_devs():

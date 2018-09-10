@@ -18,12 +18,12 @@ auto shape_function = [](InferenceContext* c) {
     // TODO. Check shape and dimension sizes for 'coords'
     ShapeHandle in_coords = c->input(0);
     // Assert 'coords' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_coords, 5, &input),
-        "coords must have shape [3, None, None, None, None] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_coords, 2, &input),
+        "coords must have shape [None, 2] but is " +
         c->DebugString(in_coords));
-    // Assert 'coords' dimension '0' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_coords, 0), 3, &d),
-        "coords must have shape [3, None, None, None, None] but is " +
+    // Assert 'coords' dimension '1' size
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_coords, 1), 2, &d),
+        "coords must have shape [None, 2] but is " +
         c->DebugString(in_coords));
     
     // TODO. Check shape and dimension sizes for 'coeffs'
@@ -40,6 +40,28 @@ auto shape_function = [](InferenceContext* c) {
         "noll_index must have shape [None, None, None] but is " +
         c->DebugString(in_noll_index));
     
+    // TODO. Check shape and dimension sizes for 'pointing_error'
+    ShapeHandle in_pointing_error = c->input(3);
+    // Assert 'pointing_error' number of dimensions
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_pointing_error, 4, &input),
+        "pointing_error must have shape [None, None, None, 2] but is " +
+        c->DebugString(in_pointing_error));
+    // Assert 'pointing_error' dimension '3' size
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_pointing_error, 3), 2, &d),
+        "pointing_error must have shape [None, None, None, 2] but is " +
+        c->DebugString(in_pointing_error));
+    
+    // TODO. Check shape and dimension sizes for 'antenna_scaling'
+    ShapeHandle in_antenna_scaling = c->input(4);
+    // Assert 'antenna_scaling' number of dimensions
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_antenna_scaling, 3, &input),
+        "antenna_scaling must have shape [None, None, 2] but is " +
+        c->DebugString(in_antenna_scaling));
+    // Assert 'antenna_scaling' dimension '2' size
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_antenna_scaling, 2), 2, &d),
+        "antenna_scaling must have shape [None, None, 2] but is " +
+        c->DebugString(in_antenna_scaling));
+    
     
 
     // TODO: Supply a proper shapes for output variables here,
@@ -49,10 +71,10 @@ auto shape_function = [](InferenceContext* c) {
     //      c->Dim(input_2, 1)}); // input_2 dimension 1""")
 
     ShapeHandle out_zernike_value = c->MakeShape({ 
-        c->Dim(in_coords, 1),  
-        c->Dim(in_coords, 2),  
-        c->Dim(in_coords, 3),  
-        c->Dim(in_coords, 4)});
+        c->Dim(in_coords, 0), 
+        c->Dim(in_pointing_error, 0), 
+        c->Dim(in_coeffs, 0), 
+        c->Dim(in_coeffs, 1) });
     
     c->set_output(0, out_zernike_value);
     
@@ -67,6 +89,8 @@ REGISTER_OP("Zernike")
     .Input("coords: FT")
     .Input("coeffs: CT")
     .Input("noll_index: FT")
+    .Input("pointing_error: FT")
+    .Input("antenna_scaling: FT")
     .Output("zernike_value: CT")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
@@ -87,6 +111,7 @@ REGISTER_KERNEL_BUILDER(
     .TypeConstraint<tensorflow::complex64>("CT")
     .Device(tensorflow::DEVICE_CPU),
     Zernike<CPUDevice, float, tensorflow::complex64>);
+
 
 // Register a CPU kernel for Zernike
 // handling permutation ['double', 'tensorflow::complex128']

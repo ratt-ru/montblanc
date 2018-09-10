@@ -15,6 +15,7 @@ REGISTER_KERNEL_BUILDER(
     .Device(tensorflow::DEVICE_GPU),
     Zernike<GPUDevice, float, tensorflow::complex64>);
 
+
 // Register a GPU kernel for Zernike
 // handling permutation ['double', 'tensorflow::complex128']
 REGISTER_KERNEL_BUILDER(
