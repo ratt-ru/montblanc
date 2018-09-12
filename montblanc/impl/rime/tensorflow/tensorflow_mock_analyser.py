@@ -263,7 +263,8 @@ def _inspect_tf_op_call(*args, **kwargs):
         # Check that these attributes agree
         for attr in ('allowed_types', 'default', 'default_type_name'):
             if new[attr] != old[attr]:
-                raise ValueError("old['%s']['%s'] (%s) != "
+                raise ValueError("input: '%s' "
+                                 "old['%s']['%s'] (%s) != "
                                  "new['%s']['%s'] (%s)" %
                                  (k, attr, new[attr], k, attr, old[attr]))
 
@@ -279,8 +280,9 @@ def _inspect_tf_op_call(*args, **kwargs):
             pass
         # Old and new schema's should exist
         elif new_schema != old_schema:
-            raise ValueError("old['schema'] (%s) != new['schema'] (%s)" %
-                             (old_schema, new_schema))
+            raise ValueError("input: '%s' "
+                             "old['schema'] (%s) != new['schema'] (%s)" %
+                             (k, old_schema, new_schema))
 
         # Add this op to the set of ops requiring this input placeholder
         old['ops'].update(new['ops'])
