@@ -14,6 +14,15 @@ tensorflow::Status infer_dimensionality(const tensorflow::OpInputList & in_list,
 {
     namespace tf = tensorflow;
 
+    if(output_schema.size() > MAX_TENSOR_NDIM)
+    {
+        return tf::errors::InvalidArgument("Output schema ",
+                            output_schema.size(), " is greater than "
+                            "the maximum number of tensor dimensions ",
+                            MAX_TENSOR_NDIM);
+    }
+
+
     for(int i=0; i<in_list.size(); ++i)
     {
         // Get the tensor shape
@@ -38,14 +47,6 @@ tensorflow::Status infer_dimensionality(const tensorflow::OpInputList & in_list,
         std::vector<tf::int64> reshape;
         reshape.reserve(MAX_TENSOR_NDIM);
 
-        if(output_schema.size() > MAX_TENSOR_NDIM)
-        {
-            return tf::errors::InvalidArgument("Output schema ",
-                                output_schema.size(), " is greater than "
-                                "the maximum number of tensor dimensions ",
-                                MAX_TENSOR_NDIM);
-        }
-
         for(int j=0; j<MAX_TENSOR_NDIM; ++j)
             { reshape.push_back(1); }
 
@@ -53,7 +54,7 @@ tensorflow::Status infer_dimensionality(const tensorflow::OpInputList & in_list,
         {
             // Either set the output size for this
             // schema dimension or check that it matches
-            // a previously found value
+            // a previously discovered value
             auto size_it = output_sizes.find(schema[j]);
 
             if(size_it == output_sizes.end())
@@ -84,7 +85,7 @@ tensorflow::Status infer_dimensionality(const tensorflow::OpInputList & in_list,
             reshape[it->second] = shape.dim_size(j);
         }
 
-        reshapes.emplace_back(reshape);
+        reshapes.emplace_back(std::move(reshape));
     }
 
     return tf::Status::OK();

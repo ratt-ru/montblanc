@@ -32,17 +32,24 @@ public:
     explicit JonesMultiply(tensorflow::OpKernelConstruction * context)
         : tensorflow::OpKernel(context)
     {
+        namespace tf = tensorflow;
+
         OP_REQUIRES_OK(context, context->GetAttr("schemas", &schemas));
         OP_REQUIRES_OK(context, context->GetAttr("N", &N));
         OP_REQUIRES_OK(context, context->GetAttr("squeeze", &squeeze));
         OP_REQUIRES_OK(context, context->GetAttr("output_schema", &str_output_schema));
 
-
         OP_REQUIRES_OK(context,
             parse_shape_schema(str_output_schema, output_schema));
 
+        OP_REQUIRES(context, MAX_TENSOR_NDIM - output_schema.size() >= 0,
+                tf::errors::InvalidArgument("Output schema size ",
+                    output_schema.size(), " exceeds ", MAX_TENSOR_NDIM));
+
+        int diff = MAX_TENSOR_NDIM - output_schema.size();
+
         for(int i=0; i < output_schema.size(); ++i)
-            { output_index.insert({output_schema[i], i}); }
+            { output_index.insert({output_schema[i], diff + i}); }
     }
 
     void Compute(tensorflow::OpKernelContext * context) override
@@ -71,14 +78,9 @@ public:
         // Reshape output tensor to MAX_TENSOR_NDIM
         std::vector<tf::int64> out_reshape;
 
-        OP_REQUIRES(context, MAX_TENSOR_NDIM - output_schema.size() >= 0,
-                tf::errors::InvalidArgument("Output schema size ",
-                    output_schema.size(), " exceeds ", MAX_TENSOR_NDIM));
-
         for(int i=0; i < MAX_TENSOR_NDIM - output_schema.size(); ++i)
         {
             out_reshape.push_back(1);
-            //output_shape.AddDim(1);
         }
 
         for(int i=0; i < output_schema.size(); ++i)
@@ -142,6 +144,7 @@ public:
             int itime_inc = data.dimension(1) == out.dimension(1) ? 1 : 0;
             int iant_inc = data.dimension(2) == out.dimension(2) ? 1 : 0;
             int ichan_inc = data.dimension(3) == out.dimension(3) ? 1 : 0;
+            int icorr_inc = data.dimension(4) == out.dimension(4) ? 1 : 0;
 
             for(int isrc=0, osrc=0; osrc < out.dimension(0);
                 ++osrc, isrc += isrc_inc)
@@ -160,15 +163,29 @@ public:
                             const CT t2 = out(osrc, otime, oant, ochan, 2);
                             const CT t3 = out(osrc, otime, oant, ochan, 3);
 
-                            const CT & i0 = data(isrc, itime, iant, ichan, 0);
-                            const CT & i1 = data(isrc, itime, iant, ichan, 1);
-                            const CT & i2 = data(isrc, itime, iant, ichan, 2);
-                            const CT & i3 = data(isrc, itime, iant, ichan, 3);
+                            if(data.dimension(4) == out.dimension(4))
+                            {
+                                const CT & i0 = data(isrc, itime, iant, ichan, 0);
+                                const CT & i1 = data(isrc, itime, iant, ichan, 1);
+                                const CT & i2 = data(isrc, itime, iant, ichan, 2);
+                                const CT & i3 = data(isrc, itime, iant, ichan, 3);
 
-                            out(osrc, otime, oant, ochan, 0) = t0*i0 + t1*i2;
-                            out(osrc, otime, oant, ochan, 1) = t0*i1 + t1*i3;
-                            out(osrc, otime, oant, ochan, 2) = t2*i0 + t3*i2;
-                            out(osrc, otime, oant, ochan, 3) = t2*i1 + t3*i3;
+                                out(osrc, otime, oant, ochan, 0) = t0*i0 + t1*i2;
+                                out(osrc, otime, oant, ochan, 1) = t0*i1 + t1*i3;
+                                out(osrc, otime, oant, ochan, 2) = t2*i0 + t3*i2;
+                                out(osrc, otime, oant, ochan, 3) = t2*i1 + t3*i3;
+                            }
+                            else
+                            {
+                                const CT & i0 = data(isrc, itime, iant, ichan, 0);
+
+                                out(osrc, otime, oant, ochan, 0) = t0*i0;
+                                out(osrc, otime, oant, ochan, 1) = t1*i0;
+                                out(osrc, otime, oant, ochan, 2) = t2*i0;
+                                out(osrc, otime, oant, ochan, 3) = t3*i0;
+
+                            }
+
                         }
                     }
                 }

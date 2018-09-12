@@ -53,6 +53,9 @@ constexpr int MAX_TENSORS = 10;
 __device__ __forceinline__ int _jones_corr()
     { return threadIdx.x & 0x3; }
 
+__device__ __forceinline__ int _jones_chan()
+    { return threadIdx.x % 4; }
+
 // CUDA kernel outline
 template <typename Traits>
 __global__ void rime_jones_multiply(
@@ -116,7 +119,9 @@ __global__ void rime_jones_multiply(
             const uint32_t isrc = nisrc == 1 ? 0 : osrc;
             const uint32_t itime = nitime == 1 ? 0 : time;
             const uint32_t iant = niant == 1 ? 0 : ant;
-            const uint32_t icorrchan = nichan == 1 ? _jones_corr() : corrchan;
+            const uint32_t ichan = nichan == 1 ? 0 : _jones_chan();
+            const uint32_t icorr = nicorr == 1 ? 0 : _jones_corr();
+            const uint32_t icorrchan = ichan*icorr;
 
             // Load in the value for this tensor,
             // attempting to take advantage of any values stored
@@ -124,7 +129,11 @@ __global__ void rime_jones_multiply(
             i = ((isrc*nitime + itime)*niant + iant)*nicorrchan + icorrchan;
             CT in = cub::ThreadLoad<cub::LOAD_LDG>(tensor_ptrs[j] + i);
 
-            montblanc::jones_multiply_4x4_in_place<FT>(result, in);
+            // Handle the no-correlation case
+            if(nicorr == 1)
+                { montblanc::complex_multiply_in_place<FT>(result, in); }
+            else
+                { montblanc::jones_multiply_4x4_in_place<FT>(result, in); }
         }
 
         // Set shared buffer to thread index
@@ -149,17 +158,24 @@ public:
     explicit JonesMultiply(tensorflow::OpKernelConstruction * context)
         : tensorflow::OpKernel(context)
     {
+        namespace tf = tensorflow;
+
         OP_REQUIRES_OK(context, context->GetAttr("schemas", &schemas));
         OP_REQUIRES_OK(context, context->GetAttr("N", &N));
         OP_REQUIRES_OK(context, context->GetAttr("squeeze", &squeeze));
         OP_REQUIRES_OK(context, context->GetAttr("output_schema", &str_output_schema));
 
-
         OP_REQUIRES_OK(context,
             parse_shape_schema(str_output_schema, output_schema));
 
+        OP_REQUIRES(context, MAX_TENSOR_NDIM - output_schema.size() >= 0,
+                tf::errors::InvalidArgument("Output schema size ",
+                    output_schema.size(), " exceeds ", MAX_TENSOR_NDIM));
+
+        int diff = MAX_TENSOR_NDIM - output_schema.size();
+
         for(int i=0; i < output_schema.size(); ++i)
-            { output_index.insert({output_schema[i], i}); }
+            { output_index.insert({output_schema[i], diff + i}); }
     }
 
     void Compute(tensorflow::OpKernelContext * context) override
@@ -201,10 +217,6 @@ public:
         tf::TensorShape output_shape;
         // Reshape output tensor to MAX_TENSOR_NDIM
         std::vector<tf::int64> out_reshape;
-
-        OP_REQUIRES(context, MAX_TENSOR_NDIM - output_schema.size() >= 0,
-                tf::errors::InvalidArgument("Output schema size ",
-                    output_schema.size(), " exceeds ", MAX_TENSOR_NDIM));
 
         for(int i=0; i < MAX_TENSOR_NDIM - output_schema.size(); ++i)
         {
