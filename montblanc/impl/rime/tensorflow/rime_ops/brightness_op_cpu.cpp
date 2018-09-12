@@ -28,6 +28,7 @@ REGISTER_OP("Brightness")
     .Output("brightness: CT")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
+    .Attr("stokes_schema: string = '(source,corr)'")
     .Doc(R"doc(Stokes parameters
 )doc")
     .SetShapeFn(shape_function);
