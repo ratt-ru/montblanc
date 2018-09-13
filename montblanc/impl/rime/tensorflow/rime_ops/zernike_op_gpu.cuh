@@ -6,7 +6,6 @@
 #include "zernike_op.h"
 #include <montblanc/abstraction.cuh>
 
-
 // Required in order for Eigen::GpuDevice to be an actual type
 #define EIGEN_USE_GPU
 
@@ -28,18 +27,36 @@ template <typename FT, typename CT> struct LaunchTraits {};
 // but this works because this header is included only once
 template <> struct LaunchTraits<float, tensorflow::complex64>
 {
-    static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 32;
-    static constexpr int BLOCKDIMZ = 32;
+    static constexpr int BLOCKDIMX = 1024;
+    static constexpr int BLOCKDIMY = 1;
+    static constexpr int BLOCKDIMZ = 1;
+};
+// Specialise for float, tensorflow::complex128
+// Should really be .cu file as this is a concrete type
+// but this works because this header is included only once
+template <> struct LaunchTraits<float, tensorflow::complex128>
+{
+    static constexpr int BLOCKDIMX = 1024;
+    static constexpr int BLOCKDIMY = 1;
+    static constexpr int BLOCKDIMZ = 1;
+};
+// Specialise for double, tensorflow::complex64
+// Should really be .cu file as this is a concrete type
+// but this works because this header is included only once
+template <> struct LaunchTraits<double, tensorflow::complex64>
+{
+    static constexpr int BLOCKDIMX = 1024;
+    static constexpr int BLOCKDIMY = 1;
+    static constexpr int BLOCKDIMZ = 1;
 };
 // Specialise for double, tensorflow::complex128
 // Should really be .cu file as this is a concrete type
 // but this works because this header is included only once
 template <> struct LaunchTraits<double, tensorflow::complex128>
 {
-    static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 32;
-    static constexpr int BLOCKDIMZ = 32;
+    static constexpr int BLOCKDIMX = 1024;
+    static constexpr int BLOCKDIMY = 1;
+    static constexpr int BLOCKDIMZ = 1;
 };
 
 template<typename FT, typename CT>
@@ -65,7 +82,6 @@ __device__ __forceinline__ FT pre_fac(int k, int n, int m){
 
 template <typename FT, typename CT>
 __device__ __forceinline__ FT zernike_rad(int m, int n, FT rho){
-    //if(n < 0 || m < 0 || m > n) return -1;
     FT radial_component = 0.0;
     for(int k = 0; k < ((n - m) / 2) + 1; k++){
         radial_component += pre_fac<FT, CT>(k, n, m) * pow(rho, n - 2.0 * k);
@@ -96,20 +112,19 @@ __device__ __forceinline__ FT zernike(int j, FT rho, FT phi){
     return zernike_rad<FT, CT>(0, n, rho);
 }
 
+
 // CUDA kernel outline
 template <typename Traits> 
 __global__ void zernike_dde_zernike(
     const typename Traits::FT * in_coords,
     const typename Traits::CT * in_coeffs,
-    const typename Traits::FT * in_noll_index,
+    const int * in_noll_index,
     const typename Traits::point_error_type * in_pointing_error,
     const typename Traits::antenna_scale_type * in_antenna_scaling,
     typename Traits::CT * out_zernike_value,
-    const int nsrc, const int ntime, const int na, const int nchan, const int npoly)
+    const int ncorr, const int nsrc, const int ntime, const int na, const int nchan, const int npoly)
     
 {
-    // Shared memory usage unnecesssary, but demonstrates use of
-    // constant Trait members to create kernel shared memory.
     using FT = typename Traits::FT;
     using CT = typename Traits::CT;
     using LTr = LaunchTraits<FT, CT>;
@@ -118,25 +133,25 @@ __global__ void zernike_dde_zernike(
     int chan = antchan % nchan;
     int ant = antchan / nchan;
     int time = blockIdx.y*blockDim.y + threadIdx.y;
-    int src = blockIdx.z*blockDim.z + threadIdx.z;
+    int srccorr = blockIdx.z * blockDim.z + threadIdx.z; //combine src and corr
+    int src = srccorr % nsrc;
+    int corr = srccorr / nsrc;
 
-    if(chan >= nchan || ant >= na || time >= ntime || src >= nsrc) return;
+    if(corr >= ncorr || chan >= nchan || ant >= na || time >= ntime || src >= nsrc) return;
 
-    FT l = in_coords[src * 2];
-    FT m = in_coords[src * 2 + 1];
+    FT l = in_coords[corr * nsrc + src * 2];
+    FT m = in_coords[corr * nsrc + src * 2 + 1];
     FT rho = sqrt(l * l + m * m);
     FT phi = atan2(l, m);
-    int noll_index = (int)in_noll_index[ant * nchan + chan * npoly];
-    CT zernike_sum = mul_CT_FT<FT, CT>(zernike<FT, CT>(noll_index, rho, phi), in_coeffs[ant, chan, 0]);
+    int noll_index = in_noll_index[corr * na + ant * nchan + chan * npoly];
+    CT zernike_sum = mul_CT_FT<FT, CT>(zernike<FT, CT>(noll_index, rho, phi), in_coeffs[corr * na + ant * nchan + chan]);
     for(int poly = 1; poly < npoly; poly++){
-        noll_index = (int)in_noll_index[ant * nchan + chan * npoly + poly];
-        //CT coeff = in_coeffs[ant * nchan + chan * npoly + poly];
-        CT zernike_output = mul_CT_FT<FT, CT>(zernike<FT, CT>(noll_index, rho, phi), in_coeffs[ant * nchan + chan * npoly + poly]);
+        noll_index = in_noll_index[corr * na + ant * nchan + chan * npoly + poly];
+        CT zernike_output = mul_CT_FT<FT, CT>(zernike<FT, CT>(noll_index, rho, phi), in_coeffs[ corr * na + ant * nchan + chan * npoly + poly]);
         zernike_sum.x += zernike_output.x;
         zernike_sum.y += zernike_output.y;
     }
-    out_zernike_value[src * ntime + time * na + ant * nchan + chan] = zernike_sum;
-   //out_zernike_value[src, time, ant, chan] = {10, 10}; //zernike_sum;
+    out_zernike_value[corr * nsrc + src * ntime + time * na + ant * nchan + chan] = zernike_sum;
 }
 
 // Specialise the Zernike op for GPUs
@@ -157,39 +172,42 @@ public:
         const tf::Tensor & in_noll_index = context->input(2);
         const tf::Tensor & in_pointing_error = context->input(3);
         const tf::Tensor & in_antenna_scaling = context->input(4);
-
-        int nsrc = in_coords.dim_size(0);
-        int ntime = in_pointing_error.dim_size(0);
-        int na = in_coeffs.dim_size(0);
-        int nchan = in_coeffs.dim_size(1);
-        int npoly = in_coeffs.dim_size(2);
         
+
+        int ncorr = in_coords.dim_size(0);
+        int nsrc = in_coords.dim_size(1);
+        int ntime = in_pointing_error.dim_size(1);
+        int na = in_coeffs.dim_size(1);
+        int nchan = in_coeffs.dim_size(2);
+        int npoly = in_coeffs.dim_size(3);
+
         // Allocate output tensors
         // Allocate space for output tensor 'zernike_value'
         tf::Tensor * zernike_value_ptr = nullptr;
         tf::TensorShape zernike_value_shape = tf::TensorShape({ 
+            ncorr, 
             nsrc, 
-            ntime,
+            ntime, 
             na, 
             nchan });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, zernike_value_shape, &zernike_value_ptr));
-
-        using LTr = LaunchTraits<FT, CT>;
+        
         typedef montblanc::kernel_traits<FT> Tr;
+        using LTr = LaunchTraits<FT, CT>;
 
         // Set up our CUDA thread block and grid
-        dim3 block(na * nchan, ntime, 1);
-        dim3 grid(1, 1, nsrc );        
+        dim3 block(na * nchan, ntime, 32);
+        dim3 grid(1, 1, (nsrc * ncorr) / 32 + 1 );
+
+        // Get pointers to flattened tensor data buffers
         auto coords = reinterpret_cast< //lm_type coords
             const typename Tr::FT *>(
                 in_coords.flat<FT>().data());
         auto coeffs = reinterpret_cast< //CT coeffs
             const typename Tr::CT *>(
                 in_coeffs.flat<CT>().data());
-        auto noll_index = reinterpret_cast<  //FT noll_index
-            const typename Tr::FT *>(
-                in_noll_index.flat<FT>().data());
+        auto noll_index = in_noll_index.flat<int>().data(); //int noll_index
         auto pointing_error = reinterpret_cast< //point_error_type pointing_error
             const typename Tr::point_error_type *>(
                 in_pointing_error.flat<FT>().data());
@@ -202,22 +220,24 @@ public:
 
         // Get the GPU device
         const auto & device = context->eigen_device<GPUDevice>();
-        
+
+
         // Call the zernike_dde_zernike CUDA kernel
         zernike_dde_zernike<Tr>
-            <<<grid, block>>>(
+            <<<grid, block, 0, device.stream()>>>(
                 coords,
                 coeffs,
                 noll_index,
                 pointing_error,
                 antenna_scaling,
                 zernike_value,
-                nsrc, ntime, na, nchan, npoly);
+                ncorr, nsrc, ntime, na, nchan, npoly);
         cudaError_t e = cudaGetLastError(); 
-        if(e!=cudaSuccess) {                                              \
-            printf("Cuda failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e));           \
-            exit(0); \
-          }                
+        if(e!=cudaSuccess) {                                              
+            printf("Cuda failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e));           
+            exit(0); 
+            }  
+                
     }
 };
 

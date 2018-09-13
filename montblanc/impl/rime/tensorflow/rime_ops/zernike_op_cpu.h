@@ -37,53 +37,59 @@ public:
         
 
         // Extract Eigen tensors
-        auto coords = in_coords.tensor<FT, 2>();
-        auto coeffs = in_coeffs.tensor<CT, 3>();
-        auto noll_index = in_noll_index.tensor<FT, 3>();
-        auto pointing_error = in_pointing_error.tensor<FT, 4>();
-        auto antenna_scaling = in_antenna_scaling.tensor<FT, 3>();
+        auto coords = in_coords.tensor<FT, 3>();
+        auto coeffs = in_coeffs.tensor<CT, 4>();
+        auto noll_index = in_noll_index.tensor<tensorflow::int32, 4>();
+        auto pointing_error = in_pointing_error.tensor<FT, 5>();
+        auto antenna_scaling = in_antenna_scaling.tensor<FT, 4>();
 
-        int nsrc = in_coords.dim_size(0);
-        int ntime = in_pointing_error.dim_size(0);
-        int na = in_coeffs.dim_size(0);
-        int nchan = in_coeffs.dim_size(1);
-        int npoly = in_coeffs.dim_size(2);
+        int ncorr = in_coords.dim_size(0);
+        int nsrc = in_coords.dim_size(1);
+        int ntime = in_pointing_error.dim_size(1);
+        int na = in_coeffs.dim_size(1);
+        int nchan = in_coeffs.dim_size(2);
+        int npoly = in_coeffs.dim_size(3);
         
 
         // Allocate output tensors
         // Allocate space for output tensor 'zernike_value'
         tf::Tensor * zernike_value_ptr = nullptr;
         tf::TensorShape zernike_value_shape = tf::TensorShape({ 
+            ncorr, 
             nsrc, 
             ntime, 
             na, 
             nchan });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, zernike_value_shape, &zernike_value_ptr));
-        // Create output tensor
-        auto zernike_value = zernike_value_ptr->tensor<CT, 4>();
-        
-        for(int src = 0; src < nsrc ; src++){
-            // Get (l, m) coordinates
-            FT l = coords(src, 0);
-            FT m = coords(src, 1);
+        auto zernike_value = zernike_value_ptr->tensor<CT, 5>();
 
-            // Convert from (l, m) coordinates to polar coordinates
-            FT rho = sqrt((l * l)+(m * m));
-            FT phi = atan2(l, m);
+        for(int corr = 0; corr < ncorr; corr++)
+        {
+            for(int src = 0; src < nsrc; src++){
+                FT l = coords(corr, src, 0);
+                FT m = coords(corr, src, 1);
 
-            for(int time = 0; time < ntime; time++){
-                for(int ant = 0; ant < na; ant++){
-                    for(int chan = 0; chan < nchan; chan++){
-                        CT zernike_sum = 0;
-                        for(int poly = 0; poly < npoly; poly++){
-                            zernike_sum+= coeffs(ant, chan, poly) * zernike(noll_index(ant, chan, poly), rho, phi);
-                        }
-                        zernike_value(src, time, ant, chan) = zernike_sum;
-                    }
-                }
+               // Convert from (l, m) coordinates to polar coordinates
+               FT rho = sqrt((l * l)+(m * m));
+               FT phi = atan2(l, m);
+
+               for(int time = 0; time < ntime; time++){
+                   for(int ant = 0; ant < na; ant++){
+                       for(int chan = 0; chan < nchan ; chan++){
+                           CT zernike_sum = 0;
+                           for(int poly = 0; poly < npoly; poly++){
+                               //printf("%d \n", noll_index(corr, ant, chan, poly));
+                               zernike_sum += coeffs(corr, ant, chan, poly) * zernike(noll_index(corr, ant, chan, poly), rho, phi);
+                           }
+                           zernike_value(corr, src, time, ant, chan) = zernike_sum;
+                       }
+                   }
+               }
+
             }
-        }        
+        }
+        
     }
 
 private:
@@ -132,6 +138,7 @@ private:
         // Get Zernike polynomials
         if(m > 0){
             return zernike_rad(m, n, rho) * cos(m * phi);
+
         }
         else if(m < 0){
             return zernike_rad(-1 * m, n, rho) * sin(-1 * m * phi);

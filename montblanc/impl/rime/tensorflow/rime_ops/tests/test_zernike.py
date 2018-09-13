@@ -38,6 +38,7 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
     ntime = 1
     na = 1
     nchan = 1
+    ncorr = 1
 
     nx, ny = npix, npix
     grid = (np.indices((nx, ny), dtype=np.float) - nx//2) * 2 / nx
@@ -45,17 +46,17 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
 
     lm = np.vstack((ll.flatten(), mm.flatten())).T
     # Create input variables
-    coords = np.empty((nsrc, 2)).astype(FT)
-    coeffs = np.empty((na, nchan, thresh)).astype(CT)
-    noll_index = np.zeros((na, nchan, thresh)).astype(FT)
-    pointing_error = np.empty((ntime, na, nchan, 2)).astype(FT)
-    antenna_scaling = np.empty((na, nchan, 2)).astype(FT)
+    coords = np.empty((ncorr, nsrc, 2)).astype(FT)
+    coeffs = np.empty((ncorr, na, nchan, thresh)).astype(CT)
+    noll_index = np.zeros((ncorr, na, nchan, thresh)).astype(np.int32)
+    pointing_error = np.empty((ncorr, ntime, na, nchan, 2)).astype(FT)
+    antenna_scaling = np.empty((ncorr, na, nchan, 2)).astype(FT)
     
-    coeffs[0,0,:] = coeff_nn[:thresh]
-    noll_index[0,0,:] = noll_index_nn[:thresh]
+    coeffs[0,0,0,:] = coeff_nn[:thresh]
+    noll_index[0,0,0,:] = noll_index_nn[:thresh]
 
-    coords[0:nsrc, 0] = lm[0:nsrc, 0]
-    coords[0:nsrc, 1] = lm[0:nsrc, 1]
+    coords[0, 0:nsrc, 0] = lm[0:nsrc, 0]
+    coords[0, 0:nsrc, 1] = lm[0:nsrc, 1]
 
 
     # Argument list
@@ -81,11 +82,10 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
     with tf.Session() as S:
         S.run(init_op)
         cpu_data = S.run(cpu_op)
-        cpu_data = cpu_data[:, 0, 0, 0].reshape((npix, npix))
+        cpu_data = cpu_data[0, :, 0, 0, 0].reshape((npix, npix))
         assert np.allclose(cpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
         gpu_data = np.array(S.run(gpu_ops))
-        print(gpu_data.shape)
-        gpu_data = gpu_data[0, :, 0, 0, 0].reshape((npix,npix))
+        gpu_data = gpu_data[0, 0, :, 0, 0, 0].reshape((npix,npix))
         assert np.allclose(gpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
 
 @pytest.fixture
