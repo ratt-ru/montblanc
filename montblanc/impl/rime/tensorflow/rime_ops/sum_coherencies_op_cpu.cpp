@@ -16,18 +16,28 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
     ShapeHandle input;
     DimensionHandle d;
 
+    namespace tf = tensorflow;
+
     TensorflowInputFacade<TFShapeInference> in_facade(c);
 
     TF_RETURN_IF_ERROR(in_facade.inspect({"time_index",
-                                        "antenna1",
-                                        "antenna2",
-                                        "ant_scalar_1",
-                                        "ant_jones_1",
-                                        "baseline_scalar",
-                                        "baseline_jones",
-                                        "ant_scalar_2",
-                                        "ant_jones_2",
-                                        "base_coherencies"}));
+                                          "antenna1",
+                                          "antenna2",
+                                          "ant_jones_1",
+                                          "baseline_jones",
+                                          "ant_jones_2",
+                                          "base_coherencies"}));
+
+    const ShapeHandle * aj1 = nullptr;
+    const ShapeHandle * aj2 = nullptr;
+    const ShapeHandle * blj = nullptr;
+
+    bool have_aj1 = in_facade.tensor_present("ant_jones_1");
+    bool have_blj = in_facade.tensor_present("baseline_jones");
+    bool have_aj2 = in_facade.tensor_present("ant_jones_2");
+
+    if(!(have_aj1 || have_blj || have_aj2))
+        { return tf::errors::InvalidArgument("No Jones Terms were supplied"); }
 
     DimensionHandle nrow, nchan, ncorr;
     TF_RETURN_IF_ERROR(in_facade.get_dim("row", &nrow));
@@ -49,31 +59,24 @@ REGISTER_OP("SumCoherencies")
     .Input("time_index: int32")
     .Input("antenna1: int32")
     .Input("antenna2: int32")
-    .Input("ant_scalar_1: ant_scalar_1_type")
-    .Input("ant_jones_1: CT")
-    .Input("baseline_scalar: baseline_scalar_type")
+    .Input("ant_jones_1: ant_jones_1_type")
     .Input("baseline_jones: baseline_jones_type")
-    .Input("ant_scalar_2: ant_scalar_2_type")
-    .Input("ant_jones_2: CT")
+    .Input("ant_jones_2: ant_jones_2_type")
     .Input("base_coherencies: base_coherencies_type")
     .Output("coherencies: CT")
     .Attr("FT: {double, float} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")
-    .Attr("ant_scalar_1_type: list({complex64, complex128}) >= 0")
-    .Attr("ant_scalar_2_type: list({complex64, complex128}) >= 0")
-    .Attr("baseline_scalar_type: list({complex64, complex128}) >= 0")
+    .Attr("ant_jones_1_type: list({complex64, complex128}) >= 0")
     .Attr("baseline_jones_type: list({complex64, complex128}) >= 0")
+    .Attr("ant_jones_2_type: list({complex64, complex128}) >= 0")
     .Attr("base_coherencies_type: list({complex64, complex128}) >= 0")
     .Attr("time_index_schema: string = '(row,)'")
     .Attr("antenna1_schema: string = '(row,)'")
     .Attr("antenna2_schema: string = '(row,)'")
-    .Attr("ant_scalar_1_schema: string = '(source,time,ant,chan,corr)'")
     .Attr("ant_jones_1_schema: string = '(source,time,ant,chan,corr)'")
-    .Attr("baseline_scalar_schema: string = '(source,row,chan,corr)'")
     .Attr("baseline_jones_schema: string = '(source,row,chan,corr)'")
-    .Attr("ant_scalar_2_schema: string = '(source,time,ant,chan,corr)'")
     .Attr("ant_jones_2_schema: string = '(source,time,ant,chan,corr)'")
-    .Attr("base_coherencies_schema: string = '(row, chan, corr)'")
+    .Attr("base_coherencies_schema: string = '(row,chan,corr)'")
     .SetShapeFn(sum_coherencies_shape_function);
 
 // Register a CPU kernel for SumCoherencies that handles floats

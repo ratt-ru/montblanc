@@ -265,7 +265,7 @@ private:
 
     tensorflow::Status inspect_inputs(const std::string & name)
     {
-        auto input_vector = inputs[name];
+        auto & input_vector = inputs[name];
         TF_RETURN_WITH_CONTEXT_IF_ERROR(context->input(name, &input_vector),
             "Unable to obtain input " + name);
 
@@ -374,6 +374,12 @@ public:
 
         *size = it->second;
         return tensorflow::Status::OK();
+    }
+
+    bool tensor_present(const std::string & name)
+    {
+        auto it = inputs.find(name);
+        return it != inputs.end() && it->second.size() != 0;
     }
 
     tensorflow::Status get_tensor(const std::string & name,

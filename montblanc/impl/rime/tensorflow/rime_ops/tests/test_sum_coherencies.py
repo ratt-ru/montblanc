@@ -10,15 +10,20 @@ from montblanc.impl.rime.tensorflow.tensorflow_ops import (
     (np.float32, np.complex64),
     (np.float64, np.complex128),
 ])
-@pytest.mark.parametrize("have_ant_1_scalar", [False, True])
-@pytest.mark.parametrize("have_ant_2_scalar", [False, True])
-@pytest.mark.parametrize("have_bl_scalar", [False, True])
-@pytest.mark.parametrize("have_bl_jones", [False, True])
+@pytest.mark.parametrize("have_ant_jones_1, have_bl_jones, have_ant_jones_2", [
+    [True, False, False],
+    [False, True, False],
+    [False, False, True],
+    [True, True, False],
+    [False, True, True],
+    [True, False, True],
+    [True, True, True],
+    pytest.param(False, False, False, marks=pytest.mark.xfail)
+])
 @pytest.mark.parametrize("have_base_coherencies", [False, True])
 def test_sum_coherencies(FT, CT,
-                         have_ant_1_scalar,
-                         have_ant_2_scalar,
-                         have_bl_scalar,
+                         have_ant_jones_1,
+                         have_ant_jones_2,
                          have_bl_jones,
                          have_base_coherencies,
                          tensorflow_gpu_devices):
@@ -41,34 +46,35 @@ def test_sum_coherencies(FT, CT,
 
     _, np_ant1, np_ant2, np_time_index = random_baselines(chunks, na)
 
-    np_ant_scalar_1 = rc(size=(nsrc, ntime, na, nchan, 4))
     np_ant_jones_1 = rc(size=(nsrc, ntime, na, nchan, 4))
-    np_ant_scalar_2 = rc(size=(nsrc, ntime, na, nchan, 4))
     np_ant_jones_2 = rc(size=(nsrc, ntime, na, nchan, 4))
-    np_bl_scalar = rc(size=(nsrc, nvrow, nchan, 4))
     np_bl_jones = rc(size=(nsrc, nvrow, nchan, 4))
     np_base_coherencies = rc(size=(nvrow, nchan, 4))
 
     # Argument list
-    np_args = [np_time_index, np_ant1, np_ant2,
-               np_ant_scalar_1, np_ant_jones_1,
-               np_bl_scalar, np_bl_jones,
-               np_ant_scalar_2, np_ant_jones_2,
+    np_args = [np_time_index,
+               np_ant1,
+               np_ant2,
+               np_ant_jones_1,
+               np_bl_jones,
+               np_ant_jones_2,
                np_base_coherencies]
 
     # Argument string name list
-    arg_names = ['time_index', 'antenna1', 'antenna2',
-                 'ant_scalar_1', 'ant_jones_1',
-                 'baseline_scalar', 'baseline_jones',
-                 'ant_scalar_2', 'ant_jones_2',
+    arg_names = ['time_index',
+                 'antenna1',
+                 'antenna2',
+                 'ant_jones_1',
+                 'baseline_jones',
+                 'ant_jones_2',
                  'base_coherencies']
 
     # These variables are optional and should be input as lists
-    optionals = {'ant_scalar_1': have_ant_1_scalar,
-                 'ant_scalar_2': have_ant_2_scalar,
-                 'baseline_jones': have_bl_jones,
-                 'baseline_scalar': have_bl_scalar,
-                 'base_coherencies': have_base_coherencies}
+    optionals = {
+            'ant_jones_1': have_ant_jones_1,
+            'baseline_jones': have_bl_jones,
+            'ant_jones_2': have_ant_jones_2,
+            'base_coherencies': have_base_coherencies}
 
     tf_args = [tf.Variable(v, name=n) if n not in optionals
                else [tf.Variable(v, name=n)] if optionals.get(n, False)
@@ -78,42 +84,29 @@ def test_sum_coherencies(FT, CT,
     # Compute expected result with numpy
     shape_2x2 = (nsrc, nvrow, nchan, 2, 2)
 
-    if have_ant_1_scalar:
-        ant_jones_1 = np_ant_scalar_1 * np_ant_jones_1
-    else:
+    if have_ant_jones_1:
         ant_jones_1 = np_ant_jones_1
-
-    if have_ant_2_scalar:
-        ant_jones_2 = np_ant_scalar_2 * np_ant_jones_2
     else:
+        ant_jones_1 = np.broadcast_to([1, 0, 0, 1], np_ant_jones_1.shape)
+
+    if have_ant_jones_2:
         ant_jones_2 = np_ant_jones_2
-
-    if have_bl_jones and have_bl_scalar:
-        bl_jones = np_bl_scalar * np_bl_jones
-        mul_bl_jones = True
-    elif have_bl_jones and not have_bl_scalar:
-        bl_jones = np_bl_jones
-        mul_bl_jones = True
-    elif not have_bl_jones and have_bl_scalar:
-        bl_jones = np_bl_scalar
-        mul_bl_jones = True
     else:
-        bl_jones = None
-        mul_bl_jones = False
+        ant_jones_2 = np.broadcast_to([1, 0, 0, 1], np_ant_jones_2.shape)
+
+    if have_bl_jones:
+        bl_jones = np_bl_jones
+    else:
+        bl_jones = np.broadcast_to([1, 0, 0, 1], np_bl_jones.shape)
 
     ant1_jones = ant_jones_1[:, np_time_index, np_ant1]
     ant2_jones = ant_jones_2[:, np_time_index, np_ant2].conj()
     tshape = (0, 1, 2, 4, 3)
 
-    if mul_bl_jones:
-        expected = np.einsum("srcij,srcjk,srckl->rcil",
-                             ant1_jones.reshape(shape_2x2),
-                             bl_jones.reshape(shape_2x2),
-                             ant2_jones.reshape(shape_2x2).transpose(tshape))
-    else:
-        expected = np.einsum("srcij,srcjk->rcik",
-                             ant1_jones.reshape(shape_2x2),
-                             ant2_jones.reshape(shape_2x2).transpose(tshape))
+    expected = np.einsum("srcij,srcjk,srckl->rcil",
+                         ant1_jones.reshape(shape_2x2),
+                         bl_jones.reshape(shape_2x2),
+                         ant2_jones.reshape(shape_2x2).transpose(tshape))
 
     expected = expected.reshape(nvrow, nchan, 4)
 
@@ -124,7 +117,7 @@ def test_sum_coherencies(FT, CT,
     def _pin_op(device, *tf_args):
         """ Pin operation to device """
         with tf.device(device):
-            return sum_coherencies_op(*tf_args, FT=FT)
+            return sum_coherencies_op(*tf_args, FT=FT, CT=CT)
 
     # Pin operation to CPU
     cpu_op = _pin_op('/cpu:0', *tf_args)
