@@ -293,7 +293,7 @@ def _inspect_tf_op_call(*args, **kwargs):
                                    var_info=info)
                     for name, info in output_ph)
 
-    return outputs
+    return outputs[0] if len(outputs) == 1 else outputs
 
 
 MapDatasetInfo = namedtuple("MapDatasetInfo", ["placeholders", "tensor_map",
