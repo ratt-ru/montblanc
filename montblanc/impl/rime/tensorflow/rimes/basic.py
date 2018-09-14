@@ -81,32 +81,22 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         # Combine the brightness square root, complex phase,
         # feed rotation and beam dde's
         with tf.control_dependencies(deps):
-            antenna_jones = ops.create_antenna_jones(
-                                            [bsqrt],
-                                            [],
-                                            [feed_rotation],
-                                            [],
-                                            FT=FT, CT=CT)
+            antenna_jones = ops.jones_multiply(
+                [bsqrt, feed_rotation],
+                schemas=["(source,time,chan,corr)", "(time,ant,corr)"],
+                FT=FT)
 
         return antenna_jones, sgn_brightness
 
     def point_body(points, base_coherencies):
         point_inputs = point_inputs_it.get_next()
-        stokes = point_inputs['point_stokes']
-
-        ant_jones, sgn_brightness = antenna_jones(
-                                        point_inputs['point_lm'],
-                                        point_inputs['point_stokes'],
-                                        point_inputs['point_alpha'],
-                                        point_inputs['point_ref_freq'])
-
-        ajs = tf.shape(ant_jones)
-        nsrc, ntime, na = ajs[0], ajs[1], ajs[2]
 
         complex_phase = ops.phase(point_inputs['point_lm'],
                                   inputs['uvw'],
                                   inputs['frequency'],
-                                  uvw_schema="(row,(u,v,w))", CT=CT)
+                                  lm_schema="(source,(l,m))",
+                                  uvw_schema="(row,(u,v,w))",
+                                  CT=CT)
 
         phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
                      "for all your lm coordinates. This is required "
@@ -116,22 +106,24 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         phase_real = tf.check_numerics(tf.real(complex_phase), phase_msg)
         phase_imag = tf.check_numerics(tf.imag(complex_phase), phase_msg)
 
-        # Cast to complex and broadcast up
-        sgn_brightness = tf.cast(sgn_brightness, CT)[:, :, None, None, None]
-        sgn_brightness = tf.broadcast_to(sgn_brightness,
-                                         [nsrc, ntime, na, nchan, ncorr])
+        brightness = ops.brightness(point_inputs['point_stokes'],
+                                    stokes_schema="(source,corr)",
+                                    CT=CT)
+
+        bl_jones = ops.jones_multiply([complex_phase, brightness],
+                                      schemas=["(source,row,chan)",
+                                               "(source,corr)"],
+                                      output_schema="(source,row,chan,corr)",
+                                      FT=FT)
 
         coherencies = ops.sum_coherencies(
                         inputs['time_index'],
                         inputs['antenna1'],
                         inputs['antenna2'],
-                        [sgn_brightness],
-                        ant_jones,
                         [],
+                        [bl_jones],
                         [],
-                        [],
-                        ant_jones,
-                        [base_coherencies], FT=FT)
+                        [base_coherencies], FT=FT, CT=CT)
 
         return points+1, coherencies
 

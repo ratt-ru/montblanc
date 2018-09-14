@@ -115,11 +115,14 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         # Combine the brightness square root, complex phase,
         # feed rotation and beam dde's
         with tf.control_dependencies(deps):
-            antenna_jones = ops.create_antenna_jones([bsqrt],
-                                                     [cplx_phase],
-                                                     [feed_rotation],
-                                                     [ddes],
-                                                     FT=FT, CT=CT)
+            antenna_jones = ops.jones_multiply(
+                [bsqrt, cplx_phase, feed_rotation, ddes],
+                schemas=["(source,time,chan,corr)",
+                         "(source,time,ant,chan)",
+                         "(time,ant,corr)",
+                         "(source,time,ant,chan,corr)"],
+                output_schema="(source,time,ant,chan,corr)",
+                FT=FT)
 
         return antenna_jones, sgn_brightness
 
@@ -132,25 +135,18 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
                                         point_inputs['point_alpha'],
                                         point_inputs['point_ref_freq'])
 
-        ajs = tf.shape(ant_jones)
-        nsrc, ntime, na = ajs[0], ajs[1], ajs[2]
-
-        # Cast to complex and broadcast up
-        sgn_brightness = tf.cast(sgn_brightness, CT)[:, :, None, None, None]
-        sgn_brightness = tf.broadcast_to(sgn_brightness,
-                                         [nsrc, ntime, na, nchan, ncorr])
+        ant_jones_1 = (ant_jones[:, :, :, :, :] *
+                       tf.cast(sgn_brightness, CT)[:, :, None, None, None])
+        ant_jones_2 = ant_jones
 
         coherencies = ops.sum_coherencies(
                         inputs['time_index'],
                         inputs['antenna1'],
                         inputs['antenna2'],
-                        [sgn_brightness],
-                        ant_jones,
+                        [ant_jones_1],
                         [],
-                        [],
-                        [],
-                        ant_jones,
-                        [base_coherencies], FT=FT)
+                        [ant_jones_2],
+                        [base_coherencies], FT=FT, CT=CT)
 
         return points+1, coherencies
 
@@ -163,8 +159,6 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         _, summed_coherencies = tf.while_loop(lambda p, coh: tf.less(p, npsrc),
                                               point_body,
                                               [0, base_coherencies])
-
-
 
         # Post process visibilities to produce model visibilities and chi squared
         model_vis, chi_squared = ops.post_process_visibilities(
