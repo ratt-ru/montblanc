@@ -47,7 +47,8 @@ auto shape_function = [](InferenceContext* c)
     if(input_shapes.size() != str_schemas.size())
     {
         return tf::errors::InvalidArgument("Number of inputs ",
-            input_shapes.size(), " does not match the number of ",
+            input_shapes.size(),
+            " does not match the number of schemas ",
             str_schemas.size());
     }
 
@@ -64,8 +65,9 @@ auto shape_function = [](InferenceContext* c)
         if(ndims != schema.size())
         {
             return tf::errors::InvalidArgument("Rank ", ndims,
-                " of input ", i, " does not match the schema rank ",
-                schema.size());
+                " of input ", c->DebugString(shape),
+                " does not match the rank ",
+                schema.size(), " of schema ", str_schemas[i]);
         }
 
         for(int d=0; d<ndims; ++d)
