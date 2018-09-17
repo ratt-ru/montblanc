@@ -44,50 +44,6 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
     nrow, nchan, ncorr = map(model_vis_shape.__getitem__, range(3))
     FT, CT = inputs['frequency'].dtype, inputs['data'].dtype
 
-    # Feed rotation is used within the while loop bodies
-    # Create the expression for it upfront
-    with tf.device(device):
-        pa_sin, pa_cos = ops.parallactic_angle_sin_cos(
-                            inputs['parallactic_angles'])
-        feed_rotation = ops.feed_rotation(pa_sin, pa_cos, CT=CT,
-                                          feed_type=polarisation_type)
-
-    def antenna_jones(lm, stokes, alpha, ref_freq):
-        """
-        Compute the jones terms for each antenna.
-
-        `lm`, `stokes`, `alpha` and `ref_freq` are the source variables.
-        """
-        # Compute the square root of the brightness matrix
-        # (as well as the sign)
-        bsqrt, sgn_brightness = ops.b_sqrt(stokes, alpha,
-                                           inputs['frequency'],
-                                           ref_freq, CT=CT,
-                                           polarisation_type=polarisation_type)
-
-        # Check for nans/infs in the bsqrt
-        bsqrt_msg = ("Check that your stokes parameters "
-                     "satisfy I**2 >= Q**2 + U**2 + V**2. "
-                     "Montblanc performs a cholesky decomposition "
-                     "of the brightness matrix and the above must "
-                     "hold for this to produce valid values.")
-
-        bsqrt_real = tf.check_numerics(tf.real(bsqrt), bsqrt_msg)
-        bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
-
-        # Create dependencies on checks if debugging
-        deps = [] if not debug else [bsqrt_real, bsqrt_imag]
-
-        # Combine the brightness square root, complex phase,
-        # feed rotation and beam dde's
-        with tf.control_dependencies(deps):
-            antenna_jones = ops.jones_multiply(
-                [bsqrt, feed_rotation],
-                schemas=["(source,time,chan,corr)", "(time,ant,corr)"],
-                FT=FT)
-
-        return antenna_jones, sgn_brightness
-
     def point_body(points, base_coherencies):
         point_inputs = point_inputs_it.get_next()
 
@@ -123,7 +79,8 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
                         [],
                         [bl_jones],
                         [],
-                        [base_coherencies], FT=FT, CT=CT)
+                        [base_coherencies],
+                        FT=FT, CT=CT)
 
         return points+1, coherencies
 
