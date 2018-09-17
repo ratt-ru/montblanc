@@ -609,7 +609,7 @@ def analyse_tensorflow_function(fn, cfg, device):
     # into concrete types
     float_types = _float_types(cfg)
     placeholders = _set_placeholder_types(placeholders, float_types)
-    outputs = ((n, _set_placeholder_type(ph, float_types))
-               for n, ph in outputs)
+    outputs = {n: _set_placeholder_type(ph, float_types)
+               for n, ph in outputs}
 
     return datasets, placeholders, outputs
