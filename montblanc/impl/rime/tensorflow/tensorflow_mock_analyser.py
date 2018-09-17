@@ -166,7 +166,7 @@ def get_tf_placeholders(op_def, call_args):
         schema = arg_schema(output_name + "_schema", op_def)
 
         if schema is not None:
-            arg_ph_info['schema'] = schema
+            arg_ph_info['schema'] = parse_shape_schema(schema)
 
         out_ph_info.append((output_name, arg_ph_info))
 
