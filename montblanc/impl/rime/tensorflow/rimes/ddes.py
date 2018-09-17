@@ -2,9 +2,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from collections import namedtuple
-from pprint import pprint
-
 import tensorflow as tf
 
 from tensorflow.contrib.data import prefetch_to_device
@@ -135,8 +132,9 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
                                         point_inputs['point_alpha'],
                                         point_inputs['point_ref_freq'])
 
+        sgn_brightness = tf.cast(sgn_brightness, CT)
         ant_jones_1 = (ant_jones[:, :, :, :, :] *
-                       tf.cast(sgn_brightness, CT)[:, :, None, None, None])
+                       sgn_brightness[:, :, None, None, None])
         ant_jones_2 = ant_jones
 
         coherencies = ops.sum_coherencies(
@@ -146,7 +144,8 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
                         [ant_jones_1],
                         [],
                         [ant_jones_2],
-                        [base_coherencies], FT=FT, CT=CT)
+                        [base_coherencies],
+                        FT=FT, CT=CT)
 
         return points+1, coherencies
 
@@ -160,7 +159,8 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
                                               point_body,
                                               [0, base_coherencies])
 
-        # Post process visibilities to produce model visibilities and chi squared
+        # Post process visibilities to produce
+        # model visibilities and chi squared
         model_vis, chi_squared = ops.post_process_visibilities(
             inputs["time_index"], inputs["antenna1"], inputs["antenna2"],
             inputs["direction_independent_effects"], inputs["flag"],
