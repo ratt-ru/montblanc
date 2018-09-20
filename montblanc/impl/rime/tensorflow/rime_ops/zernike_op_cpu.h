@@ -43,55 +43,47 @@ public:
         auto pointing_error = in_pointing_error.tensor<FT, 5>();
         auto antenna_scaling = in_antenna_scaling.tensor<FT, 4>();
 
-        int ncorr = in_coords.dim_size(0);
-        int nsrc = in_coords.dim_size(1);
-        int ntime = in_pointing_error.dim_size(1);
-        int na = in_coeffs.dim_size(1);
-        int nchan = in_coeffs.dim_size(2);
-        int npoly = in_coeffs.dim_size(3);
+        int nsrc = in_coords.dim_size(0);
+        int ntime = in_pointing_error.dim_size(0);
+        int na = in_coeffs.dim_size(0);
+        int nchan = in_coeffs.dim_size(1);
+        int npoly = in_coeffs.dim_size(2);
         
 
         // Allocate output tensors
         // Allocate space for output tensor 'zernike_value'
         tf::Tensor * zernike_value_ptr = nullptr;
         tf::TensorShape zernike_value_shape = tf::TensorShape({ 
-            ncorr, 
             nsrc, 
             ntime, 
             na, 
-            nchan });
+            nchan, 
+            4 });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, zernike_value_shape, &zernike_value_ptr));
         auto zernike_value = zernike_value_ptr->tensor<CT, 5>();
-
-        for(int corr = 0; corr < ncorr; corr++)
-        {
+        
+        for(int corr = 0; corr < 4 ; corr++){
             for(int src = 0; src < nsrc; src++){
-                FT l = coords(corr, src, 0);
-                FT m = coords(corr, src, 1);
+                FT l = coords(src, corr,0 );
+                FT m = coords(src, corr, 1);
 
-               // Convert from (l, m) coordinates to polar coordinates
-               FT rho = sqrt((l * l)+(m * m));
-               FT phi = atan2(l, m);
-
-               for(int time = 0; time < ntime; time++){
-                   for(int ant = 0; ant < na; ant++){
-                       for(int chan = 0; chan < nchan ; chan++){
-                           CT zernike_sum = 0;
-                           for(int poly = 0; poly < npoly; poly++){
-                               //printf("%d \n", noll_index(corr, ant, chan, poly));
-                               zernike_sum += coeffs(corr, ant, chan, poly) * zernike(noll_index(corr, ant, chan, poly), rho, phi);
-                           }
-                           zernike_value(corr, src, time, ant, chan) = zernike_sum;
-                       }
-                   }
-               }
-
+                FT rho = sqrt((l * l) + (m * m));
+                FT phi = atan2(l, m);
+                for(int time = 0; time < ntime; time++ ){
+                    for(int ant = 0; ant < na; ant++){
+                        for(int chan = 0; chan < nchan; chan++){
+                            CT zernike_sum = 0;
+                            for(int poly = 0; poly < npoly ; poly++){
+                                zernike_sum += coeffs(ant, chan, poly, corr) * zernike(noll_index(ant, chan, poly, corr), rho, phi);
+                            }
+                            zernike_value(src, time, ant, chan, corr) = zernike_sum;
+                        }
+                    }
+                }
             }
         }
-        
     }
-
 private:
 
     FT factorial(unsigned n){
