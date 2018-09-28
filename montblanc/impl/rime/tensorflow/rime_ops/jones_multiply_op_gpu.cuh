@@ -119,13 +119,15 @@ __global__ void rime_jones_multiply(
             const uint32_t isrc = nisrc == 1 ? 0 : osrc;
             const uint32_t itime = nitime == 1 ? 0 : time;
             const uint32_t iant = niant == 1 ? 0 : ant;
-            const uint32_t ichan = nichan == 1 ? 0 : _jones_chan();
-            const uint32_t icorr = nicorr == 1 ? 0 : _jones_corr();
-            const uint32_t icorrchan = ichan*icorr;
+            // const uint32_t ichan = nichan == 1 ? 0 : _jones_chan();
+            // const uint32_t icorr = nicorr == 1 ? 0 : _jones_corr();
+            const uint32_t icorrchan = nicorrchan == 1 ? 0 :
+                    (nicorrchan == nicorr ? _jones_corr() : corrchan);
+
 
             // Load in the value for this tensor,
-            // attempting to take advantage of any values stored
-            // in the readonly L1 cache
+            // attempting to take advantage of any values
+            // stored in the readonly L1 cache
             i = ((isrc*nitime + itime)*niant + iant)*nicorrchan + icorrchan;
             CT in = cub::ThreadLoad<cub::LOAD_LDG>(tensor_ptrs[j] + i);
 
@@ -343,11 +345,11 @@ public:
             cudaMemcpyHostToDevice,
             device.stream());
 
-        int nsrc = output_ptr->dim_size(0);
-        int ntime = output_ptr->dim_size(1);
-        int na = output_ptr->dim_size(2);
-        int nchan = output_ptr->dim_size(3);
-        int ncorr = output_ptr->dim_size(4);
+        int nsrc = out_reshape[0];
+        int ntime = out_reshape[1];
+        int na = out_reshape[2];
+        int nchan = out_reshape[3];
+        int ncorr = out_reshape[4];
         int npolchan = nchan*ncorr;
 
         // Set up our CUDA thread block and grid

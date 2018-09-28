@@ -108,7 +108,7 @@ def test_jones_multiply(FT, CT, in_shape, out_shape, squeeze,
 
     # Create input variables
     # Argument list
-    np_args = [np.ones(a.tf_shape, dtype=CT) for a in input_analysis]
+    np_args = [rc(size=(a.tf_shape)) for a in input_analysis]
     schemas = [a.tf_schema for a in input_analysis]
 
     # Argument string name list
