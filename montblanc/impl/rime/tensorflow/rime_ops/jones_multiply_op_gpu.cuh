@@ -82,9 +82,6 @@ __global__ void rime_jones_multiply(
     uint32_t ant = blockIdx.y*blockDim.y + threadIdx.y;
     uint32_t time = blockIdx.z*blockDim.z + threadIdx.z;
 
-    if(time >= ntime || ant >= na || corrchan >= ncorrchan)
-        { return; }
-
     // 3D thread ID
     i = threadIdx.z*blockDim.x*blockDim.y
         + threadIdx.y*blockDim.x
@@ -98,6 +95,9 @@ __global__ void rime_jones_multiply(
         { tensor_sizes[i] = in_shapes[i]; }
 
     __syncthreads();
+
+    if(time >= ntime || ant >= na || corrchan >= ncorrchan)
+        { return; }
 
     // Iterate over sources and then tensors
     // Necessary to do it this way as
@@ -121,9 +121,9 @@ __global__ void rime_jones_multiply(
             const uint32_t iant = niant == 1 ? 0 : ant;
             // const uint32_t ichan = nichan == 1 ? 0 : _jones_chan();
             // const uint32_t icorr = nicorr == 1 ? 0 : _jones_corr();
-            const uint32_t icorrchan = nicorrchan == 1 ? 0 :
-                    (nicorrchan == nicorr ? _jones_corr() : corrchan);
-
+            const uint32_t icorrchan = (nicorrchan == 1 ? 0 :
+                    (nicorrchan == nicorr ? _jones_corr() :
+                    (nicorrchan == nichan ? _jones_chan() : corrchan)));
 
             // Load in the value for this tensor,
             // attempting to take advantage of any values
@@ -287,7 +287,7 @@ public:
         // which contain pointers to the sizes of the input
         // arrays of Jones matrices
         tf::TensorShape array_size_shape({(long long) in_list.size(),
-                                          (long long) output_schema.size()});
+                                          (long long) out_reshape.size()});
 
         tf::Tensor h_array_sizes;
         tf::Tensor d_array_sizes;
@@ -316,7 +316,7 @@ public:
         auto output = reinterpret_cast<typename Tr::CT *>(
                             output_ptr->flat<CT>().data());
 
-        // Set the input array sizes
+        // Set the input array pointers and sizes
         for(int i=0; i < in_list.size(); ++i)
         {
             const tf::Tensor & tensor = in_list[i];
@@ -324,7 +324,7 @@ public:
             host_input_array_ptrs[i] = reinterpret_cast<const typename Tr::CT *>(
                             tensor.flat<CT>().data());
 
-            for(int s=0; s < output_schema.size(); ++s)
+            for(int s=0; s < out_reshape.size(); ++s)
                 { host_array_sizes(i, s) = shape[s]; }
         }
 
@@ -352,6 +352,17 @@ public:
         int ncorr = out_reshape[4];
         int npolchan = nchan*ncorr;
 
+        int ntensors = in_list.size();
+        int ntensor_elements = out_reshape.size();
+
+        OP_REQUIRES(context, ntensors < MAX_TENSORS,
+            tf::errors::InvalidArgument("ntensors ",
+                ntensors, " >= ", MAX_TENSORS));
+
+        OP_REQUIRES(context, ntensors < MAX_TENSORS,
+            tf::errors::InvalidArgument("ntensor_elements ",
+                ntensor_elements, " != ", MAX_TENSOR_NDIM));
+
         // Set up our CUDA thread block and grid
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
@@ -365,8 +376,7 @@ public:
                 dev_input_array_ptrs,
                 dev_array_size_ptrs,
                 output,
-                in_list.size(),
-                output_schema.size(),
+                ntensors, ntensor_elements,
                 nsrc, ntime, na, npolchan);
 
     }
