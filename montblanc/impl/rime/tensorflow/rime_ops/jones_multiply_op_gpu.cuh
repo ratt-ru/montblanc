@@ -53,9 +53,6 @@ constexpr int MAX_TENSORS = 10;
 __device__ __forceinline__ int _jones_corr()
     { return threadIdx.x & 0x3; }
 
-__device__ __forceinline__ int _jones_chan()
-    { return threadIdx.x % 4; }
-
 // CUDA kernel outline
 template <typename Traits>
 __global__ void rime_jones_multiply(
@@ -116,14 +113,20 @@ __global__ void rime_jones_multiply(
             const uint32_t & nicorr = tensor_sizes[j*ntensor_elements + 4];
             const uint32_t nicorrchan = nichan*nicorr;
 
+            // Input indices are either 0 or equal to the
+            // output indices of the greater solution space
             const uint32_t isrc = nisrc == 1 ? 0 : osrc;
             const uint32_t itime = nitime == 1 ? 0 : time;
             const uint32_t iant = niant == 1 ? 0 : ant;
-            // const uint32_t ichan = nichan == 1 ? 0 : _jones_chan();
-            // const uint32_t icorr = nicorr == 1 ? 0 : _jones_corr();
-            const uint32_t icorrchan = (nicorrchan == 1 ? 0 :
+            const uint32_t icorrchan =
+                    // No correlations or channels case
+                    (nicorrchan == 1 ? 0 :
+                    // Correlations only case
                     (nicorrchan == nicorr ? _jones_corr() :
-                    (nicorrchan == nichan ? _jones_chan() : corrchan)));
+                    // Channels only case
+                    (nicorrchan == nichan ? corrchan / 4 :
+                    // Should never happen!
+                     corrchan)));
 
             // Load in the value for this tensor,
             // attempting to take advantage of any values
