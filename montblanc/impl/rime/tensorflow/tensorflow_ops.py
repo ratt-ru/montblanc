@@ -1,4 +1,3 @@
-import inspect
 from collections import namedtuple, OrderedDict
 from os.path import join as pjoin
 import re
@@ -82,4 +81,3 @@ def parse_shape_schema(schema):
     return [_xform(schema[i+1:j].strip())
             for i, j in zip(idx, idx[1:])
             if i+1 != j]
-
