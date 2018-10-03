@@ -105,7 +105,9 @@ def _fake_dask_inputs(input_data):
         dtype = data['type'].as_numpy_dtype()
 
         array = da.random.random(size=shape, chunks=chunks).astype(dtype)
-        dask_inputs.append((name, data['schema'], array))
+        schema = tuple("row" if a == "time" else a for a in data['schema'])
+
+        dask_inputs.append((name, schema, array))
 
     return dask_inputs
 
