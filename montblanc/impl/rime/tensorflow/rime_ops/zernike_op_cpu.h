@@ -62,16 +62,22 @@ public:
         OP_REQUIRES_OK(context, context->allocate_output(
             0, zernike_value_shape, &zernike_value_ptr));
         auto zernike_value = zernike_value_ptr->tensor<CT, 5>();
-        
+
+        #pragma omp parallel for
         for(int corr = 0; corr < 4 ; corr++){
+            #pragma omp parallel for
             for(int src = 0; src < nsrc; src++){
                 FT l = coords(src, corr,0 );
                 FT m = coords(src, corr, 1);
 
+
                 FT rho = sqrt((l * l) + (m * m));
                 FT phi = atan2(l, m);
+                #pragma omp parallel for
                 for(int time = 0; time < ntime; time++ ){
+                    #pragma omp parallel for
                     for(int ant = 0; ant < na; ant++){
+                        #pragma omp parallel for
                         for(int chan = 0; chan < nchan; chan++){
                             CT zernike_sum = 0;
                             for(int poly = 0; poly < npoly ; poly++){
@@ -84,6 +90,7 @@ public:
             }
         }
     }
+
 private:
 
     FT factorial(unsigned n){

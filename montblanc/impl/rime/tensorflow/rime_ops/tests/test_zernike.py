@@ -12,7 +12,6 @@ from montblanc.impl.rime.tensorflow.tensorflow_ops import zernike
 @pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
 def test_zernike_xx(gpu_devs, coeff_xx, noll_index_xx, eidos_data_xx, FT, CT):
     """ Test the Zernike operator """
-    # Run test with the type combinations above
     _impl_test_zernike(FT, CT, gpu_devs, coeff_xx, noll_index_xx, 15, eidos_data_xx, 0)
 
 @pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
@@ -23,7 +22,6 @@ def test_zernike_xy(gpu_devs, coeff_xy, noll_index_xy, eidos_data_xy, FT, CT):
 @pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
 def test_zernike_yx(gpu_devs, coeff_yx, noll_index_yx, eidos_data_yx, FT, CT):
     """ Test the Zernike operator """
-    # List of type constraint for testing this operator
     _impl_test_zernike(FT, CT, gpu_devs, coeff_yx, noll_index_yx, 8, eidos_data_yx, 2)
 
 @pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
@@ -36,9 +34,9 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
     """ Implementation of the Zernike operator test """
     npix = 17
     nsrc = npix ** 2
-    ntime = 1
-    na = 1
-    nchan = 1
+    ntime = 20
+    na = 20
+    nchan = 20
 
     nx, ny = npix, npix
     grid = (np.indices((nx, ny), dtype=np.float) - nx//2) * 2 / nx
@@ -49,9 +47,11 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
     coords = np.empty((nsrc, 4, 2)).astype(FT)
     coeffs = np.empty((na, nchan, thresh, 4)).astype(CT)
     noll_index = np.zeros((na, nchan, thresh, 4)).astype(np.int32)
-    pointing_error = np.empty((ntime, na, nchan, 4, 2)).astype(FT)
+    pointing_error = np.zeros((ntime, na, nchan, 4, 2)).astype(FT)
     antenna_scaling = np.empty((na, nchan, 4, 2)).astype(FT)
     
+    antenna_scaling[:,:,:,:] = 1
+
     coeffs[0,0,:, 0], coeffs[0,0,:, 1], coeffs[0,0,:, 2], coeffs[0,0,:, 3] = coeff_nn[:thresh], coeff_nn[:thresh], coeff_nn[:thresh], coeff_nn[:thresh]
     noll_index[0,0,:, 0], noll_index[0,0,:, 1], noll_index[0,0,:, 2], noll_index[0,0,:, 3] = noll_index_nn[:thresh], noll_index_nn[:thresh], noll_index_nn[:thresh], noll_index_nn[:thresh]
 
@@ -86,7 +86,8 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
         assert np.allclose(cpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
         gpu_data = np.array(S.run(gpu_ops))
         gpu_data = gpu_data[ 0, :, 0, 0, 0, corr_num].reshape((npix,npix))
-        assert np.allclose(gpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
+       assert np.allclose(gpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
+        
 
 
 @pytest.fixture
