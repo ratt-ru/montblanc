@@ -86,8 +86,41 @@ _fake_dim_chunks = {
 }
 
 
-def output_chunks(output_schema):
-    return tuple(_fake_dim_chunks[s] for s in output_schema)
+def output_shapes(wrapper, output_schema, chunks=False, reshapes=False):
+    if not chunks and not reshapes:
+        return ()
+
+    oreshapes = []
+    ochunks = []
+
+    for o, (oname, odata) in enumerate(wrapper.placeholder_outputs.items()):
+        oschema = odata['schema']
+        oreshape = []
+        ochunk = []
+
+        for dim in output_schema:
+            dim_chunks = _fake_dim_chunks[dim]
+
+            try:
+                oschema.index(dim)
+            except ValueError:
+                oreshape.append(None)
+                ochunk.append((1,)*len(dim_chunks))
+            else:
+                oreshape.append(slice(None))
+                ochunk.append(dim_chunks)
+
+        oreshapes.append(tuple(oreshape))
+        ochunks.append(tuple(ochunk))
+
+    if chunks and reshapes:
+        return (ochunks, oreshapes)
+    elif chunks and not reshapes:
+        return ochunks
+    elif not chunks and reshapes:
+        return oreshapes
+    else:
+        raise ValueError("Logic Error")
 
 
 def _flatten_singletons(D):
@@ -117,7 +150,7 @@ def _key_from_dsn(source_dataset_name):
 _key_pool = KeyPool()
 
 
-def _rime_factory(wrapper):
+def _rime_factory(wrapper, output_schema):
     # Establish a sorted sequence of inputs that will correspond
     # to the *args in _rime
     phs = wrapper.placeholders.copy()
@@ -128,21 +161,7 @@ def _rime_factory(wrapper):
     source_inputs = {dsn: (_key_from_dsn(dsn), list(sorted(sphs.keys())))
                      for dsn, sphs in phs.items()}
 
-    oreshapes = []
-
-    for o, (oname, odata) in enumerate(wrapper.placeholder_outputs.items()):
-        oschema = odata['schema']
-        oreshape = []
-
-        for dim in ["row", "chan", "corr"]:
-            try:
-                oschema.index(dim)
-            except ValueError:
-                oreshape.append(None)
-            else:
-                oreshape.append(slice(None))
-
-        oreshapes.append(tuple(oreshape))
+    oreshapes = output_shapes(wrapper, output_schema, reshapes=True)
 
     def _rime(*args):
         start = len(main_inputs)
@@ -233,11 +252,11 @@ def _fake_dask_inputs(wrapper):
 
 def test_dask_wrap(rime_cfg):
     with TensorflowSessionWrapper(basic, rime_cfg) as w:
-        rime_fn = _rime_factory(w)
-        dask_inputs = _fake_dask_inputs(w)
-
         # We're always producing this kind of output
         output_schema = ["row", "chan", "corr"]
+
+        rime_fn = _rime_factory(w, output_schema)
+        dask_inputs = _fake_dask_inputs(w)
 
         token = dask.base.tokenize(*(a for _, _, a in dask_inputs))
         rime_name = "rime-" + token
@@ -254,6 +273,7 @@ def test_dask_wrap(rime_cfg):
         rime_dsk = _flatten_singletons(rime_dsk)
 
         outputs = []
+        ochunks = output_shapes(w, output_schema, chunks=True)
 
         # Create graphs for each of the outputs produced by rime_fn
         for o, (oname, odata) in enumerate(w.placeholder_outputs.items()):
@@ -271,26 +291,8 @@ def test_dask_wrap(rime_cfg):
 
             dsk.update(get_dsk)
 
-            oschema = odata['schema']
-
-            # Determine output chunks
-            # If the schema for the output array has dimensions
-            # from the global output_schema, use the chunks in that position
-            # Otherwise, just assume chunks of size 1
-            ochunks = []
-
-            for dim in output_schema:
-                dim_chunks = _fake_dim_chunks[dim]
-
-                try:
-                    oschema.index(dim)
-                except ValueError:
-                    ochunks.append((1,)*len(dim_chunks))
-                else:
-                    ochunks.append(dim_chunks)
-
             dtype = odata['type'].as_numpy_dtype()
-            output = da.Array(dsk, out_name, ochunks, dtype=dtype)
+            output = da.Array(dsk, out_name, ochunks[o], dtype=dtype)
             outputs.append(output)
 
         # Test that compute works
