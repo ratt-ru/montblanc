@@ -69,9 +69,9 @@ def test_session_run(rime_cfg, iteration):
         # Now wait for the result
         w.dequeue({"inputs": 100, "point_inputs": [pt_key]})
 
-        # Check that input queue + map is clear
-        assert w._session.run(in_ds.size) == 0
-        assert w._session.run(pt_ds.size) == 0
+        # Check that all datasets are empty
+        for ds in w._datasets.values():
+            assert w._session.run(ds.size) == 0
 
 
 _fake_dim_chunks = {
@@ -135,6 +135,8 @@ def _rime_factory(wrapper):
         main_key = _key_pool.get(1)
         source_keys = []
 
+        dequeue_dict = {"inputs": main_key[0]}
+
         for dsn, (source_key, inputs) in source_inputs.items():
             end += len(inputs)
             ds_args = args[start:end]
@@ -143,6 +145,7 @@ def _rime_factory(wrapper):
                 raise TypeError("Argument types were not all the same "
                                 "type for dataset %s" % dsn)
 
+            # Handle lists of source chunks
             if isinstance(ds_args[0], list):
                 nentries = len(ds_args[0])
 
@@ -151,15 +154,27 @@ def _rime_factory(wrapper):
 
                 main_feed[source_key] = keys = _key_pool.get(nentries)
                 source_keys.extend(keys)
+                dequeue_dict[dsn] = keys
 
                 for e, k in enumerate(keys):
                     wrapper.enqueue(dsn, k, {n: a[e] for n, a
                                              in zip(inputs, ds_args)})
+            # Handle a single source chunk
+            elif isinstance(ds_args[0], np.ndarray):
+                main_feed[source_key] = keys = _key_pool.get(1)
+                source_keys.extends(keys)
+                dequeue_dict[dsn] = keys
+
+                wrapper.enqueue(dsn, k, {n: a for n, a
+                                         in zip(inputs, ds_args)})
+            else:
+                raise ValueError("Unhandled input type '%s'"
+                                 % type(ds_args[0]))
 
         main_feed.update({n: a for n, a in zip(main_inputs, main_args)})
         wrapper.enqueue("inputs", main_key[0], main_feed)
 
-        res = wrapper.dequeue({"inputs": main_key[0]})
+        res = wrapper.dequeue(dequeue_dict)
         _key_pool.release(source_keys)
         _key_pool.release(main_key)
 
@@ -232,4 +247,9 @@ def test_dask_wrap(rime_cfg):
         # Test that compute works
         assert output.compute().shape == output.shape
 
+        # Test that all keys have been released from the pool
         assert _key_pool.all_released() is True
+
+        # Check that all datasets are empty
+        for ds in w._datasets.values():
+            assert w._session.run(ds.size) == 0
