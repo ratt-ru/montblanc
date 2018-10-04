@@ -1,5 +1,5 @@
 from collections import Mapping
-from operator import itemgetter
+from operator import itemgetter, getitem
 
 import cloudpickle
 import dask
@@ -118,6 +118,8 @@ _key_pool = KeyPool()
 
 
 def _rime_factory(wrapper):
+    # Establish a sorted sequence of inputs that will correspond
+    # to the *args in _rime
     phs = wrapper.placeholders.copy()
 
     main_phs = phs.pop("inputs")
@@ -125,6 +127,22 @@ def _rime_factory(wrapper):
 
     source_inputs = {dsn: (_key_from_dsn(dsn), list(sorted(sphs.keys())))
                      for dsn, sphs in phs.items()}
+
+    oreshapes = []
+
+    for o, (oname, odata) in enumerate(wrapper.placeholder_outputs.items()):
+        oschema = odata['schema']
+        oreshape = []
+
+        for dim in ["row", "chan", "corr"]:
+            try:
+                oschema.index(dim)
+            except ValueError:
+                oreshape.append(None)
+            else:
+                oreshape.append(slice(None))
+
+        oreshapes.append(tuple(oreshape))
 
     def _rime(*args):
         start = len(main_inputs)
@@ -137,7 +155,10 @@ def _rime_factory(wrapper):
 
         dequeue_dict = {"inputs": main_key[0]}
 
+        # Iteration producing something like
+        # "point_inputs", ("__point_keys__", ["point_lm", "point_stokes"])
         for dsn, (source_key, inputs) in source_inputs.items():
+            # Extract argument range for this source type
             end += len(inputs)
             ds_args = args[start:end]
 
@@ -178,7 +199,8 @@ def _rime_factory(wrapper):
         _key_pool.release(source_keys)
         _key_pool.release(main_key)
 
-        return res[0]
+        # Return data, reshaping into shapes that dask will understand
+        return tuple(out[r] for out, r in zip(res, oreshapes))
 
     return _rime
 
@@ -231,21 +253,49 @@ def test_dask_wrap(rime_cfg):
         # Remove the need to recurse into input lists within rime_fn
         rime_dsk = _flatten_singletons(rime_dsk)
 
-        # Create the dask graph
-        dsk = ShareDict()
-        dsk.update(rime_dsk)
+        outputs = []
 
-        # Add input dask graphs
-        for _, _, a in dask_inputs:
-            dsk.update(a.__dask_graph__())
+        # Create graphs for each of the outputs produced by rime_fn
+        for o, (oname, odata) in enumerate(w.placeholder_outputs.items()):
+            # Create the dask graph
+            dsk = ShareDict()
+            dsk.update(rime_dsk)
 
-        # Create the output array
-        output = da.Array(dsk, rime_name,
-                          output_chunks(output_schema),
-                          dtype=np.complex128)
+            # Add input dask graphs
+            for _, _, a in dask_inputs:
+                dsk.update(a.__dask_graph__())
+
+            out_name = oname + "-" + token
+            get_dsk = {(out_name,) + key[1:]: (getitem, key, o)
+                       for key in rime_dsk.keys()}
+
+            dsk.update(get_dsk)
+
+            oschema = odata['schema']
+
+            # Determine output chunks
+            # If the schema for the output array has dimensions
+            # from the global output_schema, use the chunks in that position
+            # Otherwise, just assume chunks of size 1
+            ochunks = []
+
+            for dim in output_schema:
+                dim_chunks = _fake_dim_chunks[dim]
+
+                try:
+                    oschema.index(dim)
+                except ValueError:
+                    ochunks.append((1,)*len(dim_chunks))
+                else:
+                    ochunks.append(dim_chunks)
+
+            dtype = odata['type'].as_numpy_dtype()
+            output = da.Array(dsk, out_name, ochunks, dtype=dtype)
+            outputs.append(output)
 
         # Test that compute works
-        assert output.compute().shape == output.shape
+        for output in outputs:
+            assert output.compute().shape == output.shape
 
         # Test that all keys have been released from the pool
         assert _key_pool.all_released() is True
