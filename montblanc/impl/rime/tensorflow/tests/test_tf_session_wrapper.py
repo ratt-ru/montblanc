@@ -1,4 +1,5 @@
 from collections import Mapping
+from operator import itemgetter
 
 import cloudpickle
 import dask
@@ -14,6 +15,7 @@ from montblanc.impl.rime.tensorflow.rimes.basic import (
 
 from montblanc.impl.rime.tensorflow.rimes.ddes import (
                                             create_tf_expr as ddes)
+from montblanc.impl.rime.tensorflow.key_pool import KeyPool
 
 
 @pytest.fixture
@@ -38,7 +40,8 @@ def test_session_with(expr, rime_cfg):
         pass
 
 
-def test_session_run(rime_cfg):
+@pytest.mark.parametrize("iteration", xrange(1))
+def test_session_run(rime_cfg, iteration):
     def _dummy_data(ph):
         """ Generate some dummy data given a tensorflow placeholder """
         shape = tuple(2 if s is None else s for s in ph.shape.as_list())
@@ -71,45 +74,16 @@ def test_session_run(rime_cfg):
         assert w._session.run(pt_ds.size) == 0
 
 
-def _rime_factory(inputs):
-    try:
-        data_index = inputs.index("data")
-    except IndexError:
-        raise ValueError("This rime function depends on the use "
-                         "of the 'data' input within the rime function ")
-
-    def _rime(*args):
-        return args[data_index]
-
-    return _rime
-
-
 _fake_dim_chunks = {
     'source': (5, 5, 5),
     'row': (20, 20, 20, 20, 20),
     'time': (1, 1, 1, 1, 1),
-    'chan': (16,),
+    'chan': (8, 8),
     'corr': (4,),
     'ant': (7,),
     '(u,v,w)': (3,),
     '(l,m)': (2,)
 }
-
-
-def _fake_dask_inputs(input_data):
-    dask_inputs = []
-
-    for name, data in input_data:
-        chunks = tuple(_fake_dim_chunks[s] for s in data['schema'])
-        shape = tuple(map(sum, chunks))
-        dtype = data['type'].as_numpy_dtype()
-
-        array = da.random.random(size=shape, chunks=chunks).astype(dtype)
-        schema = tuple("row" if a == "time" else a for a in data['schema'])
-
-        dask_inputs.append((name, schema, array))
-
-    return dask_inputs
 
 
 def output_chunks(output_schema):
@@ -132,24 +106,95 @@ def _flatten_singletons(D):
         return D
 
 
+def _key_from_dsn(source_dataset_name):
+    if not source_dataset_name.endswith("_inputs"):
+        raise ValueError("Source Dataset name %s did not "
+                         "end with '_inputs'")
+
+    return "__" + source_dataset_name[:-len("_inputs")] + "_keys__"
+
+
+def _rime_factory(wrapper):
+    phs = wrapper.placeholders.copy()
+
+    main_phs = phs.pop("inputs")
+    main_inputs = list(sorted(main_phs.keys()))
+
+    source_inputs = {dsn: (_key_from_dsn(dsn), list(sorted(sphs.keys())))
+                     for dsn, sphs in phs.items()}
+
+    key_pool = KeyPool()
+
+    def _rime(*args):
+        start = len(main_inputs)
+        end = start
+
+        main_args = args[0:len(main_inputs)]
+        main_feed = {}
+        main_key = key_pool.get(1)
+
+        for dsn, (source_key, inputs) in source_inputs.items():
+            end += len(inputs)
+            ds_args = args[start:end]
+
+            if not all(isinstance(a, type(ds_args[0])) for a in ds_args[1:]):
+                raise TypeError("Argument types were not all the same "
+                                "type for dataset %s" % dsn)
+
+            if isinstance(ds_args[0], list):
+                nentries = len(ds_args[0])
+
+                if not all(nentries == len(a) for a in ds_args[1:]):
+                    raise ValueError("Expected lists of the same length")
+
+                main_feed[source_key] = keys = key_pool.get(nentries)
+
+                for e, k in enumerate(keys):
+                    wrapper.enqueue(dsn, k, {n: a[e] for n, a
+                                             in zip(inputs, ds_args)})
+
+        main_feed.update({n: a for n, a in zip(main_inputs, main_args)})
+        wrapper.enqueue("inputs", main_key[0], main_feed)
+
+        res = wrapper.dequeue({"inputs": main_key[0]})
+        return res[0]
+
+    return _rime
+
+
+def _fake_dask_inputs(wrapper):
+    phs = wrapper.placeholders.copy()
+
+    main_phs = phs.pop("inputs")
+    ordered_inputs = list(sorted(main_phs.items(), key=itemgetter(0)))
+
+    for dsn, dphs in phs.items():
+        ordered_inputs.extend(sorted(dphs.items(), key=itemgetter(0)))
+
+    dask_inputs = []
+
+    for input_name, ph_data in ordered_inputs:
+        chunks = tuple(_fake_dim_chunks[s] for s in ph_data['schema'])
+        shape = tuple(map(sum, chunks))
+        dtype = ph_data['type'].as_numpy_dtype()
+
+        # Create random data
+        array = da.random.random(size=shape, chunks=chunks).astype(dtype)*0.001
+        # We associate time chunks with row chunks
+        schema = tuple("row" if a == "time" else a for a in ph_data['schema'])
+
+        dask_inputs.append((input_name, schema, array))
+
+    return dask_inputs
+
+
 def test_dask_wrap(rime_cfg):
     with TensorflowSessionWrapper(basic, rime_cfg) as w:
-        inputs = []
+        rime_fn = _rime_factory(w)
+        dask_inputs = _fake_dask_inputs(w)
 
-        for dsn, ds in w.placeholders.items():
-            inputs.extend(ds.items())
-
-        outputs = tuple((k, v['schema']) for k, v
-                        in w.placeholder_outputs.items())
-
-        inputs = sorted(inputs)
-        output_schema = max(outputs, key=lambda o: len(o[1]))[1]
         # We're always producing this kind of output
         output_schema = ["row", "chan", "corr"]
-
-        rime_fn = _rime_factory([name for name, _ in inputs])
-
-        dask_inputs = _fake_dask_inputs(inputs)
 
         token = dask.base.tokenize(*(a for _, _, a in dask_inputs))
         rime_name = "rime-" + token
@@ -157,20 +202,26 @@ def test_dask_wrap(rime_cfg):
         name_schemas = [(a.name, s) for _, s, a in dask_inputs]
         numblocks = {a.name: a.numblocks for _, _, a in dask_inputs}
 
+        # Create the graph from all the inputs
         rime_dsk = da.core.top(rime_fn, rime_name, output_schema,
                                *(a for pair in name_schemas for a in pair),
                                numblocks=numblocks)
 
+        # Remove the need to recurse into input lists within rime_fn
         rime_dsk = _flatten_singletons(rime_dsk)
 
+        # Create the dask graph
         dsk = ShareDict()
         dsk.update(rime_dsk)
 
+        # Add input dask graphs
         for _, _, a in dask_inputs:
             dsk.update(a.__dask_graph__())
 
+        # Create the output array
         output = da.Array(dsk, rime_name,
                           output_chunks(output_schema),
                           dtype=np.complex128)
 
+        # Test that compute works
         assert output.compute().shape == output.shape

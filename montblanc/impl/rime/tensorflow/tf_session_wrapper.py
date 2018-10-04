@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from copy import deepcopy
 from threading import Thread
 
 from dask.sizeof import sizeof, getsizeof
@@ -89,6 +90,7 @@ class TensorflowSessionWrapper(object):
                                                                 self._cfg,
                                                                 'fake')
 
+        self.placeholders = deepcopy(placeholders)
         # Add in a chunk_key uniquely identifying the chunk of data
         datasets["inputs"].variables()["chunk_key"]
         placeholders["inputs"]["chunk_key"] = {
@@ -259,7 +261,9 @@ class TensorflowSessionWrapper(object):
 
             self._session.run(ops, feed_dict=feed_dict)
 
-        return res
+            return res
+        else:
+            raise TypeError("'keys' must be an integer or a dict")
 
     def evaluate_expr(self):
         while True:
