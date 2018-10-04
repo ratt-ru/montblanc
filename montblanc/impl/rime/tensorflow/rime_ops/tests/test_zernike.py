@@ -86,7 +86,7 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
         assert np.allclose(cpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
         gpu_data = np.array(S.run(gpu_ops))
         gpu_data = gpu_data[ 0, :, 0, 0, 0, corr_num].reshape((npix,npix))
-       assert np.allclose(gpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
+        assert np.allclose(gpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
         
 
 
