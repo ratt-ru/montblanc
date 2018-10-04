@@ -114,6 +114,9 @@ def _key_from_dsn(source_dataset_name):
     return "__" + source_dataset_name[:-len("_inputs")] + "_keys__"
 
 
+_key_pool = KeyPool()
+
+
 def _rime_factory(wrapper):
     phs = wrapper.placeholders.copy()
 
@@ -123,15 +126,14 @@ def _rime_factory(wrapper):
     source_inputs = {dsn: (_key_from_dsn(dsn), list(sorted(sphs.keys())))
                      for dsn, sphs in phs.items()}
 
-    key_pool = KeyPool()
-
     def _rime(*args):
         start = len(main_inputs)
         end = start
 
         main_args = args[0:len(main_inputs)]
         main_feed = {}
-        main_key = key_pool.get(1)
+        main_key = _key_pool.get(1)
+        source_keys = []
 
         for dsn, (source_key, inputs) in source_inputs.items():
             end += len(inputs)
@@ -147,7 +149,8 @@ def _rime_factory(wrapper):
                 if not all(nentries == len(a) for a in ds_args[1:]):
                     raise ValueError("Expected lists of the same length")
 
-                main_feed[source_key] = keys = key_pool.get(nentries)
+                main_feed[source_key] = keys = _key_pool.get(nentries)
+                source_keys.extend(keys)
 
                 for e, k in enumerate(keys):
                     wrapper.enqueue(dsn, k, {n: a[e] for n, a
@@ -157,6 +160,9 @@ def _rime_factory(wrapper):
         wrapper.enqueue("inputs", main_key[0], main_feed)
 
         res = wrapper.dequeue({"inputs": main_key[0]})
+        _key_pool.release(source_keys)
+        _key_pool.release(main_key)
+
         return res[0]
 
     return _rime
@@ -225,3 +231,5 @@ def test_dask_wrap(rime_cfg):
 
         # Test that compute works
         assert output.compute().shape == output.shape
+
+        assert _key_pool.all_released() is True

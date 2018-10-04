@@ -27,6 +27,7 @@ except ImportError:
 
 import six
 
+
 class KeyPool(object):
     """ Pool of reusable integer keys """
     def __init__(self):
@@ -43,7 +44,8 @@ class KeyPool(object):
             remaining = nkeys - len(keys)
 
             if remaining > 0:
-                extra_keys = six.moves.range(self._last_key, self._last_key + remaining)
+                extra_keys = six.moves.range(self._last_key,
+                                             self._last_key + remaining)
                 keys.extend(extra_keys)
                 self._last_key += remaining
 
@@ -59,6 +61,7 @@ class KeyPool(object):
         with self._lock:
             return len(self._keys) == self._last_key
 
+
 class KeyPoolTest(unittest.TestCase):
     def test_key_pool(self):
         keypool = KeyPool()
@@ -71,10 +74,8 @@ class KeyPoolTest(unittest.TestCase):
         keypool.release(rel_keys)
 
         more_keys = keypool.get(10)
-        self.assertTrue(more_keys == list(six.moves.range(5,15)))
+        self.assertTrue(more_keys == list(six.moves.range(5, 15)))
+
 
 if __name__ == "__main__":
     unittest.main()
-
-
-
