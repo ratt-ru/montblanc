@@ -205,11 +205,11 @@ def _rime_factory(wrapper, output_schema):
             # Handle a single source chunk
             elif isinstance(ds_args[0], np.ndarray):
                 main_feed[source_key] = keys = _key_pool.get(1)
-                source_keys.extends(keys)
+                source_keys.extend(keys)
                 dequeue_dict[dsn] = keys
 
-                wrapper.enqueue(dsn, k, {n: a for n, a
-                                         in zip(inputs, ds_args)})
+                wrapper.enqueue(dsn, keys[0], {n: a for n, a
+                                               in zip(inputs, ds_args)})
             else:
                 raise ValueError("Unhandled input type '%s'"
                                  % type(ds_args[0]))
@@ -291,6 +291,8 @@ def test_dask_wrap(expr, rime_cfg):
             for _, _, a in dask_inputs:
                 dsk.update(a.__dask_graph__())
 
+            # Extract individual tuple components produced by the
+            # rime function.
             out_name = oname + "-" + token
             get_dsk = {(out_name,) + key[1:]: (getitem, key, o)
                        for key in rime_dsk.keys()}
