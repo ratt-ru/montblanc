@@ -81,6 +81,9 @@ _fake_dim_chunks = {
     'chan': (8, 8),
     'corr': (4,),
     'ant': (7,),
+    'beam_lw': (5,),
+    'beam_mh': (5,),
+    'beam_nud': (5,),
     '(u,v,w)': (3,),
     '(l,m)': (2,)
 }
@@ -236,7 +239,9 @@ def _fake_dask_inputs(wrapper):
     dask_inputs = []
 
     for input_name, ph_data in ordered_inputs:
-        chunks = tuple(_fake_dim_chunks[s] for s in ph_data['schema'])
+        chunks = tuple((s,) if isinstance(s, int)
+                       else _fake_dim_chunks[s]
+                       for s in ph_data['schema'])
         shape = tuple(map(sum, chunks))
         dtype = ph_data['type'].as_numpy_dtype()
 
@@ -250,8 +255,9 @@ def _fake_dask_inputs(wrapper):
     return dask_inputs
 
 
-def test_dask_wrap(rime_cfg):
-    with TensorflowSessionWrapper(basic, rime_cfg) as w:
+@pytest.mark.parametrize("expr", [basic, ddes])
+def test_dask_wrap(expr, rime_cfg):
+    with TensorflowSessionWrapper(expr, rime_cfg) as w:
         # We're always producing this kind of output
         output_schema = ["row", "chan", "corr"]
 
