@@ -91,6 +91,8 @@ class TensorflowSessionWrapper(object):
                                                                 'fake')
 
         self.placeholders = deepcopy(placeholders)
+        self.placeholder_outputs = deepcopy(outputs)
+
         # Add in a chunk_key uniquely identifying the chunk of data
         datasets["inputs"].variables()["chunk_key"]
         placeholders["inputs"]["chunk_key"] = {
