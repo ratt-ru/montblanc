@@ -9,14 +9,13 @@ import numpy as np
 import pytest
 
 from montblanc.impl.rime.tensorflow.tf_session_wrapper import (
-                                            TensorflowSessionWrapper)
+                                TensorflowSessionWrapper)
 from montblanc.impl.rime.tensorflow.rimes.basic_multiple_sources import (
-                                            create_tf_expr as basic_multiple_sources)
+                                create_tf_expr as basic_multiple_sources)
 from montblanc.impl.rime.tensorflow.rimes.basic import (
-                                            create_tf_expr as basic)
-
+                                create_tf_expr as basic)
 from montblanc.impl.rime.tensorflow.rimes.ddes import (
-                                            create_tf_expr as ddes)
+                                create_tf_expr as ddes)
 from montblanc.impl.rime.tensorflow.key_pool import KeyPool
 
 
