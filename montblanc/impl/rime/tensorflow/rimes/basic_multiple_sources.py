@@ -27,19 +27,26 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
 
     # Obtain the tensor map for point inputs
     point_input_map = source_input_maps["point_inputs"]
+    gaussian_input_map = source_input_maps["gaussian_inputs"]
     # Create a key dataset from the set of __point_keys__
-    point_key_ds = tf.data.Dataset.from_tensor_slices(inputs["__point_keys__"])
+    point_key_ds = tf.data.Dataset.from_tensor_slices(
+                        inputs["__point_keys__"])
+    gaussian_key_ds = tf.data.Dataset.from_tensor_slices(
+                        inputs["__gaussian_keys__"])
     # Create a point inputs dataset, retrieving point data from
     # the point input map per key
     point_inputs_ds = MapDataset(point_key_ds, point_input_map)
+    gaussian_inputs_ds = MapDataset(gaussian_key_ds, gaussian_input_map)
 
     # Apply GPU prefetch to point data
     if device.device_type == "GPU":
         xform = prefetch_to_device(device, buffer_size=1)
         point_inputs_ds = point_inputs_ds.apply(xform)
+        gaussian_inputs_ds = gaussian_inputs_ds.apply(xform)
 
     # Create an iterator over point source data
     point_inputs_it = point_inputs_ds.make_initializable_iterator()
+    gaussian_inputs_it = gaussian_inputs_ds.make_initializable_iterator()
 
     model_vis_shape = tf.shape(inputs['data'])
     nrow, nchan, ncorr = map(model_vis_shape.__getitem__, range(3))
@@ -55,14 +62,6 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
                                   lm_schema="(source,(l,m))",
                                   uvw_schema="(row,(u,v,w))",
                                   CT=CT)
-
-        phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
-                     "for all your lm coordinates. This is required "
-                     "for 'n = sqrt(1 - l**2 - m**2) - 1' "
-                     "to be finite.")
-
-        phase_real = tf.check_numerics(tf.real(complex_phase), phase_msg)
-        phase_imag = tf.check_numerics(tf.imag(complex_phase), phase_msg)
 
         brightness = ops.brightness(point_inputs['point_stokes'],
                                     stokes_schema="(source,corr)",
@@ -86,6 +85,39 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
 
         return points+1, coherencies
 
+    @source_decorator("gaussian")
+    def gaussian_body(gaussians, base_coherencies):
+        gaussian_inputs = gaussian_inputs_it.get_next()
+
+        complex_phase = ops.phase(gaussian_inputs['gaussian_lm'],
+                                  inputs['uvw'],
+                                  inputs['frequency'],
+                                  lm_schema="(source,(l,m))",
+                                  uvw_schema="(row,(u,v,w))",
+                                  CT=CT)
+
+        brightness = ops.brightness(gaussian_inputs['gaussian_stokes'],
+                                    stokes_schema="(source,corr)",
+                                    CT=CT)
+
+        bl_jones = ops.jones_multiply([complex_phase, brightness],
+                                      schemas=["(source,row,chan)",
+                                               "(source,corr)"],
+                                      output_schema="(source,row,chan,corr)",
+                                      FT=FT)
+
+        coherencies = ops.sum_coherencies(
+                        inputs['time_index'],
+                        inputs['antenna1'],
+                        inputs['antenna2'],
+                        [],
+                        [bl_jones],
+                        [],
+                        [base_coherencies],
+                        FT=FT, CT=CT)
+
+        return gaussians+1, coherencies
+
     # point dataset iterator  must be initialised
     deps = [point_inputs_it.initializer]
 
@@ -95,6 +127,11 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
         _, summed_coherencies = tf.while_loop(lambda p, coh: tf.less(p, npsrc),
                                               point_body,
                                               [0, base_coherencies])
+
+        ngsrc = tf.shape(inputs['__gaussian_keys__'])[0]
+        _, sum_coherencies = tf.while_loop(lambda g, coh: tf.less(g, ngsrc),
+                                           gaussian_body,
+                                           [0, base_coherencies])
 
         # Post process visibilities to produce
         # model visibilities and chi squared

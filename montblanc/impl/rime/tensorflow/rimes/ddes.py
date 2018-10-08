@@ -8,6 +8,7 @@ from tensorflow.contrib.data import prefetch_to_device
 
 import montblanc.impl.rime.tensorflow.tensorflow_ops as ops
 from montblanc.impl.rime.tensorflow.map_dataset import MapDataset
+from montblanc.impl.rime.tensorflow.utils import source_decorator
 
 
 def create_tf_expr(cfg, device, input_ds, source_input_maps):
@@ -123,6 +124,7 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
 
         return antenna_jones, sgn_brightness
 
+    @source_decorator("point")
     def point_body(points, base_coherencies):
         point_inputs = point_inputs_it.get_next()
 

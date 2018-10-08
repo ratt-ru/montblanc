@@ -10,6 +10,8 @@ import pytest
 
 from montblanc.impl.rime.tensorflow.tf_session_wrapper import (
                                             TensorflowSessionWrapper)
+from montblanc.impl.rime.tensorflow.rimes.basic_multiple_sources import (
+                                            create_tf_expr as basic_multiple_sources)
 from montblanc.impl.rime.tensorflow.rimes.basic import (
                                             create_tf_expr as basic)
 
@@ -75,7 +77,9 @@ def test_session_run(rime_cfg, iteration):
 
 
 _fake_dim_chunks = {
-    'source': (5, 5, 5),
+    # 'source': (5, 5, 5),
+    'point': (5, 5),
+    'gaussian': (7, 7, 7),
     'row': (20, 20, 20, 20, 20),
     'time': (1, 1, 1, 1, 1),
     'chan': (8, 8),
@@ -214,6 +218,8 @@ def _rime_factory(wrapper, output_schema):
                 raise ValueError("Unhandled input type '%s'"
                                  % type(ds_args[0]))
 
+            start = end
+
         main_feed.update({n: a for n, a in zip(main_inputs, main_args)})
         wrapper.enqueue("inputs", main_key[0], main_feed)
 
@@ -255,7 +261,7 @@ def _fake_dask_inputs(wrapper):
     return dask_inputs
 
 
-@pytest.mark.parametrize("expr", [basic, ddes])
+@pytest.mark.parametrize("expr", [basic, basic_multiple_sources, ddes])
 def test_dask_wrap(expr, rime_cfg):
     with TensorflowSessionWrapper(expr, rime_cfg) as w:
         # We're always producing this kind of output

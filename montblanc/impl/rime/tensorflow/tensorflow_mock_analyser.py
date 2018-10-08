@@ -17,6 +17,8 @@ from montblanc.impl.rime.tensorflow.map_dataset import (TensorMap,
 from montblanc.impl.rime.tensorflow.queue_dataset import (TensorQueue,
                                                           QueueDataset)
 
+from montblanc.impl.rime.tensorflow.utils import active_source
+
 
 mock = tf.test.mock
 
@@ -81,6 +83,35 @@ def arg_schema(schema_name, op_def):
             return attr.default_value.s
 
         return None
+
+
+def xform_schema(schema):
+    """
+    Transform a schema string into a list of string dimensions.
+
+    If a source type is active
+    Replaces any 'source' dimensions with the active source type.
+
+    Parameters
+    ----------
+    schema : str
+        Schema string
+
+    Returns
+    -------
+    list
+        list of parsed string dimensions
+
+    """
+    split_schema = parse_shape_schema(schema)
+
+    try:
+        active = active_source()
+    except ValueError:
+        return split_schema
+    else:
+        return [active if s == "source" else s
+                for s in split_schema]
 
 
 def get_tf_placeholders(op_def, call_args):
@@ -154,7 +185,7 @@ def get_tf_placeholders(op_def, call_args):
             schema = arg_schema(schema_name, op_def)
 
         if schema is not None:
-            arg_ph_info['schema'] = parse_shape_schema(schema)
+            arg_ph_info['schema'] = xform_schema(schema)
 
         # Assign the placeholder info for this argument
         in_ph_info.append((ph_name, arg_ph_info))
@@ -166,7 +197,7 @@ def get_tf_placeholders(op_def, call_args):
         schema = arg_schema(output_name + "_schema", op_def)
 
         if schema is not None:
-            arg_ph_info['schema'] = parse_shape_schema(schema)
+            arg_ph_info['schema'] = xform_schema(schema)
 
         out_ph_info.append((output_name, arg_ph_info))
 
