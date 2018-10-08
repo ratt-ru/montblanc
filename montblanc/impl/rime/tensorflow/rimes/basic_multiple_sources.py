@@ -8,7 +8,7 @@ from tensorflow.contrib.data import prefetch_to_device
 
 import montblanc.impl.rime.tensorflow.tensorflow_ops as ops
 from montblanc.impl.rime.tensorflow.map_dataset import MapDataset
-from montblanc.impl.rime.tensorflow.utils import source_decorator
+from montblanc.impl.rime.tensorflow.utils import source_context
 
 
 def create_tf_expr(cfg, device, input_ds, source_input_maps):
@@ -52,7 +52,7 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
     nrow, nchan, ncorr = map(model_vis_shape.__getitem__, range(3))
     FT, CT = inputs['frequency'].dtype, inputs['data'].dtype
 
-    @source_decorator("point")
+    @source_context("point")
     def point_body(points, base_coherencies):
         point_inputs = point_inputs_it.get_next()
 
@@ -85,7 +85,7 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
 
         return points+1, coherencies
 
-    @source_decorator("gaussian")
+    @source_context("gaussian")
     def gaussian_body(gaussians, base_coherencies):
         gaussian_inputs = gaussian_inputs_it.get_next()
 

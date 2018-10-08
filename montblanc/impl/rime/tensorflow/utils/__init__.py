@@ -5,12 +5,27 @@ from threading import Lock
 _source_stack = deque()
 
 
-def source_decorator(source):
+def source_context(source):
+    """
+    Marks a function as associated with a particular source type.
+
+    An internal stack
+
+    .. code-block:: python
+
+        @source_context("point")
+        def point_body(p, coherencies):
+            ...
+            return p+1, coherencies
+
+    """
+
     def fn_decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
+            _source_stack.append(source)
+
             try:
-                _source_stack.append(source)
                 return fn(*args, **kwargs)
             finally:
                 _source_stack.pop()
