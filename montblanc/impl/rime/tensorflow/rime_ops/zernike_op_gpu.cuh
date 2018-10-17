@@ -214,16 +214,19 @@ public:
         // Allocate space for output tensor 'zernike_value'
         tf::Tensor * zernike_value_ptr = nullptr;
         tf::TensorShape zernike_value_shape = tf::TensorShape({ nsrc, ntime, na, nchan, 4 });
-        OP_REQUIRES_OK(context, context->allocate_output(
-            0, zernike_value_shape, &zernike_value_ptr));
         typedef montblanc::kernel_traits<FT> Tr;
         using LTr = LaunchTraits<typename Tr::FT>;
+        OP_REQUIRES_OK(context, context->allocate_output(
+            0, zernike_value_shape, &zernike_value_ptr));
+
+            OP_REQUIRES(context, LTr::BLOCKDIMZ * 4 >= npoly, tf::errors::InvalidArgument("Not generating enough threads to handle polynomials. Try increasing ntime."));
+            OP_REQUIRES(context, npoly < NPOLY, tf::errors::InvalidArgument("Npoly is too large. Must be 16 or less."));
+
         // Set up our CUDA thread block and grid
 
         dim3 block(LTr::block_size(4 * nchan, na, ntime));
         dim3 grid(montblanc::grid_from_thread_block(
             block, 4 * nchan, na, ntime));
-        printf("Setting up block(%d, %d, %d) and grid(%d, %d, %d)\n", block.x, block.y, block.z, grid.x, grid.y, grid.z);
 
         // Get pointers to flattened tensor data buffers
         auto coords = reinterpret_cast< //lm_type coords

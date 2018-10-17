@@ -9,23 +9,23 @@ import matplotlib.pyplot as plt
 from montblanc.impl.rime.tensorflow.tensorflow_ops import zernike
 
 
-@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
+@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])
 def test_zernike_xx(gpu_devs, coeff_xx, noll_index_xx, eidos_data_xx, FT, CT):
     """ Test the Zernike operator """
     _impl_test_zernike(FT, CT, gpu_devs, coeff_xx, noll_index_xx, 15, eidos_data_xx, 0)
 
-@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
-def test_zernike_xy(gpu_devs, coeff_xy, noll_index_xy, eidos_data_xy, FT, CT):
+@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])
+def _test_zernike_xy(gpu_devs, coeff_xy, noll_index_xy, eidos_data_xy, FT, CT):
     """ Test the Zernike operator """
     _impl_test_zernike(FT, CT, gpu_devs, coeff_xy, noll_index_xy, 8, eidos_data_xy, 1)
 
-@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
-def test_zernike_yx(gpu_devs, coeff_yx, noll_index_yx, eidos_data_yx, FT, CT):
+@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])
+def _test_zernike_yx(gpu_devs, coeff_yx, noll_index_yx, eidos_data_yx, FT, CT):
     """ Test the Zernike operator """
     _impl_test_zernike(FT, CT, gpu_devs, coeff_yx, noll_index_yx, 8, eidos_data_yx, 2)
 
-@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])    
-def test_zernike_yy(gpu_devs, coeff_yy, noll_index_yy, eidos_data_yy, FT, CT):
+@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])
+def _test_zernike_yy(gpu_devs, coeff_yy, noll_index_yy, eidos_data_yy, FT, CT):
     """ Test the Zernike operator """
     _impl_test_zernike(FT, CT, gpu_devs, coeff_yy, noll_index_yy, 15, eidos_data_yy, 3)
 
@@ -49,7 +49,7 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
     noll_index = np.zeros((na, nchan, thresh, 4)).astype(np.int32)
     pointing_error = np.zeros((ntime, na, nchan, 4, 2)).astype(FT)
     antenna_scaling = np.empty((na, nchan, 4, 2)).astype(FT)
-    
+
     antenna_scaling[:,:,:,:] = 1
 
     coeffs[0,0,:, 0], coeffs[0,0,:, 1], coeffs[0,0,:, 2], coeffs[0,0,:, 3] = coeff_nn[:thresh], coeff_nn[:thresh], coeff_nn[:thresh], coeff_nn[:thresh]
@@ -87,7 +87,7 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
         gpu_data = np.array(S.run(gpu_ops))
         gpu_data = gpu_data[ 0, :, 0, 0, 0, corr_num].reshape((npix,npix))
         assert np.allclose(gpu_data, eidos_data_nn, atol=1e-6, rtol=1e-4)
-        
+
 
 
 @pytest.fixture

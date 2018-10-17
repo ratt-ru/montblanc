@@ -491,6 +491,7 @@ public:
             beam_lw, beam_mh, beam_nud);
 
     }
+
 };
 
 } // namespace ebeam {
