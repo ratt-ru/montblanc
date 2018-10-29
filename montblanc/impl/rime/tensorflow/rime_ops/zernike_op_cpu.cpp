@@ -18,16 +18,12 @@ auto shape_function = [](InferenceContext* c) {
     // TODO. Check shape and dimension sizes for 'coords'
     ShapeHandle in_coords = c->input(0);
     // Assert 'coords' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_coords, 3, &input),
-        "coords must have shape [None, 4, 2] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_coords, 2, &input),
+        "coords must have shape [None, 2] but is " +
         c->DebugString(in_coords));
     // Assert 'coords' dimension '1' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_coords, 1), 4, &d),
-        "coords must have shape [None, 4, 2] but is " +
-        c->DebugString(in_coords));
-    // Assert 'coords' dimension '2' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_coords, 2), 2, &d),
-        "coords must have shape [None, 4, 2] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_coords, 1), 2, &d),
+        "coords must have shape [None, 2] but is " +
         c->DebugString(in_coords));
     
     // TODO. Check shape and dimension sizes for 'coeffs'
@@ -55,34 +51,38 @@ auto shape_function = [](InferenceContext* c) {
     // TODO. Check shape and dimension sizes for 'pointing_error'
     ShapeHandle in_pointing_error = c->input(3);
     // Assert 'pointing_error' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_pointing_error, 5, &input),
-        "pointing_error must have shape [None, None, None, 4, 2] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_pointing_error, 4, &input),
+        "pointing_error must have shape [None, None, None, 2] but is " +
         c->DebugString(in_pointing_error));
     // Assert 'pointing_error' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_pointing_error, 3), 4, &d),
-        "pointing_error must have shape [None, None, None, 4, 2] but is " +
-        c->DebugString(in_pointing_error));
-    // Assert 'pointing_error' dimension '4' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_pointing_error, 4), 2, &d),
-        "pointing_error must have shape [None, None, None, 4, 2] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_pointing_error, 3), 2, &d),
+        "pointing_error must have shape [None, None, None, 2] but is " +
         c->DebugString(in_pointing_error));
     
     // TODO. Check shape and dimension sizes for 'antenna_scaling'
     ShapeHandle in_antenna_scaling = c->input(4);
     // Assert 'antenna_scaling' number of dimensions
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_antenna_scaling, 4, &input),
-        "antenna_scaling must have shape [None, None, 4, 2] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_antenna_scaling, 3, &input),
+        "antenna_scaling must have shape [None, None, 2] but is " +
         c->DebugString(in_antenna_scaling));
     // Assert 'antenna_scaling' dimension '2' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_antenna_scaling, 2), 4, &d),
-        "antenna_scaling must have shape [None, None, 4, 2] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_antenna_scaling, 2), 2, &d),
+        "antenna_scaling must have shape [None, None, 2] but is " +
         c->DebugString(in_antenna_scaling));
-    // Assert 'antenna_scaling' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_antenna_scaling, 3), 2, &d),
-        "antenna_scaling must have shape [None, None, 4, 2] but is " +
-        c->DebugString(in_antenna_scaling));
-    
-    
+
+    // TODO. Check shape and dimension sizes for 'antenna_scaling'
+    ShapeHandle in_parallactic_angle_sin = c->input(5);
+    // Assert 'antenna_scaling' number of dimensions
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_parallactic_angle_sin, 2, &input),
+        "parallactic_angle_sin must have shape [None, None] but is " +
+        c->DebugString(in_parallactic_angle_sin));
+
+    // TODO. Check shape and dimension sizes for 'antenna_scaling'
+    ShapeHandle in_parallactic_angle_cos = c->input(6);
+    // Assert 'antenna_scaling' number of dimensions
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(in_parallactic_angle_cos, 2, &input),
+        "parallactic_angle_cos must have shape [None, None] but is " +
+        c->DebugString(in_parallactic_angle_cos));    
 
     // TODO: Supply a proper shapes for output variables here,
     // usually derived from input shapes
@@ -99,9 +99,6 @@ auto shape_function = [](InferenceContext* c) {
     
     c->set_output(0, out_zernike_value);
     
-
-    // printf("output shape %s\\n", c->DebugString(out).c_str());;
-
     return Status::OK();
 };
 
@@ -112,6 +109,8 @@ REGISTER_OP("Zernike")
     .Input("noll_index: int32")
     .Input("pointing_error: FT")
     .Input("antenna_scaling: FT")
+    .Input("parallactic_angle_sin: FT")
+    .Input("parallactic_angle_cos: FT")
     .Output("zernike_value: CT")
     .Attr("FT: {float, double} = DT_FLOAT")
     .Attr("CT: {complex64, complex128} = DT_COMPLEX64")

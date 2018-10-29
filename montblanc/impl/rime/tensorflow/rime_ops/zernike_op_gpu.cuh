@@ -30,9 +30,9 @@ template <typename FT> struct LaunchTraits {};
 template <> struct LaunchTraits<float>
 {
 public:
-    static constexpr int BLOCKDIMX = 16;
-    static constexpr int BLOCKDIMY = 16;
-    static constexpr int BLOCKDIMZ = 4;
+    static constexpr int BLOCKDIMX = 8;
+    static constexpr int BLOCKDIMY = 4;
+    static constexpr int BLOCKDIMZ = 16;
 
     static dim3 block_size(int X, int Y, int Z)
     {
@@ -49,9 +49,9 @@ template <> struct LaunchTraits<double>
 {
 
 public:
-    static constexpr int BLOCKDIMX = 16;
-    static constexpr int BLOCKDIMY = 16;
-    static constexpr int BLOCKDIMZ = 4;
+    static constexpr int BLOCKDIMX = 8;
+    static constexpr int BLOCKDIMY = 4;
+    static constexpr int BLOCKDIMZ = 16;
 
     static dim3 block_size(int X, int Y, int Z)
     {
@@ -62,43 +62,53 @@ public:
 };
 
 template<typename FT, typename CT>
-__device__ __forceinline__ CT mul_CT_FT(FT floatval, CT complexval){
+__device__ __forceinline__ CT mul_CT_FT(FT floatval, CT complexval)
+{
     return {floatval * complexval.x, floatval * complexval.y};
 }
 
-template <typename FT, typename CT>
-__device__ __forceinline__ FT factorial(unsigned n){
+template <typename FT>
+__device__ __forceinline__ FT factorial(unsigned n)
+{
     if(n==0) return 1.;
     FT fac = 1;
     for(int i = 1; i <= n; i++) fac *= i;
     return fac;
 }
 
-template <typename FT, typename CT>
-__device__ __forceinline__ FT pre_fac(int k, int n, int m){
-    FT numerator = pow(-1, k) * factorial<FT, CT>(n - k);
-    FT denominator = factorial<FT, CT>(k) * factorial<FT, CT>((n+m)/2.0 - k) * factorial<FT, CT>((n-m)/2.0 - k);
+template <typename FT, typename CT, typename Po>
+__device__ __forceinline__ FT pre_fac(int k, int n, int m)
+{
+    FT numerator = factorial<FT>(n - k);
+    if(k % 2 == 1) numerator *= -1;
+    FT denominator = factorial<FT>(k) * factorial<FT>((n+m)/2.0 - k) * factorial<FT>((n-m)/2.0 - k);
     return numerator / denominator;
 }
 
-template <typename FT, typename CT>
-__device__ __forceinline__ FT zernike_rad(int m, int n, FT rho){
+template <typename FT, typename CT, typename Po>
+__device__ __forceinline__ FT zernike_rad(int m, int n, FT rho)
+{
     FT radial_component = 0.0;
-    for(int k = 0; k < ((n - m) / 2) + 1; k++){
-        radial_component += pre_fac<FT, CT>(k, n, m) * pow(rho, n - 2.0 * k);
+    for(int k = 0; k < ((n - m) / 2) + 1; k++)
+    {
+        radial_component += pre_fac<FT, CT, Po>(k, n, m) * Po::pow(rho, n - 2.0 * k);
     }
     return radial_component;
 }
 
-template<typename FT, typename CT>
-__device__ __forceinline__ FT zernike(int j, FT rho, FT phi){
-    if(rho >= 1) return 0.;
-
+template<typename FT, typename CT, typename Po>
+__device__ __forceinline__ FT zernike(int j, FT rho, FT phi)
+{
+    if(rho >= 1) 
+    {
+        return 0.;
+    }
     // Convert from Noll to regular dual index
     int n = 0;
     j += 1;
     int j1 = j - 1;
-    while(j1 > n){
+    while(j1 > n)
+    {
         n += 1;
         j1 -= n;
     }
@@ -106,11 +116,11 @@ __device__ __forceinline__ FT zernike(int j, FT rho, FT phi){
     if(j % 2 == 1) m *= -1;
 
     // Get Zernike polynomials
-    if(m > 0) return zernike_rad<FT, CT>(m, n, rho) 
-    * cos(m * phi);
-    else if(m < 0) return zernike_rad<FT, CT>(-m, n, rho) 
-    * sin(-m * phi);
-    return zernike_rad<FT, CT>(0, n, rho);
+    if(m > 0) return zernike_rad<FT, CT, Po>(m, n, rho) 
+        * cos(m * phi);
+    if(m < 0) return zernike_rad<FT, CT, Po>(-1 * m, n, rho) 
+        * sin(-1 * m * phi);
+    return zernike_rad<FT, CT, Po>(0, n, rho);
 }
 
 
@@ -123,6 +133,8 @@ __global__ void zernike_dde_zernike(
     const int * in_noll_index,
     const typename Traits::point_error_type * in_pointing_error,
     const typename Traits::antenna_scale_type * in_antenna_scaling,
+    const typename Traits::FT * in_parallactic_angle_sin,
+    const typename Traits::FT * in_parallactic_angle_cos,
     typename Traits::CT * out_zernike_value,
     const int nsrc, const int ntime, const int na, const int nchan, const int npoly)
     
@@ -135,11 +147,14 @@ __global__ void zernike_dde_zernike(
     using LTr = LaunchTraits<FT>;
     using Po = typename montblanc::kernel_policies<FT>;
 
-    __shared__ struct {
-        CT zernike_coeff[LTr::BLOCKDIMY][LTr::BLOCKDIMX >> 2][NPOLY];
-        int zernike_noll_indices[LTr::BLOCKDIMY][LTr::BLOCKDIMX>>2][NPOLY];
+    __shared__ struct 
+    {
+        CT zernike_coeff[LTr::BLOCKDIMY][LTr::BLOCKDIMX >> 2][LTr::BLOCKDIMZ];
+        int zernike_noll_indices[LTr::BLOCKDIMY][LTr::BLOCKDIMX>>2][LTr::BLOCKDIMZ];
         antenna_scale_type antenna_scaling[LTr::BLOCKDIMY][LTr::BLOCKDIMX>>2];
         point_error_type pointing_error[LTr::BLOCKDIMZ][LTr::BLOCKDIMY][LTr::BLOCKDIMX>>2];
+        FT pa_sin[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];
+        FT pa_cos[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];
     } shared;
 
 
@@ -149,33 +164,61 @@ __global__ void zernike_dde_zernike(
     int ant = blockIdx.y * blockDim.y + threadIdx.y;
     int time = blockIdx.z * blockDim.z + threadIdx.z;
 
-  int i = threadIdx.z * 4 + (threadIdx.x & 0x03);
+    if(corr >= 4 || chan >= nchan || ant >= na || time >= ntime) return;
 
-    if(i < npoly){  
-        shared.zernike_coeff[threadIdx.y][threadIdx.x >> 2][i] = in_coeffs[((ant * nchan + chan) * npoly + i) * 4 + corr];
-        shared.zernike_noll_indices[threadIdx.y][threadIdx.x >> 2][i] = in_noll_index[((ant * nchan + chan) * npoly + i) * 4 + corr];
+    if(threadIdx.z < npoly)
+    {
+        shared.zernike_coeff[threadIdx.y][threadIdx.x >> 2][threadIdx.z] = in_coeffs[
+            ((ant * nchan + chan) * npoly + threadIdx.z) * 4 + corr];
+        shared.zernike_noll_indices[threadIdx.y][threadIdx.x >> 2][threadIdx.z] = in_noll_index[
+            ((ant * nchan + chan) * npoly + threadIdx.z) * 4 + corr];
     }
         
-    if(threadIdx.z == 0) shared.antenna_scaling[threadIdx.y][threadIdx.x >> 2] = in_antenna_scaling[(((ant * nchan + chan) * 4 + corr))];
-    if((threadIdx.x & 0x03) == 0){
-        shared.pointing_error[threadIdx.z][threadIdx.y][threadIdx.x>>2]  = in_pointing_error[(((time * na + ant) * nchan + chan) * 4 + corr)];
+    if(threadIdx.z == 0)
+    {
+        shared.antenna_scaling[threadIdx.y][threadIdx.x >> 2] = in_antenna_scaling[
+            (((ant * nchan + chan)))];
+    }
+    if((threadIdx.x & 0x03) == 0)
+    {
+        shared.pointing_error[threadIdx.z][threadIdx.y][threadIdx.x>>2]  = in_pointing_error[
+                (((time * na + ant) * nchan + chan))];
+    }
 
+    if(threadIdx.x == 0){
+        shared.pa_sin[threadIdx.z][threadIdx.y] = in_parallactic_angle_sin[time * na + ant];
+        shared.pa_cos[threadIdx.z][threadIdx.y] = in_parallactic_angle_cos[time * na + ant];
     }
 
     __syncthreads();
 
-    if(corr >= 4 || chan >= nchan || ant >= na || time >= ntime) return;
+    FT pa_sin = shared.pa_sin[threadIdx.z][threadIdx.y];
+    FT pa_cos = shared.pa_cos[threadIdx.z][threadIdx.y];
+
     for(int src = 0; src < nsrc; src++){
-        FT l = (in_coords[(src * 4 + corr) * 2 ] + shared.pointing_error[threadIdx.z][threadIdx.y][threadIdx.x>>2].x) * shared.antenna_scaling[threadIdx.y][threadIdx.x>>2].x; 
-        FT m = (in_coords[(src * 4 + corr) * 2 + 1] + shared.pointing_error[threadIdx.z][threadIdx.y][threadIdx.x>>2].y) * shared.antenna_scaling[threadIdx.y][threadIdx.x>>2].y; 
+        FT l = in_coords[src * 2]; 
+        FT m = in_coords[src * 2 + 1];
+
+        FT l_tmp = l * pa_cos - m * pa_sin;
+        FT m_tmp = l * pa_sin + m * pa_cos;
+
+        l = l_tmp;
+        m = m_tmp;
+
+        l += shared.pointing_error[threadIdx.z][threadIdx.y][threadIdx.x>>2].x; 
+        l *= shared.antenna_scaling[threadIdx.y][threadIdx.x>>2].x; 
+        m += shared.pointing_error[threadIdx.z][threadIdx.y][threadIdx.x>>2].y; 
+        m *= shared.antenna_scaling[threadIdx.y][threadIdx.x>>2].y; 
+        
         FT rho = Po::sqrt(l * l + m * m);
         FT phi = Po::atan2(l, m);
         CT zernike_sum = {0, 0};
         for(int poly = 0; poly < npoly; poly++){
-            CT zernike_output = mul_CT_FT<FT, CT>(zernike<FT, CT>(shared.zernike_noll_indices[threadIdx.y][threadIdx.x >>2][poly], rho, phi), shared.zernike_coeff[threadIdx.y][threadIdx.x >> 2][poly]);
+            CT zernike_output = mul_CT_FT<FT, CT>(zernike<FT, CT, Po>(shared.zernike_noll_indices[threadIdx.y][threadIdx.x >>2][poly], rho, phi),//shared.zernike_noll_indices[threadIdx.y][threadIdx.x >>2][poly], rho, phi), 
+                shared.zernike_coeff[threadIdx.y][threadIdx.x >> 2][poly]); // coeff * zernike
             zernike_sum.x += zernike_output.x;
             zernike_sum.y += zernike_output.y;
-        }
+            }
         out_zernike_value[(((src * ntime + time) * na + ant) * nchan + chan ) * 4 + corr] = zernike_sum;
     }
 
@@ -200,16 +243,15 @@ public:
         const tf::Tensor & in_noll_index = context->input(2);
         const tf::Tensor & in_pointing_error = context->input(3);
         const tf::Tensor & in_antenna_scaling = context->input(4);
-
-
-
+        const tf::Tensor & in_parallactic_angle_sin = context->input(5);
+        const tf::Tensor & in_parallactic_angle_cos = context->input(6);
+    
         int nsrc = in_coords.dim_size(0);
         int ntime = in_pointing_error.dim_size(0);
         int na = in_coeffs.dim_size(0);
         int nchan = in_coeffs.dim_size(1);
         int npoly = in_coeffs.dim_size(2);
         
-
         // Allocate output tensors
         // Allocate space for output tensor 'zernike_value'
         tf::Tensor * zernike_value_ptr = nullptr;
@@ -219,14 +261,16 @@ public:
         OP_REQUIRES_OK(context, context->allocate_output(
             0, zernike_value_shape, &zernike_value_ptr));
 
-            OP_REQUIRES(context, LTr::BLOCKDIMZ * 4 >= npoly, tf::errors::InvalidArgument("Not generating enough threads to handle polynomials. Try increasing ntime."));
-            OP_REQUIRES(context, npoly < NPOLY, tf::errors::InvalidArgument("Npoly is too large. Must be 16 or less."));
+        OP_REQUIRES(context, npoly <= LTr::BLOCKDIMZ, tf::errors::InvalidArgument("Npoly is too large. Must be %d or less.\n", LTr::BLOCKDIMZ));
 
         // Set up our CUDA thread block and grid
 
         dim3 block(LTr::block_size(4 * nchan, na, ntime));
         dim3 grid(montblanc::grid_from_thread_block(
             block, 4 * nchan, na, ntime));
+
+       OP_REQUIRES(context, block.z >= npoly, tf::errors::InvalidArgument("Not generating enough threads to handle polynomials. Try increasing ntime.\n"));
+        
 
         // Get pointers to flattened tensor data buffers
         auto coords = reinterpret_cast< //lm_type coords
@@ -242,11 +286,16 @@ public:
         auto antenna_scaling = reinterpret_cast< //antenna_scale_type antenna_scaling
             const typename Tr::antenna_scale_type *>(
                 in_antenna_scaling.flat<FT>().data());
+        auto parallactic_angle_sin = reinterpret_cast< // FT parallactic_angle_sin
+            const typename Tr::FT *>(
+                in_parallactic_angle_sin.flat<FT>().data());
+        auto parallactic_angle_cos = reinterpret_cast< // FT parallactic_angle_cos
+            const typename Tr::FT *>(
+                in_parallactic_angle_cos.flat<FT>().data());
             
         auto zernike_value = reinterpret_cast<typename Tr::CT *>(
             zernike_value_ptr->flat<CT>().data());
         
-
         // Get the GPU device
         const auto & device = context->eigen_device<GPUDevice>();
 
@@ -258,14 +307,16 @@ public:
                 noll_index,
                 pointing_error,
                 antenna_scaling,
+                parallactic_angle_sin,
+                parallactic_angle_cos,
                 zernike_value,
                 nsrc, ntime, na, nchan, npoly);
         cudaError_t e = cudaGetLastError(); 
-        if(e!=cudaSuccess) {                                              
+        if(e!=cudaSuccess) 
+        {                                              
             printf("Cuda failure %s:%d: '%s'\n",__FILE__,__LINE__,cudaGetErrorString(e));           
             exit(0); 
-            } 
-                
+        }         
     }
 };
 
