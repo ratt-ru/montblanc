@@ -21,6 +21,8 @@ MONTBLANC_ZERNIKE_NAMESPACE_BEGIN
 template <typename Device, typename FT, typename CT>
 class Zernike {};
 
+constexpr int _ZERNIKE_CORRS = 4;
+
 MONTBLANC_ZERNIKE_NAMESPACE_STOP
 MONTBLANC_NAMESPACE_STOP
 

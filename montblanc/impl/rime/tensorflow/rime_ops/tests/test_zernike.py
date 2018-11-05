@@ -94,14 +94,14 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
         assert np.allclose(gpu_data, eidos_data_nn, atol=atolerance, rtol=rtolerance)
 
 
-@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64)])#, (np.float64, np.complex128)])
+@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])
 def test_random_inputs(FT, CT, gpu_devs):
     """ Implementation of the Zernike operator test """
     npix = 17
     nsrc = npix ** 2
-    ntime = 10
-    na = 10
-    nchan = 10
+    ntime = 20
+    na = 20
+    nchan = 20
     thresh = 10
 
     # Create input variables

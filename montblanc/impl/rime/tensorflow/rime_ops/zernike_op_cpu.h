@@ -60,7 +60,7 @@ public:
             ntime, 
             na, 
             nchan, 
-            4 });
+            _ZERNIKE_CORRS });
         OP_REQUIRES_OK(context, context->allocate_output(
             0, zernike_value_shape, &zernike_value_ptr));
         auto zernike_value = zernike_value_ptr->tensor<CT, 5>();
@@ -95,7 +95,7 @@ public:
                         FT rho = std::sqrt((l * l) + (m * m));
                         FT phi = std::atan2(l, m);
 
-                        for(int corr = 0; corr < 4 ; corr++)
+                        for(int corr = 0; corr < _ZERNIKE_CORRS ; corr++)
                         {
                             CT zernike_sum = 0;
                             for(int poly = 0; poly < npoly ; poly++)

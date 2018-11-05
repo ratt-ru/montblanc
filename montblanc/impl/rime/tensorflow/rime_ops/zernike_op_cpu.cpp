@@ -33,8 +33,8 @@ auto shape_function = [](InferenceContext* c) {
         "coeffs must have shape [None, None, None, 4] but is " +
         c->DebugString(in_coeffs));
     // Assert 'coeffs' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_coeffs, 3), 4, &d),
-        "coeffs must have shape [None, None, None, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_coeffs, 3), _ZERNIKE_CORRS, &d),
+        "coeffs must have shape [None, None, None, " + std::to_string(_ZERNIKE_CORRS) + "] but is " +
         c->DebugString(in_coeffs));
     
     // TODO. Check shape and dimension sizes for 'noll_index'
@@ -44,8 +44,8 @@ auto shape_function = [](InferenceContext* c) {
         "noll_index must have shape [None, None, None, 4] but is " +
         c->DebugString(in_noll_index));
     // Assert 'noll_index' dimension '3' size
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_noll_index, 3), 4, &d),
-        "noll_index must have shape [None, None, None, 4] but is " +
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_noll_index, 3), _ZERNIKE_CORRS, &d),
+        "noll_index must have shape [None, None, None, " + std::to_string(_ZERNIKE_CORRS) + "] but is " +
         c->DebugString(in_noll_index));
     
     // TODO. Check shape and dimension sizes for 'pointing_error'
@@ -95,7 +95,7 @@ auto shape_function = [](InferenceContext* c) {
         c->Dim(in_pointing_error, 0), 
         c->Dim(in_coeffs, 0), 
         c->Dim(in_coeffs, 1), 
-        4 });
+        _ZERNIKE_CORRS });
     
     c->set_output(0, out_zernike_value);
     
