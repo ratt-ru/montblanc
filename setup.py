@@ -78,21 +78,22 @@ def reinitialize_command(self, command, reinit_subcommands):
 Distribution.reinitialize_command = reinitialize_command
 
 TF_VERSION = "1.12.0"
+TF_INSTALL_MSG = ("Please 'pip install tensorflow==%s' or "
+                  "'pip install tensorflow-gpu==%s' prior to "
+                  "installation if you require CPU or GPU "
+                  "support, respectively" % (TF_VERSION, TF_VERSION))
 
 try:
     import tensorflow as tf
 except ImportError as e:
-    ex = ImportError("Tensorflow import failed: %s "
-                     "Please 'pip install tensorflow==%s' or "
-                     "'pip install tensorflow-gpu==%s' prior to "
-                     "installation if you require CPU or GPU "
-                     "support, respectively" % (e, TF_VERSION, TF_VERSION))
+    ex = ImportError("Tensorflow import failed: %s\n" + TF_INSTALL_MSG)
     raise (ex, None, sys.exc_info()[2])
 
 else:
     if not tf.__version__ == TF_VERSION:
-        raise ValueError("Tensorflow '%s' is required, "
-                         "but '%s' was found" % (TF_VERSION, tf.__version__))
+        raise ValueError(("Tensorflow '%s' is required, "
+                          "but '%s' was found\n" + TF_INSTALL_MSG)
+                         % (TF_VERSION, tf.__version__))
 
     use_tf_cuda = tf.test.is_built_with_cuda()
 
