@@ -77,7 +77,7 @@ def reinitialize_command(self, command, reinit_subcommands):
 # Replace original command with monkey-patched version
 Distribution.reinitialize_command = reinitialize_command
 
-TF_VERSION = "1.10.0"
+TF_VERSION = "1.12.0"
 
 try:
     import tensorflow as tf
@@ -90,6 +90,10 @@ except ImportError as e:
     raise (ex, None, sys.exc_info()[2])
 
 else:
+    if not tf.__version__ == TF_VERSION:
+        raise ValueError("Tensorflow '%s' is required, "
+                         "but '%s' was found" % (TF_VERSION, tf.__version__))
+
     use_tf_cuda = tf.test.is_built_with_cuda()
 
 

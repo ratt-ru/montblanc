@@ -7,11 +7,13 @@ from tensorflow.python.framework import sparse_tensor as sparse_tensor_lib
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import tensor_util
 
-from montblanc.impl.rime.tensorflow.tensorflow_ops import (simple_queue_dataset as qds,
-                                                        dataset_queue_handle,
-                                                        dataset_queue_enqueue,
-                                                        dataset_queue_close,
-                                                        dataset_queue_size)
+from montblanc.impl.rime.tensorflow.tensorflow_ops import (
+                                    simple_queue_dataset as qds,
+                                    dataset_queue_handle,
+                                    dataset_queue_enqueue,
+                                    dataset_queue_close,
+                                    dataset_queue_size)
+
 
 class TensorQueue(object):
     """
@@ -75,7 +77,7 @@ class TensorQueue(object):
         nest.assert_same_structure(tensors, self.output_types)
         flat_dtypes = nest.flatten(self.output_types)
         tensors = tuple(
-            ops.convert_to_tensor(t, dtype=dt, name="component_%i"%i)
+            ops.convert_to_tensor(t, dtype=dt, name="component_%i" % i)
             for i, (t, dt)
             in enumerate(zip(nest.flatten(tensors), flat_dtypes)))
 
@@ -87,26 +89,30 @@ class TensorQueue(object):
     def size(self, name=None):
         return dataset_queue_size(self.handle, name=name)
 
+
 class QueueDataset(tf.data.Dataset):
-  """
-  A `Dataset` consuming elements from a `TensorQueue`
-  """
-  def __init__(self, queue, name=None):
-    super(QueueDataset, self).__init__()
-    self._queue = queue
-    self._name = name
+    """
+    A `Dataset` consuming elements from a `TensorQueue`
+    """
+    def __init__(self, queue, name=None):
+        super(QueueDataset, self).__init__()
+        self._queue = queue
+        self._name = name
 
-  def _as_variant_tensor(self):
-    return qds(self._queue.handle, name=self._name)
+    def _as_variant_tensor(self):
+        return qds(self._queue.handle, name=self._name)
 
-  @property
-  def output_shapes(self):
-    return self._queue.output_shapes
+    def _inputs(self):
+        return []
 
-  @property
-  def output_types(self):
-    return self._queue.output_types
+    @property
+    def output_shapes(self):
+        return self._queue.output_shapes
 
-  @property
-  def output_classes(self):
-    return self._queue.output_classes
+    @property
+    def output_types(self):
+        return self._queue.output_types
+
+    @property
+    def output_classes(self):
+        return self._queue.output_classes

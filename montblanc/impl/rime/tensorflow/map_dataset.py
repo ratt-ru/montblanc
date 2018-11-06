@@ -142,6 +142,9 @@ class MapDataset(tf.data.Dataset):
         return mds(self._key_dataset._as_variant_tensor(),
                    self._map.handle, name=self._name)
 
+    def _inputs(self):
+        return [self._key_dataset]
+
     @property
     def output_shapes(self):
         return self._map.output_shapes
