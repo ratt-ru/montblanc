@@ -3,7 +3,15 @@ from __future__ import division
 from __future__ import print_function
 
 from copy import deepcopy
+import logging
+
+try:
+    from queue import Queue
+except ImportError:
+    from Queue import Queue
+
 from threading import Thread
+import sys
 
 from dask.sizeof import sizeof, getsizeof
 import numpy as np
@@ -22,6 +30,51 @@ from montblanc.impl.rime.tensorflow.tensorflow_mock_analyser import (
     MapDatasetInfo,
     QueueDatasetInfo)
 
+log = logging.getLogger(__name__)
+
+
+class EvaluationThread(Thread):
+    def __init__(self, session, exprs):
+        Thread.__init__(self)
+        self._session = session
+        self._exprs = exprs
+        self._status_queue = Queue()
+
+    def evaluate_expr(self):
+        while True:
+            try:
+                self._session.run(self._exprs)
+            except tf.errors.OutOfRangeError as ex:
+                # log.exception("Main Evaluation Run Complete")
+                # Try run each of the key expression pairs
+                # individually to fully clear the entries out
+                for i, e in enumerate(self._exprs):
+                    try:
+                        self._session.run(e)
+                    except tf.errors.OutOfRangeError:
+                        pass
+                        # log.exception("Secondary Evaluation "
+                        #               "Run %d Complete" % i)
+
+                break
+
+        log.info("Finished evaluating expressions!")
+
+    def run(self):
+        try:
+            self.evaluate_expr()
+        except BaseException:
+            self._status_queue.put(sys.exc_info())
+        else:
+            self._status_queue.put(None)
+
+    def join_with_exception(self):
+        status = self._status_queue.get()
+
+        if status is None:
+            return
+        else:
+            raise status[1]
 
 def _requires_input_ds(op):
     """ Does the supplied op depend on the input dataset? """
@@ -42,7 +95,7 @@ class TensorflowSessionWrapper(object):
         self._cfg = cfg
         self._create_session()
 
-        self._eval_thread = Thread(target=self.evaluate_expr)
+        self._eval_thread = EvaluationThread(self._session, self._exprs)
         self._eval_thread.setDaemon(True)
         self._eval_thread.start()
 
@@ -126,7 +179,8 @@ class TensorflowSessionWrapper(object):
 
             output_map = TensorMap(tuple(o['type'] for o in outputs.values()))
             self._output_map_pop_key = tf.placeholder(tf.int64)
-            self._output_map_pop = output_map.pop(self._output_map_pop_key)
+            self._output_map_pop = output_map.pop(self._output_map_pop_key,
+                                                  name="output-map-pop")
 
             # Shard the dataset over each device
             for shard, device in enumerate(device_list):
@@ -137,7 +191,8 @@ class TensorflowSessionWrapper(object):
 
                 # Identify the chunk key
                 # This could get dodgy at some point
-                key_idx.append([i for i, (n, t) in enumerate(out_types)
+                key_idx.append([i for i, (n, t)
+                               in enumerate(out_types)
                                if n == "chunk_key"][0])
 
                 device = tf.DeviceSpec.from_string(device.name)
@@ -267,27 +322,12 @@ class TensorflowSessionWrapper(object):
         else:
             raise TypeError("'keys' must be an integer or a dict")
 
-    def evaluate_expr(self):
-        while True:
-            try:
-                self._session.run(self._exprs)
-            except tf.errors.OutOfRangeError:
-                # Try run each of the key expression pairs
-                # individually to fully clear the entries out
-                for e in self._exprs:
-                    try:
-                        self._session.run(e)
-                    except tf.errors.OutOfRangeError:
-                        pass
-
-                break
-
     def close(self):
         if not self._session._closed:
             # Close all queues/maps
             self._session.run(self._closes)
             # Wait for the evaluation thread to join
-            self._eval_thread.join()
+            self._eval_thread.join_with_exception()
             # Close the session
             self._session.close()
 
