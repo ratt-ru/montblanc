@@ -350,7 +350,7 @@ def tensor_map(ds_name, ds_ph, dtypes, shapes):
                              name="%s_put_key" % ds_name)
     key_ds = tf.data.Dataset.from_tensor_slices(map_keys)
     map_dataset = MapDataset(key_ds, tensor_map, name=ds_name)
-    put = tensor_map.insert(put_key, ds_ph)
+    put = tensor_map.insert(put_key, ds_ph, name="%s_put" % ds_name)
     clear_keys = tf.placeholder(tf.int64, shape=(None,),
                                 name="%s_clear_keys" % ds_name)
     clear = tensor_map.clear(clear_keys)
@@ -526,7 +526,7 @@ class DatasetsDict(dict):
         return data
 
 
-def FakeMapDataset(keys, tensor_map):
+def FakeMapDataset(key_dataset, tensor_map, name=None):
     return tensor_map.dataset
 
 
