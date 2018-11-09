@@ -263,6 +263,13 @@ public:
             b_sqrt, sgn_brightness,
             linear,
             nsrc, ntime, nchan);
+
+        cudaError_t e = cudaPeekAtLastError();
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ", __FILE__, __LINE__, " ",
+                                             cudaGetErrorString(e)));
+        }
     }
 };
 

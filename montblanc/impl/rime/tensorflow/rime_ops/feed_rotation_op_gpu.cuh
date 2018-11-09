@@ -203,6 +203,14 @@ public:
                 "Invalid feed type '", feed_type, "'. "
                 "Must be 'linear' or 'circular'")));
         }
+
+        cudaError_t e = cudaPeekAtLastError();
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ", __FILE__, __LINE__, " ",
+                                             cudaGetErrorString(e)));
+        }
+
     }
 };
 

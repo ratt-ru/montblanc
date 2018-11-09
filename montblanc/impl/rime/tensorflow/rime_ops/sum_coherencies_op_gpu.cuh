@@ -27,15 +27,15 @@ template <typename FT> struct LaunchTraits {};
 
 template <> struct LaunchTraits<float>
 {
-    static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 24;
+    static constexpr int BLOCKDIMX = 16;
+    static constexpr int BLOCKDIMY = 16;
     static constexpr int BLOCKDIMZ = 1;
 };
 
 template <> struct LaunchTraits<double>
 {
-    static constexpr int BLOCKDIMX = 32;
-    static constexpr int BLOCKDIMY = 24;
+    static constexpr int BLOCKDIMX = 16;
+    static constexpr int BLOCKDIMY = 16;
     static constexpr int BLOCKDIMZ = 1;
 };
 
@@ -231,6 +231,14 @@ public:
             ant_jones_2,
             base_coherencies, coherencies,
             nsrc, ntime, nvrow, na, nchan, ncorrchan);
+
+        cudaError_t e = cudaPeekAtLastError();
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(ctx,
+                tf::errors::Internal("Cuda Failure ", __FILE__, __LINE__, " ",
+                                             cudaGetErrorString(e)));
+        }
+
     }
 };
 

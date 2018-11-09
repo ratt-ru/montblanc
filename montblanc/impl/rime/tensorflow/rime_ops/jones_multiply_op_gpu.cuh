@@ -8,6 +8,7 @@
 
 
 #include "jones_multiply_op.h"
+#include "op_kernel_utils.h"
 #include "shapes.h"
 
 #include "tensorflow/core/framework/op.h"
@@ -79,6 +80,9 @@ __global__ void rime_jones_multiply(
     uint32_t ant = blockIdx.y*blockDim.y + threadIdx.y;
     uint32_t time = blockIdx.z*blockDim.z + threadIdx.z;
 
+    if(time >= ntime || ant >= na || corrchan >= ncorrchan)
+        { return; }
+
     // 3D thread ID
     i = threadIdx.z*blockDim.x*blockDim.y
         + threadIdx.y*blockDim.x
@@ -93,9 +97,6 @@ __global__ void rime_jones_multiply(
 
     __syncthreads();
 
-    if(time >= ntime || ant >= na || corrchan >= ncorrchan)
-        { return; }
-
     // Iterate over sources and then tensors
     // Necessary to do it this way as
     for(uint32_t osrc=0; osrc < nsrc; ++osrc)
@@ -106,11 +107,11 @@ __global__ void rime_jones_multiply(
         for(uint32_t j=0; j<ntensors; ++j)
         {
             // Dimensions of this tensor
-            const uint32_t & nisrc = tensor_sizes[j*ntensor_elements + 0];
-            const uint32_t & nitime = tensor_sizes[j*ntensor_elements + 1];
-            const uint32_t & niant = tensor_sizes[j*ntensor_elements + 2];
-            const uint32_t & nichan = tensor_sizes[j*ntensor_elements + 3];
-            const uint32_t & nicorr = tensor_sizes[j*ntensor_elements + 4];
+            const uint32_t nisrc = tensor_sizes[j*ntensor_elements + 0];
+            const uint32_t nitime = tensor_sizes[j*ntensor_elements + 1];
+            const uint32_t niant = tensor_sizes[j*ntensor_elements + 2];
+            const uint32_t nichan = tensor_sizes[j*ntensor_elements + 3];
+            const uint32_t nicorr = tensor_sizes[j*ntensor_elements + 4];
             const uint32_t nicorrchan = nichan*nicorr;
 
             // Input indices are either 0 or equal to the
@@ -319,34 +320,42 @@ public:
         auto output = reinterpret_cast<typename Tr::CT *>(
                             output_ptr->flat<CT>().data());
 
+        // Get the GPU device
+        const auto & device = context->eigen_device<GPUDevice>();
+        const auto & stream = device.stream();
+
         // Set the input array pointers and sizes
         for(int i=0; i < in_list.size(); ++i)
         {
-            const tf::Tensor & tensor = in_list[i];
-            auto & shape = reshapes[i];
             host_input_array_ptrs[i] = reinterpret_cast<const typename Tr::CT *>(
-                            tensor.flat<CT>().data());
+                            in_list[i].flat<CT>().data());
+
+            // printf("input array device ptr %p %d\n", host_input_array_ptrs[i], stream);
 
             for(int s=0; s < out_reshape.size(); ++s)
-                { host_array_sizes(i, s) = shape[s]; }
+                { host_array_sizes(i, s) = reshapes[i][s]; }
         }
-
-        // Get the GPU device
-        const auto & device = context->eigen_device<GPUDevice>();
 
         // Copy array of tensor pointers to the device
         cudaMemcpyAsync((void *) dev_input_array_ptrs,
-            (const void *) host_input_array_ptrs,
-            input_arrays_bytes,
-            cudaMemcpyHostToDevice,
-            device.stream());
+                        (const void *) host_input_array_ptrs,
+                        input_arrays_bytes,
+                        cudaMemcpyHostToDevice,
+                        stream);
+
+        OP_REQUIRES_CUDA_SUCCESS(context);
 
         // Copy array of tensor sizes to the device
         cudaMemcpyAsync((void *) dev_array_size_ptrs,
-            (const void *) host_array_sizes.data(),
-            h_array_sizes.TotalBytes(),
-            cudaMemcpyHostToDevice,
-            device.stream());
+                        (const void *) host_array_sizes.data(),
+                        h_array_sizes.TotalBytes(),
+                        cudaMemcpyHostToDevice,
+                        stream);
+
+        OP_REQUIRES_CUDA_SUCCESS(context);
+
+        // This seems to sometimes be necessary...
+        cudaStreamSynchronize(stream);
 
         int nsrc = out_reshape[0];
         int ntime = out_reshape[1];
@@ -375,12 +384,14 @@ public:
 
         // Call the rime_jones_multiply CUDA kernel
         rime_jones_multiply<Tr>
-            <<<grid, block, 0, device.stream()>>>(
+            <<<grid, block, 0, stream>>>(
                 dev_input_array_ptrs,
                 dev_array_size_ptrs,
                 output,
                 ntensors, ntensor_elements,
                 nsrc, ntime, na, npolchan);
+
+        OP_REQUIRES_CUDA_SUCCESS(context);
 
     }
 };

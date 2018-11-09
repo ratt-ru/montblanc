@@ -216,9 +216,18 @@ public:
         // this use case
         std::size_t temp_storage_bytes = 0;
 
+
         cub::DeviceReduce::Sum(nullptr, temp_storage_bytes,
             fout_chi_squared_terms, fout_chi_squared,
             chi_squared_terms.NumElements(), device.stream());
+
+        cudaError_t e = cudaGetLastError();
+
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ", cudaGetErrorString(e)));
+        }
+
 
         // Make a tensor to hold temporary cub::DeviceReduce::Sum storage
         tf::Tensor temp_storage;
@@ -252,11 +261,27 @@ public:
                 fout_chi_squared_terms,
                 ntime, nvrow, na, npolchan);
 
+        e = cudaGetLastError();
+
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ", cudaGetErrorString(e)));
+
+        }
+
         // Perform a reduction on the chi squared terms
         tf::uint8 * temp_storage_ptr = temp_storage.flat<tf::uint8>().data();
         cub::DeviceReduce::Sum(temp_storage_ptr, temp_storage_bytes,
             fout_chi_squared_terms, fout_chi_squared,
             chi_squared_terms.NumElements(), device.stream());
+
+        e = cudaGetLastError();
+
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ", cudaGetErrorString(e)));
+        }
+
     }
 };
 

@@ -139,6 +139,13 @@ public:
         rime_brightness<Tr>
             <<<grid, blocks, 0, device.stream()>>>(
                 stokes_gpu, brightness_gpu, nrowpols);
+
+        cudaError_t e = cudaGetLastError();
+
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ",  cudaGetErrorString(e)));
+        }
     }
 };
 

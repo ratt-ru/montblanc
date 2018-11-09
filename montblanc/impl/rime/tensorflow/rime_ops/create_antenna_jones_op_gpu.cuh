@@ -277,6 +277,13 @@ public:
             reinterpret_cast<typename Tr::CT *>
                             (ant_jones_ptr->flat<CT>().data()),
             nsrc, ntime, na, nchan, ncorr);
+
+        cudaError_t e = cudaPeekAtLastError();
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ", __FILE__, __LINE__, " ",
+                                             cudaGetErrorString(e)));
+        }
     }
 };
 
