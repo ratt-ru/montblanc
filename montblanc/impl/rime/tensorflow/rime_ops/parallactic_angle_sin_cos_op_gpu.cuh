@@ -140,6 +140,14 @@ public:
                 fout_pa_cos,
                 npa);
 
+        cudaError_t e = cudaPeekAtLastError();
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ", __FILE__, __LINE__, " ",
+                                             cudaGetErrorString(e)));
+        }
+
+
     }
 };
 
