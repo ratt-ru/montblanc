@@ -190,6 +190,14 @@ public:
         rime_phase<Tr> <<<grid, blocks, 0, stream>>>(
             lm, uvw, frequency, complex_phase,
             nsrc, nuvw, nchan);
+
+        cudaError_t e = cudaPeekAtLastError();
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ", __FILE__, __LINE__, " ",
+                                             cudaGetErrorString(e)));
+        }
+
     }
 };
 
