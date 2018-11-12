@@ -41,15 +41,12 @@ template <> struct LaunchTraits<double>
 // CUDA kernel outline
 template <typename Traits>
 __global__ void rime_gauss_shape(
-    const int * time_index,
     const typename Traits::uvw_type * uvw,
-    const typename Traits::antenna_type * antenna1,
-    const typename Traits::antenna_type * antenna2,
     const typename Traits::frequency_type * frequency,
     const typename Traits::gauss_param_type * gauss_params,
     typename Traits::gauss_shape_type * gauss_shape,
     const typename Traits::FT gauss_scale,
-    int ngsrc, int nvrow, int na, int nchan)
+    int ngsrc, int nvrow, int nchan)
 {
     int chan = blockIdx.x*blockDim.x + threadIdx.x;
     int vrow = blockIdx.y*blockDim.y + threadIdx.y;
@@ -58,47 +55,35 @@ __global__ void rime_gauss_shape(
     using LTr = LaunchTraits<FT>;
     using Po = montblanc::kernel_policies<FT>;
 
-    if(vrow >= nvrow || chan >= nchan)
-        { return; }
 
     __shared__ struct {
-        typename Traits::uvw_type uvw[LTr::BLOCKDIMZ][LTr::BLOCKDIMY];
+        typename Traits::uvw_type uvw[LTr::BLOCKDIMY];
         typename Traits::frequency_type scaled_freq[LTr::BLOCKDIMX];
     } shared;
 
-    // Reference u, v and w in shared memory for this thread
-    FT & u = shared.uvw[threadIdx.z][threadIdx.y].x;
-    FT & v = shared.uvw[threadIdx.z][threadIdx.y].y;
-    FT & w = shared.uvw[threadIdx.z][threadIdx.y].z;
-
-    // Retrieve antenna pairs for the current baseline
-    int ant1 = antenna1[vrow];
-    int ant2 = antenna2[vrow];
-    int time = time_index[vrow];
     int i;
 
-    // UVW coordinates vary by baseline, but not channel
-    if(threadIdx.x == 0)
-    {
-        // UVW, calculated from u_pq = u_p - u_q
-        i = time*na + ant2;
-        shared.uvw[threadIdx.z][threadIdx.y] = uvw[i];
-
-        i = time*na + ant1;
-        typename Traits::uvw_type ant1_uvw = uvw[i];
-        u -= ant1_uvw.x;
-        v -= ant1_uvw.y;
-        w -= ant1_uvw.z;
-    }
+    if(vrow >= nvrow || chan >= nchan)
+        { return; }
 
     // Wavelength varies by channel, but not baseline
     if(threadIdx.y == 0)
         { shared.scaled_freq[threadIdx.x] = gauss_scale*frequency[chan]; }
 
+    // UVW coordinates vary by baseline, but not channel
+    if(threadIdx.x == 0)
+        { shared.uvw[threadIdx.y] = uvw[vrow]; }
+
+    // Reference u, v and w in shared memory for this thread
+    FT & u = shared.uvw[threadIdx.y].x;
+    FT & v = shared.uvw[threadIdx.y].y;
+
     __syncthreads();
 
     for(int gsrc=0; gsrc < ngsrc; ++gsrc)
     {
+        i = (gsrc*nvrow + vrow)*nchan + chan;
+
         i = gsrc;   FT el = cub::ThreadLoad<cub::LOAD_LDG>(gauss_params+i);
         i += ngsrc; FT em = cub::ThreadLoad<cub::LOAD_LDG>(gauss_params+i);
         i += ngsrc; FT eR = cub::ThreadLoad<cub::LOAD_LDG>(gauss_params+i);
@@ -126,15 +111,11 @@ public:
     {
         namespace tf = tensorflow;
 
-        const tf::Tensor & in_time_index = context->input(0);
-        const tf::Tensor & in_uvw = context->input(1);
-        const tf::Tensor & in_antenna1 = context->input(2);
-        const tf::Tensor & in_antenna2 = context->input(3);
-        const tf::Tensor & in_frequency = context->input(4);
-        const tf::Tensor & in_gauss_params = context->input(5);
+        const tf::Tensor & in_uvw = context->input(0);
+        const tf::Tensor & in_frequency = context->input(1);
+        const tf::Tensor & in_gauss_params = context->input(2);
 
-        int na = in_uvw.dim_size(1);
-        int nvrow = in_antenna1.dim_size(0);
+        int nvrow = in_uvw.dim_size(0);
         int nchan = in_frequency.dim_size(0);
         int ngsrc = in_gauss_params.dim_size(1);
 
@@ -151,19 +132,13 @@ public:
         dim3 block = montblanc::shrink_small_dims(
             dim3(LTr::BLOCKDIMX, LTr::BLOCKDIMY, LTr::BLOCKDIMZ),
             nchan, nvrow, 1);
-        dim3 grid(montblanc::grid_from_thread_block(
-            block, nchan, nvrow, 1));
+        dim3 grid(montblanc::grid_from_thread_block(block,
+            nchan, nvrow, 1));
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
-        auto time_index = reinterpret_cast<const int *>(
-            in_time_index.flat<int>().data());
         auto uvw = reinterpret_cast<const typename Tr::uvw_type *>(
             in_uvw.flat<FT>().data());
-        auto antenna1 = reinterpret_cast<const typename Tr::antenna_type *>(
-            in_antenna1.flat<int>().data());
-        auto antenna2 = reinterpret_cast<const typename Tr::antenna_type *>(
-            in_antenna2.flat<int>().data());
         auto frequency = reinterpret_cast<const typename Tr::frequency_type *>(
             in_frequency.flat<FT>().data());
         auto gauss_params = reinterpret_cast<const typename Tr::gauss_param_type *>(
@@ -172,10 +147,17 @@ public:
             gauss_shape_ptr->flat<FT>().data());
 
         rime_gauss_shape<Tr><<<grid, block, 0, stream>>>(
-            time_index, uvw, antenna1, antenna2,
-            frequency, gauss_params, gauss_shape,
+            uvw, frequency, gauss_params, gauss_shape,
             montblanc::constants<FT>::gauss_scale,
-            ngsrc, nvrow, na, nchan);
+            ngsrc, nvrow, nchan);
+
+        cudaError_t e = cudaPeekAtLastError();
+        if(e != cudaSuccess) {
+            OP_REQUIRES_OK(context,
+                tf::errors::Internal("Cuda Failure ", __FILE__, __LINE__, " ",
+                                             cudaGetErrorString(e)));
+        }
+
     }
 };
 

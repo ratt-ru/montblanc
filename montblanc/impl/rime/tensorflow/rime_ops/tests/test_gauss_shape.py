@@ -1,4 +1,3 @@
-import os
 import unittest
 
 import cppimport
@@ -11,13 +10,14 @@ dsmod = cppimport.imp("montblanc.ext.dataset_mod")
 from montblanc.impl.rime.tensorflow.tensorflow_ops import (
                             gauss_shape as gauss_shape_op)
 
+
 class TestGaussShape(unittest.TestCase):
     """ Test the Gaussian Shape Operator """
 
     def setUp(self):
         # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
         self.gpu_devs = [d.name for d in device_lib.list_local_devices()
-                                if d.device_type == 'GPU']
+                         if d.device_type == 'GPU']
 
     def test_gauss_shape(self):
         """ Test the Gaussian Shape Operator """
@@ -34,8 +34,11 @@ class TestGaussShape(unittest.TestCase):
     def _impl_test_gauss_shape(self, FT, CT):
         """ Implementation of the Gaussian Shape Operator test """
 
-        rf = lambda *a, **kw: np.random.random(*a, **kw).astype(FT)
-        rc = lambda *a, **kw: rf(*a, **kw) + 1j*rf(*a, **kw).astype(CT)
+        def rf(*args, **kwargs):
+            return np.random.random(*args, **kwargs).astype(FT)
+
+        def rc(*args, **kwargs):
+            return rf(*args, **kwargs) + 1j*rf(*args, **kwargs).astype(CT)
 
         ngsrc, ntime, na, nchan = 10, 15, 7, 16
         nbl = na*(na-1)//2
@@ -46,16 +49,13 @@ class TestGaussShape(unittest.TestCase):
         nvrow = np.sum(chunks)
 
         np_uvw, np_ant1, np_ant2, np_time_index = random_baselines(chunks, na)
-        np_ant_uvw = dsmod.antenna_uvw(np_uvw, np_ant1, np_ant2, chunks,
-                                            nr_of_antenna=na).astype(FT)
+        np_uvw = np_uvw.astype(FT)
         np_frequency = np.linspace(1.4e9, 1.5e9, nchan).astype(FT)
-        gp_modifier = np.array([[0.1],[0.1],[1.0]],dtype=FT)
+        gp_modifier = np.array([[0.1], [0.1], [1.0]], dtype=FT)
         np_gauss_params = rf((3, ngsrc))*gp_modifier
 
-        np_args = [np_time_index, np_ant_uvw, np_ant1, np_ant2,
-                            np_frequency, np_gauss_params]
-        arg_names = ["time_index", "uvw", "ant1", "ant2",
-                            "frequency", "gauss_params"]
+        np_args = [np_uvw, np_frequency, np_gauss_params]
+        arg_names = ["uvw", "frequency", "gauss_params"]
 
         tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 

@@ -29,14 +29,11 @@ public:
     {
         namespace tf = tensorflow;
 
-        const tf::Tensor & in_time_index = context->input(0);
-        const tf::Tensor & in_uvw = context->input(1);
-        const tf::Tensor & in_antenna1 = context->input(2);
-        const tf::Tensor & in_antenna2 = context->input(3);
-        const tf::Tensor & in_frequency = context->input(4);
-        const tf::Tensor & in_gauss_params = context->input(5);
+        const tf::Tensor & in_uvw = context->input(0);
+        const tf::Tensor & in_frequency = context->input(1);
+        const tf::Tensor & in_gauss_params = context->input(2);
 
-        int nvrow = in_antenna1.dim_size(0);
+        int nvrow = in_uvw.dim_size(0);
         int nchan = in_frequency.dim_size(0);
         int ngsrc = in_gauss_params.dim_size(1);
 
@@ -47,10 +44,7 @@ public:
         OP_REQUIRES_OK(context, context->allocate_output(
             0, gauss_shape_shape, &gauss_shape_ptr));
 
-        auto time_index = in_time_index.tensor<int, 1>();
-        auto uvw = in_uvw.tensor<FT, 3>();
-        auto antenna1 = in_antenna1.tensor<int, 1>();
-        auto antenna2 = in_antenna2.tensor<int, 1>();
+        auto uvw = in_uvw.tensor<FT, 2>();
         auto frequency = in_frequency.tensor<FT, 1>();
         auto gauss_params = in_gauss_params.tensor<FT, 2>();
         auto gauss_shape = gauss_shape_ptr->tensor<FT, 3>();
@@ -65,18 +59,14 @@ public:
             #pragma omp parallel for
             for(int vrow=0; vrow < nvrow; ++vrow)
             {
-                // Antenna pairs for this baseline
-                int ant1 = antenna1(vrow);
-                int ant2 = antenna2(vrow);
-                int time = time_index(vrow);
-
                 // UVW coordinates for this baseline
-                FT u = uvw(time,ant2,0) - uvw(time,ant1,0);
-                FT v = uvw(time,ant2,1) - uvw(time,ant1,1);
+                FT u = uvw(vrow,0);
+                FT v = uvw(vrow,1);
 
                 for(int chan=0; chan < nchan; ++chan)
                 {
-                    FT scaled_freq = montblanc::constants<FT>::gauss_scale*frequency(chan);
+                    FT scaled_freq = montblanc::constants<FT>::gauss_scale;
+                    scaled_freq *= frequency(chan);
 
                     FT u1 = u*em - v*el;
                     u1 *= scaled_freq*eR;
