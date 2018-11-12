@@ -6,29 +6,58 @@ from tensorflow.python.client import device_lib
 
 from montblanc.impl.rime.tensorflow.tensorflow_ops import zernike
 
+"""
+Note on tolerances
+------------------
 
-@pytest.mark.parametrize("FT, CT, atolerance, rtolerance", [(np.float32, np.complex64, 1e-5, 1e-5), (np.float64, np.complex128, 1e-8, 1e-8)])
-def test_zernike_xx(gpu_devs, coeff_xx, noll_index_xx, eidos_data_xx, FT, CT, atolerance, rtolerance):
+atol=1e-8 and rtol=1e-5 are the np.allclose defaults,
+We relax rtol=1e-3 for single precision to obtain agreement
+with the precalculated values
+"""
+
+
+@pytest.mark.parametrize("FT, CT, atol, rtol", [
+        (np.float32, np.complex64, 1e-8, 1e-3),
+        (np.float64, np.complex128, 1e-8, 1e-5)])
+def test_zernike_xx(gpu_devs, coeff_xx, noll_index_xx, eidos_data_xx,
+                    FT, CT, atol, rtol):
     """ Test the Zernike operator """
-    _impl_test_zernike(FT, CT, gpu_devs, coeff_xx, noll_index_xx, 15, eidos_data_xx, 0, atolerance, rtolerance)
+    _impl_test_zernike(FT, CT, gpu_devs, coeff_xx, noll_index_xx,
+                       15, eidos_data_xx, 0, atol, rtol)
 
-@pytest.mark.parametrize("FT, CT, atolerance, rtolerance", [(np.float32, np.complex64, 1e-7, 1e-1), (np.float64, np.complex128, 1e-7, 1e-1)])
-def test_zernike_xy(gpu_devs, coeff_xy, noll_index_xy, eidos_data_xy, FT, CT, atolerance, rtolerance):
+
+@pytest.mark.parametrize("FT, CT, atol, rtol", [
+        (np.float32, np.complex64, 1e-8, 1e-3),
+        (np.float64, np.complex128, 1e-8, 1e-5)])
+def test_zernike_xy(gpu_devs, coeff_xy, noll_index_xy, eidos_data_xy,
+                    FT, CT, atol, rtol):
     """ Test the Zernike operator """
-    _impl_test_zernike(FT, CT, gpu_devs, coeff_xy, noll_index_xy, 8, eidos_data_xy, 1, atolerance, rtolerance)
+    _impl_test_zernike(FT, CT, gpu_devs, coeff_xy, noll_index_xy,
+                       8, eidos_data_xy, 1, atol, rtol)
 
-@pytest.mark.parametrize("FT, CT, atolerance, rtolerance", [(np.float32, np.complex64, 1e-7, 1e-1), (np.float64, np.complex128, 1e-7, 1e-1)])
-def test_zernike_yx(gpu_devs, coeff_yx, noll_index_yx, eidos_data_yx, FT, CT, atolerance, rtolerance):
+
+@pytest.mark.parametrize("FT, CT, atol, rtol", [
+        (np.float32, np.complex64, 1e-8, 1e-3),
+        (np.float64, np.complex128, 1e-8, 1e-5)])
+def test_zernike_yx(gpu_devs, coeff_yx, noll_index_yx, eidos_data_yx,
+                    FT, CT, atol, rtol):
     """ Test the Zernike operator """
-    _impl_test_zernike(FT, CT, gpu_devs, coeff_yx, noll_index_yx, 8, eidos_data_yx, 2, atolerance, rtolerance)
+    _impl_test_zernike(FT, CT, gpu_devs, coeff_yx, noll_index_yx,
+                       8, eidos_data_yx, 2, atol, rtol)
 
-@pytest.mark.parametrize("FT, CT, atolerance, rtolerance", [(np.float32, np.complex64, 1e-6, 1e-4), (np.float64, np.complex128, 1e-6, 1e-4)])
-def test_zernike_yy(gpu_devs, coeff_yy, noll_index_yy, eidos_data_yy, FT, CT, atolerance, rtolerance):
+
+@pytest.mark.parametrize("FT, CT, atol, rtol", [
+        (np.float32, np.complex64, 1e-8, 1e-3),
+        (np.float64, np.complex128, 1e-8, 1e-5)])
+def test_zernike_yy(gpu_devs, coeff_yy, noll_index_yy, eidos_data_yy,
+                    FT, CT, atol, rtol):
     """ Test the Zernike operator """
-    _impl_test_zernike(FT, CT, gpu_devs, coeff_yy, noll_index_yy, 15, eidos_data_yy, 3, atolerance, rtolerance)
+    _impl_test_zernike(FT, CT, gpu_devs, coeff_yy, noll_index_yy, 15,
+                       eidos_data_yy, 3, atol, rtol)
 
 
-def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_data_nn, corr_num, atolerance, rtolerance):
+def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh,
+                       eidos_data_nn, corr_num, atol, rtol):
     """ Implementation of the Zernike operator test """
     npix = 17
     nsrc = npix ** 2
@@ -50,12 +79,12 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
     parallactic_angle_sin = np.empty((ntime, na)).astype(FT)
     parallactic_angle_cos = np.empty((ntime, na)).astype(FT)
 
-    antenna_scaling[:,:,:] = 1
-    pointing_error[:,:,:,:] = 0
-    coeffs[:,:,:,:] = 1
+    antenna_scaling[:, :, :] = 1
+    pointing_error[:, :, :, :] = 0
+    coeffs[:, :, :, :] = 1
 
-    parallactic_angle_sin[:,:] = 0
-    parallactic_angle_cos[:,:] = 1
+    parallactic_angle_sin[:, :] = 0
+    parallactic_angle_cos[:, :] = 1
 
     coeffs[0,0,:, 0], coeffs[0,0,:, 1], coeffs[0,0,:, 2], coeffs[0,0,:, 3] = coeff_nn[:thresh], coeff_nn[:thresh], coeff_nn[:thresh], coeff_nn[:thresh]
     noll_index[0,0,:, 0], noll_index[0,0,:, 1], noll_index[0,0,:, 2], noll_index[0,0,:, 3] = noll_index_nn[:thresh], noll_index_nn[:thresh], noll_index_nn[:thresh], noll_index_nn[:thresh]
@@ -64,9 +93,13 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
     coords[0:nsrc, 1] = lm[0:nsrc, 1]
 
     # Argument list
-    np_args = [coords, coeffs, noll_index, pointing_error, antenna_scaling, parallactic_angle_sin, parallactic_angle_cos]
+    np_args = [coords, coeffs, noll_index,
+               pointing_error, antenna_scaling,
+               parallactic_angle_sin, parallactic_angle_cos]
     # Argument string name list
-    arg_names = ['coords', 'coeffs', 'noll_index', 'pointing_error', 'antenna_scaling', 'parallactic_angle_sin', 'parallactic_angle_cos']
+    arg_names = ['coords', 'coeffs', 'noll_index',
+                 'pointing_error', 'antenna_scaling',
+                 'parallactic_angle_sin', 'parallactic_angle_cos']
     # Constructor tensorflow variables
     tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
@@ -89,13 +122,13 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
         cpu_data = cpu_data[:, 0, 0, 0, corr_num].reshape((npix, npix))
 
         assert np.allclose(cpu_data, eidos_data_nn,
-                           atol=atolerance, rtol=rtolerance)
+                           atol=atol, rtol=rtol)
 
         for gpu_data in S.run(gpu_ops):
             gpu_data = gpu_data[0, :, 0, 0, 0, corr_num].reshape((npix, npix))
 
             assert np.allclose(gpu_data, eidos_data_nn,
-                               atol=atolerance, rtol=rtolerance)
+                               atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64),
