@@ -45,17 +45,14 @@ class TestSersicShape(unittest.TestCase):
         chunks = np.random.random_integers(int(3.*nbl/4.), nbl, ntime)
         nvrow = np.sum(chunks)
 
-        np_uvw, np_ant1, np_ant2, np_time_index = random_baselines(chunks, na)
-        np_ant_uvw = dsmod.antenna_uvw(np_uvw, np_ant1, np_ant2, chunks,
-                                            nr_of_antenna=na).astype(FT)
+        np_uvw, _, _, _ = random_baselines(chunks, na)
+        np_uvw = np_uvw.astype(FT)
         np_frequency = np.linspace(1.4e9, 1.5e9, nchan).astype(FT)
         sp_modifier = np.array([[1.0],[1.0],[np.pi/648000]],dtype=FT)
         np_sersic_params = rf((3, nssrc))*sp_modifier
 
-        np_args = [np_time_index, np_ant_uvw, np_ant1, np_ant2,
-                            np_frequency, np_sersic_params]
-        arg_names = ["time_index", "uvw", "ant1", "ant2",
-                            "frequency", "sersic_params"]
+        np_args = [np_uvw, np_frequency, np_sersic_params]
+        arg_names = ["uvw", "frequency", "sersic_params"]
 
         tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
