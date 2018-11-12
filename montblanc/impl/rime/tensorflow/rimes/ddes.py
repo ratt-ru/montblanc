@@ -10,13 +10,15 @@ import montblanc.impl.rime.tensorflow.tensorflow_ops as ops
 from montblanc.impl.rime.tensorflow.map_dataset import MapDataset
 from montblanc.impl.rime.tensorflow.utils import source_context
 
+should_prefetch = False
+
 
 def create_tf_expr(cfg, device, input_ds, source_input_maps):
     polarisation_type = cfg['polarisation_type']
     debug = cfg.get('debug', False)
 
     # Apply GPU prefetch to input dataset
-    if device.device_type == "GPU":
+    if should_prefetch and device.device_type == "GPU":
         xform = prefetch_to_device(device, buffer_size=1)
         input_ds = input_ds.apply(xform)
 
@@ -34,7 +36,7 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
     point_inputs_ds = MapDataset(point_key_ds, point_input_map)
 
     # Apply GPU prefetch to point data
-    if device.device_type == "GPU":
+    if should_prefetch and device.device_type == "GPU":
         xform = prefetch_to_device(device, buffer_size=1)
         point_inputs_ds = point_inputs_ds.apply(xform)
 
