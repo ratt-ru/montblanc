@@ -76,6 +76,7 @@ class EvaluationThread(Thread):
         else:
             raise status[1]
 
+
 def _requires_input_ds(op):
     """ Does the supplied op depend on the input dataset? """
     for i in op.inputs:
@@ -163,8 +164,9 @@ class TensorflowSessionWrapper(object):
         with tf.Graph().as_default() as graph:
             # Now create source datasets composed of maps
             # and main input dataset composed of a queue
-            src_ds = create_datasets(datasets, placeholders, "map")
-            input_ds = create_datasets(input_ds, placeholders, "queue")
+            with tf.device("/cpu:0"):
+                src_ds = create_datasets(datasets, placeholders, "map")
+                input_ds = create_datasets(input_ds, placeholders, "queue")
 
             dataset_info = merge(input_ds, src_ds)
             src_maps = {ds_name: ds.tensor_map for ds_name, ds
@@ -178,9 +180,11 @@ class TensorflowSessionWrapper(object):
             in_ds = dataset_info["inputs"].dataset
 
             output_map = TensorMap(tuple(o['type'] for o in outputs.values()))
-            self._output_map_pop_key = tf.placeholder(tf.int64)
-            self._output_map_pop = output_map.pop(self._output_map_pop_key,
-                                                  name="output-map-pop")
+
+            with tf.device("/cpu:0"):
+                self._output_map_pop_key = tf.placeholder(tf.int64)
+                self._output_map_pop = output_map.pop(self._output_map_pop_key,
+                                                      name="output-map-pop")
 
             # Shard the dataset over each device
             for shard, device in enumerate(device_list):
