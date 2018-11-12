@@ -87,14 +87,19 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh, eidos_
         S.run(init_op)
         cpu_data = S.run(cpu_op)
         cpu_data = cpu_data[:, 0, 0, 0, corr_num].reshape((npix, npix))
-        gpu_data = np.array(S.run(gpu_ops))
-        gpu_data = gpu_data[ 0, :, 0, 0, 0, corr_num].reshape((npix,npix))
 
-        assert np.allclose(cpu_data, eidos_data_nn, atol=atolerance, rtol=rtolerance)
-        assert np.allclose(gpu_data, eidos_data_nn, atol=atolerance, rtol=rtolerance)
+        assert np.allclose(cpu_data, eidos_data_nn,
+                           atol=atolerance, rtol=rtolerance)
+
+        for gpu_data in S.run(gpu_ops):
+            gpu_data = gpu_data[0, :, 0, 0, 0, corr_num].reshape((npix, npix))
+
+            assert np.allclose(gpu_data, eidos_data_nn,
+                               atol=atolerance, rtol=rtolerance)
 
 
-@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64), (np.float64, np.complex128)])
+@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64),
+                                    (np.float64, np.complex128)])
 def test_random_inputs(FT, CT, gpu_devs):
     """ Implementation of the Zernike operator test """
     npix = 17
@@ -110,13 +115,17 @@ def test_random_inputs(FT, CT, gpu_devs):
     noll_index = np.random.randint(0, high=8, size=(na, nchan, thresh, 4)).astype(np.int32)
     pointing_error = np.random.uniform(0, 1, size=(ntime, na, nchan, 2)).astype(FT)
     antenna_scaling = np.random.uniform(0, 3, size=(na, nchan, 2)).astype(FT)
-    parallactic_angle_sin = np.random.uniform(-1,1,size=(ntime, na)).astype(FT)
-    parallactic_angle_cos = np.random.uniform(-1,1,size=(ntime, na)).astype(FT)
+    parallactic_angle_sin = np.random.uniform(-1, 1, size=(ntime, na)).astype(FT)
+    parallactic_angle_cos = np.random.uniform(-1, 1, size=(ntime, na)).astype(FT)
 
     # Argument list
-    np_args = [coords, coeffs, noll_index, pointing_error, antenna_scaling, parallactic_angle_sin, parallactic_angle_cos]
+    np_args = [coords, coeffs, noll_index,
+               pointing_error, antenna_scaling,
+               parallactic_angle_sin, parallactic_angle_cos]
     # Argument string name list
-    arg_names = ['coords', 'coeffs', 'noll_index', 'pointing_error', 'antenna_scaling', 'parallactic_angle_sin', 'parallactic_angle_cos']
+    arg_names = ['coords', 'coeffs', 'noll_index',
+                 'pointing_error', 'antenna_scaling',
+                 'parallactic_angle_sin', 'parallactic_angle_cos']
     # Constructor tensorflow variables
     tf_args = [tf.Variable(v, name=n) for v, n in zip(np_args, arg_names)]
 
@@ -135,16 +144,16 @@ def test_random_inputs(FT, CT, gpu_devs):
     init_op = tf.global_variables_initializer()
     with tf.Session() as S:
         S.run(init_op)
-        cpu_data = S.run(cpu_op)[:, 0, 0, 0, 0]
-        gpu_data = np.array(S.run(gpu_ops))[0, :, 0, 0, 0, 0]
-        assert np.allclose(np.real(cpu_data), np.real(gpu_data), atol=1e-5, rtol=1e-5)
+        cpu_data = S.run(cpu_op)
 
-
+        for gpu_data in S.run(gpu_ops):
+            assert np.allclose(np.real(cpu_data), np.real(gpu_data))
 
 
 @pytest.fixture
 def gpu_devs():
     return [d.name for d in device_lib.list_local_devices() if d.device_type == 'GPU']
+
 
 @pytest.fixture
 def coeff_xx():
