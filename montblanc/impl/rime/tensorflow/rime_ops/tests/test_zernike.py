@@ -86,8 +86,15 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh,
     parallactic_angle_sin[:, :] = 0
     parallactic_angle_cos[:, :] = 1
 
-    coeffs[0,0,:, 0], coeffs[0,0,:, 1], coeffs[0,0,:, 2], coeffs[0,0,:, 3] = coeff_nn[:thresh], coeff_nn[:thresh], coeff_nn[:thresh], coeff_nn[:thresh]
-    noll_index[0,0,:, 0], noll_index[0,0,:, 1], noll_index[0,0,:, 2], noll_index[0,0,:, 3] = noll_index_nn[:thresh], noll_index_nn[:thresh], noll_index_nn[:thresh], noll_index_nn[:thresh]
+    coeffs[0, 0, :, 0] = coeff_nn[:thresh]
+    coeffs[0, 0, :, 1] = coeff_nn[:thresh]
+    coeffs[0, 0, :, 2] = coeff_nn[:thresh]
+    coeffs[0, 0, :, 3] = coeff_nn[:thresh]
+
+    noll_index[0, 0, :, 0] = noll_index_nn[:thresh]
+    noll_index[0, 0, :, 1] = noll_index_nn[:thresh]
+    noll_index[0, 0, :, 2] = noll_index_nn[:thresh]
+    noll_index[0, 0, :, 3] = noll_index_nn[:thresh]
 
     coords[0:nsrc, 0] = lm[0:nsrc, 0]
     coords[0:nsrc, 1] = lm[0:nsrc, 1]
@@ -121,14 +128,12 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh,
         cpu_data = S.run(cpu_op)
         cpu_data = cpu_data[:, 0, 0, 0, corr_num].reshape((npix, npix))
 
-        assert np.allclose(cpu_data, eidos_data_nn,
-                           atol=atol, rtol=rtol)
+        assert np.allclose(cpu_data, eidos_data_nn, atol=atol, rtol=rtol)
 
         for gpu_data in S.run(gpu_ops):
             gpu_data = gpu_data[:, 0, 0, 0, corr_num].reshape((npix, npix))
 
-            assert np.allclose(gpu_data, eidos_data_nn,
-                               atol=atol, rtol=rtol)
+            assert np.allclose(gpu_data, eidos_data_nn, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("FT, CT, atol, rtol", [
