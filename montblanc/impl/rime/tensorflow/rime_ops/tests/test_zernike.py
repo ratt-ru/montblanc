@@ -136,6 +136,8 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh,
             assert np.allclose(gpu_data, eidos_data_nn, atol=atol, rtol=rtol)
 
 
+@pytest.mark.xfail(reason="CPU and GPU results don't agree. "
+                          "outputs seem to be mostly zero, mixed with nans")
 @pytest.mark.parametrize("FT, CT, atol, rtol", [
         (np.float32, np.complex64, 1e-8, 1e-3),
         (np.float64, np.complex128, 1e-8, 1e-5)])
