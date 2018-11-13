@@ -131,9 +131,10 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh,
                                atol=atol, rtol=rtol)
 
 
-@pytest.mark.parametrize("FT, CT", [(np.float32, np.complex64),
-                                    (np.float64, np.complex128)])
-def test_random_inputs(FT, CT, gpu_devs):
+@pytest.mark.parametrize("FT, CT, atol, rtol", [
+        (np.float32, np.complex64, 1e-8, 1e-3),
+        (np.float64, np.complex128, 1e-8, 1e-5)])
+def test_random_inputs(FT, CT, atol, rtol, gpu_devs):
     """ Implementation of the Zernike operator test """
     npix = 17
     nsrc = npix ** 2
@@ -180,7 +181,7 @@ def test_random_inputs(FT, CT, gpu_devs):
         cpu_data = S.run(cpu_op)
 
         for gpu_data in S.run(gpu_ops):
-            assert np.allclose(np.real(cpu_data), np.real(gpu_data))
+            assert np.allclose(cpu_data, gpu_data, atol=atol, rtol=rtol)
 
 
 @pytest.fixture
