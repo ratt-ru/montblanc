@@ -125,7 +125,7 @@ def _impl_test_zernike(FT, CT, gpu_devs, coeff_nn, noll_index_nn, thresh,
                            atol=atol, rtol=rtol)
 
         for gpu_data in S.run(gpu_ops):
-            gpu_data = gpu_data[0, :, 0, 0, 0, corr_num].reshape((npix, npix))
+            gpu_data = gpu_data[:, 0, 0, 0, corr_num].reshape((npix, npix))
 
             assert np.allclose(gpu_data, eidos_data_nn,
                                atol=atol, rtol=rtol)
