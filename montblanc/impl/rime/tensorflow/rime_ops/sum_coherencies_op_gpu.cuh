@@ -98,7 +98,7 @@ __global__ void rime_sum_coherencies(
         // Apply sign inversions stemming from cholesky decompositions.
         // Sum source coherency into model visibility
         i = base*nchan + chan;
-        FT sign = FT(sgn_brightness[base]);
+        FT sign = FT(sgn_brightness[i]);
 
         coherency.x += sign*J1.x;
         coherency.y += sign*J1.y;
