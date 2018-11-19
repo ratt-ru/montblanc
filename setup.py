@@ -20,6 +20,7 @@
 
 import json
 import os
+import sys
 
 # =============
 # Setup logging
@@ -41,6 +42,7 @@ from setuptools.dist import Distribution
 
 import versioneer
 
+PY2 = sys.version_info[0] == 2
 
 mb_path = 'montblanc'
 mb_inc_path = os.path.join(mb_path, 'include')
@@ -164,7 +166,7 @@ if on_rtd:
 else:
     # Add binary/C extension type packages
     install_requires += [
-        'astropy >= 1.3.0',
+        'astropy >= 2.0.0, < 3.0.0' if PY2 else 'astropy >= 3.0.0',
         'cerberus >= 1.1',
         'nose >= 1.3.7',
         'numba >= 0.36.2',
