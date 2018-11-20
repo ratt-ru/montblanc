@@ -557,7 +557,7 @@ protected:
     }
 
 private:
-    class Dataset : public GraphDatasetBase
+    class Dataset : public DatasetBase
     {
     public:
         const DatasetBase * input_;
@@ -566,7 +566,7 @@ private:
         explicit Dataset(OpKernelContext * ctx,
                         const DatasetBase * input,
                         MapResource * map_resource)
-                : GraphDatasetBase(ctx),
+                : DatasetBase(DatasetContext(ctx)),
                     input_(input),
                     map_resource_(map_resource)
         {
@@ -575,6 +575,9 @@ private:
             // printf("Creating MapDatset %p\n", (void *) this);
         }
 
+        Dataset(const Dataset & rhs) = delete;
+        Dataset & operator=(const Dataset & rhs) = delete;
+
         ~Dataset() override
         {
             input_->Unref();
@@ -582,9 +585,6 @@ private:
             // printf("Destroying MapDatset %p\n", (void *) this);
         }
 
-
-        Dataset(const Dataset & rhs) = delete;
-        Dataset & operator=(const Dataset & rhs) = delete;
 
         const DataTypeVector & output_dtypes() const override
             { return map_resource_->output_dtypes(); }
@@ -603,11 +603,11 @@ private:
         }
 
     protected:
-        Status AsGraphDefInternal(OpKernelContext * ctx,
-                                DatasetGraphDefBuilder * b,
-                                Node ** output) const override
+        Status AsGraphDefInternal(SerializationContext* ctx,
+                                  DatasetGraphDefBuilder* b,
+                                  Node** node) const override
         {
-            return errors::InvalidArgument("Not Implemented");
+            return errors::Unimplemented("AsGraphDefInternal");
         }
 
     private:

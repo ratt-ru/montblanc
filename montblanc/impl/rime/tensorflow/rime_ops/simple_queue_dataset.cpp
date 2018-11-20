@@ -427,13 +427,14 @@ protected:
     }
 
 private:
-    class Dataset : public GraphDatasetBase
+    class Dataset : public DatasetBase
     {
     public:
         QueueResource * queue_resource_;
 
         explicit Dataset(OpKernelContext * ctx, QueueResource * queue_resource)
-                : GraphDatasetBase(ctx), queue_resource_(queue_resource)
+                : DatasetBase(DatasetContext(ctx)),
+                  queue_resource_(queue_resource)
         {
             // printf("Creating QueueDataset %p\n", (void *) this);
             queue_resource_->Ref();
@@ -465,12 +466,13 @@ private:
         }
 
     protected:
-        Status AsGraphDefInternal(OpKernelContext * ctx,
-                                DatasetGraphDefBuilder * b,
-                                Node ** output) const override
+        Status AsGraphDefInternal(SerializationContext* ctx,
+                                  DatasetGraphDefBuilder* b,
+                                  Node** node) const override
         {
-            return errors::InvalidArgument("Not Implemented");
+            return errors::Unimplemented("AsGraphDefInternal");
         }
+
 
     private:
         class Iterator : public DatasetIterator<Dataset>
@@ -516,13 +518,13 @@ private:
         protected:
           Status SaveInternal(IteratorStateWriter* writer) override
             {
-                return errors::InvalidArgument("Not Implemented");
+                return errors::Unimplemented("SaveInternal");
             }
 
           Status RestoreInternal(IteratorContext * ctx,
                                 IteratorStateReader * reader) override
             {
-                return errors::InvalidArgument("Not Implemented");
+                return errors::Unimplemented("RestoreInternal");
             }
         }; // class Iterator
     };     // class Dataset
