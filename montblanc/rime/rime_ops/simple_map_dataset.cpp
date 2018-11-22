@@ -266,7 +266,7 @@ public:
 
     void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
+        // mutex_lock l(mu_);
 
         MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
@@ -316,7 +316,7 @@ public:
 
     void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
+        // mutex_lock l(mu_);
 
         MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
@@ -363,7 +363,7 @@ public:
 
     void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
+        // mutex_lock l(mu_);
 
         // Obtain map resource and close it
         MapResource * map_resource;
@@ -399,7 +399,7 @@ public:
 
     void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
+        // mutex_lock l(mu_);
 
         // Obtain map resource and close it
         MapResource * map_resource;
@@ -449,7 +449,7 @@ public:
 
     void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
+        // mutex_lock l(mu_);
 
         // Obtain map resource and close it
         MapResource * map_resource;
@@ -500,7 +500,7 @@ public:
 
     void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
+        // mutex_lock l(mu_);
 
         // Obtain map resource and close it
         MapResource * map_resource;
