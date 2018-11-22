@@ -1,4 +1,3 @@
-#include <chrono>
 #include <deque>
 #include <unordered_map>
 
@@ -28,8 +27,8 @@ private:
     mutex mu_;
 
     condition_variable cv_ GUARDED_BY(mu_);
-    QueueRegister queues_ GUARDED_BY(mu_);
-    Queue stash_ GUARDED_BY(mu_);
+    QueueRegister queues GUARDED_BY(mu_);
+    Queue stash GUARDED_BY(mu_);
     bool closed_ GUARDED_BY(mu_);
 
     DataTypeVector dtypes_;
@@ -41,15 +40,14 @@ public:
                            const std::vector<PartialTensorShape> & shapes)
       : dtypes_(dtypes), shapes_(shapes), closed_(false)
     {
-        queues_.insert({100, Queue()});
         // printf("Creating QueueResource %p\n", (void *) this);
     }
 
     ~QueueResource() override
     {
-        if(queues_.size() > 0)
+        if(queues.size() > 0)
         {
-            VLOG(ERROR) << queues_.size()
+            VLOG(ERROR) << queues.size()
                     << " iterators still registered "
                     << "while destroying queue.";
         }
@@ -78,33 +76,26 @@ public:
         cv_.notify_all();
     }
 
-    Status insert(const Tuple & data,
-                  const std::string & name = "DefaultQueueInsert") LOCKS_EXCLUDED(mu_)
+    Status insert(const Tuple & data) LOCKS_EXCLUDED(mu_)
     {
         // Slightly more optimal to unlock the mutex
         // before the notify
-
-        // printf("%s Inserting\n", name.c_str());
-
         {
             mutex_lock l(mu_);
 
             if(closed_)
                 { return errors::OutOfRange("Queue is closed"); }
 
-            // if(queues_.size() == 0)
-            //     { stash_.push_back(data); }
-            // else
-            // {
+            if(queues.size() == 0)
+                { stash.push_back(data); }
+            else
+            {
                 // Insert tuple into all registered queues
-                for(auto & queue : queues_)
+                for(auto & queue : queues)
                     { queue.second.push_back(data); }
-            // }
+            }
 
         }
-
-        // printf("%s Inserted\n", name.c_str());
-
 
         // Notify waiting consumers
         cv_.notify_all();
@@ -114,30 +105,29 @@ public:
 
     Status pop(std::size_t id, Tuple * out) LOCKS_EXCLUDED(mu_)
     {
+        mutex_lock l(mu_);
 
-        // auto it = queues.end();
+        auto it = queues.end();
 
         while(true)
         {
-            mutex_lock l(mu_);
-
-            // Decant any stash contents into the queues
-            if(stash_.size() > 0)
+            // Decant stash contents into the maps
+            if(stash.size() > 0)
             {
-                for(auto it = queues_.begin(); it != queues_.end(); ++it)
+                for(auto it = queues.begin(); it != queues.end(); ++it)
                 {
-                    for(auto & entry: stash_)
+                    for(auto & entry: stash)
                         { it->second.push_back(entry); }
                 }
 
-                stash_.clear();
+                stash.clear();
             }
 
             // Searching for the registered queue on each iteration
             // is probably overkill, but correct
-            auto it = queues_.find(100);
+            it = queues.find(id);
 
-            if(it == queues_.end())
+            if(it == queues.end())
             {
                 return errors::InvalidArgument("Iterator ", id,
                                                " not registered "
@@ -156,13 +146,8 @@ public:
             else if (closed_)
                 { return errors::OutOfRange("Queue is closed and empty"); }
 
-            printf("Waiting in queues %d %d [", queues_.size(), stash_.size());
-            for(auto & queue: queues_)
-                { printf("%d ", queue.second.size()); }
-            printf("]\n");
-
             // Wait for better conditions
-            cv_.wait_for(l, std::chrono::seconds(2));
+            cv_.wait(l);
         }
 
         return errors::Internal("Should never exit pop while loop");
@@ -174,7 +159,7 @@ public:
 
         sizes->clear();
 
-        for(auto & queue: queues_)
+        for(auto & queue: queues)
             { sizes->push_back(queue.second.size()); }
 
         return Status::OK();
@@ -182,14 +167,12 @@ public:
 
     Status register_iterator(std::size_t id) LOCKS_EXCLUDED(mu_)
     {
-        return Status::OK();
-
         {
             mutex_lock l(mu_);
 
             // Create if doesn't exist
-            if(queues_.find(id) == queues_.end())
-                { queues_.insert({id, Queue()}); }
+            if(queues.find(id) == queues.end())
+                { queues.insert({id, Queue()}); }
         }
 
         // Notify waiting consumers
@@ -200,11 +183,9 @@ public:
 
     Status deregister_iterator(std::size_t id) LOCKS_EXCLUDED(mu_)
     {
-        return Status::OK();
-
         mutex_lock l(mu_);
         // Erase
-        queues_.erase(id);
+        queues.erase(id);
         return Status::OK();
     }
 };
@@ -315,7 +296,7 @@ public:
             { tensors.emplace_back(std::move(components[c])); }
 
         // Insert
-        OP_REQUIRES_OK(ctx, queue_resource->insert(std::move(tensors), name()));
+        OP_REQUIRES_OK(ctx, queue_resource->insert(std::move(tensors)));
     }
 };
 
@@ -455,7 +436,7 @@ private:
                 : DatasetBase(DatasetContext(ctx)),
                   queue_resource_(queue_resource)
         {
-            printf("Creating QueueDataset %p\n", (void *) this);
+            // printf("Creating QueueDataset %p\n", (void *) this);
             queue_resource_->Ref();
         }
 
@@ -464,7 +445,7 @@ private:
 
         ~Dataset() override
         {
-            printf("Destroying QueueDataset %p\n", (void *) this);
+            // printf("Destroying QueueDataset %p\n", (void *) this);
             queue_resource_->Unref();
         }
 
@@ -505,12 +486,12 @@ private:
             {
                 // We deregister at EOF in GetNextInternal
                 dataset()->queue_resource_->register_iterator(id);
-                printf("Creating QueueDataset::Iterator %p\n", (void *) this);
+                // printf("Creating QueueDataset::Iterator %p\n", (void *) this);
             }
 
             ~Iterator() override
             {
-                printf("Destroying QueueDataset::Iterator %p\n", (void *) this);
+                // printf("Destroying QueueDataset::Iterator %p\n", (void *) this);
                 dataset()->queue_resource_->deregister_iterator(id);
             }
 

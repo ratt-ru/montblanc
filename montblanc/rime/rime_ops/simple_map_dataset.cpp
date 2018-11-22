@@ -86,10 +86,10 @@ public:
     {
         int64 key = tensor_key.scalar<int64>()();
 
+        mutex_lock l(mu_);
+
         while(true)
         {
-            mutex_lock l(mu_);
-
             auto map_it = maps_.find(key);
 
             if(map_it != maps_.end())
@@ -113,8 +113,8 @@ public:
                 return errors::OutOfRange("Map is closed and empty");
             }
 
-            // Release lock and wait for key to be inserted
-            cv_.wait_for(l, std::chrono::seconds(10));
+            // Wait for better conditions
+            cv_.wait(l);
         }
 
         return errors::Internal("Should never exit pop while loop");
@@ -146,25 +146,18 @@ public:
 
     Status clear(const Tensor & tensor_keys) LOCKS_EXCLUDED(mu_)
     {
-        // Slightly more optimal to release the lock
-        // before the notify
+        mutex_lock l(mu_);
+
+        if(tensor_keys.dims() == 0)
         {
-            mutex_lock l(mu_);
-
-            if(tensor_keys.dims() == 0)
-            {
-                maps_.clear();
-                return Status::OK();
-            }
-
-            auto keys = tensor_keys.tensor<int64, 1>();
-
-            for(int i=0; i < tensor_keys.dim_size(0); ++i)
-                { maps_.erase(keys(i)); }
+            maps_.clear();
+            return Status::OK();
         }
 
-        // Notify waiting getters
-        cv_.notify_all();
+        auto keys = tensor_keys.tensor<int64, 1>();
+
+        for(int i=0; i < tensor_keys.dim_size(0); ++i)
+            { maps_.erase(keys(i)); }
 
         return Status::OK();
     }
@@ -265,11 +258,16 @@ REGISTER_KERNEL_BUILDER(Name("DatasetMapHandle")
 
 class DatasetMapInsertOp : public OpKernel
 {
+private:
+    mutex mu_;
+
 public:
     explicit DatasetMapInsertOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
 
-    void Compute(OpKernelContext * ctx) override
+    void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
+        mutex_lock l(mu_);
+
         MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
                                           &map_resource));
@@ -288,7 +286,7 @@ public:
             { tensors.emplace_back(std::move(components[c])); }
 
         // Insert
-        OP_REQUIRES_OK(ctx, map_resource->insert(*key_tensor, std::move(tensors), name()));
+        OP_REQUIRES_OK(ctx, map_resource->insert(*key_tensor, std::move(tensors)));
     }
 };
 
@@ -310,11 +308,16 @@ REGISTER_KERNEL_BUILDER(Name("DatasetMapInsert")
 
 class DatasetMapPopOp : public OpKernel
 {
+private:
+    mutex mu_;
+
 public:
     explicit DatasetMapPopOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
 
-    void Compute(OpKernelContext * ctx)
+    void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
+        mutex_lock l(mu_);
+
         MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
                                           &map_resource));
@@ -325,7 +328,8 @@ public:
         OP_REQUIRES_OK(ctx, ctx->input("key", &key_tensor));
 
         std::vector<Tensor> output;
-        OP_REQUIRES_OK(ctx, map_resource->pop(*key_tensor, &output, name()));
+
+        OP_REQUIRES_OK(ctx, map_resource->pop(*key_tensor, &output));
 
         for(int i = 0; i < output.size(); ++i)
             { ctx->set_output(i, std::move(output[i])); }
@@ -351,11 +355,16 @@ REGISTER_KERNEL_BUILDER(Name("DatasetMapPop")
 
 class MapCloseOp : public OpKernel
 {
+private:
+    mutex mu_;
+
 public:
     explicit MapCloseOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
 
-    void Compute(OpKernelContext * ctx) override
+    void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
+        mutex_lock l(mu_);
+
         // Obtain map resource and close it
         MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
@@ -382,11 +391,16 @@ REGISTER_KERNEL_BUILDER(Name("DatasetMapClose")
 
 class MapSizeOp : public OpKernel
 {
+private:
+    mutex mu_;
+
 public:
     explicit MapSizeOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
 
-    void Compute(OpKernelContext * ctx) override
+    void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
+        mutex_lock l(mu_);
+
         // Obtain map resource and close it
         MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
@@ -427,11 +441,16 @@ REGISTER_KERNEL_BUILDER(Name("DatasetMapSize")
 
 class MapKeysOp : public OpKernel
 {
+private:
+    mutex mu_;
+
 public:
     explicit MapKeysOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
 
-    void Compute(OpKernelContext * ctx) override
+    void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
+        mutex_lock l(mu_);
+
         // Obtain map resource and close it
         MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
@@ -473,11 +492,16 @@ REGISTER_KERNEL_BUILDER(Name("DatasetMapKeys")
 
 class MapClearOp : public OpKernel
 {
+private:
+    mutex mu_;
+
 public:
     explicit MapClearOp(OpKernelConstruction * ctx) : OpKernel(ctx) {}
 
-    void Compute(OpKernelContext * ctx) override
+    void Compute(OpKernelContext * ctx) override LOCKS_EXCLUDED(mu_)
     {
+        mutex_lock l(mu_);
+
         // Obtain map resource and close it
         MapResource * map_resource;
         OP_REQUIRES_OK(ctx, LookupResource(ctx, HandleFromInput(ctx, 0),
@@ -622,8 +646,6 @@ private:
                 std::vector<Tensor> keys;
                 auto map_resource = dataset()->map_resource_;
 
-                // printf("GetNextInternal\n");
-
                 TF_RETURN_IF_ERROR(input_impl_->GetNext(ctx, &keys,
                                                     end_of_sequence));
 
@@ -638,8 +660,6 @@ private:
                                                     keys.size(),
                                                     "), expected 1.");
                 }
-
-                // printf("GetNextInternal got %d\n", keys[0].scalar<int64>()());
 
                 // Retrieve tensors from the map
                 status = map_resource->pop(keys[0], out_tensors);
