@@ -55,6 +55,9 @@ REGISTER_OP("SersicShape")
     .Input("frequency: FT")
     .Input("params: FT")
     .Output("sersic_shape: FT")
+    .Attr("uvw_schema: string = '(row,(u,v,w))'")
+    .Attr("frequency_schema: string = '(chan,)'")
+    .Attr("params_schema: string = '(3,source)'")
     .Attr("FT: {float, double} = DT_FLOAT")
     .SetShapeFn(sersic_shape_shape_function);
 

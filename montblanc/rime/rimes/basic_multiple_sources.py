@@ -151,9 +151,9 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
                                     stokes_schema="(source,corr)",
                                     CT=CT)
 
-        gauss_shape = ops.gauss_shape(inputs['uvw'],
-                                      inputs['frequency'],
-                                      sersic_inputs['gauss_params'])
+        gauss_shape = ops.sersic_shape(inputs['uvw'],
+                                       inputs['frequency'],
+                                       sersic_inputs['sersic_params'])
 
         gauss_shape = tf.cast(gauss_shape, dtype=CT)
 
