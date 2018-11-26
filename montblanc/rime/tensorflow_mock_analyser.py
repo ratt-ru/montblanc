@@ -362,7 +362,8 @@ def tensor_queue(ds_name, ds_ph, dtypes, shapes):
     """
     Creates TensorQueue dataset
     """
-    tensor_queue = TensorQueue(dtypes, shapes)
+
+    tensor_queue = TensorQueue(dtypes, shapes, name=ds_name)
     tensor_dataset = QueueDataset(tensor_queue, name=ds_name)
     put = tensor_queue.put(ds_ph)
     close = tensor_queue.close()

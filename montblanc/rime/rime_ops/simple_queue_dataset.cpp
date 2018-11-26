@@ -33,12 +33,14 @@ private:
 
     DataTypeVector dtypes_;
     std::vector<PartialTensorShape> shapes_;
+    std::string name_;
 
 public:
 public:
     explicit QueueResource(const DataTypeVector & dtypes,
-                           const std::vector<PartialTensorShape> & shapes)
-      : dtypes_(dtypes), shapes_(shapes), closed_(false)
+                           const std::vector<PartialTensorShape> & shapes,
+                           const std::string & name)
+      : dtypes_(dtypes), shapes_(shapes), name_(name), closed_(false)
     {
         // printf("Creating QueueResource %p\n", (void *) this);
     }
@@ -86,6 +88,7 @@ public:
             if(closed_)
                 { return errors::OutOfRange("Queue is closed"); }
 
+            // No registered queues, push it on the stash
             if(queues.size() == 0)
                 { stash.push_back(data); }
             else
@@ -238,7 +241,7 @@ public:
                 cinfo.container(), cinfo.name(), &queue_resource,
                 [this, ctx](QueueResource ** result) EXCLUSIVE_LOCKS_REQUIRED(mu_)
                 {
-                    *result = new QueueResource(dtypes_, shapes_);
+                    *result = new QueueResource(dtypes_, shapes_, cinfo.name());
                     return Status::OK();
                 }
             ));

@@ -16,7 +16,7 @@ class TensorQueue(object):
     A Queue of tensors.
     """
 
-    def __init__(self, dtypes, shapes=None, shared_name=None):
+    def __init__(self, dtypes, shapes=None, name=None, shared_name=None):
         """
         Constructs a simple queue accepting ``put`` operations
         of tensors with the specified ``dtypes`` and ``shapes``.
@@ -47,11 +47,16 @@ class TensorQueue(object):
             A nested collection of dicts or tuples
             containing shapes associated with ``dtypes``.
             Must have the same structure as ``dtypes``
+        name : str, optional
+            Queue name
         shared_name : str, optional
             Shared resource name if this Queue is to be
             shared amongst multiple tensorflow Sesssions.
         """
-        with ops.name_scope("tensor_queue") as scope:
+        if name is None:
+            name = "tensor_queue"
+
+        with ops.name_scope(name) as scope:
             flat_dtypes = nest.flatten(dtypes)
 
             if shapes is None:
