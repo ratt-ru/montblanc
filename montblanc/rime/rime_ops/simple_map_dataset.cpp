@@ -32,13 +32,15 @@ private:
     DataTypeVector dtypes_;
     std::vector<PartialTensorShape> shapes_;
     bool store_;
+    std::string name_;
 
 public:
     explicit MapResource(const DataTypeVector & dtypes,
                            const std::vector<PartialTensorShape> & shapes,
-                           bool store)
+                           bool store,
+                           const std::string & name)
       : dtypes_(dtypes), shapes_(shapes),
-        store_(store), closed_(false)
+        store_(store), closed_(false), name_(name)
     {
         // printf("Creating MapResource %p\n", (void *) this);
     }
@@ -225,7 +227,7 @@ public:
                 cinfo.container(), cinfo.name(), &map_resource,
                 [this, ctx](MapResource ** result) EXCLUSIVE_LOCKS_REQUIRED(mu_)
                 {
-                    *result = new MapResource(dtypes_, shapes_, store);
+                    *result = new MapResource(dtypes_, shapes_, store, cinfo.name());
                     return Status::OK();
                 }
             ));

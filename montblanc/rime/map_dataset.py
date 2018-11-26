@@ -19,7 +19,8 @@ class TensorMap(object):
     A Map of tensors.
     """
 
-    def __init__(self, dtypes, shapes=None, store=False, shared_name=None):
+    def __init__(self, dtypes, shapes=None, store=False,
+                 name=None, shared_name=None):
         """
         Constructs a simple map accepting ``put`` operations
         of tensors with the specified ``dtypes`` and ``shapes``.
@@ -63,11 +64,18 @@ class TensorMap(object):
             - If ``False``, data is removed from the map when
               requested.
 
+        name : str, optional
+            Name for this Map
+
         shared_name : str, optional
             Shared resource name if this Map is to be
             shared amongst multiple tensorflow Sesssions.
         """
-        with ops.name_scope("tensor_map") as scope:
+
+        if name is None:
+            name = "tensor_map"
+
+        with ops.name_scope(name) as scope:
             flat_dtypes = nest.flatten(dtypes)
 
             if shapes is None:

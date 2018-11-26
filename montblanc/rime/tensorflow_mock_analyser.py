@@ -338,7 +338,7 @@ def tensor_map(ds_name, ds_ph, dtypes, shapes):
     """
     Creates TensorMap dataset
     """
-    tensor_map = TensorMap(dtypes, shapes, store=True)
+    tensor_map = TensorMap(dtypes, shapes, store=True, name=ds_name)
     map_keys = tf.placeholder(tf.int64, shape=(None, 1),
                               name="%s_map_keys" % ds_name)
     put_key = tf.placeholder(tf.int64, shape=(),

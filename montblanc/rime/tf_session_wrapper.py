@@ -181,7 +181,8 @@ class TensorflowSessionWrapper(object):
             # Get the main input dataset
             in_ds = dataset_info["inputs"].dataset
 
-            output_map = TensorMap(tuple(o['type'] for o in outputs.values()))
+            output_map = TensorMap(tuple(o['type'] for o in outputs.values()),
+                                   name="output_map")
 
             with tf.device("/cpu:0"):
                 self._output_map_pop_key = tf.placeholder(tf.int64)
