@@ -20,55 +20,58 @@ def _antenna_uvw_loop(uvw, antenna1, antenna2, ant_uvw,
                                 chunk_index, start, end):
 
     c = chunk_index
+
+    clusters = {}
     a1 = antenna1[start]
     a2 = antenna2[start]
 
-    # Handle first row separately
-    # If a1 associated with starting row is nan
-    # initial values have not yet been assigned. Do so.
-    if np.isnan(ant_uvw[c,a1,u]):
-        ant_uvw[c,a1,u] = 0.0
-        ant_uvw[c,a1,v] = 0.0
-        ant_uvw[c,a1,w] = 0.0
-
-        # If this is not an auto-correlation
-        # assign a2 to inverse of baseline UVW,
-        if a1 != a2:
-            ant_uvw[c,a2,u] = uvw[start,u]
-            ant_uvw[c,a2,v] = uvw[start,v]
-            ant_uvw[c,a2,w] = uvw[start,w]
-
     # Now do the rest of the rows in this chunk
-    for row in range(start+1, end):
+    for row in range(start, end):
         a1 = antenna1[row]
         a2 = antenna2[row]
 
-        # Have their coordinates been discovered yet?
-        ant1_found = not np.isnan(ant_uvw[c,a1,u])
-        ant2_found = not np.isnan(ant_uvw[c,a2,u])
+        # Have they been clustered yet?
+        cl1 = clusters.get(a1)
+        cl2 = clusters.get(a2)
 
-        if ant1_found and ant2_found:
-            # We've already computed antenna coordinates
-            # for this baseline, ignore it
-            pass
-        elif not ant1_found and not ant2_found:
-            # We can't infer one antenna's coordinate from another
-            # Hopefully this can be filled in during another run
-            # of this function
-            pass
-        elif ant1_found and not ant2_found:
-            # Infer antenna2's coordinate from antenna1
-            #    u12 = u2 - u1 => u2 = u12 + u1
+        # Both new -- start a new cluster relative to a1
+        if cl1 is None and cl2 is None:
+            clusters[a1] = clusters[a2] = a1
+            ant_uvw[c, a1, u] = 0.0
+            ant_uvw[c, a1, v] = 0.0
+            ant_uvw[c, a1, w] = 0.0
+
+            # If this is not an auto-correlation
+            # assign a2 to inverse of baseline UVW,
+            if a1 != a2:
+                ant_uvw[c, a2, u] = uvw[start, u]
+                ant_uvw[c, a2, v] = uvw[start, v]
+                ant_uvw[c, a2, w] = uvw[start, w]
+
+        ## if either antenna has not been clustered, infer its coodrinate from
+        ## the clustered one
+        elif c11 is not None and cl2 is None:
+            clusters[a2] = a1
             ant_uvw[c,a2,u] = ant_uvw[c,a1,u] + uvw[row,u]
             ant_uvw[c,a2,v] = ant_uvw[c,a1,v] + uvw[row,v]
             ant_uvw[c,a2,w] = ant_uvw[c,a1,w] + uvw[row,w]
-        elif not ant1_found and ant2_found:
-            # Infer antenna1's coordinate from antenna2
-            #    u12 = u2 - u1 => u1 = u2 - u12
+        elif cl1 is None and cl2 is not None:
+            clusters[a1] = a2
             ant_uvw[c,a1,u] = ant_uvw[c,a2,u] - uvw[row,u]
             ant_uvw[c,a1,v] = ant_uvw[c,a2,v] - uvw[row,v]
             ant_uvw[c,a1,w] = ant_uvw[c,a2,w] - uvw[row,w]
-        else:
+        ## Both clustered. If clusters differ, merge them
+        elif cl1 is not None and cl2 is not None:
+            if cl1 != cl2:
+                # how much do we need to add to the current cluster2 reference position
+                # to make the baseline a2-a1 consistent
+                offset = uvw[row,:] - (ant_uvw[c,a2,:] - ant_uvw[c,a1,:])
+                # get all antennas of second cluster
+                for a, cl in clusters.items():
+                    if a == cl2:
+                        clusters[a] = cl1
+                        ant_uvw[c,a,:] += offset
+
             raise ValueError("Illegal Condition")
 
 
@@ -103,7 +106,7 @@ def _antenna_uvw(uvw, antenna1, antenna2, chunks, nr_of_antenna):
     for ci, chunk in enumerate(chunks):
         end = start + chunk
 
-        _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, ci, start, end)
+        # one pass should be enough!
         _antenna_uvw_loop(uvw, antenna1, antenna2, antenna_uvw, ci, start, end)
 
         start = end
