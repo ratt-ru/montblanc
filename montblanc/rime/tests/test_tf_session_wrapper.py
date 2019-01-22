@@ -73,6 +73,9 @@ def test_session_run(rime_cfg, iteration):
 
 
 _fake_dim_chunks = {
+    #'point': (5,),
+    # 'gaussian': (7,),
+    # 'sersic': (4,),
     'point': (5, 5),
     'gaussian': (7, 7, 7),
     'sersic': (4, 4, 4),
@@ -205,6 +208,9 @@ def _rime_factory(wrapper, output_schema):
             dequeue_dict[dsn] = keys
             start = end
 
+        print("KEYS", main_key, source_keys)
+
+
         inputs = {n: a for n, a in zip(main_inputs, main_args)}
         inputs["time_index"].fill(0)
         inputs["antenna1"][:] = 0
@@ -242,6 +248,8 @@ def _rime_factory(wrapper, output_schema):
             print("Enqueueing %s inputs %s done" % (dsn, keys))
 
             start = end
+
+        print("Dequeueing %s" % dequeue_dict)
 
         res = wrapper.dequeue(dequeue_dict)
         _key_pool.release(source_keys)
@@ -282,7 +290,7 @@ def _fake_dask_inputs(wrapper):
 
 
 @pytest.mark.parametrize("expr", [basic_multiple_sources])
-@pytest.mark.parametrize("iteration", range(1))
+@pytest.mark.parametrize("iteration", range(100))
 def test_dask_wrap(expr, rime_cfg, iteration):
     with TensorflowSessionWrapper(expr, rime_cfg) as w:
         # We're always producing this kind of output

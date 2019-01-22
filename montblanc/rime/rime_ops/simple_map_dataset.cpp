@@ -1,4 +1,7 @@
+#include <chrono>
 #include <unordered_map>
+
+#include "absl/strings/str_join.h"
 
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/common_shape_fns.h"
@@ -42,12 +45,23 @@ public:
       : dtypes_(dtypes), shapes_(shapes),
         store_(store), closed_(false), name_(name)
     {
-        // printf("Creating MapResource %p\n", (void *) this);
+        printf("%s Creating MapResource %p\n", name_.c_str(), (void *) this);
     }
 
     ~MapResource() override
     {
-        // printf("Destroying MapResource %p\n", (void *) this);
+        printf("%s Destroying MapResource %p\n", name_.c_str(), (void *) this);
+    }
+
+    std::string MapKeys()
+    {
+        std::vector<int64> keys;
+
+        for(auto & m: maps_)
+            { keys.push_back(m.first); }
+
+        return "[" + absl::StrJoin(keys, ",") + "]";
+
     }
 
     void close(void) LOCKS_EXCLUDED(mu_)
@@ -66,15 +80,24 @@ public:
     {
         int64 key = tensor_key.scalar<int64>()();
 
+
         // Slightly more optimal to release the lock
         // before the notify
         {
             mutex_lock l(mu_);
 
+            printf("%s map.insert %s %d\n", name_.c_str(), MapKeys().c_str(), key);
+
             if(closed_)
                 { return errors::OutOfRange("Map is closed"); }
 
+            if(maps_.find(key) != maps_.end())
+                { return errors::InvalidArgument(key, " is already in the map!"); }
+
             maps_.insert({key, tensors});
+
+            printf("%s map.inserted %s %d\n", name_.c_str(), MapKeys().c_str(), key);
+
         }
 
         // Notify all waiting getters
@@ -88,10 +111,12 @@ public:
     {
         int64 key = tensor_key.scalar<int64>()();
 
-        mutex_lock l(mu_);
-
         while(true)
         {
+            mutex_lock l(mu_);
+
+            printf("%s map.pop %s %d\n", name_.c_str(), MapKeys().c_str(), key);
+
             auto map_it = maps_.find(key);
 
             if(map_it != maps_.end())
@@ -108,6 +133,7 @@ public:
                     maps_.erase(map_it);
                 }
 
+                printf("%s map.popped %s %d\n", name_.c_str(), MapKeys().c_str(), key);
                 return Status::OK();
             }
             else if(closed_)
@@ -116,7 +142,7 @@ public:
             }
 
             // Wait for better conditions
-            cv_.wait(l);
+            cv_.wait_for(l, std::chrono::seconds(10));
         }
 
         return errors::Internal("Should never exit pop while loop");
@@ -148,18 +174,24 @@ public:
 
     Status clear(const Tensor & tensor_keys) LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
-
-        if(tensor_keys.dims() == 0)
         {
-            maps_.clear();
-            return Status::OK();
+            mutex_lock l(mu_);
+
+
+            if(tensor_keys.dims() == 0)
+            {
+                maps_.clear();
+            }
+            else
+            {
+                auto keys = tensor_keys.tensor<int64, 1>();
+
+                for(int i=0; i < tensor_keys.dim_size(0); ++i)
+                    { maps_.erase(keys(i)); }
+            }
         }
 
-        auto keys = tensor_keys.tensor<int64, 1>();
-
-        for(int i=0; i < tensor_keys.dim_size(0); ++i)
-            { maps_.erase(keys(i)); }
+        cv_.notify_all();
 
         return Status::OK();
     }
@@ -574,7 +606,7 @@ private:
         {
             input_->Ref();
             map_resource_->Ref();
-            // printf("Creating MapDatset %p\n", (void *) this);
+            printf("Creating MapDatset %p\n", (void *) this);
         }
 
         Dataset(const Dataset & rhs) = delete;
@@ -584,7 +616,7 @@ private:
         {
             input_->Unref();
             map_resource_->Unref();
-            // printf("Destroying MapDatset %p\n", (void *) this);
+            printf("Destroying MapDatset %p\n", (void *) this);
         }
 
 
@@ -594,7 +626,7 @@ private:
         const std::vector<PartialTensorShape> & output_shapes() const override
             { return map_resource_->output_shapes(); }
 
-        string DebugString() const
+        string DebugString() const override
             { return "SimpleMapDataset"; }
 
         std::unique_ptr<IteratorBase>
@@ -618,19 +650,17 @@ private:
         private:
             mutex mu_;
             std::unique_ptr<IteratorBase> input_impl_ GUARDED_BY(mu_);
-            std::size_t id;
 
         public:
             explicit Iterator(const Params & params)
-                : DatasetIterator<Dataset>(params),
-                  id(std::hash<Iterator *>{}(this))
+                : DatasetIterator<Dataset>(params)
             {
-                // printf("Creating MapDataset::Iterator %p\n", (void *) this);
+                printf("Creating MapDataset::Iterator %p\n", (void *) this);
             }
 
             ~Iterator() override
             {
-                // printf("Destroying MapDataset::Iterator %p\n", (void *) this);
+                printf("Destroying MapDataset::Iterator %p\n", (void *) this);
             }
 
             Status Initialize(IteratorContext * ctx) override
@@ -640,7 +670,7 @@ private:
                                             &input_impl_);
             }
 
-            virtual Status GetNextInternal(IteratorContext * ctx,
+            Status GetNextInternal(IteratorContext * ctx,
                         std::vector<Tensor> * out_tensors,
                         bool * end_of_sequence) override
             {
@@ -648,8 +678,12 @@ private:
                 std::vector<Tensor> keys;
                 auto map_resource = dataset()->map_resource_;
 
-                TF_RETURN_IF_ERROR(input_impl_->GetNext(ctx, &keys,
-                                                    end_of_sequence));
+                // {
+                //     mutex_lock l(mu_);
+
+                    TF_RETURN_IF_ERROR(input_impl_->GetNext(ctx, &keys,
+                                                        end_of_sequence));
+                // }
 
                 // Nothing left in the input iterator
                 if(*end_of_sequence)
@@ -668,11 +702,14 @@ private:
 
                 if(!status.ok())
                 {
-                    if(!errors::IsOutOfRange(status))
-                        { return status; }
-
                     // OutOfRange, indicate eos
-                    *end_of_sequence = true;
+                    if(errors::IsOutOfRange(status))
+                    {
+                        *end_of_sequence = true;
+                        return Status::OK();
+                    }
+
+                    return status;
                 }
 
                 return Status::OK();

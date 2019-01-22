@@ -1,5 +1,8 @@
+#include <chrono>
 #include <deque>
 #include <unordered_map>
+
+#include "absl/strings/str_join.h"
 
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/common_shape_fns.h"
@@ -21,14 +24,12 @@ class QueueResource : public ResourceBase
 public:
     using Tuple = std::vector<Tensor>;
     using Queue = std::deque<Tuple>;
-    using QueueRegister = std::unordered_map<std::size_t, Queue>;
 
 private:
     mutex mu_;
 
     condition_variable cv_ GUARDED_BY(mu_);
-    QueueRegister queues GUARDED_BY(mu_);
-    Queue stash GUARDED_BY(mu_);
+    Queue queue GUARDED_BY(mu_);
     bool closed_ GUARDED_BY(mu_);
 
     DataTypeVector dtypes_;
@@ -42,18 +43,12 @@ public:
                            const std::string & name)
       : dtypes_(dtypes), shapes_(shapes), name_(name), closed_(false)
     {
-        // printf("Creating QueueResource %p\n", (void *) this);
+        printf("%s Creating QueueResource %p\n", name_.c_str(), (void *) this);
     }
 
     ~QueueResource() override
     {
-        if(queues.size() > 0)
-        {
-            VLOG(ERROR) << queues.size()
-                    << " iterators still registered "
-                    << "while destroying queue.";
-        }
-        // printf("Destroying QueueResource %p\n", (void *) this);
+        printf("%s Destroying QueueResource %p\n", name_.c_str(), (void *) this);
     }
 
     const DataTypeVector &
@@ -64,8 +59,9 @@ public:
     output_shapes() const
       { return shapes_; }
 
-    string DebugString() override
+    std::string DebugString() override
       { return "QueueResource"; }
+
 
     void close(void) LOCKS_EXCLUDED(mu_)
     {
@@ -82,23 +78,21 @@ public:
     {
         // Slightly more optimal to unlock the mutex
         // before the notify
+        printf("%s queue.inserting\n", name_.c_str());
+
         {
             mutex_lock l(mu_);
+
 
             if(closed_)
                 { return errors::OutOfRange("Queue is closed"); }
 
-            // No registered queues, push it on the stash
-            if(queues.size() == 0)
-                { stash.push_back(data); }
-            else
-            {
-                // Insert tuple into all registered queues
-                for(auto & queue : queues)
-                    { queue.second.push_back(data); }
-            }
+            queue.push_back(data);
+
+            printf("%s queue.inserted\n", name_.c_str());
 
         }
+
 
         // Notify waiting consumers
         cv_.notify_all();
@@ -106,90 +100,35 @@ public:
         return Status::OK();
     }
 
-    Status pop(std::size_t id, Tuple * out) LOCKS_EXCLUDED(mu_)
+    Status pop(Tuple * out) LOCKS_EXCLUDED(mu_)
     {
-        mutex_lock l(mu_);
-
-        auto it = queues.end();
-
         while(true)
         {
-            // Decant stash contents into the maps
-            if(stash.size() > 0)
-            {
-                for(auto it = queues.begin(); it != queues.end(); ++it)
-                {
-                    for(auto & entry: stash)
-                        { it->second.push_back(entry); }
-                }
-
-                stash.clear();
-            }
-
-            // Searching for the registered queue on each iteration
-            // is probably overkill, but correct
-            it = queues.find(id);
-
-            if(it == queues.end())
-            {
-                return errors::InvalidArgument("Iterator ", id,
-                                               " not registered "
-                                               "for pop operation.");
-            }
-
-            auto & queue = it->second;
+            mutex_lock l(mu_);
+            printf("%s queue.popwait\n", name_.c_str());
 
             if(!queue.empty())
             {
                 // Pop the first entry and return it
                 *out = std::move(queue.front());
                 queue.pop_front();
+                printf("%s queue.popped\n", name_.c_str());
                 return Status::OK();
             }
             else if (closed_)
                 { return errors::OutOfRange("Queue is closed and empty"); }
 
             // Wait for better conditions
-            cv_.wait(l);
+            cv_.wait_for(l, std::chrono::seconds(2));
         }
 
         return errors::Internal("Should never exit pop while loop");
     }
 
-    Status size(std::vector<int> * sizes) LOCKS_EXCLUDED(mu_)
+    std::size_t size() LOCKS_EXCLUDED(mu_)
     {
         mutex_lock l(mu_);
-
-        sizes->clear();
-
-        for(auto & queue: queues)
-            { sizes->push_back(queue.second.size()); }
-
-        return Status::OK();
-    }
-
-    Status register_iterator(std::size_t id) LOCKS_EXCLUDED(mu_)
-    {
-        {
-            mutex_lock l(mu_);
-
-            // Create if doesn't exist
-            if(queues.find(id) == queues.end())
-                { queues.insert({id, Queue()}); }
-        }
-
-        // Notify waiting consumers
-        cv_.notify_all();
-
-        return Status::OK();
-    }
-
-    Status deregister_iterator(std::size_t id) LOCKS_EXCLUDED(mu_)
-    {
-        mutex_lock l(mu_);
-        // Erase
-        queues.erase(id);
-        return Status::OK();
+        return queue.size();
     }
 };
 
@@ -373,19 +312,13 @@ public:
 
         core::ScopedUnref unref_queue(queue_resource);
 
-        std::vector<int> sizes;
-        OP_REQUIRES_OK(ctx, queue_resource->size(&sizes));
-
         // Allocate size output tensor
         Tensor* size_ptr = nullptr;
         OP_REQUIRES_OK(ctx, ctx->allocate_output(0,
-                            TensorShape({int(sizes.size())}), &size_ptr));
+                            TensorShape({}), &size_ptr));
 
-        auto size = size_ptr->tensor<int, 1>();
-
-        for(int i=0; i < sizes.size(); ++i)
-            { size(i) = sizes[i]; }
-
+        auto size = size_ptr->scalar<int>();
+        size() = queue_resource->size();
     }
 };
 
@@ -439,7 +372,7 @@ private:
                 : DatasetBase(DatasetContext(ctx)),
                   queue_resource_(queue_resource)
         {
-            // printf("Creating QueueDataset %p\n", (void *) this);
+            printf("Creating QueueDataset %p\n", (void *) this);
             queue_resource_->Ref();
         }
 
@@ -448,7 +381,7 @@ private:
 
         ~Dataset() override
         {
-            // printf("Destroying QueueDataset %p\n", (void *) this);
+            printf("Destroying QueueDataset %p\n", (void *) this);
             queue_resource_->Unref();
         }
 
@@ -458,7 +391,7 @@ private:
         const std::vector<PartialTensorShape> & output_shapes() const override
             { return queue_resource_->output_shapes(); }
 
-        string DebugString() const
+        string DebugString() const override
             { return "SimpleQueueDataset"; }
 
         std::unique_ptr<IteratorBase>
@@ -480,40 +413,36 @@ private:
     private:
         class Iterator : public DatasetIterator<Dataset>
         {
-        private:
-            std::size_t id;
         public:
             explicit Iterator(const Params & params)
-                : DatasetIterator<Dataset>(params),
-                  id(std::hash<Iterator *>{}(this))
+                : DatasetIterator<Dataset>(params)
             {
-                // We deregister at EOF in GetNextInternal
-                dataset()->queue_resource_->register_iterator(id);
-                // printf("Creating QueueDataset::Iterator %p\n", (void *) this);
+                printf("Creating QueueDataset::Iterator %p\n", (void *) this);
             }
 
             ~Iterator() override
             {
-                // printf("Destroying QueueDataset::Iterator %p\n", (void *) this);
-                dataset()->queue_resource_->deregister_iterator(id);
+                printf("Destroying QueueDataset::Iterator %p\n", (void *) this);
             }
 
-            virtual Status GetNextInternal(IteratorContext * ctx,
+            Status GetNextInternal(IteratorContext * ctx,
                         std::vector<Tensor> * out_tensors,
                         bool * end_of_sequence) override
             {
                 auto & queue = dataset()->queue_resource_;
 
-                Status status = queue->pop(id, out_tensors);
+                Status status = queue->pop(out_tensors);
 
                 if(!status.ok())
                 {
-                    // We can't get any more data from the queue. EOF
-                    *end_of_sequence = true;
+                    // OutOfRange, indicate eos
+                    if(errors::IsOutOfRange(status))
+                    {
+                        *end_of_sequence = true;
+                        return Status::OK();
+                    }
 
-                    // Stop subscribing to the queue
-                    queue->deregister_iterator(id);
-
+                    return status;
                 }
 
                 return Status::OK();

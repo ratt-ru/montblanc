@@ -3,12 +3,71 @@ import unittest
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib.data import prefetch_to_device
+from tensorflow.data.experimental import prefetch_to_device, copy_to_device
 
 from montblanc.rime.queue_dataset import (TensorQueue, QueueDataset)
 
 
 class TestQueueTensorDataset(unittest.TestCase):
+
+    def test_multiple_thread_enqueue_and_dequeue(self):
+        with tf.Session() as S:
+            devices = [dev.name for dev in S.list_devices()
+                       if 'XLA' not in dev.name]
+
+        with tf.Graph().as_default() as graph:
+            pi = tf.placeholder(dtype=tf.int64)
+            dtypes = {'i': pi.dtype}
+
+            queue = TensorQueue(dtypes)
+            ds = QueueDataset(queue)
+
+            with tf.device('/CPU:0'):
+                put_op = queue.put({'i': pi})
+
+            close_op = queue.close()
+
+            datasets = [ds.apply(copy_to_device(target_device=device))
+                        for device in devices]
+            dataset = [ds.prefetch(1) for ds in datasets]
+            iterators = [ds.make_initializable_iterator() for ds in datasets]
+            next_ops = [it.get_next() for it in iterators]
+
+            global_init_op = tf.global_variables_initializer()
+
+        print_lock = threading.Lock()
+
+        with tf.Session(graph=graph) as S:
+            S.run([global_init_op] + [it.initializer for it in iterators])
+
+            def _enqueue(n):
+                for i in range(1, n+1):
+                    S.run(put_op, feed_dict={pi: i})
+
+                S.run(close_op)
+
+            def _dequeue(op):
+                while True:
+                    try:
+                        print(S.run(op))
+                    except tf.errors.OutOfRangeError:
+                        return
+
+            enqueue_thread = threading.Thread(target=_enqueue, args=(10,))
+            dequeue_threads = [threading.Thread(target=_dequeue, args=(op,))
+                               for op in next_ops]
+
+            enqueue_thread.start()
+
+            for t in dequeue_threads:
+                t.start()
+
+            enqueue_thread.join()
+
+            for t in dequeue_threads:
+                t.join()
+
+
 
     def test_numpy_conversion(self):
         with tf.Graph().as_default() as graph:

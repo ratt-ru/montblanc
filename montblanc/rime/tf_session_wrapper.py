@@ -34,36 +34,28 @@ log = logging.getLogger(__name__)
 
 
 class EvaluationThread(Thread):
-    def __init__(self, session, exprs):
+    def __init__(self, session, expr):
         Thread.__init__(self)
         self._session = session
-        self._exprs = exprs
+        self._expr = expr
         self._status_queue = Queue()
 
     def evaluate_expr(self):
         while True:
             try:
-                self._session.run(self._exprs)
+                print(self.name, "crank.start")
+                self._session.run(self._expr)
+                print(self.name, "crank.done")
             except tf.errors.OutOfRangeError as ex:
-                # log.exception("Main Evaluation Run Complete")
-                # Try run each of the key expression pairs
-                # individually to fully clear the entries out
-                for i, e in enumerate(self._exprs):
-                    try:
-                        self._session.run(e)
-                    except tf.errors.OutOfRangeError:
-                        pass
-                        # log.exception("Secondary Evaluation "
-                        #               "Run %d Complete" % i)
-
-                break
-
-        log.info("Finished evaluating expressions!")
+                print(self.name, "crank.done")
+                log.info("Finished evaluating expressions!")
+                return
 
     def run(self):
         try:
             self.evaluate_expr()
-        except BaseException:
+        except BaseException as e:
+            log.exception("Evaluation Error")
             self._status_queue.put(sys.exc_info())
         else:
             self._status_queue.put(None)
@@ -82,9 +74,8 @@ class EvaluationThread(Thread):
 def _requires_input_ds(op):
     """ Does the supplied op depend on the input dataset? """
     for i in op.inputs:
-        if (i.op.name.startswith("shard_") and
-                i.op.name.endswith("/inputs") and
-                i.op.op_def.name == "SimpleQueueDataset"):
+        if (i.op.name == "inputs" and
+                i.op.op_def.name == "DatasetQueueHandle"):
 
             return True
 
@@ -97,10 +88,12 @@ class TensorflowSessionWrapper(object):
         self._fn = fn
         self._cfg = cfg
         self._create_session()
+        self._eval_threads = [EvaluationThread(self._session, e)
+                              for e in self._exprs]
 
-        self._eval_thread = EvaluationThread(self._session, self._exprs)
-        self._eval_thread.setDaemon(True)
-        self._eval_thread.start()
+        for t in self._eval_threads:
+            t.setDaemon(True)
+            t.start()
 
     def _get_device_list(self):
         """ Get a list of the preferred devices """
@@ -191,8 +184,6 @@ class TensorflowSessionWrapper(object):
 
             # Shard the dataset over each device
             for shard, device in enumerate(device_list):
-                in_ds = in_ds.shard(len(device_list), shard)
-
                 out_types = in_ds.output_types
                 out_types = nest.flatten_with_joined_string_paths(out_types)
 
@@ -232,18 +223,20 @@ class TensorflowSessionWrapper(object):
                         chunk_key_i = key_idx[shard]
                         shard_it_keys[int(scope[-1])] = op.outputs[chunk_key_i]
 
+            print("Shard Iterator Keys", shard_it_keys)
+
             assert all(ik is not None for ik in shard_it_keys)
 
             # # No input dataset?
-            if len(self._iterator_inits) == 0:
-                raise ValueError("No input dataset iterator was created!")
+            if len(self._iterator_inits) != 1:
+                raise ValueError("Exactly one input dataset must be created!")
 
             map_inserts = []
 
             for key, expr in zip(shard_it_keys, exprs):
-                print_op = tf.print("output-map-key:", key)
+                # print_op = tf.print("output-map-key:", key)
 
-                with tf.control_dependencies([print_op]):
+                # with tf.control_dependencies([print_op]):
                     map_inserts.append(output_map.insert(key, expr,
                                                          name='output-map-insert'))
 
@@ -256,7 +249,8 @@ class TensorflowSessionWrapper(object):
         self._keys = shard_it_keys
 
         self._graph = graph
-        self._session = tf.Session(graph=graph)
+        config = tf.ConfigProto(inter_op_parallelism_threads=16)
+        self._session = tf.Session(graph=graph, config=config)
 
         # Run initialisation
         self._session.run([self._global_init, self._iterator_inits])
@@ -338,7 +332,8 @@ class TensorflowSessionWrapper(object):
             # Close all queues/maps
             self._session.run(self._closes)
             # Wait for the evaluation thread to join
-            self._eval_thread.join_with_exception()
+            for t in self._eval_threads:
+                t.join_with_exception()
             # Close the session
             self._session.close()
 

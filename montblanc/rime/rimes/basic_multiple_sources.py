@@ -5,7 +5,7 @@ from __future__ import print_function
 import montblanc.rime.tensorflow_ops as ops
 import tensorflow as tf
 from montblanc.rime.utils import source_context
-from tensorflow.data.experimental import prefetch_to_device
+from tensorflow.data.experimental import prefetch_to_device, copy_to_device
 
 from montblanc.rime.map_dataset import MapDataset
 
@@ -19,8 +19,9 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
 
     # Apply GPU prefetch to input dataset
     if should_prefetch and device.device_type == "GPU":
-        xform = prefetch_to_device(device, buffer_size=buffer_size)
-        input_ds = input_ds.apply(xform)
+        # xform = prefetch_to_device(device, buffer_size=buffer_size)
+        xform = copy_to_device(target_device=device.to_string())
+        input_ds = input_ds.apply(xform).prefetch(buffer_size)
 
     # Create iterator
     inputs_it = input_ds.make_initializable_iterator()
@@ -46,13 +47,16 @@ def create_tf_expr(cfg, device, input_ds, source_input_maps):
 
     # Apply GPU prefetch to source data
     if should_prefetch and device.device_type == "GPU":
-        point_xform = prefetch_to_device(device, buffer_size=buffer_size)
-        gaussian_xform = prefetch_to_device(device, buffer_size=buffer_size)
-        sersic_xform = prefetch_to_device(device, buffer_size=buffer_size)
+        # point_xform = prefetch_to_device(device, buffer_size=buffer_size)
+        # gaussian_xform = prefetch_to_device(device, buffer_size=buffer_size)
+        # sersic_xform = prefetch_to_device(device, buffer_size=buffer_size)
+        point_xform = copy_to_device(target_device=device.to_string())
+        gaussian_xform = copy_to_device(target_device=device.to_string())
+        sersic_xform = copy_to_device(target_device=device.to_string())
 
-        point_inputs_ds = point_inputs_ds.apply(point_xform)
-        gaussian_inputs_ds = gaussian_inputs_ds.apply(gaussian_xform)
-        sersic_inputs_ds = sersic_inputs_ds.apply(sersic_xform)
+        point_inputs_ds = point_inputs_ds.apply(point_xform).prefetch(buffer_size)
+        gaussian_inputs_ds = gaussian_inputs_ds.apply(gaussian_xform).prefetch(buffer_size)
+        sersic_inputs_ds = sersic_inputs_ds.apply(sersic_xform).prefetch(buffer_size)
 
     # Create an iterator over point source data
     point_inputs_it = point_inputs_ds.make_initializable_iterator()
