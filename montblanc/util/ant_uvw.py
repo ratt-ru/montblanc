@@ -3,7 +3,7 @@ from future_builtins import zip
 from itertools import islice
 import math
 import numpy as np
-import numba
+from numba import jit, generated_jit
 
 # Coordinate indexing constants
 u, v, w = range(3)
@@ -11,31 +11,31 @@ u, v, w = range(3)
 try:
     isclose = math.isclose
 except AttributeError:
-    @numba.jit(nopython=True, nogil=True, cache=True)
+    @jit(nopython=True, nogil=True, cache=True)
     def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
         return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+
+@jit(nopython=True, nogil=True, cache=True)
 def _antenna_uvw_loop(uvw, antenna1, antenna2, ant_uvw,
-                                chunk_index, start, end):
+                      chunk_index, start, end):
 
     c = chunk_index
 
-    clusters = {}
-    a1 = antenna1[start]
-    a2 = antenna2[start]
+    # Cluster (first antenna) associated with each antenna
+    clusters = np.full((ant_uvw.shape[1],), -1, dtype=antenna1.dtype)
 
-    # Now do the rest of the rows in this chunk
+    # Iterate over rows in chunk
     for row in range(start, end):
         a1 = antenna1[row]
         a2 = antenna2[row]
 
         # Have they been clustered yet?
-        cl1 = clusters.get(a1)
-        cl2 = clusters.get(a2)
+        cl1 = clusters[a1]
+        cl2 = clusters[a2]
 
         # Both new -- start a new cluster relative to a1
-        if cl1 is None and cl2 is None:
+        if cl1 == -1 and cl2 == -1:
             clusters[a1] = clusters[a2] = a1
             ant_uvw[c, a1, u] = 0.0
             ant_uvw[c, a1, v] = 0.0
@@ -44,38 +44,45 @@ def _antenna_uvw_loop(uvw, antenna1, antenna2, ant_uvw,
             # If this is not an auto-correlation
             # assign a2 to inverse of baseline UVW,
             if a1 != a2:
-                ant_uvw[c, a2, u] = uvw[start, u]
-                ant_uvw[c, a2, v] = uvw[start, v]
-                ant_uvw[c, a2, w] = uvw[start, w]
+                ant_uvw[c, a2, u] = uvw[row, u]
+                ant_uvw[c, a2, v] = uvw[row, v]
+                ant_uvw[c, a2, w] = uvw[row, w]
 
-        ## if either antenna has not been clustered, infer its coodrinate from
-        ## the clustered one
-        elif c11 is not None and cl2 is None:
-            clusters[a2] = a1
-            ant_uvw[c,a2,u] = ant_uvw[c,a1,u] + uvw[row,u]
-            ant_uvw[c,a2,v] = ant_uvw[c,a1,v] + uvw[row,v]
-            ant_uvw[c,a2,w] = ant_uvw[c,a1,w] + uvw[row,w]
-        elif cl1 is None and cl2 is not None:
-            clusters[a1] = a2
-            ant_uvw[c,a1,u] = ant_uvw[c,a2,u] - uvw[row,u]
-            ant_uvw[c,a1,v] = ant_uvw[c,a2,v] - uvw[row,v]
-            ant_uvw[c,a1,w] = ant_uvw[c,a2,w] - uvw[row,w]
-        ## Both clustered. If clusters differ, merge them
-        elif cl1 is not None and cl2 is not None:
+        # if either antenna has not been clustered,
+        # infer its coordinate from the clustered one
+        elif cl1 != -1 and cl2 == -1:
+            clusters[a2] = cl1
+            ant_uvw[c, a2, u] = ant_uvw[c, a1, u] + uvw[row, u]
+            ant_uvw[c, a2, v] = ant_uvw[c, a1, v] + uvw[row, v]
+            ant_uvw[c, a2, w] = ant_uvw[c, a1, w] + uvw[row, w]
+        elif cl1 == -1 and cl2 != -1:
+            clusters[a1] = cl2
+            ant_uvw[c, a1, u] = ant_uvw[c, a2, u] - uvw[row, u]
+            ant_uvw[c, a1, v] = ant_uvw[c, a2, v] - uvw[row, v]
+            ant_uvw[c, a1, w] = ant_uvw[c, a2, w] - uvw[row, w]
+        # Both clustered. If clusters differ, merge them
+        elif cl1 != -1 and cl2 != -1:
             if cl1 != cl2:
-                # how much do we need to add to the current cluster2 reference position
-                # to make the baseline a2-a1 consistent
-                offset = uvw[row,:] - (ant_uvw[c,a2,:] - ant_uvw[c,a1,:])
-                # get all antennas of second cluster
-                for a, cl in clusters.items():
-                    if a == cl2:
-                        clusters[a] = cl1
-                        ant_uvw[c,a,:] += offset
+                # how much do we need to add to the current cluster2
+                # reference position to make the baseline a2 - a1 consistent?
+                u_off = uvw[row, u] - (ant_uvw[c, a2, u] - ant_uvw[c, a1, u])
+                v_off = uvw[row, v] - (ant_uvw[c, a2, v] - ant_uvw[c, a1, v])
+                w_off = uvw[row, w] - (ant_uvw[c, a2, w] - ant_uvw[c, a1, w])
 
+                # Merge cluster2 into cluster1
+                for ant, cluster in enumerate(clusters):
+                    if cluster == cl2:
+                        clusters[ant] = cl1
+                        ant_uvw[c, ant, u] += u_off
+                        ant_uvw[c, ant, v] += v_off
+                        ant_uvw[c, ant, w] += w_off
+
+        # Shouldn't ever occur
+        else:
             raise ValueError("Illegal Condition")
 
 
-@numba.jit(nopython=True, nogil=True, cache=True)
+@jit(nopython=True, nogil=True, cache=True)
 def _antenna_uvw(uvw, antenna1, antenna2, chunks, nr_of_antenna):
     """ numba implementation of antenna_uvw """
 
@@ -90,7 +97,7 @@ def _antenna_uvw(uvw, antenna1, antenna2, chunks, nr_of_antenna):
 
     if not (uvw.shape[0] == antenna1.shape[0] == antenna2.shape[0]):
         raise ValueError("First dimension of uvw, antenna1 "
-                                "and antenna2 do not match")
+                         "and antenna2 do not match")
 
     if chunks.ndim != 1:
         raise ValueError("chunks shape should be (utime,)")
@@ -113,8 +120,10 @@ def _antenna_uvw(uvw, antenna1, antenna2, chunks, nr_of_antenna):
 
     return antenna_uvw
 
+
 class AntennaUVWDecompositionError(Exception):
     pass
+
 
 def _raise_decomposition_errors(uvw, antenna1, antenna2,
                                 chunks, ant_uvw, max_err):
@@ -131,8 +140,8 @@ def _raise_decomposition_errors(uvw, antenna1, antenna2,
         ant2 = antenna2[start:end]
         cuvw = uvw[start:end]
 
-        ant1_uvw = ant_uvw[ci,ant1,:]
-        ant2_uvw = ant_uvw[ci,ant2,:]
+        ant1_uvw = ant_uvw[ci, ant1, :]
+        ant2_uvw = ant_uvw[ci, ant2, :]
         ruvw = ant2_uvw - ant1_uvw
 
         # Identifty rows where any of the UVW components differed
@@ -140,11 +149,10 @@ def _raise_decomposition_errors(uvw, antenna1, antenna2,
         problems = np.nonzero(np.logical_or.reduce(np.invert(close), axis=1))
 
         for row in problems[0]:
-            problem_str.append("[row %d (chunk %d)]: "
-                              "original %s "
-                              "recovered %s "
-                              "ant1 %s "
-                              "ant2 %s" % (start+row, ci,
+            problem_str.append("[row %d [%d, %d] (chunk %d)]: "
+                               "original %s recovered %s "
+                               "ant1 %s ant2 %s" % (
+                                    start+row, ant1[row], ant2[row], ci,
                                     cuvw[row], ruvw[row],
                                     ant1_uvw[row], ant2_uvw[row]))
 
@@ -164,12 +172,14 @@ def _raise_decomposition_errors(uvw, antenna1, antenna2,
 
     # Add a preamble and raise exception
     problem_str = ["Antenna UVW Decomposition Failed",
-                "The following differences were found "
-                "(first 100):"] + problem_str
+                   "The following differences were found "
+                   "(first 100):"] + problem_str
     raise AntennaUVWDecompositionError('\n'.join(problem_str))
+
 
 class AntennaMissingError(Exception):
     pass
+
 
 def _raise_missing_antenna_errors(ant_uvw, max_err):
     """ Raises an informative error for missing antenna """
@@ -180,7 +190,7 @@ def _raise_missing_antenna_errors(ant_uvw, max_err):
     problem_str = []
 
     for c, a in zip(*problems):
-        problem_str.append("[chunk %d antenna %d]" % (c,a))
+        problem_str.append("[chunk %d antenna %d]" % (c, a))
 
         # Exit early
         if len(problem_str) >= max_err:
@@ -193,6 +203,7 @@ def _raise_missing_antenna_errors(ant_uvw, max_err):
     # Add a preamble and raise exception
     problem_str = ["Antenna were missing"] + problem_str
     raise AntennaMissingError('\n'.join(problem_str))
+
 
 def antenna_uvw(uvw, antenna1, antenna2, chunks,
                 nr_of_antenna, check_missing=False,
