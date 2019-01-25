@@ -946,9 +946,17 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         FT, CT = D.uvw.dtype, D.model_vis.dtype
 
         # Compute sine and cosine of parallactic angles
-        pa_sin, pa_cos = rime.parallactic_angle_sin_cos(D.parallactic_angles)
+        # for the beam
+        beam_sin, beam_cos = rime.parallactic_angle_sin_cos(
+                                        D.parallactic_angles)
+
+        # Compute sine and cosine of feed rotation angle
+        feed_sin, feed_cos = rime.parallactic_angle_sin_cos(
+                                        D.parallactic_angles[:, :] +
+                                        D.feed_angles[None, :])
+
         # Compute feed rotation
-        feed_rotation = rime.feed_rotation(pa_sin, pa_cos, CT=CT,
+        feed_rotation = rime.feed_rotation(feed_sin, feed_cos, CT=CT,
                                            feed_type=polarisation_type)
 
     def antenna_jones(lm, stokes):
@@ -988,7 +996,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         # Compute the direction dependent effects from the beam
         ejones = rime.e_beam(lm, D.frequency,
             D.pointing_errors, D.antenna_scaling,
-            pa_sin, pa_cos,
+            beam_sin, beam_cos,
             D.beam_extents, D.beam_freq_map, D.ebeam)
 
         deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag]
