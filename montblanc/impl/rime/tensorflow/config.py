@@ -289,6 +289,23 @@ A = [
             "are stacked on top of each other. ",
         units   = HERTZ),
 
+    # Feed angles for each antenna
+    array_dict('feed_angles', ('na',), 'ft',
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: rf(c.shape, c.dtype)*np.pi,
+        tags    = "input, constant",
+        description = "Feed angles for each antenna.",
+        units   = RADIANS),
+
+
+    # Parallactic angles at each timestep for each antenna
+    array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
+        default = lambda s, c: np.zeros(c.shape, c.dtype),
+        test    = lambda s, c: rf(c.shape, c.dtype)*np.pi,
+        tags    = "input, constant",
+        description = "Parallactic angles for each antenna.",
+        units   = RADIANS),
+
     # Holographic Beam
 
     # Pointing errors
@@ -309,13 +326,6 @@ A = [
             "The components express a scale in the (l,m) plane.",
         units   = DIMENSIONLESS),
 
-    # Parallactic angles at each timestep for each antenna
-    array_dict('parallactic_angles', ('ntime', 'na'), 'ft',
-        default = lambda s, c: np.zeros(c.shape, c.dtype),
-        test    = lambda s, c: rf(c.shape, c.dtype)*np.pi,
-        tags    = "input, constant",
-        description = "Parallactic angles for each antenna.",
-        units   = RADIANS),
 
     # Extents of the beam.
     # First 3 values are lower coordinate for (l, m, frequency)
