@@ -171,7 +171,7 @@ def inspect_cuda_version_and_devices(compiler, settings):
     except Exception as e:
         msg = ("Running the CUDA device check "
             "stub failed\n{}".format(str(e)))
-        raise InspectCudaException(msg), None, sys.exc_info()[2]
+        raise (InspectCudaException(msg), None, sys.exc_info()[2])
 
     return output
 
