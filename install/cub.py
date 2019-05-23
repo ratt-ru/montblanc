@@ -22,7 +22,10 @@ import hashlib
 import os
 import shutil
 import sys
-import urllib2
+try:
+    import urllib2
+except ImportError:
+    import urllib.request as urllib2
 import zipfile
 
 from install_log import log
