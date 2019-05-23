@@ -28,7 +28,7 @@ except ImportError:
     import urllib.request as urllib2
 import zipfile
 
-from install_log import log
+from .install_log import log
 
 class InstallCubException(Exception):
     pass
