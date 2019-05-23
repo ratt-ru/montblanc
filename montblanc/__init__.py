@@ -32,7 +32,7 @@ log = setup_logging()
 # you try and set it
 def constant(f):
     def fset(self, value):
-        raise SyntaxError, 'Foolish Mortal! You would dare change a universal constant?'
+        raise SyntaxError('Foolish Mortal! You would dare change a universal constant?')
     def fget(self):
         return f()
 

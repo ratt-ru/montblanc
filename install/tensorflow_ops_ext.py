@@ -177,8 +177,12 @@ class BuildCommand(build_ext):
             # created on it during finalize_options() that are required by run()
             # and build_extensions(). However, tensorflow will not yet be installed
             # at this point
+            
             for n, v in inspect.getmembers(ext):
-                setattr(e, n, v)
+                if n == "__weakref__":
+                    pass
+                else:
+                    setattr(e, n, v)
 
         build_ext.run(self)
 

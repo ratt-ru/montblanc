@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from run_tests import test
+from .run_tests import test
 
 if __name__ == '__main__':
     test()
