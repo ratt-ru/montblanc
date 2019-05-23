@@ -25,7 +25,7 @@ import os
 from setuptools.extension import Extension
 from setuptools.command.build_ext import build_ext
 
-from install_log import log
+from .install_log import log
 
 tensorflow_extension_name = 'montblanc.ext.rime'
 
