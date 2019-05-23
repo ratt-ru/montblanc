@@ -30,7 +30,7 @@ import subprocess
 import sys
 import tempfile
 
-from install_log import log
+from .install_log import log
 
 minimum_cuda_version = 8000
 
