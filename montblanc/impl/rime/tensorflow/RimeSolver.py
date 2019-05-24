@@ -946,34 +946,30 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         FT, CT = D.uvw.dtype, D.model_vis.dtype
 
         # Compute sine and cosine of parallactic angles
-        # for the beam
-        beam_sin, beam_cos = rime.parallactic_angle_sin_cos(
-                                        D.parallactic_angles)
-
-        # Compute sine and cosine of feed rotation angle
-        feed_sin, feed_cos = rime.parallactic_angle_sin_cos(
-                                        D.parallactic_angles[:, :] +
-                                        D.feed_angles[None, :])
-
+        pa_sin, pa_cos = rime.parallactic_angle_sin_cos(
+				D.parallactic_angles[:, :] + 
+				D.feed_angles[None, :])
         # Compute feed rotation
-        feed_rotation = rime.feed_rotation(feed_sin, feed_cos, CT=CT,
+        feed_rotation = rime.feed_rotation(pa_sin, pa_cos, CT=CT,
                                            feed_type=polarisation_type)
 
-    def antenna_jones(lm, stokes):
+    def antenna_jones(radec, stokes):
         """
         Compute the jones terms for each antenna.
 
         lm, stokes and alpha are the source variables.
         """
 
+        lm = rime.radec_to_lm(radec, D.phase_centre)
+
         # Compute the complex phase
         cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
 
         # Check for nans/infs in the complex phase
         phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
-                    "for all your lm coordinates. This is required "
-                    "for 'n = sqrt(1 - l**2 - m**2) - 1' "
-                    "to be finite.")
+                     "for all your lm coordinates. This is required "
+                     "for 'n = sqrt(1 - l**2 - m**2) - 1' "
+                     "to be finite.")
 
         phase_real = tf.check_numerics(tf.real(cplx_phase), phase_msg)
         phase_imag = tf.check_numerics(tf.imag(cplx_phase), phase_msg)
@@ -985,19 +981,26 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
         # Check for nans/infs in the bsqrt
         bsqrt_msg = ("Check that your stokes parameters "
-                    "satisfy I**2 >= Q**2 + U**2 + V**2. "
-                    "Montblanc performs a cholesky decomposition "
-                    "of the brightness matrix and the above must "
-                    "hold for this to produce valid values.")
+                     "satisfy I**2 >= Q**2 + U**2 + V**2. "
+                     "Montblanc performs a cholesky decomposition "
+                     "of the brightness matrix and the above must "
+                     "hold for this to produce valid values.")
 
         bsqrt_real = tf.check_numerics(tf.real(bsqrt), bsqrt_msg)
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
         # Compute the direction dependent effects from the beam
+        #radec_prime = radec * tf.cast(tf.stack([-1.0, 1.0]), radec.dtype)
+        #phase_centre_prime = D.phase_centre * tf.cast(tf.stack([-1.0, 1.0]), D.phase_centre.dtype)
+        #def normang(val):
+        #    """ Normalizes angle between [-pi, pi) """
+        #    return ( val + np.pi) % ( 2 * np.pi ) - np.pi
+        #cube_pos = normang(normang(radec_prime) - normang(phase_centre_prime))
+
         ejones = rime.e_beam(lm, D.frequency,
-            D.pointing_errors, D.antenna_scaling,
-            beam_sin, beam_cos,
-            D.beam_extents, D.beam_freq_map, D.ebeam)
+                             D.pointing_errors, D.antenna_scaling,
+                             pa_sin, pa_cos,
+                             D.beam_extents, D.beam_freq_map, D.ebeam)
 
         deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag]
         deps = [] # Do nothing for now
@@ -1006,7 +1009,8 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         # feed rotation and beam dde's
         with tf.control_dependencies(deps):
             antenna_jones = rime.create_antenna_jones(bsqrt, cplx_phase,
-                                                    feed_rotation, ejones, FT=FT)
+                                                      feed_rotation, ejones,
+                                                      FT=FT)
             return antenna_jones, sgn_brightness
 
     # While loop condition for each point source type
