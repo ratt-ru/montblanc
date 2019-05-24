@@ -152,6 +152,7 @@ install_requires = [
     'funcsigs >= 0.4',
     'futures >= 3.0.5',
     'hypercube == 0.3.3',
+    'tensorflow == {0:s}'.format(str(REQ_TF_VERSION)),
 ]
 
 # ==================================
@@ -182,12 +183,15 @@ else:
         install_requires.append("tensorflow == %s" % REQ_TF_VERSION)
 
     from install.tensorflow_ops_ext import (BuildCommand,
-                                            tensorflow_extension_name)
+                                            tensorflow_extension_name,
+                                            create_tensorflow_extension)
 
     cmdclass = {'build_ext': BuildCommand}
     # tensorflow_ops_ext.BuildCommand.run will
     # expand this dummy extension to its full portential
-    ext_modules = [Extension(tensorflow_extension_name, ['rime.cu'])]
+    
+    ext_modules = [create_tensorflow_extension(nvcc_settings, device_info)]
+
     # Pass NVCC and CUDA settings through to the build extension
     ext_options = {
         'build_ext': {

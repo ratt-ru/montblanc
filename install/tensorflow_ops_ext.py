@@ -159,32 +159,32 @@ class BuildCommand(build_ext):
         self.nvcc_settings = None
         self.cuda_devices = None
 
-    def finalize_options(self):
-        build_ext.finalize_options(self)
+    # def finalize_options(self):
+    #     build_ext.finalize_options(self)
 
-    def run(self):
-        # Create the tensorflow extension during the run
-        # At this point, pip should have installed tensorflow
-        ext = create_tensorflow_extension(self.nvcc_settings,
-            self.cuda_devices)
+    # def run(self):
+    #     # Create the tensorflow extension during the run
+    #     # At this point, pip should have installed tensorflow
+    #     ext = create_tensorflow_extension(self.nvcc_settings,
+    #         self.cuda_devices)
 
-        for i, e in enumerate(self.extensions):
-            if not e.name == ext.name:
-                continue
+    #     for i, e in enumerate(self.extensions):
+    #         if not e.name == ext.name:
+    #             continue
 
-            # Copy extension attributes over to the dummy extension.
-            # Need to do this because the dummy extension has extra attributes
-            # created on it during finalize_options() that are required by run()
-            # and build_extensions(). However, tensorflow will not yet be installed
-            # at this point
+    #         # Copy extension attributes over to the dummy extension.
+    #         # Need to do this because the dummy extension has extra attributes
+    #         # created on it during finalize_options() that are required by run()
+    #         # and build_extensions(). However, tensorflow will not yet be installed
+    #         # at this point
             
-            for n, v in inspect.getmembers(ext):
-                if n == "__weakref__":
-                    pass
-                else:
-                    setattr(e, n, v)
+    #         for n, v in inspect.getmembers(ext):
+    #             if n == "__weakref__":
+    #                 pass
+    #             else:
+    #                 setattr(e, n, v)
 
-        build_ext.run(self)
+    #     build_ext.run(self)
 
     def build_extensions(self):
         customize_compiler_for_nvcc(self.compiler,
