@@ -23,6 +23,7 @@ from .context_help import context_help
 from .hypercube_proxy_metaclass import HypercubeProxyMetaClass
 
 class StartContext(object):
+    __metaclass__ = HypercubeProxyMetaClass
     """
     Start Context object passed to Providers.
 
@@ -48,8 +49,6 @@ class StartContext(object):
     present on this object.
     """
     __slots__ = ('_cube', '_cfg', '_iter_args')
-
-    __metaclass__ = HypercubeProxyMetaClass
 
     def __init__(self, cube, slvr_cfg, iter_args):
         self._cube = cube

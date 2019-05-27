@@ -26,7 +26,7 @@ import unittest
 import montblanc
 import montblanc.util as mbu
 
-from source_provider import SourceProvider
+from .source_provider import SourceProvider
 
 class NumpySourceProvider(SourceProvider):
     """
@@ -55,7 +55,7 @@ class NumpySourceProvider(SourceProvider):
             return _source
 
         # Create source methods for each supplied array
-        for n, a in arrays.iteritems():
+        for n, a in list(arrays.items()):
             # Create the source function, update the wrapper,
             # bind it to a method and set the attribute on the object
             f = functools.update_wrapper(

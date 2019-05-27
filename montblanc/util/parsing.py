@@ -1,6 +1,6 @@
 import ast
 
-import __builtin__
+import builtins as __builtin__
 
 # builtin function whitelist
 _BUILTIN_WHITELIST = frozenset(['slice'])

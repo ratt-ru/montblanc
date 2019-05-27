@@ -1,7 +1,7 @@
 import argparse
 import re
 
-from op_source_templates import (MAIN_HEADER_TEMPLATE,
+from .op_source_templates import (MAIN_HEADER_TEMPLATE,
     CPP_HEADER_TEMPLATE,
     CPP_SOURCE_TEMPLATE,
     CUDA_HEADER_TEMPLATE,

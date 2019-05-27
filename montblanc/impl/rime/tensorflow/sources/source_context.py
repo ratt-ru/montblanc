@@ -30,6 +30,7 @@ class _setter_property(object):
         return self.func(obj, value)
 
 class SourceContext(object):
+    __metaclass__ = HypercubeProxyMetaClass
     """
     Context object passed to data sources.
 
@@ -70,8 +71,6 @@ class SourceContext(object):
     """
     __slots__ = ('_cube', '_cfg', '_name', '_shape', '_dtype',
         '_iter_args', '_array_schema')
-
-    __metaclass__ = HypercubeProxyMetaClass
 
     def __init__(self, name, cube, slvr_cfg, iter_args,
                 array_schema, shape, dtype):

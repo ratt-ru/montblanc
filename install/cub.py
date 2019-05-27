@@ -23,9 +23,9 @@ import os
 import shutil
 import sys
 try:
-    import urllib2
+    import urllib.request, urllib.error, urllib.parse
 except ImportError:
-    import urllib.request as urllib2
+    import urllib2 as urllib
 import zipfile
 
 from .install_log import log
@@ -36,7 +36,7 @@ class InstallCubException(Exception):
 def dl_cub(cub_url, cub_archive_name):
     """ Download cub archive from cub_url and store it in cub_archive_name """
     with open(cub_archive_name, 'wb') as f:
-        remote_file = urllib2.urlopen(cub_url)
+        remote_file = urllib.request.urlopen(cub_url)
         meta = remote_file.info()
 
         # The server may provide us with the size of the file.

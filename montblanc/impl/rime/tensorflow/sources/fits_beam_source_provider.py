@@ -59,7 +59,7 @@ class FitsAxes(object):
         self._ndims = ndims = header['NAXIS']
 
         # Extract header information for each dimension
-        axr = range(1, ndims+1)
+        axr = list(range(1, ndims+1))
         self._naxis = [header.get('NAXIS%d'%n)      for n in axr]
         self._ctype = [header.get('CTYPE%d'%n, n)   for n in axr]
         self._crval = [header.get('CRVAL%d'%n, 0)   for n in axr]
@@ -223,11 +223,11 @@ def _open_fits_files(filenames):
 
     return collections.OrderedDict(
             (corr, tuple(_fh(fn) for fn in files))
-        for corr, files in filenames.iteritems() )
+        for corr, files in list(filenames.items()) )
 
 def _cube_extents(axes, l_ax, m_ax, f_ax, l_sign, m_sign):
     # List of (lower, upper) extent tuples for the given dimensions
-    it = zip((l_ax, m_ax, f_ax), (l_sign, m_sign, 1.0))
+    it = list(zip((l_ax, m_ax, f_ax), (l_sign, m_sign, 1.0)))
     # Get the extents, flipping the sign on either end if required
     extent_list = [tuple(s*e for e in axes.extents[i]) for i, s in it]
 
@@ -240,13 +240,12 @@ def _create_axes(filenames, file_dict):
     try:
         # Loop through the file_dictionary, finding the
         # first open FITS file.
-        f = iter(f for tup in file_dict.itervalues()
-            for f in tup if f is not None).next()
+        f = next(iter(f for tup in list(file_dict.values())
+            for f in tup if f is not None))
     except StopIteration as e:
-        raise (ValueError("No FITS files were found. "
+        raise ValueError("No FITS files were found. "
             "Searched filenames: '{f}'." .format(
-                f=filenames.values())),
-                    None, sys.exc_info()[2])
+                f=list(filenames.values())))
 
 
     # Create a FitsAxes object
@@ -378,7 +377,7 @@ class FitsBeamSourceProvider(SourceProvider):
         # Iterate through the correlations,
         # assigning real and imaginary data, if present,
         # otherwise zeroing the correlation
-        for i, (re, im) in enumerate(self._files.itervalues()):
+        for i, (re, im) in enumerate(self._files.values()):
             ebeam[:,:,:,i].real[:] = 0 if re is None else re[0].data.T
             ebeam[:,:,:,i].imag[:] = 0 if im is None else im[0].data.T
 
@@ -410,7 +409,7 @@ class FitsBeamSourceProvider(SourceProvider):
         if not hasattr(self, "_files"):
             return
 
-        for re, im in self._files.itervalues():
+        for re, im in list(self._files.values()):
             re.close()
             im.close()
 

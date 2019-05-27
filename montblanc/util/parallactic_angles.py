@@ -79,8 +79,8 @@ def parallactic_angles(times, antenna_positions, field_centre, offsets=None):
     fc_rad = np.asarray([[pm.direction('J2000',
                             pq.quantity(field_centre[0] + offsets[t, a, 0], 'rad'),
                             pq.quantity(field_centre[1] + offsets[t, a, 1], 'rad'))
-                          for a in xrange(na)]
-                         for t in xrange(nt)])
+                          for a in range(na)]
+                         for t in range(nt)])
 
     return np.asarray([
             # Set current time as the reference frame

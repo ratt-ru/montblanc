@@ -79,7 +79,7 @@ def context_help(context, display_cube=False):
         "{upper_extents}\n".format(upper_extents=u_extents))
     lines.append('\n')
 
-    dims, strides = zip(*context._iter_args)
+    dims, strides = list(zip(*context._iter_args))
 
     lines.append("Iteration information:")
     lines += wrap("Iterating over the {d} "

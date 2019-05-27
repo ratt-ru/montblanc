@@ -27,7 +27,7 @@ with tf.Session() as S:
     run_metadata = tf.RunMetadata()
     S.run(tf.initialize_all_variables())
     
-    print S.run(c, options=run_options, run_metadata=run_metadata)[:10]
+    print((S.run(c, options=run_options, run_metadata=run_metadata)[:10]))
     #print S.run(r)
 
     tl = timeline.Timeline(run_metadata.step_stats)

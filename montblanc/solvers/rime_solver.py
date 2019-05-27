@@ -102,7 +102,7 @@ class RIMESolver(object):
         D.update(self.dim_local_size_dict())
 
         # Add any registered properties to the dictionary
-        for p in self._properties.itervalues():
+        for p in list(self._properties.values()):
             D[p.name] = getattr(self, p.name)
 
         return D

@@ -30,6 +30,7 @@ class _setter_property(object):
         return self.func(obj, value)
 
 class SinkContext(object):
+    __metaclass__=HypercubeProxyMetaClass
     """
     Context object passed to data sinks.
 
@@ -55,8 +56,6 @@ class SinkContext(object):
 
     __slots__ = ('_cube', '_cfg', '_name', '_data', '_input_cache',
         '_cube_attributes', '_iter_args', '_array_schema')
-
-    __metaclass__ = HypercubeProxyMetaClass
 
     def __init__(self, name, cube, slvr_cfg,
             iter_args, array_schema,

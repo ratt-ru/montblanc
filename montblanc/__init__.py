@@ -62,7 +62,7 @@ def rime_solver_cfg(**kwargs):
     -------
     A SolverConfiguration object.
     """
-    from configuration import (load_config, config_validator,
+    from .configuration import (load_config, config_validator,
         raise_validator_errors)
 
     def _merge_copy(d1, d2):

@@ -96,7 +96,7 @@ class CustomSinkProvider(SinkProvider):
 
     def model_vis(self, context):
         """ Receive model visibilities from Montblanc in `context.data` """
-        print context.data
+        print((context.data))
 
 # Configure montblanc solver with a memory budget of 2GB
 # and set it to double precision floating point accuracy

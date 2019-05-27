@@ -1,4 +1,4 @@
-from __future__ import print_function
+
 
 import unittest
 
@@ -47,7 +47,7 @@ class TestSumCoherencies(unittest.TestCase):
         nsrc, ntime, na, nchan = 10, 15, 7, 16
         nbl = na*(na-1)//2
 
-        np_ant1, np_ant2 = map(lambda x: np.int32(x), np.triu_indices(na, 1))
+        np_ant1, np_ant2 = [np.int32(x) for x in np.triu_indices(na, 1)]
         np_ant1, np_ant2 = (np.tile(np_ant1, ntime).reshape(ntime, nbl),
                             np.tile(np_ant2, ntime).reshape(ntime, nbl))
         np_shape = rf(size=(nsrc, ntime, nbl, nchan))

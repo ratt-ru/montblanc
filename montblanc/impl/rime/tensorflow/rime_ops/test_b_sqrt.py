@@ -144,7 +144,7 @@ class TestBSqrt(unittest.TestCase):
 
                 import itertools
                 it = (np.asarray(p).T, cpu_bsqrt[d], gpu_bsqrt[d])
-                it = enumerate(itertools.izip(*it))
+                it = enumerate(zip(*it))
 
                 msg = ["%s %s %s %s %s" % (i, idx, c, g, c-g)
                        for i, (idx, c, g) in it]

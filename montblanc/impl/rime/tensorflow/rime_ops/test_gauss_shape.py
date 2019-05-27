@@ -14,7 +14,7 @@ nbl = na*(na-1)//2
 rf = lambda *s: np.random.random(size=s).astype(dtype=dtype)
 
 np_uvw = rf(ntime, na, 3)
-np_ant1, np_ant2 = map(lambda x: np.int32(x), np.triu_indices(na, 1))
+np_ant1, np_ant2 = [np.int32(x) for x in np.triu_indices(na, 1)]
 np_ant1, np_ant2 = (np.tile(np_ant1, ntime).reshape(ntime, nbl),
     np.tile(np_ant2, ntime).reshape(ntime,nbl))
 np_frequency = np.linspace(1.4e9, 1.5e9, nchan).astype(dtype)
@@ -24,9 +24,9 @@ assert np_ant1.shape == (ntime, nbl), np_ant1.shape
 assert np_ant2.shape == (ntime, nbl), np_ant2.shape
 assert np_frequency.shape == (nchan,)
 
-args = map(lambda v, n: tf.Variable(v, name=n),
+args = list(map(lambda v, n: tf.Variable(v, name=n),
     [np_uvw, np_ant1, np_ant2, np_frequency, np_gauss_params],
-    ["uvw", "ant1", "ant2", "frequency", "gauss_params"])
+    ["uvw", "ant1", "ant2", "frequency", "gauss_params"]))
 
 with tf.device('/cpu:0'):
     gauss_shape_cpu = rime.gauss_shape(*args)

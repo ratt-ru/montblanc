@@ -122,24 +122,24 @@ def test_complex_phase():
         # Evaluate and time tensorflow GPU
         start = timeit.default_timer()
         tf_cplx_phase_op_gpu = S.run(cplx_phase_op_gpu)
-        print('Tensorflow custom GPU time %f' % (timeit.default_timer() - start))  # noqa
+        print(('Tensorflow custom GPU time %f' % (timeit.default_timer() - start)))  # noqa
 
         # Evaluate and time tensorflow GPU
         start = timeit.default_timer()
         tf_cplx_phase_expr_gpu = S.run(cplx_phase_expr_gpu)
-        print('Tensorflow expression GPU time %f' % (timeit.default_timer() - start))  # noqa
+        print(('Tensorflow expression GPU time %f' % (timeit.default_timer() - start)))  # noqa
 
         # Evaluate and time tensorflow CPU
         start = timeit.default_timer()
         tf_cplx_phase_op_cpu = S.run(cplx_phase_op_cpu)
-        print('Tensorflow CPU time %f' % (timeit.default_timer() - start))
+        print(('Tensorflow CPU time %f' % (timeit.default_timer() - start)))
 
         # Evaluate and time numpy CPU
         start = timeit.default_timer()
         # Now calculate the complex phase using numpy
         # Reshapes help us to broadcast
         np_cplx_phase = complex_phase_numpy(np_lm, np_uvw, np_frequency)
-        print('Numpy CPU time %f' % (timeit.default_timer() - start))
+        print(('Numpy CPU time %f' % (timeit.default_timer() - start)))
 
         # Check that our shapes and values agree with a certain tolerance
         assert tf_cplx_phase_op_cpu.shape == (nsrc, ntime, na, nchan)

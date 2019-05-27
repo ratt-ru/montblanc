@@ -3,7 +3,7 @@ from attrdict import AttrDict
 import tensorflow as tf
 from tensorflow.python.ops import data_flow_ops
 
-from queue_wrapper import _get_queue_types
+from .queue_wrapper import _get_queue_types
 
 class StagingAreaWrapper(object):
     def __init__(self, name, fed_arrays, data_sources, shared_name=None):

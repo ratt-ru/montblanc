@@ -277,19 +277,19 @@ https://img.shields.io/travis/warner/python-versioneer/master.svg
 [travis-url]: https://travis-ci.org/warner/python-versioneer
 
 """
-
 from __future__ import print_function
+
+
 try:
     import configparser
 except ImportError:
-    import ConfigParser as configparser
+    import configparser as configparser
 import errno
 import json
 import os
 import re
 import subprocess
 import sys
-
 
 class VersioneerConfig:
     """Container for Versioneer configuration parameters."""
@@ -1713,11 +1713,10 @@ def do_setup():
     except (EnvironmentError, configparser.NoSectionError,
             configparser.NoOptionError) as e:
         if isinstance(e, (EnvironmentError, configparser.NoSectionError)):
-            print("Adding sample versioneer config to setup.cfg",
-                  file=sys.stderr)
+            eprint("Adding sample versioneer config to setup.cfg")
             with open(os.path.join(root, "setup.cfg"), "a") as f:
                 f.write(SAMPLE_CONFIG)
-        print(CONFIG_ERROR, file=sys.stderr)
+        eprint(CONFIG_ERROR)
         return 1
 
     print(" creating %s" % cfg.versionfile_source)

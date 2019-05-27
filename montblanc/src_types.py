@@ -44,15 +44,15 @@ SOURCE_VAR_TYPES = OrderedDict([
 ])
 
 SOURCE_DIM_TYPES = OrderedDict((v, k) for (k, v)
-    in SOURCE_VAR_TYPES.iteritems())
+    in list(SOURCE_VAR_TYPES.items()))
 
 def source_types():
     """ Returns a list of registered source types """
-    return SOURCE_VAR_TYPES.keys()
+    return list(SOURCE_VAR_TYPES.keys())
 
 def source_nr_vars():
     """ Returns a list of registered source number variables """
-    return SOURCE_VAR_TYPES.values()
+    return list(SOURCE_VAR_TYPES.values())
 
 def source_var_types():
     """ Returns a mapping of source type to number variable """
@@ -75,15 +75,15 @@ def default_sources(**kwargs):
     S = OrderedDict()
     total = 0
 
-    invalid_types = [t for t in kwargs.keys() if t not in SOURCE_VAR_TYPES]
+    invalid_types = [t for t in list(kwargs.keys()) if t not in SOURCE_VAR_TYPES]
 
     for t in invalid_types:
         montblanc.log.warning('Source type %s is not yet '
             'implemented in montblanc. '
-            'Valid source types are %s' % (t, SOURCE_VAR_TYPES.keys()))
+            'Valid source types are %s' % (t, list(SOURCE_VAR_TYPES.keys())))
 
     # Zero all source types
-    for k, v in SOURCE_VAR_TYPES.iteritems():
+    for k, v in list(SOURCE_VAR_TYPES.items()):
         # Try get the number of sources for this source
         # from the kwargs
         value = kwargs.get(k, 0)
@@ -124,12 +124,12 @@ def sources_to_nr_vars(sources):
 
     try:
         return OrderedDict((SOURCE_VAR_TYPES[name], nr)
-            for name, nr in sources.iteritems())
+            for name, nr in list(sources.items()))
     except KeyError as e:
         raise KeyError((
             'No source type ''%s'' is '
             'registered. Valid source types '
-            'are %s') % (e, SOURCE_VAR_TYPES.keys()))
+            'are %s') % (e, list(SOURCE_VAR_TYPES.keys())))
 
 def source_range_tuple(start, end, nr_var_dict):
     """
@@ -139,9 +139,9 @@ def source_range_tuple(start, end, nr_var_dict):
     for each source variable type.
     """
 
-    starts = np.array([0 for nr_var in SOURCE_VAR_TYPES.itervalues()])
+    starts = np.array([0 for nr_var in list(SOURCE_VAR_TYPES.values())])
     ends = np.array([nr_var_dict[nr_var] if nr_var in nr_var_dict else 0
-        for nr_var in SOURCE_VAR_TYPES.itervalues()])
+        for nr_var in list(SOURCE_VAR_TYPES.values())])
     sum_counts = np.cumsum(ends)
     idx = np.arange(len(starts))
 
@@ -183,7 +183,7 @@ def source_range(start, end, nr_var_dict):
 
     return OrderedDict((k, e-s)
         for k, (s, e)
-        in source_range_tuple(start, end, nr_var_dict).iteritems())
+        in list(source_range_tuple(start, end, nr_var_dict).items()))
 
 def source_range_slices(start, end, nr_var_dict):
     """
@@ -194,4 +194,4 @@ def source_range_slices(start, end, nr_var_dict):
 
     return OrderedDict((k, slice(s,e,1))
         for k, (s, e)
-        in source_range_tuple(start, end, nr_var_dict).iteritems())
+        in list(source_range_tuple(start, end, nr_var_dict).items()))

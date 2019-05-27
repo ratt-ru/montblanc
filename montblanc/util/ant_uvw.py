@@ -6,7 +6,7 @@ import numpy as np
 from numba import jit, generated_jit
 
 # Coordinate indexing constants
-u, v, w = range(3)
+u, v, w = list(range(3))
 
 try:
     isclose = math.isclose

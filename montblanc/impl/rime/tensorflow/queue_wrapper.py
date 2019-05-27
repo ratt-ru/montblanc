@@ -15,7 +15,7 @@ def _get_queue_types(fed_arrays, data_sources):
         return [data_sources[n].dtype for n in fed_arrays]
     except KeyError as e:
         raise ValueError("Array '{k}' has no data source!"
-            .format(k=e.message)), None, sys.exc_info()[2]
+            .format(k=e.message)).with_traceback(sys.exc_info()[2])
 
 class QueueWrapper(object):
     def __init__(self, name, queue_size, fed_arrays, data_sources, shared_name=None):
@@ -75,11 +75,11 @@ class QueueWrapper(object):
         return self._queue.dequeue()
 
     def dequeue_to_dict(self):
-        return {k: v for k, v in itertools.izip(
+        return {k: v for k, v in zip(
             self._fed_arrays, self._queue.dequeue())}
 
     def dequeue_to_attrdict(self):
-        return AttrDict((k, v) for k, v in itertools.izip(
+        return AttrDict((k, v) for k, v in zip(
             self._fed_arrays, self._queue.dequeue()))
 
     @property
@@ -108,7 +108,7 @@ class SingleInputMultiQueueWrapper(QueueWrapper):
         super(SingleInputMultiQueueWrapper, self).__init__(name, queue_size,
             fed_arrays, data_sources, shared_name)
 
-        R = range(1, count)
+        R = list(range(1, count))
 
         extra_names = ['%s_%s' % (name, i) for i in R]
         extra_shared_names = ['%s_%s' % (shared_name, i) for i in R]
