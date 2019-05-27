@@ -170,8 +170,11 @@ class BuildCommand(build_ext):
     """ Custom build command for building the tensorflow extension """
 
     def get_ext_filename(self, ext_name):
-        filename = super().get_ext_filename(ext_name)
-        return get_ext_filename_without_platform_suffix(filename)
+        if six.PY3:
+            filename = super().get_ext_filename(ext_name)
+            return get_ext_filename_without_platform_suffix(filename)
+        else:
+            return build_ext.get_ext_filename(self, ext_name)
 
     def initialize_options(self):
         build_ext.initialize_options(self)
