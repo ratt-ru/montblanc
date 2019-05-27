@@ -888,7 +888,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
         dtype = dfs[array.name].dtype
 
         ph = tf.placeholder(dtype=dtype,
-            name=a.name + "_placeholder")
+            name=array.name + "_placeholder")
 
         var = tf.Variable(tf.zeros(shape=(1,), dtype=dtype),
             validate_shape=False,

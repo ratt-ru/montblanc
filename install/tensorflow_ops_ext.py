@@ -21,10 +21,10 @@
 import inspect
 import itertools
 import os
-
+import six
 from setuptools.extension import Extension
 from setuptools.command.build_ext import build_ext
-
+from distutils import sysconfig
 from .install_log import log
 
 tensorflow_extension_name = 'montblanc.ext.rime'
@@ -151,9 +151,28 @@ def create_tensorflow_extension(nvcc_settings, device_info):
         extra_link_args=extra_link_args,
     )
 
+def get_ext_filename_without_platform_suffix(filename):
+    name, ext = os.path.splitext(filename)
+    ext_suffix = sysconfig.get_config_var('EXT_SUFFIX')
+
+    if ext_suffix == ext:
+        return filename
+
+    ext_suffix = ext_suffix.replace(ext, '')
+    idx = name.find(ext_suffix)
+
+    if idx == -1:
+        return filename
+    else:
+        return name[:idx] + ext
 
 class BuildCommand(build_ext):
     """ Custom build command for building the tensorflow extension """
+
+    def get_ext_filename(self, ext_name):
+        filename = super().get_ext_filename(ext_name)
+        return get_ext_filename_without_platform_suffix(filename)
+
     def initialize_options(self):
         build_ext.initialize_options(self)
         self.nvcc_settings = None
