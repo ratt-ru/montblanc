@@ -1,4 +1,7 @@
-from future_builtins import zip
+try:
+    from future_builtins import zip
+except:
+    pass
 
 from itertools import islice
 import math
