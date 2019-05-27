@@ -20,6 +20,7 @@
 
 from ..context_help import context_help
 from ..hypercube_proxy_metaclass import HypercubeProxyMetaClass
+import six
 
 class _setter_property(object):
     def __init__(self, func, doc=None):
@@ -29,8 +30,8 @@ class _setter_property(object):
     def __set__(self, obj, value):
         return self.func(obj, value)
 
+@six.add_metaclass(HypercubeProxyMetaClass)
 class SinkContext(object):
-    __metaclass__=HypercubeProxyMetaClass
     """
     Context object passed to data sinks.
 

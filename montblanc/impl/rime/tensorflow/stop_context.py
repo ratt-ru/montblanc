@@ -20,9 +20,10 @@
 
 from .context_help import context_help
 from .hypercube_proxy_metaclass import HypercubeProxyMetaClass
+import six
 
+@six.add_metaclass(HypercubeProxyMetaClass)
 class StopContext(object):
-    __metaclass__ = HypercubeProxyMetaClass
     """
     Stop Context object passed to Providers.
 

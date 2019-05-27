@@ -60,6 +60,7 @@ class HypercubeProxyMetaClass(type):
             return wrap
 
         for name, method in hc_members:
+            print(name, method)
             setattr(cls, name, wrap_cube_method(name, method.__func__))
 
         super(HypercubeProxyMetaClass, cls).__init__(name, bases, dct)
