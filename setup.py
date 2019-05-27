@@ -151,7 +151,7 @@ install_requires = [
     'enum34 >= 1.1.6',
     'funcsigs >= 0.4',
     'futures >= 3.0.5',
-    'hypercube == 0.3.3',
+    'hypercube @ git+https://github.com/ska-sa/hypercube.git@py3',
     'tensorflow == {0:s}'.format(str(REQ_TF_VERSION)),
 ]
 
