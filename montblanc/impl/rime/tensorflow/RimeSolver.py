@@ -107,18 +107,22 @@ class RimeSolver(MontblancTensorflowSolver):
                 self._lock = threading.Lock()
 
             def __getitem__(self, key):
+                key = hash(bytes(key))
                 with self._lock:
                     return self._cache[key]
 
             def __setitem__(self, key, value):
+                key = hash(bytes(key))
                 with self._lock:
                     self._cache[key]=value
 
             def __delitem__(self, key):
+                key = hash(bytes(key))
                 with self._lock:
                     del self._cache[key]
 
             def pop(self, key, default=None):
+                key = hash(bytes(key))
                 with self._lock:
                     return self._cache.pop(key, default)
 
