@@ -90,7 +90,7 @@ class TestAntennaUvWDecomposition(unittest.TestCase):
 
                     yield valid_ants, remove_ants, ant1, ant2
 
-            tup = list(zip(*list(_create_ant_arrays())))
+            tup = zip(*list(_create_ant_arrays()))
             valid_ants, remove_ants, ant1, ant2 = tup
 
             bl_uvw = []

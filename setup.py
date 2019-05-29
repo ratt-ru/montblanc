@@ -53,34 +53,7 @@ mb_inc_path = os.path.join(mb_path, 'include')
 
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
-# =====================
-# Monkeypatch distutils
-# =====================
 
-# Save the original command for use within the monkey-patched version
-_DISTUTILS_REINIT = Distribution.reinitialize_command
-
-
-def reinitialize_command(self, command, reinit_subcommands):
-    """
-    Monkeypatch distutils.Distribution.reinitialize_command() to match behavior
-    of Distribution.get_command_obj()
-    This fixes a problem where 'pip install -e' does not reinitialise options
-    using the setup(options={...}) variable for the build_ext command.
-    This also effects other option sourcs such as setup.cfg.
-    """
-    cmd_obj = _DISTUTILS_REINIT(self, command, reinit_subcommands)
-
-    options = self.command_options.get(command)
-
-    if options:
-        self._set_command_options(cmd_obj, options)
-
-    return cmd_obj
-
-
-# Replace original command with monkey-patched version
-Distribution.reinitialize_command = reinitialize_command
 
 REQ_TF_VERSION = LooseVersion("1.8.0")
 
@@ -88,6 +61,12 @@ REQ_TF_VERSION = LooseVersion("1.8.0")
 try:
     import tensorflow as tf
 except ImportError:
+    if not on_rtd:
+        raise ImportError("Please 'pip install tensorflow==%s' or "
+                          "'pip install tensorflow-gpu==%s' prior to "
+                          "installation if you require CPU or GPU "
+                          "support, respectively" % (TF_VERSION, TF_VERSION))
+
     tf_installed = False
     use_tf_cuda = False
 else:
@@ -106,6 +85,10 @@ else:
 # ===========================
 
 # See if CUDA is installed and if any NVIDIA devices are available
+# Choose the tensorflow flavour to install (CPU or GPU)
+from install.cuda import inspect_cuda, InspectCudaException
+from install.cub import install_cub, InstallCubException
+
 if use_tf_cuda:
     try:
         # Look for CUDA devices and NVCC/CUDA installation
@@ -148,11 +131,11 @@ def readme():
 install_requires = [
     'attrdict >= 2.0.0',
     'attrs >= 16.3.0',
-    'enum34 >= 1.1.6',
+    'enum34 >= 1.1.6; python_version <= "2.7"',
     'funcsigs >= 0.4',
-    'futures >= 3.0.5',
+    'futures >= 3.0.5; python_version <= "2.7"',
     'six',
-    'hypercube @ git+https://github.com/ska-sa/hypercube.git@py3',
+    'hypercube == 0.3.4',
     'tensorflow == {0:s}'.format(str(REQ_TF_VERSION)),
 ]
 
@@ -168,7 +151,8 @@ if on_rtd:
 else:
     # Add binary/C extension type packages
     install_requires += [
-        'astropy >= 2.0.0, < 3.0.0' if PY2 else 'astropy >= 3.0.0',
+        'astropy >= 2.0.0, < 3.0; python_version <= "2.7"',
+        'astropy > 3.0; python_version >= "3.0"',
         'cerberus >= 1.1',
         'nose >= 1.3.7',
         'numba >= 0.36.2',
