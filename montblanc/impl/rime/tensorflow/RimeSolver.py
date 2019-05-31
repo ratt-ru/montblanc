@@ -24,6 +24,7 @@ import itertools
 import threading
 import sys
 import types
+import six
 
 import concurrent.futures as cf
 import numpy as np
@@ -536,7 +537,7 @@ class RimeSolver(MontblancTensorflowSolver):
             return self._consume_impl(data_sinks, cube, global_iter_args)
         except Exception as e:
             montblanc.log.exception("Consumer Exception")
-            raise e.with_traceback(sys.exc_info()[2])
+            six.reraise(Exception, Exception(e), sys.exc_info()[2])
 
     def _consume_impl(self, data_sinks, cube, global_iter_args):
         """ Consume """
@@ -1142,7 +1143,7 @@ def _get_data(data_source, context):
             "{help}".format(ds=context.name,
                 e=str(e), help=context.help()))
 
-        raise ex.with_traceback(sys.exc_info()[2])
+        six.reraise(ValueError, ex, sys.exc_info()[2])
 
 def _supply_data(data_sink, context):
     """ Supply data to the data sink """
@@ -1155,7 +1156,7 @@ def _supply_data(data_sink, context):
             "{help}".format(ds=context.name,
                 e=str(e), help=context.help()))
 
-        raise ex.with_traceback(sys.exc_info()[2])
+        six.reraise(ValueError, ex, sys.exc_info()[2])
 
 def _iter_args(iter_dims, cube):
     iter_strides = cube.dim_extent_size(*iter_dims)
