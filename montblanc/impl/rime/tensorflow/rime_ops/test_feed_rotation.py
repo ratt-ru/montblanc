@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
+
 class TestFeedRotation(unittest.TestCase):
     """ Tests the FeedRotation operator """
 
@@ -13,7 +14,7 @@ class TestFeedRotation(unittest.TestCase):
         self.rime = load_tf_lib()
         # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
         self.gpu_devs = [d.name for d in device_lib.list_local_devices()
-                                if d.device_type == 'GPU']
+                         if d.device_type == 'GPU']
 
     def test_feed_rotation(self):
         """ Test the FeedRotation operator """
@@ -35,7 +36,7 @@ class TestFeedRotation(unittest.TestCase):
         # Create input variables
         ntime, na = 10, 7
 
-        parallactic_angle = np.random.random(size=[ntime,na]).astype(FT)
+        parallactic_angle = np.random.random(size=[ntime, na]).astype(FT)
         parallactic_angle_sin = np.sin(parallactic_angle)
         parallactic_angle_cos = np.cos(parallactic_angle)
 
@@ -49,8 +50,8 @@ class TestFeedRotation(unittest.TestCase):
         def _pin_op(device, *tf_args):
             """ Pin operation to device """
             with tf.device(device):
-                return self.rime.feed_rotation(*tf_args,
-                    CT=CT, feed_type=feed_type)
+                return self.rime.feed_rotation(*tf_args, CT=CT,
+                                               feed_type=feed_type)
 
         # Pin operation to CPU
         cpu_op = _pin_op('/cpu:0', *tf_args)
@@ -67,7 +68,9 @@ class TestFeedRotation(unittest.TestCase):
             cpu_feed_rotation = S.run(cpu_op)
 
             for gpu_feed_rotation in S.run(gpu_ops):
-                self.assertTrue(np.allclose(cpu_feed_rotation, gpu_feed_rotation))
+                self.assertTrue(np.allclose(cpu_feed_rotation,
+                                            gpu_feed_rotation))
+
 
 if __name__ == "__main__":
     unittest.main()
