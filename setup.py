@@ -65,7 +65,8 @@ except ImportError:
         raise ImportError("Please 'pip install tensorflow==%s' or "
                           "'pip install tensorflow-gpu==%s' prior to "
                           "installation if you require CPU or GPU "
-                          "support, respectively" % (TF_VERSION, TF_VERSION))
+                          "support, respectively" %
+                          (REQ_TF_VERSION, REQ_TF_VERSION))
 
     tf_installed = False
     use_tf_cuda = False
@@ -174,7 +175,7 @@ else:
     cmdclass = {'build_ext': BuildCommand}
     # tensorflow_ops_ext.BuildCommand.run will
     # expand this dummy extension to its full portential
-    
+
     ext_modules = [create_tensorflow_extension(nvcc_settings, device_info)]
 
     # Pass NVCC and CUDA settings through to the build extension
