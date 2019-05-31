@@ -29,7 +29,9 @@ class TestRadecToLm(unittest.TestCase):
 
     def setUp(self):
         # Load the custom operation library
-        self.rime = tf.load_op_library('./rime.so')
+        # Load the rime operation library
+        from montblanc.impl.rime.tensorflow import load_tf_lib
+        self.rime = load_tf_lib()
         # Obtain a list of GPU device specifications ['/gpu:0', '/gpu:1', ...]
         self.gpu_devs = [d.name for d in device_lib.list_local_devices()
                          if d.device_type == 'GPU']
