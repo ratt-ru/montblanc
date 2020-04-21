@@ -176,16 +176,19 @@ public:
 
                 for(int src=0; src < nsrc; ++src)
                 {
-                    // Rotate lm coordinate angle
-                    FT l = lm(src,0)*cost - lm(src,1)*sint;
-                    FT m = lm(src,0)*sint + lm(src,1)*cost;
+                    FT l = lm(src, 0);
+                    FT m = lm(src, 1);
 
                     for(int chan=0; chan < nchan; chan++)
                     {
                         // Offset lm coordinates by point errors
                         // and scale by antenna scaling
-                        FT vl = l + point_errors(time, ant, chan, 0);
-                        FT vm = m + point_errors(time, ant, chan, 1);
+                        FT tl = l + point_errors(time, ant, chan, 0);
+                        FT tm = m + point_errors(time, ant, chan, 1);
+
+                        // Rotate lm coordinate angle
+                        FT vl = tl*cost - tm*sint;
+                        FT vm = tl*sint + tm*cost;
 
                         vl *= antenna_scaling(ant, chan, 0);
                         vm *= antenna_scaling(ant, chan, 1);

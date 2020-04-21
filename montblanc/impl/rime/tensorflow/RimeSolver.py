@@ -24,6 +24,7 @@ import itertools
 import threading
 import sys
 import types
+import six
 
 import concurrent.futures as cf
 import numpy as np
@@ -107,18 +108,22 @@ class RimeSolver(MontblancTensorflowSolver):
                 self._lock = threading.Lock()
 
             def __getitem__(self, key):
+                key = hash(bytes(key))
                 with self._lock:
                     return self._cache[key]
 
             def __setitem__(self, key, value):
+                key = hash(bytes(key))
                 with self._lock:
                     self._cache[key]=value
 
             def __delitem__(self, key):
+                key = hash(bytes(key))
                 with self._lock:
                     del self._cache[key]
 
             def pop(self, key, default=None):
+                key = hash(bytes(key))
                 with self._lock:
                     return self._cache.pop(key, default)
 
@@ -143,7 +148,7 @@ class RimeSolver(MontblancTensorflowSolver):
         # Staging Area Data Source Configuration
         #================================
 
-        dfs = { n: a for n, a in cube.arrays().iteritems()
+        dfs = { n: a for n, a in list(cube.arrays().items())
             if not 'temporary' in a.tags }
 
         # Descriptors are not user-defined arrays
@@ -369,15 +374,15 @@ class RimeSolver(MontblancTensorflowSolver):
 
         # Get source strides out before the local sizes are modified during
         # the source loops below
-        src_types = LSA.sources.keys()
+        src_types = list(LSA.sources.keys())
         src_strides = [int(i) for i in cube.dim_extent_size(*src_types)]
         src_staging_areas = [[LSA.sources[t][s] for t in src_types]
             for s in range(self._nr_of_shards)]
 
         compute_feed_dict = { ph: cube.dim_global_size(n) for
-            n, ph in FD.src_ph_vars.iteritems() }
+            n, ph in list(FD.src_ph_vars.items()) }
         compute_feed_dict.update({ ph: getattr(cube, n) for
-            n, ph in FD.property_ph_vars.iteritems() })
+            n, ph in list(FD.property_ph_vars.items()) })
 
         chunks_fed = 0
 
@@ -404,7 +409,7 @@ class RimeSolver(MontblancTensorflowSolver):
             # the shard with the least work assigned to it
             emptiest_staging_areas = np.argsort(self._inputs_waiting.get())
             shard = emptiest_staging_areas[0]
-            shard = which_shard.next()
+            shard = next(which_shard)
 
             feed_f = self._feed_executors[shard].submit(self._feed_actual,
                 data_sources.copy(), cube.copy(),
@@ -532,7 +537,7 @@ class RimeSolver(MontblancTensorflowSolver):
             return self._consume_impl(data_sinks, cube, global_iter_args)
         except Exception as e:
             montblanc.log.exception("Consumer Exception")
-            raise e, None, sys.exc_info()[2]
+            six.reraise(Exception, Exception(e), sys.exc_info()[2])
 
     def _consume_impl(self, data_sinks, cube, global_iter_args):
         """ Consume """
@@ -560,7 +565,7 @@ class RimeSolver(MontblancTensorflowSolver):
                     .format(descriptor))
 
         # For each array in our output, call the associated data sink
-        gen = ((n, a) for n, a in output.iteritems() if not n == 'descriptor')
+        gen = ((n, a) for n, a in list(output.items()) if not n == 'descriptor')
 
         for n, a in gen:
             sink_context = SinkContext(n, cube,
@@ -630,13 +635,13 @@ class RimeSolver(MontblancTensorflowSolver):
         input_sources = LSA.input_sources
         data_sources = {n: DataSource(f, cube.array(n).dtype, prov.name())
             for prov in source_providers
-            for n, f in prov.sources().iteritems()
+            for n, f in list(prov.sources().items())
             if n in input_sources}
 
         # Get data sinks from supplied providers
         data_sinks = { n: DataSink(f, prov.name())
             for prov in sink_providers
-            for n, f in prov.sinks().iteritems()
+            for n, f in list(prov.sinks().items())
             if not n == 'descriptor' }
 
         # Construct a feed dictionary from data sources
@@ -647,12 +652,12 @@ class RimeSolver(MontblancTensorflowSolver):
                     array_schemas[k].shape,
                     array_schemas[k].dtype))
             for k, fo
-            in LSA.feed_once.iteritems() }
+            in list(LSA.feed_once.items()) }
 
         self._run_metadata.clear()
 
         # Run the assign operations for each feed_once variable
-        assign_ops = [fo.assign_op.op for fo in LSA.feed_once.itervalues()]
+        assign_ops = [fo.assign_op.op for fo in list(LSA.feed_once.values())]
         self._tfrun(assign_ops, feed_dict=feed_dict)
 
         try:
@@ -777,7 +782,7 @@ def _create_defaults_source_provider(cube, data_source):
 
     # Create data sources on the source provider from
     # the cube array data sources
-    for n, a in cube.arrays().iteritems():
+    for n, a in list(cube.arrays().items()):
         # Unnecessary for temporary arrays
         if 'temporary' in a.tags:
             continue
@@ -830,14 +835,14 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     # Create placeholder variables for properties
     FD.property_ph_vars = AttrDict({
         n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
-        for n, p in cube.properties().iteritems() })
+        for n, p in list(cube.properties().items()) })
 
     #========================================================
     # Determine which arrays need feeding once/multiple times
     #========================================================
 
     # Take all arrays flagged as input
-    input_arrays = [a for a in cube.arrays().itervalues()
+    input_arrays = [a for a in list(cube.arrays().values())
                     if 'input' in a.tags]
 
     src_data_sources, feed_many, feed_once = _partition(iter_dims,
@@ -869,7 +874,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
             [a.name for a in src_data_sources[src_nr_var]], dfs)
             for i in range(nr_of_input_staging_areas)]
 
-        for src_type, src_nr_var in source_var_types().iteritems()
+        for src_type, src_nr_var in list(source_var_types().items())
     }
 
     #======================================
@@ -888,7 +893,7 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
         dtype = dfs[array.name].dtype
 
         ph = tf.placeholder(dtype=dtype,
-            name=a.name + "_placeholder")
+            name=array.name + "_placeholder")
 
         var = tf.Variable(tf.zeros(shape=(1,), dtype=dtype),
             validate_shape=False,
@@ -910,12 +915,12 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     #=======================================================
 
     # Data sources from input staging_areas
-    src_sa = [q for sq in local.sources.values() for q in sq]
+    src_sa = [q for sq in list(local.sources.values()) for q in sq]
     all_staging_areas = local.feed_many + src_sa
     input_sources = { a for q in all_staging_areas
                         for a in q.fed_arrays}
     # Data sources from feed once variables
-    input_sources.update(local.feed_once.keys())
+    input_sources.update(list(local.feed_once.keys()))
 
     local.input_sources = input_sources
 
@@ -935,7 +940,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
     # of the relevant shard, adding the feed once
     # inputs to the dictionary
     D = LSA.feed_many[shard].get_to_attrdict()
-    D.update({k: fo.var for k, fo in LSA.feed_once.iteritems()})
+    D.update({k: fo.var for k, fo in list(LSA.feed_once.items())})
 
     with tf.device(device):
         # Infer chunk dimensions
@@ -946,59 +951,61 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         FT, CT = D.uvw.dtype, D.model_vis.dtype
 
         # Compute sine and cosine of parallactic angles
-        # for the beam
-        beam_sin, beam_cos = rime.parallactic_angle_sin_cos(
-                                        D.parallactic_angles)
-
-        # Compute sine and cosine of feed rotation angle
-        feed_sin, feed_cos = rime.parallactic_angle_sin_cos(
-                                        D.parallactic_angles[:, :] +
-                                        D.feed_angles[None, :])
-
+        pa_sin, pa_cos = rime.parallactic_angle_sin_cos(
+				D.parallactic_angles[:, :] + 
+				D.feed_angles[None, :])
         # Compute feed rotation
-        feed_rotation = rime.feed_rotation(feed_sin, feed_cos, CT=CT,
+        feed_rotation = rime.feed_rotation(pa_sin, pa_cos, CT=CT,
                                            feed_type=polarisation_type)
 
-    def antenna_jones(lm, stokes, alpha, ref_freq):
+    def antenna_jones(radec, stokes):
         """
         Compute the jones terms for each antenna.
 
         lm, stokes and alpha are the source variables.
         """
 
+        lm = rime.radec_to_lm(radec, D.phase_centre)
+
         # Compute the complex phase
         cplx_phase = rime.phase(lm, D.uvw, D.frequency, CT=CT)
 
         # Check for nans/infs in the complex phase
         phase_msg = ("Check that '1 - l**2  - m**2 >= 0' holds "
-                    "for all your lm coordinates. This is required "
-                    "for 'n = sqrt(1 - l**2 - m**2) - 1' "
-                    "to be finite.")
+                     "for all your lm coordinates. This is required "
+                     "for 'n = sqrt(1 - l**2 - m**2) - 1' "
+                     "to be finite.")
 
         phase_real = tf.check_numerics(tf.real(cplx_phase), phase_msg)
         phase_imag = tf.check_numerics(tf.imag(cplx_phase), phase_msg)
 
         # Compute the square root of the brightness matrix
         # (as well as the sign)
-        bsqrt, sgn_brightness = rime.b_sqrt(stokes, alpha,
-            D.frequency, ref_freq, CT=CT,
+        bsqrt, sgn_brightness = rime.b_sqrt(stokes, CT=CT,
             polarisation_type=polarisation_type)
 
         # Check for nans/infs in the bsqrt
         bsqrt_msg = ("Check that your stokes parameters "
-                    "satisfy I**2 >= Q**2 + U**2 + V**2. "
-                    "Montblanc performs a cholesky decomposition "
-                    "of the brightness matrix and the above must "
-                    "hold for this to produce valid values.")
+                     "satisfy I**2 >= Q**2 + U**2 + V**2. "
+                     "Montblanc performs a cholesky decomposition "
+                     "of the brightness matrix and the above must "
+                     "hold for this to produce valid values.")
 
         bsqrt_real = tf.check_numerics(tf.real(bsqrt), bsqrt_msg)
         bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
 
         # Compute the direction dependent effects from the beam
+        #radec_prime = radec * tf.cast(tf.stack([-1.0, 1.0]), radec.dtype)
+        #phase_centre_prime = D.phase_centre * tf.cast(tf.stack([-1.0, 1.0]), D.phase_centre.dtype)
+        #def normang(val):
+        #    """ Normalizes angle between [-pi, pi) """
+        #    return ( val + np.pi) % ( 2 * np.pi ) - np.pi
+        #cube_pos = normang(normang(radec_prime) - normang(phase_centre_prime))
+
         ejones = rime.e_beam(lm, D.frequency,
-            D.pointing_errors, D.antenna_scaling,
-            beam_sin, beam_cos,
-            D.beam_extents, D.beam_freq_map, D.ebeam)
+                             D.pointing_errors, D.antenna_scaling,
+                             pa_sin, pa_cos,
+                             D.beam_extents, D.beam_freq_map, D.ebeam)
 
         deps = [phase_real, phase_imag, bsqrt_real, bsqrt_imag]
         deps = [] # Do nothing for now
@@ -1007,7 +1014,8 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         # feed rotation and beam dde's
         with tf.control_dependencies(deps):
             antenna_jones = rime.create_antenna_jones(bsqrt, cplx_phase,
-                                                    feed_rotation, ejones, FT=FT)
+                                                      feed_rotation, ejones,
+                                                      FT=FT)
             return antenna_jones, sgn_brightness
 
     # While loop condition for each point source type
@@ -1031,7 +1039,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         npsrc +=  nsrc
 
         ant_jones, sgn_brightness = antenna_jones(S.point_lm,
-            S.point_stokes, S.point_alpha, S.point_ref_freq)
+            S.point_stokes)
         shape = tf.ones(shape=[nsrc,ntime,nbl,nchan], dtype=FT)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
             shape, ant_jones, sgn_brightness, coherencies)
@@ -1048,7 +1056,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         ngsrc += nsrc
 
         ant_jones, sgn_brightness = antenna_jones(S.gaussian_lm,
-            S.gaussian_stokes, S.gaussian_alpha, S.gaussian_ref_freq)
+            S.gaussian_stokes)
         gauss_shape = rime.gauss_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, S.gaussian_shape)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
@@ -1066,7 +1074,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         nssrc += nsrc
 
         ant_jones, sgn_brightness = antenna_jones(S.sersic_lm,
-            S.sersic_stokes, S.sersic_alpha, S.sersic_ref_freq)
+            S.sersic_stokes)
         sersic_shape = rime.sersic_shape(D.uvw, D.antenna1, D.antenna2,
             D.frequency, S.sersic_shape)
         coherencies = rime.sum_coherencies(D.antenna1, D.antenna2,
@@ -1135,7 +1143,7 @@ def _get_data(data_source, context):
             "{help}".format(ds=context.name,
                 e=str(e), help=context.help()))
 
-        raise ex, None, sys.exc_info()[2]
+        six.reraise(ValueError, ex, sys.exc_info()[2])
 
 def _supply_data(data_sink, context):
     """ Supply data to the data sink """
@@ -1148,11 +1156,11 @@ def _supply_data(data_sink, context):
             "{help}".format(ds=context.name,
                 e=str(e), help=context.help()))
 
-        raise ex, None, sys.exc_info()[2]
+        six.reraise(ValueError, ex, sys.exc_info()[2])
 
 def _iter_args(iter_dims, cube):
     iter_strides = cube.dim_extent_size(*iter_dims)
-    return zip(iter_dims, iter_strides)
+    return list(zip(iter_dims, iter_strides))
 
 def _uniq_log2_range(start, size, div):
     start = np.log2(start)
@@ -1220,7 +1228,7 @@ def _budget(cube, slvr_cfg):
         montblanc.log.info("The following dimension reductions "
             "were applied:")
 
-        for k, v in applied_reductions.iteritems():
+        for k, v in list(applied_reductions.items()):
             montblanc.log.info('{p}{d}: {id} => {rd}'.format
                 (p=' '*4, d=k, id=original_sizes[k], rd=v))
     else:
@@ -1268,7 +1276,7 @@ def _apply_source_provider_dim_updates(cube, source_providers, budget_dims):
     # when conflicts occur
     update_list = []
 
-    for name, updates in update_map.iteritems():
+    for name, updates in list(update_map.items()):
         if not all(updates[0].size == du.size for du in updates[1:]):
             raise ValueError("Received conflicting "
                 "global size updates '{u}'"

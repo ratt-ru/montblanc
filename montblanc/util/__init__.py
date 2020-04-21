@@ -38,7 +38,7 @@ from montblanc.src_types import (
     source_range_slices)
 
 
-from parsing import parse_python_assigns
+from .parsing import parse_python_assigns
 
 def nr_of_baselines(na, auto_correlations=False):
     """
@@ -343,10 +343,10 @@ def shape_from_str_tuple(sshape, variables, ignore=None):
     if ignore is None: ignore = []
 
     if not isinstance(sshape, tuple) and not isinstance(sshape, list):
-        raise TypeError, 'sshape argument must be a tuple or list'
+        raise TypeError('sshape argument must be a tuple or list')
 
     if not isinstance(ignore, list):
-        raise TypeError, 'ignore argument must be a list'
+        raise TypeError('ignore argument must be a list')
 
     return tuple([int(eval_expr(v,variables)) if isinstance(v,str) else int(v)
         for v in sshape if v not in ignore])
@@ -367,10 +367,10 @@ def array_convert_function(sshape_one, sshape_two, variables):
         for d in sshape_two])
 
     if len(s_one) != len(s_two):
-        raise ValueError, ('Flattened shapes %s and %s '\
+        raise ValueError(('Flattened shapes %s and %s '\
             'do not have the same length. '
             'Original shapes were %s and %s') % \
-            (s_one, s_two, sshape_one, sshape_two)
+            (s_one, s_two, sshape_one, sshape_two))
 
     # Reason about the transpose
     t_idx = tuple([s_one.index(v) for v in s_two])
@@ -473,11 +473,11 @@ def register_default_dimensions(cube, slvr_cfg):
     src_cfg = default_sources()
     src_nr_vars = sources_to_nr_vars(src_cfg)
     # Sum to get the total number of sources
-    cube.register_dimension('nsrc', sum(src_nr_vars.itervalues()),
+    cube.register_dimension('nsrc', sum(src_nr_vars.values()),
         description="Sources (Total)")
 
     # Register the individual source types
-    for nr_var, nr_of_src in src_nr_vars.iteritems():
+    for nr_var, nr_of_src in list(src_nr_vars.items()):
         cube.register_dimension(nr_var, nr_of_src,
             description='{} sources'.format(mbs.SOURCE_DIM_TYPES[nr_var]))
 

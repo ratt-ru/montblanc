@@ -16,35 +16,25 @@ auto bsqrt_shape_function = [](InferenceContext* c) {
     DimensionHandle d;
 
     ShapeHandle stokes = c->input(0);
-    ShapeHandle alpha = c->input(1);
-    ShapeHandle frequency = c->input(2);
-    ShapeHandle ref_freq = c->input(3);
 
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(stokes, 3, &input),
-        "stokes shape must be [nsrc, ntime, 4] but is " + c->DebugString(stokes));
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(stokes, 2), 4, &d),
-        "stokes shape must be [nsrc, ntime, 4] but is " + c->DebugString(stokes));
-
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(alpha, 2, &input),
-        "alpha shape must be [nsrc, ntime] but is " + c->DebugString(alpha));
-
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(frequency, 1, &input),
-        "frequency shape must be [nchan,] but is " + c->DebugString(frequency));
-
-    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(ref_freq, 1, &input),
-        "ref_freq shape must be [nsrc,] but is " + c->DebugString(ref_freq));
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithRank(stokes, 4, &input),
+        "stokes shape must be [nsrc, ntime, nchan, 4] but is " + c->DebugString(stokes));
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(stokes, 3), 4, &d),
+        "stokes shape must be [nsrc, ntime, nchan, 4] but is " + c->DebugString(stokes));
 
     // bsqrt output is (nsrc, ntime, nchan, 4)
     ShapeHandle bsqrt = c->MakeShape({
         c->Dim(stokes, 0),
         c->Dim(stokes, 1),
-        c->Dim(frequency, 0),
+        c->Dim(stokes, 2),
         4});
 
-    // sgn_brightness output is (nsrc, ntime)
+    // sgn_brightness output is (nsrc, ntime, nchan)
     ShapeHandle sgn_brightness = c->MakeShape({
         c->Dim(stokes, 0),
-        c->Dim(stokes, 1)});
+        c->Dim(stokes, 1),
+        c->Dim(stokes, 2),
+    });
 
     // Set the output shape
     c->set_output(0, bsqrt);
@@ -55,9 +45,6 @@ auto bsqrt_shape_function = [](InferenceContext* c) {
 
 REGISTER_OP("BSqrt")
     .Input("stokes: FT")
-    .Input("alpha: FT")
-    .Input("frequency: FT")
-    .Input("ref_freq: FT")
     .Output("b_sqrt: CT")
     .Output("sgn_brightness: int8")
     .Attr("FT: {float, double} = DT_FLOAT")

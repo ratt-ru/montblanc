@@ -20,6 +20,7 @@
 
 from ..context_help import context_help
 from ..hypercube_proxy_metaclass import HypercubeProxyMetaClass
+import six
 
 class _setter_property(object):
     def __init__(self, func, doc=None):
@@ -29,6 +30,7 @@ class _setter_property(object):
     def __set__(self, obj, value):
         return self.func(obj, value)
 
+@six.add_metaclass(HypercubeProxyMetaClass)
 class SourceContext(object):
     """
     Context object passed to data sources.
@@ -70,8 +72,6 @@ class SourceContext(object):
     """
     __slots__ = ('_cube', '_cfg', '_name', '_shape', '_dtype',
         '_iter_args', '_array_schema')
-
-    __metaclass__ = HypercubeProxyMetaClass
 
     def __init__(self, name, cube, slvr_cfg, iter_args,
                 array_schema, shape, dtype):

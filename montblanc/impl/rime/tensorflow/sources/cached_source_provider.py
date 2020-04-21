@@ -95,7 +95,7 @@ class CachedSourceProvider(SourceProvider):
 
         # Construct a list of provider data sources
         prov_data_sources = { n: ds for prov in providers
-                            for n, ds in prov.sources().iteritems() }
+                            for n, ds in list(prov.sources().items()) }
 
         # Uniquely identify data source keys
         prov_ds = set(prov_data_sources.keys())
@@ -118,7 +118,7 @@ class CachedSourceProvider(SourceProvider):
 
 
         # Construct data sources on this source provider
-        for n, ds in prov_data_sources.iteritems():
+        for n, ds in list(prov_data_sources.items()):
             if n in cache_data_sources:
                 setattr(self, n, types.MethodType(_cache(ds), self))
             else:
@@ -160,5 +160,5 @@ class CachedSourceProvider(SourceProvider):
 
     def cache_size(self):
         with self._lock:
-            return sum(a.nbytes for k, v in self._cache.iteritems()
-                                for a in v.itervalues())
+            return sum(a.nbytes for k, v in list(self._cache.items())
+                                for a in list(v.values()))

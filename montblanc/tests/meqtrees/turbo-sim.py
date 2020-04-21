@@ -78,8 +78,8 @@ try:
   from Siamese.OMS.tigger_lsm import TiggerSkyModel
   models.insert(0,TiggerSkyModel());
 except:
-  print 'Failure to import TiggerSkyModel module'
-  print 'Is the location of Tigger defined in your PYTHONPATH environment variable?'
+  print('Failure to import TiggerSkyModel module')
+  print('Is the location of Tigger defined in your PYTHONPATH environment variable?')
   pass;
       
 meqmaker.add_sky_models(models);
@@ -162,9 +162,9 @@ TDLCompileOption("random_seed","Random generator seed",["time",0],more=int,
 def _define_forest (ns):
   random.seed(random_seed if isinstance(random_seed,int) else None);
   if not mssel.msname:
-    raise RuntimeError,"MS not set up in compile-time options";
+    raise RuntimeError("MS not set up in compile-time options");
   if run_purr:
-    print mssel.msname;
+    print((mssel.msname));
     import os.path
     purrlog = os.path.normpath(mssel.msname)+".purrlog";
     Timba.TDL.GUI.purr(purrlog,[mssel.msname,'.']);
@@ -233,7 +233,7 @@ if __name__ == '__main__':
   # resolves nodes
   ns.Resolve();
 
-  print len(ns.AllNodes()),'nodes defined';
+  print((len(ns.AllNodes()),'nodes defined'));
 
 
 

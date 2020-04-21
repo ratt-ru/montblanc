@@ -1,0 +1,2 @@
+[build-system]
+requires = ["tensorflow==1.8.0"]

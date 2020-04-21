@@ -59,11 +59,11 @@ class CustomSourceProvider(SourceProvider):
     def point_stokes(self, context):
         """ Supply point source stokes parameters to montblanc """
 
-        # Shape (npsrc, ntime, 4)
-        (ls, us), (lt, ut), (l, u) = context.array_extents(context.name)
+        # Shape (npsrc, ntime, nchan, 4)
+        (ls, us), (lt, ut), (lc, uc), (l, u) = context.array_extents(context.name)
 
         data = np.empty(context.shape, context.dtype)
-        data[ls:us,:,l:u] = np.asarray(lm_stokes)[ls:us,None,:]
+        data[ls:us,:,:,l:u] = np.asarray(lm_stokes)[ls:us,None,None,:]
         return data
 
     def uvw(self, context):
@@ -96,7 +96,7 @@ class CustomSinkProvider(SinkProvider):
 
     def model_vis(self, context):
         """ Receive model visibilities from Montblanc in `context.data` """
-        print context.data
+        print((context.data))
 
 # Configure montblanc solver with a memory budget of 2GB
 # and set it to double precision floating point accuracy

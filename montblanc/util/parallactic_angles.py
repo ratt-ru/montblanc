@@ -31,7 +31,7 @@ except ImportError as e:
     montblanc.log.warn("python-casacore import failed. "
                        "Parallactic Angle computation will fail.")
 
-def parallactic_angles(times, antenna_positions, field_centre):
+def parallactic_angles(times, antenna_positions, field_centre, offsets=None):
     """
     Computes parallactic angles per timestep for the given
     reference antenna position and field centre.
@@ -45,9 +45,13 @@ def parallactic_angles(times, antenna_positions, field_centre):
             column of MS ANTENNA sub-table
         field_centre : ndarray of shape (2,)
             Field centre, should be obtained from MS PHASE_DIR
+        offsets: ndarray of shape (ntime, na, 2) or None
+            Containing time-variable offsets in ra, dec from
+            pointing centre per antenna. If None is passed offsets
+            of zero are assumed.
 
     Returns:
-        An array of parallactic angles per time-step
+        An array of parallactic angles per antenna per time-step
 
     """
     import pyrap.quanta as pq
@@ -66,9 +70,17 @@ def parallactic_angles(times, antenna_positions, field_centre):
         *(pq.quantity(x,'m') for x in pos))
         for pos in antenna_positions]
 
-    # Compute field centre in radians
-    fc_rad = pm.direction('J2000',
-        *(pq.quantity(f,'rad') for f in field_centre))
+    # Compute pointing centre in radians
+    na = antenna_positions.shape[0]
+    nt = times.shape[0]
+    if offsets is None:
+        offsets = np.zeros((nt, na, 2))
+
+    fc_rad = np.asarray([[pm.direction('J2000',
+                            pq.quantity(field_centre[0] + offsets[t, a, 0], 'rad'),
+                            pq.quantity(field_centre[1] + offsets[t, a, 1], 'rad'))
+                          for a in range(na)]
+                         for t in range(nt)])
 
     return np.asarray([
             # Set current time as the reference frame
@@ -77,7 +89,7 @@ def parallactic_angles(times, antenna_positions, field_centre):
             [   # Set antenna position as the reference frame
                 pm.do_frame(rp)
                 and
-                pm.posangle(fc_rad, zenith).get_value("rad")
-                for rp in reference_positions
+                pm.posangle(fc_rad[ti, ai], zenith).get_value("rad")
+                for ai, rp in enumerate(reference_positions)
             ]
-        for t in times])
+        for ti, t in enumerate(times)])

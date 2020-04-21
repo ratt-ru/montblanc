@@ -31,16 +31,16 @@ def print_versions():
     Print the versions of software relied upon by montblanc.
     Inspired by numexpr testing suite.
     """
-    print('-=' * 38)
-    print('Python version:    %s' % sys.version)
-    print('Montblanc version: %s' % montblanc.__version__)
-    print("NumPy version:     %s" % numpy.__version__)
+    print(('-=' * 38))
+    print(('Python version:    %s' % sys.version))
+    print(('Montblanc version: %s' % montblanc.__version__))
+    print(("NumPy version:     %s" % numpy.__version__))
 
     if os.name == 'posix':
         (sysname, nodename, release, version, machine) = os.uname()
-        print('Platform:          %s-%s' % (sys.platform, machine))
+        print(('Platform:          %s-%s' % (sys.platform, machine)))
 
-    print('-=' * 38)
+    print(('-=' * 38))
 
 def suite():
     test_suite = unittest.TestSuite()

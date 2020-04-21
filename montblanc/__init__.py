@@ -32,7 +32,7 @@ log = setup_logging()
 # you try and set it
 def constant(f):
     def fset(self, value):
-        raise SyntaxError, 'Foolish Mortal! You would dare change a universal constant?'
+        raise SyntaxError('Foolish Mortal! You would dare change a universal constant?')
     def fget(self):
         return f()
 
@@ -62,7 +62,7 @@ def rime_solver_cfg(**kwargs):
     -------
     A SolverConfiguration object.
     """
-    from configuration import (load_config, config_validator,
+    from .configuration import (load_config, config_validator,
         raise_validator_errors)
 
     def _merge_copy(d1, d2):

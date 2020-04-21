@@ -255,7 +255,7 @@ class MeasurementSetManager(object):
 
     def close(self):
         # Close all the tables
-        for table in self._tables.itervalues():
+        for table in list(self._tables.values()):
             table.close()
 
     @property
@@ -271,7 +271,7 @@ class MeasurementSetManager(object):
         return self._nchanperband
 
     def updated_dimensions(self):
-        return [(k, v) for k, v in self._dim_sizes.iteritems()]
+        return [(k, v) for k, v in list(self._dim_sizes.items())]
 
     @property
     def auto_correlations(self):

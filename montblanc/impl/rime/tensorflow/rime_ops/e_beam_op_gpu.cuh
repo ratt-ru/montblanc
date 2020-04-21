@@ -268,12 +268,16 @@ __global__ void rime_e_beam(
     {
         lm_type rlm = lm[SRC];
 
-       // L coordinate
-        // Rotate
-        FT l = rlm.x*shared.pa_cos[threadIdx.z][threadIdx.y] -
-            rlm.y*shared.pa_sin[threadIdx.z][threadIdx.y];
         // Add the pointing errors for this antenna.
-        l += shared.pe[threadIdx.z][threadIdx.y][thread_chan()].x;
+        FT tl = rlm.x + shared.pe[threadIdx.z][threadIdx.y][thread_chan()].x;
+        FT tm = rlm.y + shared.pe[threadIdx.z][threadIdx.y][thread_chan()].y;
+
+        FT l = tl*shared.pa_cos[threadIdx.z][threadIdx.y] -
+               tm*shared.pa_sin[threadIdx.z][threadIdx.y];
+        FT m = tl*shared.pa_sin[threadIdx.z][threadIdx.y] +
+               tm*shared.pa_cos[threadIdx.z][threadIdx.y];
+
+       // L coordinate
         // Scale by antenna scaling factors
         l *= shared.as[threadIdx.y][thread_chan()].x;
         // l grid position
@@ -287,11 +291,6 @@ __global__ void rime_e_beam(
         FT ld = l - gl0;
 
         // M coordinate
-        // rotate
-        FT m = rlm.x*shared.pa_sin[threadIdx.z][threadIdx.y] +
-            rlm.y*shared.pa_cos[threadIdx.z][threadIdx.y];
-        // Add the pointing errors for this antenna.
-        m += shared.pe[threadIdx.z][threadIdx.y][thread_chan()].y;
         // Scale by antenna scaling factors
         m *= shared.as[threadIdx.y][thread_chan()].y;
         // m grid position

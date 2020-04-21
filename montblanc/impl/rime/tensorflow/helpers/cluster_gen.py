@@ -58,14 +58,14 @@ except KeyboardInterrupt:
 
     logging.info('Pinging {n} connection(s)'.format(n=len(connections)))
 
-    for k, (cs, ca) in connections.iteritems():
+    for k, (cs, ca) in list(connections.items()):
         try:
             cs.send(PING)
         except socket.error as e:
             logging.warn('Lost connection to {a}'.format(a=ca))
             lost.add((cs,ca))
 
-    for k, (cs, ca) in connections.iteritems():
+    for k, (cs, ca) in list(connections.items()):
         try:
             if cs.recv(len(PONG)) != PONG:
                 raise SyncError()
@@ -75,7 +75,7 @@ except KeyboardInterrupt:
 
     logging.info('Lost {n} connection(s)'.format(n=len(lost)))
 
-    connections = { k : c for k, c in connections.iteritems()
+    connections = { k : c for k, c in list(connections.items())
         if c not in lost }
 
     logging.info('Creating cluster specification for {n} workers'.format(
@@ -83,7 +83,7 @@ except KeyboardInterrupt:
     # Create the lists of workers and master urls
     master_list = ['{ip}:{port}'.format(ip=host_address[0], port=host_address[1])]
     worker_list = ['{ip}:{port}'.format(ip=ip, port=port) for (ip, port) in
-        (s.getpeername() for s, _ in connections.itervalues())]
+        (s.getpeername() for s, _ in list(connections.values()))]
 
     logging.info('Master node(s) {n}'.format(n=master_list))
     logging.info('Worker node(s) {n}'.format(n=worker_list))
@@ -91,7 +91,7 @@ except KeyboardInterrupt:
     cluster = { 'worker' : worker_list, 'master' : master_list }
 
     # Transmit cluster specification to connected clients
-    for i, (cs, ca) in enumerate(connections.itervalues()):
+    for i, (cs, ca) in enumerate(connections.values()):
         data = { 'cluster' : cluster, 'job' : 'worker', 'task' : i }
 
         logging.info('Sending specification to {ca}'.format(ca=ca))
@@ -99,7 +99,7 @@ except KeyboardInterrupt:
 
 finally:
     # Close client sockets
-    for cs, address in connections.itervalues():
+    for cs, address in list(connections.values()):
         logging.info('Closing connection to {c}'.format(c=address))
         cs.shutdown(socket.SHUT_RDWR)
         cs.close()
@@ -163,7 +163,7 @@ if args.start is True:
     with tf.Session(server.target, graph=g) as S:
         S.run(init_op)
         S.run(do_enq)
-        print 'Worker result', S.run(result)
-        print 'Dequeue result', S.run(do_deq)
+        print(('Worker result', S.run(result)))
+        print(('Dequeue result', S.run(do_deq)))
 
         time.sleep(2)

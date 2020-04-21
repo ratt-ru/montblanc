@@ -63,9 +63,6 @@ int bsqrt_pol()
 template <typename Traits>
 __global__ void rime_b_sqrt(
     const typename Traits::stokes_type * stokes,
-    const typename Traits::alpha_type * alpha,
-    const typename Traits::frequency_type * frequency,
-    const typename Traits::frequency_type * ref_freq,
     typename Traits::visibility_type * B_sqrt,
     typename Traits::sgn_brightness_type * sgn_brightness,
     bool linear,
@@ -90,26 +87,7 @@ __global__ void rime_b_sqrt(
     if(SRC >= nsrc || TIME >= ntime || CHAN >= nchan)
         { return; }
 
-    __shared__ FT src_rfreq[LTr::BLOCKDIMZ];
-    __shared__ FT freq[LTr::BLOCKDIMX];
-
-    // Varies by channel
-    if(threadIdx.z == 0 && threadIdx.y == 0)
-    {
-        freq[threadIdx.x] = frequency[CHAN];
-    }
-
-    // Varies by source
-    if(threadIdx.y == 0 && threadIdx.x == 0)
-    {
-        src_rfreq[threadIdx.z] = ref_freq[SRC];
-    }
-
-    __syncthreads();
-
-    // Calculate power term
-    int i = SRC*ntime + TIME;
-    FT power = Po::pow(freq[threadIdx.x]/src_rfreq[threadIdx.z], alpha[i]);
+    int i = (SRC*ntime + TIME)*nchan + CHAN;
 
     // Read in stokes parameters (IQUV)
     ST _stokes = stokes[i];
@@ -118,21 +96,14 @@ __global__ void rime_b_sqrt(
     FT & U = linear ? _stokes.z : _stokes.y;
     FT & V = linear ? _stokes.w : _stokes.z;
 
-    I *= power;
-    Q *= power;
-    U *= power;
-    V *= power;
-
     // sgn variable, used to indicate whether
     // brightness matrix is negative, zero or positive
     FT IQ = I + Q;
     FT sgn = (zero < IQ) - (IQ < zero);
 
-    // Indicate that we inverted the sgn of the brightness
-    // matrix to obtain the cholesky decomposition
-    i = SRC*ntime + TIME;
-    if(CHAN == 0)
-        { sgn_brightness[i] = sgn; }
+    // We inverted the sgn of the brightness matrix to obtain the
+    // cholesky decomposition. Recover it.
+    sgn_brightness[i] = sgn;
 
     // I *= sgn;
     // Q *= sgn;
@@ -178,13 +149,12 @@ __global__ void rime_b_sqrt(
     B.XY.x = zero; B.XY.y = zero;
 
     // Write out the cholesky decomposition
-    B_sqrt[i*nchan + CHAN] = B;
+    B_sqrt[i] = B;
 }
 
 template <typename FT, typename CT>
 class BSqrt<GPUDevice, FT, CT> : public tensorflow::OpKernel
 {
-public:
 private:
     std::string polarisation_type;
 
@@ -202,14 +172,11 @@ public:
 
         // Sanity check the input tensors
         const tf::Tensor & in_stokes = context->input(0);
-        const tf::Tensor & in_alpha = context->input(1);
-        const tf::Tensor & in_frequency = context->input(2);
-        const tf::Tensor & in_ref_freq = context->input(3);
 
         // Extract problem dimensions
         int nsrc = in_stokes.dim_size(0);
         int ntime = in_stokes.dim_size(1);
-        int nchan = in_frequency.dim_size(0);
+        int nchan = in_stokes.dim_size(2);
 
         bool linear = (polarisation_type == "linear");
 
@@ -225,13 +192,13 @@ public:
         if (b_sqrt_ptr->NumElements() == 0)
             { return; }
 
-        // Reason about shape of the invert tensor
+        // Reason about shape of the sgn_brightness tensor
         // and create a pointer to it
-        tf::TensorShape invert_shape({nsrc, ntime});
-        tf::Tensor * invert_ptr = nullptr;
+        tf::TensorShape sgn_brightness_shape({nsrc, ntime, nchan});
+        tf::Tensor * sgn_brightness_ptr = nullptr;
 
         OP_REQUIRES_OK(context, context->allocate_output(
-            1, invert_shape, &invert_ptr));
+            1, sgn_brightness_shape, &sgn_brightness_ptr));
 
         // Cast input into CUDA types defined within the Traits class
         typedef montblanc::kernel_traits<FT> Tr;
@@ -245,24 +212,16 @@ public:
         // Get the device pointers of our GPU memory arrays
         auto stokes = reinterpret_cast<const typename Tr::stokes_type *>(
             in_stokes.flat<FT>().data());
-        auto alpha = reinterpret_cast<const typename Tr::alpha_type *>(
-            in_alpha.flat<FT>().data());
-        auto frequency = reinterpret_cast<const typename Tr::frequency_type *>(
-            in_frequency.flat<FT>().data());
-        auto ref_freq = reinterpret_cast<const typename Tr::frequency_type *>(
-            in_ref_freq.flat<FT>().data());
         auto b_sqrt = reinterpret_cast<typename Tr::visibility_type *>(
             b_sqrt_ptr->flat<CT>().data());
         auto sgn_brightness = reinterpret_cast<typename Tr::sgn_brightness_type *>(
-            invert_ptr->flat<tf::int8>().data());
+            sgn_brightness_ptr->flat<tf::int8>().data());
 
         const auto & stream = context->eigen_device<GPUDevice>().stream();
 
         rime_b_sqrt<Tr> <<<grid, blocks, 0, stream>>>(stokes,
-            alpha, frequency, ref_freq,
             b_sqrt, sgn_brightness,
-            linear,
-            nsrc, ntime, nchan);
+            linear, nsrc, ntime, nchan);
     }
 };
 

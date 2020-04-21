@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 
-from rime_solver import RIMESolver
+from .rime_solver import RIMESolver
 
 class MontblancTensorflowSolver(RIMESolver):
     def __init__(self, slvr_cfg):

@@ -30,7 +30,7 @@ import subprocess
 import sys
 import tempfile
 
-from install_log import log
+from .install_log import log
 
 minimum_cuda_version = 8000
 
@@ -171,7 +171,7 @@ def inspect_cuda_version_and_devices(compiler, settings):
     except Exception as e:
         msg = ("Running the CUDA device check "
             "stub failed\n{}".format(str(e)))
-        raise InspectCudaException(msg), None, sys.exc_info()[2]
+        raise InspectCudaException(msg)
 
     return output
 

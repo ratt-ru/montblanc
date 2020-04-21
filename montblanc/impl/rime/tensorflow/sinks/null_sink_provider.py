@@ -20,7 +20,7 @@
 
 import montblanc
 
-from sink_provider import SinkProvider
+from .sink_provider import SinkProvider
 
 class NullSinkProvider(SinkProvider):
 

@@ -22,14 +22,18 @@ import functools
 import inspect
 import types
 
+import six
+
 from hypercube import HyperCube
+
 
 class HypercubeProxyMetaClass(type):
     """ MetaClass for classes that proxy HyperCubes """
     def __init__(cls, name, bases, dct):
         """ Proxy public methods on the HyperCube """
         def public_member_predicate(m):
-            return inspect.ismethod(m) and not m.__name__.startswith('_')
+            return ((inspect.isfunction(m) or inspect.ismethod(m))
+                    and not m.__name__.startswith('_'))
 
         hc_members = inspect.getmembers(HyperCube, public_member_predicate)
         sc_members = inspect.getmembers(cls, public_member_predicate)
@@ -49,17 +53,10 @@ class HypercubeProxyMetaClass(type):
 
             wrap = functools.update_wrapper(_proxy, method)
             spec = inspect.getargspec(method)
-            fmt_args = inspect.formatargspec(formatvalue=lambda v: '=_default', *spec)
-            call_args = inspect.formatargspec(formatvalue=lambda v: '', *spec)
-
-            # wrap.__doc__ = (
-            #     'def {}{}:\n'
-            #     '\t""" {} """\n'
-            #     '\treturn _proxy{}').format(name, fmt_args, method.__doc__, call_args)
-
             return wrap
 
         for name, method in hc_members:
-            setattr(cls, name, wrap_cube_method(name, method.__func__))
+            fn = six.get_unbound_function(method)
+            setattr(cls, name, wrap_cube_method(name, fn))
 
         super(HypercubeProxyMetaClass, cls).__init__(name, bases, dct)

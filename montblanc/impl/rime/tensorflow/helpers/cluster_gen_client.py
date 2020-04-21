@@ -100,12 +100,12 @@ if args.start is True:
 
     with tf.Session(server.target, graph=g) as S:
         S.run(tf.initialize_local_variables())
-        print S.run([do_deq])
-        print S.run([do_deq])
-        print S.run([do_deq])
-        print S.run([do_deq])
+        print((S.run([do_deq])))
+        print((S.run([do_deq])))
+        print((S.run([do_deq])))
+        print((S.run([do_deq])))
 
-        print 'Value of master_tmp={mt}.'.format(mt=S.run(tmp))
+        print(('Value of master_tmp={mt}.'.format(mt=S.run(tmp))))
 
         S.run(do_enq)
 

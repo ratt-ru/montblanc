@@ -277,19 +277,19 @@ https://img.shields.io/travis/warner/python-versioneer/master.svg
 [travis-url]: https://travis-ci.org/warner/python-versioneer
 
 """
-
 from __future__ import print_function
+
+
 try:
-    import configparser
+    import ConfigParser
 except ImportError:
-    import ConfigParser as configparser
+    import configparser as ConfigParser
 import errno
 import json
 import os
 import re
 import subprocess
 import sys
-
 
 class VersioneerConfig:
     """Container for Versioneer configuration parameters."""
@@ -341,7 +341,7 @@ def get_config_from_root(root):
     # configparser.NoOptionError (if it lacks "VCS="). See the docstring at
     # the top of versioneer.py for instructions on writing your setup.cfg .
     setup_cfg = os.path.join(root, "setup.cfg")
-    parser = configparser.SafeConfigParser()
+    parser = ConfigParser.SafeConfigParser()
     with open(setup_cfg, "r") as f:
         parser.readfp(f)
     VCS = parser.get("versioneer", "VCS")  # mandatory
@@ -1710,14 +1710,13 @@ def do_setup():
     root = get_root()
     try:
         cfg = get_config_from_root(root)
-    except (EnvironmentError, configparser.NoSectionError,
-            configparser.NoOptionError) as e:
-        if isinstance(e, (EnvironmentError, configparser.NoSectionError)):
-            print("Adding sample versioneer config to setup.cfg",
-                  file=sys.stderr)
+    except (EnvironmentError, ConfigParser.NoSectionError,
+            ConfigParser.NoOptionError) as e:
+        if isinstance(e, (EnvironmentError, ConfigParser.NoSectionError)):
+            eprint("Adding sample versioneer config to setup.cfg")
             with open(os.path.join(root, "setup.cfg"), "a") as f:
                 f.write(SAMPLE_CONFIG)
-        print(CONFIG_ERROR, file=sys.stderr)
+        eprint(CONFIG_ERROR)
         return 1
 
     print(" creating %s" % cfg.versionfile_source)

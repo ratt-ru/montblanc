@@ -202,7 +202,7 @@ def run_test(msfile, pol_type, **kwargs):
     # Create the tigger sky model
     with open(tigger_sky_file, 'w') as f:
         f.write('#format: ra_d dec_d i q u v spi freq0 emaj_s emin_s pa_d\n')
-        it = enumerate(itertools.izip(pt_lm, pt_stokes, pt_alpha, pt_ref_freq))
+        it = enumerate(zip(pt_lm, pt_stokes, pt_alpha, pt_ref_freq))
         for i, ((l, m), (I, Q, U, V), alpha, ref_freq) in it:
             ra, dec = lm_to_radec(l, m, ra0, dec0)
             l, m = np.rad2deg([ra,dec])
@@ -210,7 +210,7 @@ def run_test(msfile, pol_type, **kwargs):
             f.write('{l:.20f} {m:.20f} {i} {q} {u} {v} {spi} {rf:.20f}\n'.format(
                 l=l, m=m, i=I, q=Q, u=U, v=V, spi=alpha, rf=ref_freq))
 
-        it = enumerate(itertools.izip(g_lm, g_stokes, g_alpha, g_ref_freq, g_shape.T))
+        it = enumerate(zip(g_lm, g_stokes, g_alpha, g_ref_freq, g_shape.T))
         for i, ((l, m), (I, Q, U, V), alpha, ref_freq, (emaj, emin, pa)) in it:
             ra, dec = lm_to_radec(l, m, ra0, dec0)
             l, m = np.rad2deg([ra,dec])
@@ -224,6 +224,9 @@ def run_test(msfile, pol_type, **kwargs):
                         l=l, m=m, i=I, q=Q, u=U, v=V, spi=alpha, rf=ref_freq,
                         emaj=emaj, emin=emin, pa=pa))
 
+#=========================================
+# Call MeqTrees
+#=========================================
 
     #=========================================
     # Call MeqTrees
@@ -274,32 +277,28 @@ def run_test(msfile, pol_type, **kwargs):
             return pt_lm[lp:up, :]
 
         def point_stokes(self, context):
-            (lp, up), (lt, ut) = context.dim_extents('npsrc', 'ntime')
-            return np.tile(pt_stokes[lp:up, np.newaxis, :], [1, ut-lt, 1])
+            (lp, up), (lt, ut), (lc, uc) = context.dim_extents('npsrc', 'ntime', 'nchan')
+            # (npsrc, ntime, nchan, 4)
+            s = pt_stokes[lp:up,None,None,:]
+            a = np.broadcast_to(pt_alpha[lp:up,None,None,None], (up-lp,ut-lt,1,1))
+            rf = pt_ref_freq[lp:up,None,None,None]
+            f = frequency[None,None,lc:uc,None]
 
-        def point_alpha(self, context):
-            (lp, up), (lt, ut) = context.dim_extents('npsrc', 'ntime')
-            return np.tile(pt_alpha[lp:up, np.newaxis], [1, ut-lt])
-
-        def point_ref_freq(self, context):
-            (lp, up) = context.dim_extents('npsrc')
-            return pt_ref_freq[lp:up]
+            return s*(f/rf)**a
 
         def gaussian_lm(self, context):
             lg, ug = context.dim_extents('ngsrc')
             return g_lm[lg:ug, :]
 
         def gaussian_stokes(self, context):
-            (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
-            return np.tile(g_stokes[lg:ug, np.newaxis, :], [1, ut-lt, 1])
+            (lg, ug), (lt, ut), (lc, uc) = context.dim_extents('ngsrc', 'ntime', 'nchan')
+            # (ngsrc, ntime, nchan, 4)
+            s = g_stokes[lg:ug,None,None,:]
+            a = np.broadcast_to(pt_alpha[lg:ug,None,None,None], (ug-lg,ut-lt,1,1))
+            rf = g_ref_freq[lg:ug,None,None,None]
+            f = frequency[None,None,lc:uc,None]
 
-        def gaussian_alpha(self, context):
-            (lg, ug), (lt, ut) = context.dim_extents('ngsrc', 'ntime')
-            return np.tile(g_alpha[lg:ug, np.newaxis], [1, ut-lt])
-
-        def gaussian_ref_freq(self, context):
-            (lg, ug) = context.dim_extents('ngsrc')
-            return g_ref_freq[lg:ug]
+            return s*(f/rf)**a
 
         def gaussian_shape(self, context):
             (lg, ug) = context.dim_extents('ngsrc')
@@ -371,20 +370,20 @@ def run_test(msfile, pol_type, **kwargs):
 
         # Everything agrees, exit
         if problems[0].size == 0:
-            print 'Montblanc and MeqTree visibilities agree'
+            print('Montblanc and MeqTree visibilities agree')
             sys.exit(1)
 
         bad_vis_file = 'bad_visibilities.txt'
 
         # Some visibilities differ, do some analysis
-        print ("Montblanc differs from MeqTrees by {nc}/{t} visibilities. "
+        print((("Montblanc differs from MeqTrees by {nc}/{t} visibilities. "
             "Writing them out to '{bvf}'").format(
-            nc=problems[0].size, t=not_close.size, bvf=bad_vis_file)
+            nc=problems[0].size, t=not_close.size, bvf=bad_vis_file)))
 
         abs_diff = np.abs(meq_vis - mb_vis)
         rmsd = np.sqrt(np.sum(abs_diff**2)/abs_diff.size)
         nrmsd = rmsd / (np.max(abs_diff) - np.min(abs_diff))
-        print 'RMSD {rmsd} NRMSD {nrmsd}'.format(rmsd=rmsd, nrmsd=nrmsd)
+        print(('RMSD {rmsd} NRMSD {nrmsd}'.format(rmsd=rmsd, nrmsd=nrmsd)))
 
         # Plot a histogram of the difference
         try:
@@ -392,7 +391,7 @@ def run_test(msfile, pol_type, **kwargs):
             matplotlib.use('pdf')
             import matplotlib.pyplot as plt
         except:
-            print "Exception importing matplotlib %s" % sys.exc_info()[2]
+            print(("Exception importing matplotlib %s" % sys.exc_info()[2]))
         else:
             try:
                 nr_of_bins = 100
@@ -406,7 +405,7 @@ def run_test(msfile, pol_type, **kwargs):
 
                 plt.savefig('histogram.pdf')
             except:
-                print "Error plotting histogram %s" % sys.exc_info()[2]
+                print(("Error plotting histogram %s" % sys.exc_info()[2]))
 
         mb_problems = mb_vis[problems]
         meq_problems = meq_vis[problems]
@@ -415,7 +414,7 @@ def run_test(msfile, pol_type, **kwargs):
 
         # Create an iterator over the first 100 problematic visibilities
         t = (np.asarray(problems).T, mb_problems, meq_problems, difference, amplitude)
-        it = enumerate(itertools.izip(*t))
+        it = enumerate(zip(*t))
         it = itertools.islice(it, 0, 1000, 1)
 
         # Write out the problematic visibilities to file

@@ -95,15 +95,13 @@ __global__ void rime_sum_coherencies(
         montblanc::jones_multiply_4x4_hermitian_transpose_in_place<FT>(
             J1, J2);
 
-        // Load in and apply in sign inversions stemming from
-        // cholesky decompositions that must be applied.
-        FT sign = FT(sgn_brightness[base]);
-        J1.x *= sign;
-        J1.y *= sign;
-
+        // Apply sign inversions stemming from cholesky decompositions.
         // Sum source coherency into model visibility
-        coherency.x += J1.x;
-        coherency.y += J1.y;
+        i = base*nchan + chan;
+        FT sign = FT(sgn_brightness[i]);
+
+        coherency.x += sign*J1.x;
+        coherency.y += sign*J1.y;
     }
 
     i = (time*nbl + bl)*npolchan + polchan;
