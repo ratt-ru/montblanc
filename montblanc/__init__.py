@@ -24,6 +24,8 @@ import os
 from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
 
+__version__ "0.6.1"
+
 log = setup_logging()
 
 # This solution for constants based on
@@ -105,7 +107,3 @@ def rime_solver(slvr_cfg):
     import montblanc.factory
 
     return montblanc.factory.rime_solver(slvr_cfg)
-
-from ._version import get_versions
-__version__ = get_versions()['version']
-del get_versions

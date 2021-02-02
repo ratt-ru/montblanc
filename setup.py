@@ -719,7 +719,7 @@ else:
 log.info('install_requires={}'.format(install_requires))
 
 setup(name='montblanc',
-    version=versioneer.get_version(),
+    version="0.6.1",
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',
@@ -734,7 +734,7 @@ setup(name='montblanc',
     ],
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
-    cmdclass=versioneer.get_cmdclass(cmdclass),
+    cmdclass=cmdclass,
     ext_modules=ext_modules,
     options=ext_options,
     license='GPL2',
