@@ -577,8 +577,6 @@ from setuptools import setup, find_packages
 from setuptools.extension import Extension
 from setuptools.dist import Distribution
 
-import versioneer
-
 PY2 = sys.version_info[0] == 2
 
 mb_path = 'montblanc'
