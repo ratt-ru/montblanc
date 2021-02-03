@@ -32,7 +32,6 @@ import os
 from setuptools.extension import Extension
 from setuptools.command.build_ext import build_ext
 import shutil
-import six
 import subprocess
 import sys
 
@@ -44,6 +43,9 @@ except ImportError:
 import tempfile
 import zipfile
 
+
+PY2 = sys.version_info[0] == 2
+PY3 = sys.version_info[0] == 3
 
 # =============
 # Setup logging
@@ -550,7 +552,7 @@ class BuildCommand(build_ext):
     """ Custom build command for building the tensorflow extension """
 
     def get_ext_filename(self, ext_name):
-        if six.PY3:
+        if PY3:
             filename = super().get_ext_filename(ext_name)
             return get_ext_filename_without_platform_suffix(filename)
         else:
@@ -576,8 +578,6 @@ from distutils.version import LooseVersion
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
 from setuptools.dist import Distribution
-
-PY2 = sys.version_info[0] == 2
 
 mb_path = 'montblanc'
 mb_inc_path = os.path.join(mb_path, 'include')
@@ -667,7 +667,6 @@ install_requires = [
     'enum34 >= 1.1.6; python_version <= "2.7"',
     'funcsigs >= 0.4',
     'futures >= 3.0.5; python_version <= "2.7"',
-    'six',
     'hypercube == 0.3.4',
     'tensorflow == {0:s}'.format(str(REQ_TF_VERSION)),
 ]
