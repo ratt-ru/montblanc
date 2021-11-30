@@ -1,8 +1,13 @@
+#backup git
+*.orig
+
 # Python cruft
+.travis/
 build/
 dist/
 montblanc.egg-info/
 *.pyc
+pip-wheel-metadata/
 
 # Old source directory, this can be deprecated
 montblanc/src/cub
