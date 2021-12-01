@@ -433,7 +433,7 @@ if __name__ == "__main__":
 
     def create_parser():
         p = argparse.ArgumentParser()
-        p.add_argument("ms", default=pjoin("data", "WSRT.MS"),
+        p.add_argument("ms", default=pjoin("data", "mk64.Lwide.0.5hr.30s.856mhz.ms"),
                                 nargs="?")
         p.add_argument("-p", "--polarisation-type",
                             choices=['linear', 'circular'],

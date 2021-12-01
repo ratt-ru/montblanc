@@ -127,7 +127,7 @@ Possible Issues
 
      .. code:: python
 
-          import tensorflow as tf
+          import tensorflow.compat.v1 as tf
           with tf.Session() as S: pass
 
      If tensorflow knows about your GPU it will log some information about it:

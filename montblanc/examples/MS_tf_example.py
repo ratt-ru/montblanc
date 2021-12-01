@@ -84,6 +84,9 @@ class RadioSourceProvider(SourceProvider):
         """ Tell montblanc about dimension sizes (point sources only) """
         return [('npsrc', self._npsrc)]
 
+    def phase_centre(self, context):
+        return np.array([0.0, -10.0])
+
 class RimeSinkProvider(SinkProvider):
     def name(self):
         return 'Sink'

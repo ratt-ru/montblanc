@@ -3,7 +3,7 @@ import itertools
 import sys
 import six
 from attrdict import AttrDict
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 def _get_queue_types(fed_arrays, data_sources):
     """

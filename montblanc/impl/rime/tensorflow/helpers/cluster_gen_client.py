@@ -74,7 +74,7 @@ except KeyError as e:
     raise
 
 if args.start is True:
-    import tensorflow as tf
+    import tensorflow.compat.v1 as tf
     import numpy as np
     import time
 

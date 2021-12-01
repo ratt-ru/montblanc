@@ -1,6 +1,6 @@
 from attrdict import AttrDict
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from tensorflow.python.ops import data_flow_ops
 
 from .queue_wrapper import _get_queue_types
