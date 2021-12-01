@@ -471,7 +471,7 @@ def cuda_architecture_flags(device_info):
 
 def create_tensorflow_extension(nvcc_settings, device_info):
     """ Create an extension that builds the custom tensorflow ops """
-    import tensorflow as tf
+    import tensorflow.compat.v1 as tf
     import glob
 
     use_cuda = (bool(nvcc_settings['cuda_available'])
@@ -596,7 +596,8 @@ class BuildCommand(build_ext):
             march_native = self.march_native
         else:
             raise ValueError("Option march_native is neither string or boolean")
-
+        if self.compiler_verbosity is None:
+            self.compiler_verbosity = ""
         customize_compiler_for_tensorflow(self.compiler,
             self.nvcc_settings, self.cuda_devices, 
             march_native=march_native,
@@ -628,7 +629,7 @@ REQ_TF_VERSION = LooseVersion("2.7.0")
 
 # Inspect previous tensorflow installs
 try:
-    import tensorflow as tf
+    import tensorflow.compat.v1 as tf
 except ImportError:
     if not on_rtd:
         raise ImportError("Please 'pip install tensorflow==%s' or "
