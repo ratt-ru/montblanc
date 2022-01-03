@@ -55,7 +55,7 @@ log_format = "%(name)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 log = logging.getLogger("Montblanc Install")
 
-
+global device_info, nvcc_settings
 
 minimum_cuda_version = 8000
 
@@ -416,7 +416,11 @@ def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info,
                                       linker_options=""):
     """inject deep into distutils to customize gcc/nvcc dispatch """
     compiler_verbosity_flags = list(map(lambda x: x.strip(), gcc_verbosity.split(" ")))
+    if compiler_verbosity_flags == [""]:
+        compiler_verbosity_flags = []
     linker_options = list(map(lambda x: x.strip(), linker_options.split(" ")))
+    if linker_options == [""]:
+       linker_options = None
     if march_native:
         print("Warning: native marching enabled - the binaries are NOT PORTABLE")
         print("         Disable this option before building distributed images/wheels")
@@ -433,7 +437,7 @@ def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info,
     # now redefine the _compile method. This gets executed for each
     # object but distutils doesn't have the ability to change compilers
     # based on source extension: we add it.
-    if linker_options:
+    if linker_options and len(linker_options) > 0:
         print("Warning overrriding default linker options \"[{}]\" with \"[{}]\"".format(
             " ".join(compiler.linker_so), " ".join(linker_options)))
         compiler.linker_so = linker_options
@@ -443,7 +447,9 @@ def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info,
             compiler.set_executable('compiler_so', nvcc_settings['nvcc_path'])
             # use only a subset of the extra_postargs, which are 1-1 translated
             # from the extra_compile_args in the Extension class
-            postargs = extra_postargs['nvcc']
+            postargs = extra_postargs['nvcc'] + [val for pair in zip(["--compiler-options"]*len(opt_flags),
+                                                                      map(lambda x: '"{}"'.format(x), opt_flags))
+                                                 for val in pair]
         else:
             postargs = extra_postargs['gcc'] + opt_flags
 
@@ -580,8 +586,9 @@ class BuildCommand(build_ext):
 
     def initialize_options(self):
         build_ext.initialize_options(self)
-        self.nvcc_settings = None
-        self.cuda_devices = None
+        global device_info, nvcc_settings
+        self.nvcc_settings = nvcc_settings
+        self.cuda_devices = device_info
         self.march_native = False
         self.compiler_verbosity = None
         self.linker_options = None
@@ -613,7 +620,6 @@ class BuildCommand(build_ext):
             gcc_verbosity=self.compiler_verbosity,
             linker_options=self.linker_options)
         build_ext.build_extensions(self)
-
 
 # ==================
 # setuptools imports
