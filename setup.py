@@ -412,9 +412,11 @@ def install_cub(mb_inc_path):
 tensorflow_extension_name = 'montblanc.ext.rime'
 
 def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info, 
-                                      march_native=False, gcc_verbosity=""):
+                                      march_native=False, gcc_verbosity="",
+                                      linker_options=""):
     """inject deep into distutils to customize gcc/nvcc dispatch """
     compiler_verbosity_flags = list(map(lambda x: x.strip(), gcc_verbosity.split(" ")))
+    linker_options = list(map(lambda x: x.strip(), linker_options.split(" ")))
     if march_native:
         print("Warning: native marching enabled - the binaries are NOT PORTABLE")
         print("         Disable this option before building distributed images/wheels")
@@ -424,7 +426,6 @@ def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info,
         opt_flags = [] + compiler_verbosity_flags
     # tell the compiler it can process .cu files
     compiler.src_extensions.append('.cu')
-
     # save references to the default compiler_so and _comple methods
     default_compiler_so = compiler.compiler_so
     default_compile = compiler._compile
@@ -432,6 +433,10 @@ def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info,
     # now redefine the _compile method. This gets executed for each
     # object but distutils doesn't have the ability to change compilers
     # based on source extension: we add it.
+    if linker_options:
+        print("Warning overrriding default linker options \"[{}]\" with \"[{}]\"".format(
+            " ".join(compiler.linker_so), " ".join(linker_options)))
+        compiler.linker_so = linker_options
     def _compile(obj, src, ext, cc_args, extra_postargs, pp_opts):
         if os.path.splitext(src)[1] == '.cu':
             # use the cuda for .cu files
@@ -445,7 +450,6 @@ def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info,
         default_compile(obj, src, ext, cc_args, postargs, pp_opts)
         # reset the default compiler_so, which we might have changed for cuda
         compiler.compiler_so = default_compiler_so
-
     # inject our redefined _compile method into the class
     compiler._compile = _compile
 
@@ -497,7 +501,7 @@ def create_tensorflow_extension(nvcc_settings, device_info):
                          map(os.path.basename, 
                              glob.glob(os.path.join(ldir, "*.so*"))))
     #libraries = [':libtensorflow_framework.so.2']
-    extra_link_args = ['-fPIC', '-fopenmp', '-g0']
+    extra_link_args = ['-fPIC', '-fopenmp']
 
     # Macros
     define_macros = [
@@ -508,7 +512,7 @@ def create_tensorflow_extension(nvcc_settings, device_info):
     # Common flags
     flags = ['-std=c++14']
 
-    gcc_flags = flags + ['-g0', '-fPIC', '-fopenmp', '-O2']
+    gcc_flags = flags + ['-fPIC', '-fopenmp']
     nvcc_flags = flags + []
 
     # Add cuda specific build information, if it is available
@@ -564,7 +568,8 @@ class BuildCommand(build_ext):
     """ Custom build command for building the tensorflow extension """
     user_options = build_ext.user_options + [
         ('march-native=', None, 'Enable native marching (optimized, non-portable binaries)'),
-        ('compiler-verbosity=', None, 'Control GCC compiler verbosity')
+        ('compiler-verbosity=', None, 'Control GCC compiler verbosity'),
+        ('linker-options=', None, 'Overrulling options to linker - this overrides all defaults')
     ]
     def get_ext_filename(self, ext_name):
         if PY3:
@@ -579,6 +584,7 @@ class BuildCommand(build_ext):
         self.cuda_devices = None
         self.march_native = False
         self.compiler_verbosity = None
+        self.linker_options = None
 
     def build_extensions(self):
         if isinstance(self.march_native, str):
@@ -598,10 +604,14 @@ class BuildCommand(build_ext):
             raise ValueError("Option march_native is neither string or boolean")
         if self.compiler_verbosity is None:
             self.compiler_verbosity = ""
+        if self.linker_options is None:
+            self.linker_options = ""
+
         customize_compiler_for_tensorflow(self.compiler,
             self.nvcc_settings, self.cuda_devices, 
             march_native=march_native,
-            gcc_verbosity=self.compiler_verbosity)
+            gcc_verbosity=self.compiler_verbosity,
+            linker_options=self.linker_options)
         build_ext.build_extensions(self)
 
 
@@ -750,7 +760,7 @@ else:
 log.info('install_requires={}'.format(install_requires))
 
 setup(name='montblanc',
-    version="0.6.4",
+    version="0.7.0",
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',
