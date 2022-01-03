@@ -24,7 +24,7 @@ def load_tf_lib():
     from pkg_resources import working_set
     from pkg_resources import Requirement
 
-    import tensorflow.compat.v1 as tf
+    import tensorflow as tf
 
     path = pjoin('ext', 'rime.so')
     mbloc = pjoin(working_set.find(Requirement.parse('montblanc')).location, "montblanc")

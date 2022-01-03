@@ -10,7 +10,9 @@ using tensorflow::shape_inference::ShapeHandle;
 using tensorflow::shape_inference::DimensionHandle;
 using tensorflow::Status;
 
-auto shape_function = [](InferenceContext* c) {
+#include <iostream>
+//auto shape_function = [](InferenceContext* c) {
+auto shape_function(InferenceContext* c) {
     // Dummies for tests
     ShapeHandle input;
     DimensionHandle d;
@@ -25,7 +27,7 @@ auto shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_radec, 1), 2, &d),
         "radec must have shape [None, 2] but is " +
         c->DebugString(in_radec));
-
+    
     // TODO. Check shape and dimension sizes for 'phase_centre'
     ShapeHandle in_phase_centre = c->input(1);
     // Assert 'phase_centre' number of dimensions
@@ -36,7 +38,7 @@ auto shape_function = [](InferenceContext* c) {
     TF_RETURN_WITH_CONTEXT_IF_ERROR(c->WithValue(c->Dim(in_phase_centre, 0), 2, &d),
         "phase_centre must have shape [2] but is " +
         c->DebugString(in_phase_centre));
-
+    
 
 
     // TODO: Supply a proper shapes for output variables here,

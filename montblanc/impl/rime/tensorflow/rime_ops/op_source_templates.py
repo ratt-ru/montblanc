@@ -306,7 +306,7 @@ PYTHON_SOURCE_TEMPLATE = string.Template(
 """import os
 
 import numpy as np
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 # Load the library containing the custom operation
 from montblanc.impl.rime.tensorflow import load_tf_lib

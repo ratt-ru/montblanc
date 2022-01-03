@@ -74,22 +74,22 @@ except KeyError as e:
     raise
 
 if args.start is True:
-    import tensorflow.compat.v1 as tf
+    import tensorflow as tf
     import numpy as np
     import time
 
-    server = tf.train.Server(cluster, job_name=job, task_index=task)
+    server = tf.distribute.Server(cluster, job_name=job, task_index=task)
     logging.info("Server Target is '{st}'".format(st=server.target))
 
     g = tf.Graph()
 
     with g.as_default():
-        with tf.container('shared'):
-            queue_in = tf.FIFOQueue(10, [tf.int32],
+        with tf.compat.v1.container('shared'):
+            queue_in = tf.queue.FIFOQueue(10, [tf.int32],
                 name='queue_in',
                 shared_name='master_queue_in')
 
-            queue_out = tf.FIFOQueue(10, [tf.string],
+            queue_out = tf.queue.FIFOQueue(10, [tf.string],
                 name='queue_out',
                 shared_name='master_queue_out')
 
@@ -98,8 +98,8 @@ if args.start is True:
         do_deq = queue_in.dequeue()
         do_enq = queue_out.enqueue("Hello World")
 
-    with tf.Session(server.target, graph=g) as S:
-        S.run(tf.initialize_local_variables())
+    with tf.compat.v1.Session(server.target, graph=g) as S:
+        S.run(tf.compat.v1.initialize_local_variables())
         print((S.run([do_deq])))
         print((S.run([do_deq])))
         print((S.run([do_deq])))

@@ -116,11 +116,11 @@ finally:
 logging.info("Cluster specification\n{c}".format(c=cluster))
 
 if args.start is True:
-    import tensorflow.compat.v1 as tf
+    import tensorflow as tf
     import numpy as np
     import time
 
-    server = tf.train.Server(cluster, job_name='master', task_index=0)
+    server = tf.distribute.Server(cluster, job_name='master', task_index=0)
     logging.info("Server Target is '{st}'".format(st=server.target))
 
     values = []
@@ -129,12 +129,12 @@ if args.start is True:
 
     with g.as_default():
         with tf.device('/job:master/task:0'):
-            with tf.container('shared'):
-                queue_in = tf.FIFOQueue(10, [tf.int32],
+            with tf.compat.v1.container('shared'):
+                queue_in = tf.queue.FIFOQueue(10, [tf.int32],
                     name='queue_in',
                     shared_name='master_queue_in')
 
-                queue_out = tf.FIFOQueue(10, [tf.string],
+                queue_out = tf.queue.FIFOQueue(10, [tf.string],
                     name='queue_out',
                     shared_name='master_queue_out')
 
@@ -154,13 +154,13 @@ if args.start is True:
                 C = A + B*2
                 values.append(C)
 
-        init_op = tf.initialize_variables([A, B, tmp])
+        init_op = tf.compat.v1.initialize_variables([A, B, tmp])
 
         result = tf.pack(values)
 
         do_deq = queue_out.dequeue()
 
-    with tf.Session(server.target, graph=g) as S:
+    with tf.compat.v1.Session(server.target, graph=g) as S:
         S.run(init_op)
         S.run(do_enq)
         print(('Worker result', S.run(result)))

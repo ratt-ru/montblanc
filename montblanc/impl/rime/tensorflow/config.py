@@ -349,7 +349,7 @@ A = [
         units   = HERTZ),
 
     # Beam cube
-    array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 'npol'), 'ct',
+    array_dict('ebeam', ('beam_lw', 'beam_mh', 'beam_nud', 4), 'ct',
         default = identity_on_pols,
         test    = lambda s, c: rc(c.shape, c.dtype),
         tags    = "input, constant",

@@ -1,6 +1,6 @@
 from attrdict import AttrDict
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 from tensorflow.python.ops import data_flow_ops
 
 from .queue_wrapper import _get_queue_types
@@ -15,7 +15,7 @@ class StagingAreaWrapper(object):
         self._dtypes = _get_queue_types(fed_arrays, data_sources)
 
         # Create placeholders for the fed arrays
-        self._placeholders = placeholders = [tf.placeholder(dt,
+        self._placeholders = placeholders = [tf.compat.v1.placeholder(dt,
                 name="{n}_placeholder".format(n=n))
             for n, dt in zip(fed_arrays, self._dtypes)]
 

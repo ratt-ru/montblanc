@@ -28,7 +28,7 @@ import six
 
 import concurrent.futures as cf
 import numpy as np
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 from tensorflow.python.client import timeline
 from attrdict import AttrDict
 import attr
@@ -205,7 +205,8 @@ class RimeSolver(MontblancTensorflowSolver):
                 for s in range(self._shards_per_device)]
 
             # Initialisation operation
-            init_op = tf.global_variables_initializer()
+            # no longer needed in TFv2
+            # init_op = tf.compat.v1.global_variables_initializer()
             # Now forbid modification of the graph
             compute_graph.finalize()
 
@@ -220,11 +221,10 @@ class RimeSolver(MontblancTensorflowSolver):
         montblanc.log.debug("Attaching session to tensorflow server "
             "'{tfs}'".format(tfs=tf_server_target))
 
-        session_config = tf.ConfigProto(allow_soft_placement=True)
+        session_config = tf.compat.v1.ConfigProto(allow_soft_placement=True)
 
-        self._tf_session = tf.Session(tf_server_target,
+        self._tf_session = tf.compat.v1.Session(tf_server_target,
             graph=compute_graph, config=session_config)
-        self._tf_session.run(init_op)
 
         #======================
         # Thread pool executors
@@ -285,7 +285,7 @@ class RimeSolver(MontblancTensorflowSolver):
                     if tag is None:
                         tag='0'
 
-                    metadata = tf.RunMetadata()
+                    metadata = tf.compat.v1.RunMetadata()
                     [metadata.MergeFrom(m) for m in self._rm]
 
                     tl = timeline.Timeline(metadata.step_stats)
@@ -303,9 +303,9 @@ class RimeSolver(MontblancTensorflowSolver):
 
         def _tfrunner(session, should_trace=False):
             """ Wrap the tensorflow Session.run method """
-            trace_level = (tf.RunOptions.FULL_TRACE if should_trace
-                                            else tf.RunOptions.NO_TRACE)
-            options = tf.RunOptions(trace_level=trace_level)
+            trace_level = (tf.compat.v1.RunOptions.FULL_TRACE if should_trace
+                                            else tf.compat.v1.RunOptions.NO_TRACE)
+            options = tf.compat.v1.RunOptions(trace_level=trace_level)
 
             def _runner(*args, **kwargs):
                 """ Pass options through """
@@ -314,7 +314,7 @@ class RimeSolver(MontblancTensorflowSolver):
             def _meta_runner(*args, **kwargs):
                 """ Aggregate run metadata for each run """
                 try:
-                    run_metadata = tf.RunMetadata()
+                    run_metadata = tf.compat.v1.RunMetadata()
                     return session.run(*args, options=options,
                                               run_metadata=run_metadata,
                                             **kwargs)
@@ -829,12 +829,12 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
 
     # Create placholder variables for source counts
     FD.src_ph_vars = AttrDict({
-        n: tf.placeholder(dtype=tf.int32, shape=(), name=n)
+        n: tf.compat.v1.placeholder(dtype=tf.int32, shape=(), name=n)
         for n in ['nsrc'] + mbu.source_nr_vars()})
 
     # Create placeholder variables for properties
     FD.property_ph_vars = AttrDict({
-        n: tf.placeholder(dtype=p.dtype, shape=(), name=n)
+        n: tf.compat.v1.placeholder(dtype=p.dtype, shape=(), name=n)
         for n, p in list(cube.properties().items()) })
 
     #========================================================
@@ -890,18 +890,17 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     #=================================================
 
     def _make_feed_once_tuple(array):
-        dtype = dfs[array.name].dtype
+        name = array.name
+        dtype = dfs[name].dtype
+        shape = tuple([None if isinstance(x, str) else x 
+                       for x in array.shape])
+        ph = tf.compat.v1.placeholder(dtype=dtype,
+            name=name + "_placeholder", shape=shape)
 
-        ph = tf.placeholder(dtype=dtype,
-            name=array.name + "_placeholder")
+        var = tf.compat.v1.Variable(ph, 
+                                    name=name)
 
-        var = tf.Variable(tf.zeros(shape=(1,), dtype=dtype),
-            validate_shape=False,
-            name=array.name)
-
-        op = tf.assign(var, ph, validate_shape=False)
-        #op = tf.Print(op, [tf.shape(var), tf.shape(op)],
-        #    message="Assigning {}".format(array.name))
+        op = tf.compat.v1.assign(var, ph)
 
         return FeedOnce(ph, var, op)
 
@@ -944,7 +943,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
     with tf.device(device):
         # Infer chunk dimensions
-        model_vis_shape = tf.shape(D.model_vis)
+        model_vis_shape = tf.shape(input=D.model_vis)
         ntime, nbl, nchan, npol = [model_vis_shape[i] for i in range(4)]
 
         # Infer float and complex type
@@ -964,7 +963,6 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
         lm, stokes and alpha are the source variables.
         """
-
         lm = rime.radec_to_lm(radec, D.phase_centre)
 
         # Compute the complex phase
@@ -976,8 +974,8 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
                      "for 'n = sqrt(1 - l**2 - m**2) - 1' "
                      "to be finite.")
 
-        phase_real = tf.check_numerics(tf.real(cplx_phase), phase_msg)
-        phase_imag = tf.check_numerics(tf.imag(cplx_phase), phase_msg)
+        phase_real = tf.debugging.check_numerics(tf.math.real(cplx_phase), phase_msg)
+        phase_imag = tf.debugging.check_numerics(tf.math.imag(cplx_phase), phase_msg)
 
         # Compute the square root of the brightness matrix
         # (as well as the sign)
@@ -991,8 +989,8 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
                      "of the brightness matrix and the above must "
                      "hold for this to produce valid values.")
 
-        bsqrt_real = tf.check_numerics(tf.real(bsqrt), bsqrt_msg)
-        bsqrt_imag = tf.check_numerics(tf.imag(bsqrt), bsqrt_msg)
+        bsqrt_real = tf.debugging.check_numerics(tf.math.real(bsqrt), bsqrt_msg)
+        bsqrt_imag = tf.debugging.check_numerics(tf.math.imag(bsqrt), bsqrt_msg)
 
         # Compute the direction dependent effects from the beam
         #radec_prime = radec * tf.cast(tf.stack([-1.0, 1.0]), radec.dtype)
@@ -1034,7 +1032,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         S = LSA.sources['npsrc'][shard].get_to_attrdict()
 
         # Maintain source counts
-        nsrc = tf.shape(S.point_lm)[0]
+        nsrc = tf.shape(input=S.point_lm)[0]
         src_count += nsrc
         npsrc +=  nsrc
 
@@ -1051,7 +1049,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         S = LSA.sources['ngsrc'][shard].get_to_attrdict()
 
         # Maintain source counts
-        nsrc = tf.shape(S.gaussian_lm)[0]
+        nsrc = tf.shape(input=S.gaussian_lm)[0]
         src_count += nsrc
         ngsrc += nsrc
 
@@ -1069,7 +1067,7 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
         S = LSA.sources['nssrc'][shard].get_to_attrdict()
 
         # Maintain source counts
-        nsrc = tf.shape(S.sersic_lm)[0]
+        nsrc = tf.shape(input=S.sersic_lm)[0]
         src_count += nsrc
         nssrc += nsrc
 
@@ -1087,18 +1085,18 @@ def _construct_tensorflow_expression(slvr_cfg, feed_data, device, shard):
 
         # Evaluate point sources
         summed_coherencies, npsrc, src_count = tf.while_loop(
-            point_cond, point_body,
-            [base_coherencies, zero, src_count])
+            cond=point_cond, body=point_body,
+            loop_vars=[base_coherencies, zero, src_count])
 
         # Evaluate gaussians
         summed_coherencies, ngsrc, src_count = tf.while_loop(
-            gaussian_cond, gaussian_body,
-            [summed_coherencies, zero, src_count])
+            cond=gaussian_cond, body=gaussian_body,
+            loop_vars=[summed_coherencies, zero, src_count])
 
         # Evaluate sersics
         summed_coherencies, nssrc, src_count = tf.while_loop(
-            sersic_cond, sersic_body,
-            [summed_coherencies, zero, src_count])
+            cond=sersic_cond, body=sersic_body,
+            loop_vars=[summed_coherencies, zero, src_count])
 
         # Post process visibilities to produce model visibilites and chi squared
         model_vis, chi_squared = rime.post_process_visibilities(

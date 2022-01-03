@@ -3,7 +3,7 @@ import itertools
 import sys
 import six
 from attrdict import AttrDict
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 def _get_queue_types(fed_arrays, data_sources):
     """
@@ -26,11 +26,11 @@ class QueueWrapper(object):
         self._queue_types = _get_queue_types(fed_arrays, data_sources)
 
         # Create placeholders for the fed arrays
-        self._placeholders = [tf.placeholder(dt, name="{n}_placeholder".format(n=n))
+        self._placeholders = [tf.compat.v1.placeholder(dt, name="{n}_placeholder".format(n=n))
             for n, dt in zip(fed_arrays, self._queue_types)]
 
         # Create a FIFOQueue of a given size with the supplied queue types
-        self._queue = tf.FIFOQueue(queue_size,
+        self._queue = tf.queue.FIFOQueue(queue_size,
             self._queue_types, name=name, shared_name=shared_name)
 
         # Create enqueue operation using placeholders
@@ -112,7 +112,7 @@ class SingleInputMultiQueueWrapper(QueueWrapper):
         extra_names = ['%s_%s' % (name, i) for i in R]
         extra_shared_names = ['%s_%s' % (shared_name, i) for i in R]
 
-        extra_queues = [tf.FIFOQueue(queue_size, self._queue_types,
+        extra_queues = [tf.queue.FIFOQueue(queue_size, self._queue_types,
                 name=n, shared_name=sn)
             for n, sn in zip(extra_names, extra_shared_names)]
 

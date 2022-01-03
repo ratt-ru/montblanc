@@ -1,7 +1,7 @@
 # Tensorflow includes and defines
-TF_CFLAGS = $(shell python -c 'import tensorflow.compat.v1 as tf; print(" ".join(tf.sysconfig.get_compile_flags()))')
-TF_LFLAGS = $(shell python -c 'import tensorflow.compat.v1 as tf; print(" ".join(tf.sysconfig.get_link_flags()))')
-TF_CUDA = $(shell python -c 'import tensorflow.compat.v1 as tf; print int(tf.test.is_built_with_cuda())')
+TF_CFLAGS = $(shell python -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_compile_flags()))')
+TF_LFLAGS = $(shell python -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_link_flags()))')
+TF_CUDA = $(shell python -c 'import tensorflow as tf; print int(tf.test.is_built_with_cuda())')
 MB_INC = ../../../../include
 
 TF_FLAGS = -D_MWAITXINTRIN_H_INCLUDED -D_FORCE_INLINES -D_GLIBCXX_USE_CXX11_ABI=0
