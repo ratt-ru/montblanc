@@ -25,7 +25,7 @@ def beam_factory(polarisation_type='linear',
                     frequency=None,
                     dtype=np.float64,
                     schema=DEFAULT_SCHEMA,
-                    overwrite=False):
+                    overwrite=True):
     """ Generate a MeqTrees compliant beam cube """
 
     # MeerKAT l-band, 64 channels

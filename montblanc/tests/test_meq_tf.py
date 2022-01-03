@@ -51,7 +51,8 @@ from montblanc.tests.beam_factory import beam_factory
 # Directory that holds MS and Beam data
 DATA_DIR = 'data'
 
-def run_test(msfile, pol_type, **kwargs):
+def run_test(msfile="/mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms", 
+             pol_type="linear", **kwargs):
     """
     Parameters
     ----------
@@ -75,7 +76,8 @@ def run_test(msfile, pol_type, **kwargs):
     mb_vis_column = 'CORRECTED_DATA'
 
     # Directory in which meqtree-related files are read/written
-    meq_dir = 'meqtrees'
+    import os
+    meq_dir = os.path.join(os.path.dirname(__file__), 'meqtrees')
     # Scripts
     meqpipe = 'meqtree-pipeliner.py'
     # Meqtree profile and script
@@ -126,7 +128,7 @@ def run_test(msfile, pol_type, **kwargs):
 
     bandwidth = frequency[-1] - frequency[0]
 
-    overwrite_beams = kwargs.get('overwrite_beams', False)
+    overwrite_beams = kwargs.get('overwrite_beams', True)
 
     # Get filenames from pattern and open the files
     filenames = beam_factory(polarisation_type=pol_type,
