@@ -4,6 +4,7 @@ import timeit
 
 import numpy as np
 import tensorflow.compat.v1 as tf
+tf.disable_eager_execution()
 from tensorflow.python.client import device_lib
 
 lightspeed = 299792458.
@@ -15,9 +16,9 @@ def complex_phase(lm, uvw, frequency):
     """
 
     # Get the dynamic shape of input tensors
-    lm_shape = tf.shape(lm)
-    uvw_shape = tf.shape(uvw)
-    frequency_shape = tf.shape(frequency)
+    lm_shape = tf.shape(input=lm)
+    uvw_shape = tf.shape(input=uvw)
+    frequency_shape = tf.shape(input=frequency)
 
     # The shapes are themselves tensors
     nsrc = lm_shape[0]
@@ -42,7 +43,7 @@ def complex_phase(lm, uvw, frequency):
     n = tf.sqrt(one - l**2 - m**2) - one
 
     # Outer product l*u + m*v * n*w
-    phase = tf.convert_to_tensor(l*u + m*v + n*w, name='real_phase')
+    phase = tf.convert_to_tensor(value=l*u + m*v + n*w, name='real_phase')
 
     # Multiply in constants
     phase = minus_two_pi_over_C*phase*frequency
@@ -112,10 +113,10 @@ class TestComplexPhase(unittest.TestCase):
         gpu_ops = [_pin_op(d, *tf_args) for d in self.gpu_devs]
 
         # Initialise variables
-        init_op = tf.global_variables_initializer()
+        init_op = tf.compat.v1.global_variables_initializer()
 
         # Now create a tensorflow Session to evaluate the above
-        with tf.Session() as S:
+        with tf.compat.v1.Session() as S:
             S.run(init_op)
 
             phase_np = complex_phase_numpy(np_lm, np_uvw, np_frequency)
