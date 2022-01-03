@@ -285,8 +285,8 @@ def dl_cub(cub_url, cub_archive_name):
         meta = remote_file.info()
 
         # The server may provide us with the size of the file.
-        cl_header = meta.getheaders("Content-Length")
-        remote_file_size = int(cl_header[0]) if len(cl_header) > 0 else None
+        cl_header = meta.get("Content-Length")
+        remote_file_size = int(cl_header[0]) if cl_header is not None and len(cl_header) > 0 else None
 
         # Initialise variables
         local_file_size = 0
