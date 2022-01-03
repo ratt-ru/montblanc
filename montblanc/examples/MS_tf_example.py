@@ -20,6 +20,7 @@
 
 import logging
 import numpy as np
+import os
 
 import montblanc
 import montblanc.util as mbu
@@ -99,6 +100,7 @@ class RimeSinkProvider(SinkProvider):
 if __name__ == '__main__':
     import sys
     import argparse
+    import tensorflow as tf
 
     parser = argparse.ArgumentParser(description='RIME MS test script')
     parser.add_argument('msfile', help='Measurement Set File')
@@ -110,8 +112,13 @@ if __name__ == '__main__':
         type=lambda v: v.lower() in ("yes", "true", "t", "1"),
         choices=[True, False], default=False,
         help='Handle auto-correlations')
+    parser.add_argument('-nt','--numthreads',dest='nt',
+        type=int, default=1, help='Number of Tensorflow threads')
 
     args = parser.parse_args(sys.argv[1:])
+
+    tf.config.threading.set_inter_op_parallelism_threads(1)
+    os.environ["OMP_NUM_THREADS"] = str(args.nt)
 
     # Set the logging level
     montblanc.log.setLevel(logging.DEBUG)
