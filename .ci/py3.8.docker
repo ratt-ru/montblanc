@@ -5,17 +5,133 @@ WORKDIR /optsoft/tensorflow
 ENV DEBIAN_DEPENDENCIES wget \
                         build-essential \
                         python3-pip \
+                        git \
                         nvidia-cuda-toolkit \
                         nvidia-cuda-gdb \
                         nvidia-cuda-dev \
-                        git \
                         casalite
+
+ENV MT_DEPENDENCIES libblitz0-dev python3-dev libblas-dev liblapack-dev libqdbm-dev wcslib-dev \
+                    libfftw3-dev python3-numpy libcfitsio-dev libboost-all-dev libboost-system-dev cmake g++ wget gfortran \
+                    libncurses5-dev bison libbison-dev flex libreadline6-dev python3-pip
 
 # setup base dependencies
 RUN docker-apt-install ${DEBIAN_DEPENDENCIES}
-RUN docker-apt-install casacore-data
+RUN docker-apt-install ${MT_DEPENDENCIES}
 RUN pip3 install -U pip setuptools wheel
 
+#####################################################################
+## BUILD CASACORE FROM SOURCE
+#####################################################################
+WORKDIR /src
+RUN wget https://github.com/casacore/casacore/archive/v3.3.0.tar.gz
+RUN tar xvf v3.3.0.tar.gz
+RUN mkdir casacore-3.3.0/build
+WORKDIR /src/casacore-3.3.0/build
+RUN cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DBUILD_DEPRECATED=ON -DBUILD_PYTHON3=ON -DBUILD_PYTHON=OFF ../
+RUN make -j 4
+RUN make install
+RUN ldconfig
+#RUN pip install -U --user --force-reinstall --install-option="--prefix=/usr"  pip setuptools wheel
+WORKDIR /src
+RUN wget https://github.com/casacore/python-casacore/archive/v3.3.0.tar.gz
+RUN tar xvf v3.3.0.tar.gz.1
+WORKDIR /src/python-casacore-3.3.0
+RUN pip3 install .
+WORKDIR /
+RUN python3 -c "from pyrap.tables import table as tbl"
+
+#####################################################################
+## Get CASACORE ephem data
+#####################################################################
+RUN mkdir -p /usr/share/casacore/data/
+WORKDIR /usr/share/casacore/data/
+RUN docker-apt-install rsync
+RUN rsync -avz rsync://casa-rsync.nrao.edu/casa-data .
+
+#####################################################################
+## BUILD CASArest from source
+#####################################################################
+WORKDIR /src
+RUN wget https://github.com/casacore/casarest/archive/v1.7.0.tar.gz
+RUN tar xvf v1.7.0.tar.gz
+WORKDIR /src/casarest-1.7.0
+RUN mkdir -p build
+WORKDIR /src/casarest-1.7.0/build
+RUN cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release ../
+RUN make -j 4
+RUN make install
+RUN ldconfig
+
+######################################## 
+# build makems from source and test
+########################################
+WORKDIR /src
+ENV BUILD /src
+RUN wget https://github.com/ska-sa/makems/archive/1.5.3.tar.gz
+RUN tar xvf 1.5.3.tar.gz
+RUN mkdir -p $BUILD/makems-1.5.3/LOFAR/build/gnu_opt
+WORKDIR $BUILD/makems-1.5.3/LOFAR/build/gnu_opt
+RUN cmake -DCMAKE_MODULE_PATH:PATH=$BUILD/makems-1.5.3/LOFAR/CMake \
+-DUSE_LOG4CPLUS=OFF -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release ../..
+RUN make -j 4
+RUN make install
+
+ENV PATH=/src/makems-1.5.3/LOFAR/build/gnu_opt/CEP/MS/src:${PATH}
+WORKDIR $BUILD/makems-1.5.3/test
+RUN makems WSRT_makems.cfg
+
+########################################
+# build SOFA
+########################################
+WORKDIR /src
+RUN wget http://www.iausofa.org/2021_0512_C/sofa_c-20210512.tar.gz
+RUN tar xvfz sofa_c-20210512.tar.gz
+WORKDIR /src/sofa/20210512/c/src
+RUN sed -i '52s/.*/INSTALL_DIR = \/usr/' makefile
+RUN make -j4
+RUN make install
+RUN make test
+
+########################################
+# install meqtrees
+########################################
+WORKDIR /src
+RUN git clone -b v1.8.0 https://github.com/ska-sa/meqtrees-timba.git
+RUN mkdir /src/meqtrees-timba/build
+WORKDIR /src/meqtrees-timba/build
+RUN cmake -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DENABLE_PYTHON_3=ON ..
+RUN make -j4
+RUN make install
+RUN ldconfig
+
+
+WORKDIR /src
+RUN git clone -b v1.7.2 https://github.com/ska-sa/meqtrees-cattery.git
+RUN git clone -b v1.5.2 https://github.com/ska-sa/purr.git
+RUN git clone -b v1.4.5 https://github.com/ska-sa/kittens.git
+RUN git clone -b v1.7.0 https://github.com/ska-sa/tigger-lsm.git
+RUN git clone -b v1.7.4.2 https://github.com/ska-sa/pyxis.git
+RUN git clone -b v1.7.6 https://github.com/ska-sa/owlcat.git
+RUN pip3.8 install ./purr ./owlcat ./kittens ./tigger-lsm
+RUN pip3.8 install ./pyxis
+WORKDIR /
+
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 2
+# basic install tests
+RUN flag-ms.py --help
+RUN meqtree-pipeliner.py --help
+RUN pyxis --help
+
+# run test when built
+RUN pip3.8 install nose
+#RUN cp -r /src/pyxis/Pyxis/recipes /usr/local/lib/python3.8/dist-packages/Pyxis/recipes
+WORKDIR /src/pyxis/Pyxis/recipes/meqtrees-batch-test
+RUN python3.8 -m "nose"
+
+#####################################################
+# install montblanc including specified tensorflow
+#####################################################
 # copy into workspace
 WORKDIR /src/montblanc
 ADD docs /src/montblanc/docs
@@ -31,7 +147,6 @@ ADD requirements.readthedocs.txt /src/montblanc/requirements.readthedocs.txt
 ADD setup.cfg /src/montblanc/setup.cfg
 ADD setup.py /src/montblanc/setup.py
 
-# install montblanc including specified tensorflow
 RUN pip3 install /src/montblanc
 
 # run tests
@@ -51,6 +166,7 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/tests/test_source_utils.py \
                  /src/montblanc/montblanc/tests/test_source_utils.py \
                  /src/montblanc/montblanc/tests/test_utils.py \
+                 /src/montblanc/montblanc/tests/test_meq_tf.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_b_sqrt.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_create_antenna_jones.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_e_beam.py \
@@ -58,16 +174,15 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_gauss_shape.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_parallactic_angle_sin_cos.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_phase.py \ 
-                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_post_process_visibilties.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_post_process_visibilities.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_radec_to_lm.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_sersic_shape.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_sum_coherencies.py
-# meqtrees unavailable for 20.04
+
+# run tests
+RUN python3 -m nose $TESTS_TO_RUN
 
 # run example montblanc recipe
 RUN python3 /src/montblanc/montblanc/examples/MS_tf_example.py /mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms \
             -b /mb_testing/data/test_beam_
-
-#RUN for i in $TESTS_TO_RUN; do python3 -m nose $i; done
-RUN python3 -m nose $TESTS_TO_RUN
 
