@@ -6,6 +6,7 @@ ENV DEBIAN_DEPENDENCIES wget \
                         build-essential \
                         python3-pip \
                         git \
+                        casacore-data \
                         casalite
 
 # setup base dependencies
