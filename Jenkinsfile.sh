@@ -15,4 +15,5 @@ echo "----------------------------------------------"
 #build using docker file in directory:
 cd $PROJECTS_DIR/montblanc
 IMAGENAME="mb"
-docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=true -f .ci/py3.8.docker .
+docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=false -f .ci/py3.8.docker .
+docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=false -f .ci/py3.6.docker .
