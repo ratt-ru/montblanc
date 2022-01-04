@@ -51,7 +51,8 @@ from montblanc.tests.beam_factory import beam_factory
 # Directory that holds MS and Beam data
 DATA_DIR = 'data'
 
-def run_test(msfile, pol_type, **kwargs):
+def run_test(msfile="/mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms", 
+             pol_type="linear", **kwargs):
     """
     Parameters
     ----------
@@ -75,7 +76,8 @@ def run_test(msfile, pol_type, **kwargs):
     mb_vis_column = 'CORRECTED_DATA'
 
     # Directory in which meqtree-related files are read/written
-    meq_dir = 'meqtrees'
+    import os
+    meq_dir = os.path.join(os.path.dirname(__file__), 'meqtrees')
     # Scripts
     meqpipe = 'meqtree-pipeliner.py'
     # Meqtree profile and script
@@ -433,7 +435,7 @@ if __name__ == "__main__":
 
     def create_parser():
         p = argparse.ArgumentParser()
-        p.add_argument("ms", default=pjoin("data", "WSRT.MS"),
+        p.add_argument("ms", default=pjoin("data", "mk64.Lwide.0.5hr.30s.856mhz.ms"),
                                 nargs="?")
         p.add_argument("-p", "--polarisation-type",
                             choices=['linear', 'circular'],

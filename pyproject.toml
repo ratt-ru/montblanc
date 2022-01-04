@@ -1,3 +1,5 @@
 [build-system]
-requires = ["tensorflow == 1.8.0", "setuptools >= 0.53.0"]
+requires = ['tensorflow >= 2.7.0; python_version >="3.8"',
+            'tensorflow <=2.4.4; python_version <"3.8"',
+            "setuptools >= 0.53.0"]
 build-backend = "setuptools.build_meta"

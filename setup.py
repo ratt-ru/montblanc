@@ -55,7 +55,9 @@ log_format = "%(name)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 log = logging.getLogger("Montblanc Install")
 
-
+global device_info, nvcc_settings
+device_info = None
+nvcc_settings = None
 
 minimum_cuda_version = 8000
 
@@ -285,8 +287,8 @@ def dl_cub(cub_url, cub_archive_name):
         meta = remote_file.info()
 
         # The server may provide us with the size of the file.
-        cl_header = meta.getheaders("Content-Length")
-        remote_file_size = int(cl_header[0]) if len(cl_header) > 0 else None
+        cl_header = meta.get("Content-Length")
+        remote_file_size = int(cl_header[0]) if cl_header is not None and len(cl_header) > 0 else None
 
         # Initialise variables
         local_file_size = 0
@@ -411,12 +413,25 @@ def install_cub(mb_inc_path):
 
 tensorflow_extension_name = 'montblanc.ext.rime'
 
-def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info):
+def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info, 
+                                      march_native=False, gcc_verbosity="",
+                                      linker_options=""):
     """inject deep into distutils to customize gcc/nvcc dispatch """
-
+    compiler_verbosity_flags = list(map(lambda x: x.strip(), gcc_verbosity.split(" ")))
+    if compiler_verbosity_flags == [""]:
+        compiler_verbosity_flags = []
+    linker_options = list(map(lambda x: x.strip(), linker_options.split(" ")))
+    if linker_options == [""]:
+       linker_options = None
+    if march_native:
+        log.warn("Warning: native marching enabled - the binaries are NOT PORTABLE\n"
+                 "Disable this option before building distributed images/wheels")
+        opt_flags = ['-march=native', '-mtune=native']
+        opt_flags += compiler_verbosity_flags
+    else:
+        opt_flags = [] + compiler_verbosity_flags
     # tell the compiler it can process .cu files
     compiler.src_extensions.append('.cu')
-
     # save references to the default compiler_so and _comple methods
     default_compiler_so = compiler.compiler_so
     default_compile = compiler._compile
@@ -424,20 +439,25 @@ def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info):
     # now redefine the _compile method. This gets executed for each
     # object but distutils doesn't have the ability to change compilers
     # based on source extension: we add it.
+    if linker_options and len(linker_options) > 0:
+        log.warn("Warning: overrriding default linker options \"[{}]\" with \"[{}]\"".format(
+                 " ".join(compiler.linker_so), " ".join(linker_options)))
+        compiler.linker_so = linker_options
     def _compile(obj, src, ext, cc_args, extra_postargs, pp_opts):
-        if os.path.splitext(src)[1] == '.cu':
+        if os.path.splitext(src)[1] == '.cu' and nvcc_settings is not None:
             # use the cuda for .cu files
             compiler.set_executable('compiler_so', nvcc_settings['nvcc_path'])
             # use only a subset of the extra_postargs, which are 1-1 translated
             # from the extra_compile_args in the Extension class
-            postargs = extra_postargs['nvcc']
+            postargs = extra_postargs['nvcc'] + [val for pair in zip(["--compiler-options"]*len(opt_flags),
+                                                                      map(lambda x: '"{}"'.format(x), opt_flags))
+                                                 for val in pair]
         else:
-            postargs = extra_postargs['gcc']
+            postargs = extra_postargs['gcc'] + opt_flags
 
         default_compile(obj, src, ext, cc_args, postargs, pp_opts)
         # reset the default compiler_so, which we might have changed for cuda
         compiler.compiler_so = default_compiler_so
-
     # inject our redefined _compile method into the class
     compiler._compile = _compile
 
@@ -463,10 +483,10 @@ def cuda_architecture_flags(device_info):
 
 def create_tensorflow_extension(nvcc_settings, device_info):
     """ Create an extension that builds the custom tensorflow ops """
-    import tensorflow as tf
+    import tensorflow.compat.v1 as tf
     import glob
 
-    use_cuda = (bool(nvcc_settings['cuda_available'])
+    use_cuda = nvcc_settings is not None and (bool(nvcc_settings['cuda_available'])
         and tf.test.is_built_with_cuda())
 
     # Source and includes
@@ -483,8 +503,13 @@ def create_tensorflow_extension(nvcc_settings, device_info):
 
     # Libraries
     library_dirs = [tf.sysconfig.get_lib()]
-    libraries = ['tensorflow_framework']
-    extra_link_args = ['-fPIC', '-fopenmp', '-g0']
+    libraries = []
+    for ldir in library_dirs:
+        libraries += map(lambda x: ":{}".format(x), 
+                         map(os.path.basename, 
+                             glob.glob(os.path.join(ldir, "*.so*"))))
+    #libraries = [':libtensorflow_framework.so.2']
+    extra_link_args = ['-fPIC', '-fopenmp']
 
     # Macros
     define_macros = [
@@ -493,10 +518,9 @@ def create_tensorflow_extension(nvcc_settings, device_info):
         ('_GLIBCXX_USE_CXX11_ABI', 0)]
 
     # Common flags
-    flags = ['-std=c++11']
+    flags = ['-std=c++14']
 
-    gcc_flags = flags + ['-g0', '-fPIC', '-fopenmp', '-O2']
-    gcc_flags += ['-march=native', '-mtune=native']
+    gcc_flags = flags + ['-fPIC', '-fopenmp']
     nvcc_flags = flags + []
 
     # Add cuda specific build information, if it is available
@@ -550,7 +574,11 @@ def get_ext_filename_without_platform_suffix(filename):
 
 class BuildCommand(build_ext):
     """ Custom build command for building the tensorflow extension """
-
+    user_options = build_ext.user_options + [
+        ('march-native=', None, 'Enable native marching (optimized, non-portable binaries)'),
+        ('compiler-verbosity=', None, 'Control GCC compiler verbosity'),
+        ('linker-options=', None, 'Overrulling options to linker - this overrides all defaults')
+    ]
     def get_ext_filename(self, ext_name):
         if PY3:
             filename = super().get_ext_filename(ext_name)
@@ -560,15 +588,40 @@ class BuildCommand(build_ext):
 
     def initialize_options(self):
         build_ext.initialize_options(self)
-        self.nvcc_settings = None
-        self.cuda_devices = None
+        global device_info, nvcc_settings
+        self.nvcc_settings = nvcc_settings
+        self.cuda_devices = device_info
+        self.march_native = False
+        self.compiler_verbosity = None
+        self.linker_options = None
 
     def build_extensions(self):
+        if isinstance(self.march_native, str):
+            if self.march_native.upper() == "TRUE" or \
+            self.march_native == "ON" or \
+            self.march_native == "YES":
+                march_native = True
+            elif self.march_native.upper() == "FALSE" or \
+                self.march_native == "OFF" or \
+                self.march_native == "NO":
+                march_native = False
+            else:
+                raise ValueError("Option march_native must be type boolean (true / on / yes) or converse acceptable")
+        elif isinstance(self.march_native, bool):
+            march_native = self.march_native
+        else:
+            raise ValueError("Option march_native is neither string or boolean")
+        if self.compiler_verbosity is None:
+            self.compiler_verbosity = ""
+        if self.linker_options is None:
+            self.linker_options = ""
+
         customize_compiler_for_tensorflow(self.compiler,
-            self.nvcc_settings, self.cuda_devices)
+            self.nvcc_settings, self.cuda_devices, 
+            march_native=march_native,
+            gcc_verbosity=self.compiler_verbosity,
+            linker_options=self.linker_options)
         build_ext.build_extensions(self)
-
-
 
 # ==================
 # setuptools imports
@@ -588,31 +641,19 @@ mb_inc_path = os.path.join(mb_path, 'include')
 
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
-
-
-REQ_TF_VERSION = LooseVersion("1.8.0")
-
 # Inspect previous tensorflow installs
 try:
-    import tensorflow as tf
+    import tensorflow.compat.v1 as tf
 except ImportError:
-    if not on_rtd:
-        raise ImportError("Please 'pip install tensorflow==%s' or "
-                          "'pip install tensorflow-gpu==%s' prior to "
-                          "installation if you require CPU or GPU "
-                          "support, respectively" %
-                          (REQ_TF_VERSION, REQ_TF_VERSION))
+    log.error("No version of tensorflow discovered. "
+              "You should install this package using pip, "
+              "not python setup.py install or develop (standard PEP 518 - "
+              "you should not be seeing this message)")
 
     tf_installed = False
     use_tf_cuda = False
 else:
-    found_version = LooseVersion(tf.__version__)
-
-    if found_version < REQ_TF_VERSION:
-        raise ValueError("Installed version of tensorflow is %s "
-                         "but %s is required" %
-                         (found_version, REQ_TF_VERSION))
-
+    # setuptools will handle version clashes
     tf_installed = True
     use_tf_cuda = tf.test.is_built_with_cuda()
 
@@ -644,7 +685,6 @@ if use_tf_cuda:
     except InspectCudaException as e:
         # Can't find a reasonable NVCC/CUDA install. Go with the CPU version
         log.exception("CUDA not found: {}. ".format(str(e)))
-        raise
 
     except InstallCubException as e:
         # This shouldn't happen and the user should
@@ -668,7 +708,8 @@ install_requires = [
     'funcsigs >= 0.4',
     'futures >= 3.0.5; python_version <= "2.7"',
     'hypercube == 0.3.4',
-    'tensorflow == {0:s}'.format(str(REQ_TF_VERSION)),
+    'tensorflow >= 2.7.0; python_version >="3.8"', #ubuntu 20.04 with distro nvcc/gcc
+    'tensorflow <=2.4.4; python_version <"3.8"', #ubuntu 18.04 with distro nvcc/gcc
 ]
 
 # ==================================
@@ -693,30 +734,26 @@ else:
         'ruamel.yaml >= 0.15.22',
     ]
 
-    if not tf_installed:
-        log.info("No previous version of tensorflow discovered. "
-                 "The CPU version will be installed.")
-
-        install_requires.append("tensorflow == %s" % REQ_TF_VERSION)
+    if not tf_installed: #error raised earlier
+        sys.exit(1)
 
     cmdclass = {'build_ext': BuildCommand}
     # tensorflow_ops_ext.BuildCommand.run will
     # expand this dummy extension to its full portential
-
     ext_modules = [create_tensorflow_extension(nvcc_settings, device_info)]
 
     # Pass NVCC and CUDA settings through to the build extension
     ext_options = {
         'build_ext': {
             'nvcc_settings': nvcc_settings,
-            'cuda_devices': device_info,
+            'cuda_devices': device_info
         },
     }
 
 log.info('install_requires={}'.format(install_requires))
 
 setup(name='montblanc',
-    version="0.6.4",
+    version="0.7.0",
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',
@@ -731,6 +768,7 @@ setup(name='montblanc',
     ],
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
+    python_requires='>=3.6',
     cmdclass=cmdclass,
     ext_modules=ext_modules,
     options=ext_options,

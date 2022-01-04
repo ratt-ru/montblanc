@@ -2,7 +2,8 @@
 import unittest
 
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_eager_execution()
 from tensorflow.python.client import device_lib
 
 class TestEBeam(unittest.TestCase):
@@ -72,9 +73,9 @@ class TestEBeam(unittest.TestCase):
         gpu_ops = [_pin_op(d, *tf_args) for d in self.gpu_devs]
 
         # Initialise variables
-        init_op = tf.global_variables_initializer()
+        init_op = tf.compat.v1.global_variables_initializer()
 
-        with tf.Session() as S:
+        with tf.compat.v1.Session() as S:
             S.run(init_op)
 
             # Get the CPU ejones

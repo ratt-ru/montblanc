@@ -126,7 +126,7 @@ def beam_factory(polarisation_type='linear',
     filenames = _create_filenames(schema, polarisation_type)
 
     for filename in [f for ri_pair in list(filenames.values()) for f in ri_pair]:
-        if overwrite:
+        if overwrite or not pexists(filename):
             ex = np.deg2rad(1.0)
             coords = np.linspace(-ex, ex, header['NAXIS2'], endpoint=True)
 

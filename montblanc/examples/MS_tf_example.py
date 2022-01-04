@@ -20,6 +20,7 @@
 
 import logging
 import numpy as np
+import os
 
 import montblanc
 import montblanc.util as mbu
@@ -96,6 +97,7 @@ class RimeSinkProvider(SinkProvider):
 if __name__ == '__main__':
     import sys
     import argparse
+    import tensorflow as tf
 
     parser = argparse.ArgumentParser(description='RIME MS test script')
     parser.add_argument('msfile', help='Measurement Set File')

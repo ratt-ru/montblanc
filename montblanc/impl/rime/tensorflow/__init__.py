@@ -21,11 +21,13 @@
 def load_tf_lib():
     """ Load the tensorflow library """
     from os.path import join as pjoin
-    import pkg_resources
+    from pkg_resources import working_set
+    from pkg_resources import Requirement
 
     import tensorflow as tf
 
     path = pjoin('ext', 'rime.so')
-    rime_lib_path = pkg_resources.resource_filename("montblanc", path)
+    mbloc = pjoin(working_set.find(Requirement.parse('montblanc')).location, "montblanc")
+    rime_lib_path = pjoin(mbloc, path)
     return tf.load_op_library(rime_lib_path)
 
