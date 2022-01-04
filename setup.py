@@ -56,6 +56,8 @@ logging.basicConfig(level=logging.INFO, format=log_format)
 log = logging.getLogger("Montblanc Install")
 
 global device_info, nvcc_settings
+device_info = None
+nvcc_settings = None
 
 minimum_cuda_version = 8000
 
@@ -422,8 +424,8 @@ def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info,
     if linker_options == [""]:
        linker_options = None
     if march_native:
-        print("Warning: native marching enabled - the binaries are NOT PORTABLE")
-        print("         Disable this option before building distributed images/wheels")
+        log.warn("Warning: native marching enabled - the binaries are NOT PORTABLE\n"
+                 "Disable this option before building distributed images/wheels")
         opt_flags = ['-march=native', '-mtune=native']
         opt_flags += compiler_verbosity_flags
     else:
@@ -438,11 +440,11 @@ def customize_compiler_for_tensorflow(compiler, nvcc_settings, device_info,
     # object but distutils doesn't have the ability to change compilers
     # based on source extension: we add it.
     if linker_options and len(linker_options) > 0:
-        print("Warning overrriding default linker options \"[{}]\" with \"[{}]\"".format(
-            " ".join(compiler.linker_so), " ".join(linker_options)))
+        log.warn("Warning: overrriding default linker options \"[{}]\" with \"[{}]\"".format(
+                 " ".join(compiler.linker_so), " ".join(linker_options)))
         compiler.linker_so = linker_options
     def _compile(obj, src, ext, cc_args, extra_postargs, pp_opts):
-        if os.path.splitext(src)[1] == '.cu':
+        if os.path.splitext(src)[1] == '.cu' and nvcc_settings is not None:
             # use the cuda for .cu files
             compiler.set_executable('compiler_so', nvcc_settings['nvcc_path'])
             # use only a subset of the extra_postargs, which are 1-1 translated
@@ -484,7 +486,7 @@ def create_tensorflow_extension(nvcc_settings, device_info):
     import tensorflow.compat.v1 as tf
     import glob
 
-    use_cuda = (bool(nvcc_settings['cuda_available'])
+    use_cuda = nvcc_settings is not None and (bool(nvcc_settings['cuda_available'])
         and tf.test.is_built_with_cuda())
 
     # Source and includes
@@ -639,31 +641,19 @@ mb_inc_path = os.path.join(mb_path, 'include')
 
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
-
-# this version compiles 3.8
-REQ_TF_VERSION = LooseVersion("2.7.0")
-
 # Inspect previous tensorflow installs
 try:
     import tensorflow.compat.v1 as tf
 except ImportError:
-    if not on_rtd:
-        raise ImportError("Please 'pip install tensorflow==%s' or "
-                          "'pip install tensorflow-gpu==%s' prior to "
-                          "installation if you require CPU or GPU "
-                          "support, respectively" %
-                          (REQ_TF_VERSION, REQ_TF_VERSION))
+    log.error("No version of tensorflow discovered. "
+              "You should install this package using pip, "
+              "not python setup.py install or develop (standard PEP 518 - "
+              "you should not be seeing this message)")
 
     tf_installed = False
     use_tf_cuda = False
 else:
-    found_version = LooseVersion(tf.__version__)
-
-    if found_version < REQ_TF_VERSION:
-        raise ValueError("Installed version of tensorflow is %s "
-                         "but %s is required" %
-                         (found_version, REQ_TF_VERSION))
-
+    # setuptools will handle version clashes
     tf_installed = True
     use_tf_cuda = tf.test.is_built_with_cuda()
 
@@ -695,7 +685,6 @@ if use_tf_cuda:
     except InspectCudaException as e:
         # Can't find a reasonable NVCC/CUDA install. Go with the CPU version
         log.exception("CUDA not found: {}. ".format(str(e)))
-        raise
 
     except InstallCubException as e:
         # This shouldn't happen and the user should
@@ -719,7 +708,8 @@ install_requires = [
     'funcsigs >= 0.4',
     'futures >= 3.0.5; python_version <= "2.7"',
     'hypercube == 0.3.4',
-    'tensorflow == {0:s}'.format(str(REQ_TF_VERSION)),
+    'tensorflow >= 2.7.0; python_version >="3.8"', #ubuntu 20.04 with distro nvcc/gcc
+    'tensorflow <=2.4.4; python_version <"3.8"', #ubuntu 18.04 with distro nvcc/gcc
 ]
 
 # ==================================
@@ -744,11 +734,8 @@ else:
         'ruamel.yaml >= 0.15.22',
     ]
 
-    if not tf_installed:
-        log.info("No previous version of tensorflow discovered. "
-                 "The CPU version will be installed.")
-
-        install_requires.append("tensorflow == %s" % REQ_TF_VERSION)
+    if not tf_installed: #error raised earlier
+        sys.exit(1)
 
     cmdclass = {'build_ext': BuildCommand}
     # tensorflow_ops_ext.BuildCommand.run will
@@ -781,7 +768,7 @@ setup(name='montblanc',
     ],
     author='Simon Perkins',
     author_email='simon.perkins@gmail.com',
-    python_requires='>=3.8',
+    python_requires='>=3.6',
     cmdclass=cmdclass,
     ext_modules=ext_modules,
     options=ext_options,
