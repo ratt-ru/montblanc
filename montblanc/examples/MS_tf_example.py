@@ -85,9 +85,6 @@ class RadioSourceProvider(SourceProvider):
         """ Tell montblanc about dimension sizes (point sources only) """
         return [('npsrc', self._npsrc)]
 
-    def phase_centre(self, context):
-        return np.array([0.0, -10.0])
-
 class RimeSinkProvider(SinkProvider):
     def name(self):
         return 'Sink'
@@ -112,13 +109,8 @@ if __name__ == '__main__':
         type=lambda v: v.lower() in ("yes", "true", "t", "1"),
         choices=[True, False], default=False,
         help='Handle auto-correlations')
-    parser.add_argument('-nt','--numthreads',dest='nt',
-        type=int, default=1, help='Number of Tensorflow threads')
 
     args = parser.parse_args(sys.argv[1:])
-
-    tf.config.threading.set_inter_op_parallelism_threads(1)
-    os.environ["OMP_NUM_THREADS"] = str(args.nt)
 
     # Set the logging level
     montblanc.log.setLevel(logging.DEBUG)
