@@ -10,8 +10,6 @@ using tensorflow::shape_inference::ShapeHandle;
 using tensorflow::shape_inference::DimensionHandle;
 using tensorflow::Status;
 
-#include <iostream>
-//auto shape_function = [](InferenceContext* c) {
 auto shape_function(InferenceContext* c) {
     // Dummies for tests
     ShapeHandle input;
