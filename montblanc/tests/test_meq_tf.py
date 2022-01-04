@@ -128,7 +128,7 @@ def run_test(msfile="/mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms",
 
     bandwidth = frequency[-1] - frequency[0]
 
-    overwrite_beams = kwargs.get('overwrite_beams', True)
+    overwrite_beams = kwargs.get('overwrite_beams', False)
 
     # Get filenames from pattern and open the files
     filenames = beam_factory(polarisation_type=pol_type,
