@@ -204,9 +204,6 @@ class RimeSolver(MontblancTensorflowSolver):
                 for d, dev in enumerate(self._devices)
                 for s in range(self._shards_per_device)]
 
-            # Initialisation operation
-            # no longer needed in TFv2
-            # init_op = tf.compat.v1.global_variables_initializer()
             # Now forbid modification of the graph
             compute_graph.finalize()
 
