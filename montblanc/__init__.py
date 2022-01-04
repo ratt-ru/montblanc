@@ -24,7 +24,7 @@ import os
 from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
 
-__version__ = "0.6.4"
+__version__ = "0.7.0"
 
 log = setup_logging()
 
