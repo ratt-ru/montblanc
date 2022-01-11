@@ -28,7 +28,7 @@ try:
     pm = pyrap.measures.measures()
 except ImportError as e:
     pm = None
-    montblanc.log.warn("python-casacore import failed. "
+    montblanc.log.warning("python-casacore import failed. "
                        "Parallactic Angle computation will fail.")
 
 def parallactic_angles(times, antenna_positions, field_centre, offsets=None):

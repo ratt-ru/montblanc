@@ -52,7 +52,7 @@ class HypercubeProxyMetaClass(type):
                 return getattr(self._cube, name)(*args, **kwargs)
 
             wrap = functools.update_wrapper(_proxy, method)
-            spec = inspect.getargspec(method)
+            spec = inspect.getfullargspec(method)
             return wrap
 
         for name, method in hc_members:

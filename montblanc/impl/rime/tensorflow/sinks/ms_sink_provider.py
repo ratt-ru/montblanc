@@ -73,7 +73,7 @@ class MSSinkProvider(SinkProvider):
         if msshape is None:
             guessed_shape = [self._manager._nchan, 4]
 
-            montblanc.log.warn("Could not obtain 'shape' from the '{c}' "
+            montblanc.log.warning("Could not obtain 'shape' from the '{c}' "
                 "column descriptor. Guessing it is '{gs}'.".format(
                     c=column, gs=guessed_shape))
 

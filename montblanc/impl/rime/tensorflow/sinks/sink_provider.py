@@ -70,7 +70,7 @@ def find_sinks(obj):
     SINK_ARGSPEC = ['self', 'context']
 
     return { n: m for n, m in inspect.getmembers(obj, inspect.ismethod)
-        if inspect.getargspec(m)[0] == SINK_ARGSPEC }
+        if inspect.getfullargspec(m)[0] == SINK_ARGSPEC }
 
 class SinkProvider(AbstractSinkProvider):
 
