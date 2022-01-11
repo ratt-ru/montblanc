@@ -173,7 +173,7 @@ class RimeSolver(MontblancTensorflowSolver):
         cpus = [d.name for d in devices if d.device_type == 'CPU']
 
         if device_type == 'GPU' and len(gpus) == 0:
-            montblanc.log.warn("No GPUs are present, falling back to CPU.")
+            montblanc.log.warning("No GPUs are present, falling back to CPU.")
             device_type = 'CPU'
 
         use_cpus = device_type == 'CPU'

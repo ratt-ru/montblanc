@@ -89,7 +89,7 @@ def find_sources(obj, argspec=None):
 
     return { n: m for n, m in inspect.getmembers(obj, callable)
         if not n.startswith('_') and
-        inspect.getargspec(m).args in argspec }
+        inspect.getfullargspec(m).args in argspec }
 
 
 class SourceProvider(AbstractSourceProvider):

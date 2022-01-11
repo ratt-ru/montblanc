@@ -91,7 +91,7 @@ def nvcc_compiler_settings():
 
     # No NVCC, try find it in the CUDA_PATH
     if not nvcc_found:
-        log.warn("nvcc compiler not found at '{}'. "
+        log.warning("nvcc compiler not found at '{}'. "
             "Searching within the CUDA_PATH '{}'"
                 .format(nvcc_path, cuda_path))
 
@@ -109,7 +109,7 @@ def nvcc_compiler_settings():
         cuda_path = os.path.normpath(
             os.path.join(os.path.dirname(nvcc_path), ".."))
 
-        log.warn("CUDA_PATH not found, inferring it as '{}' "
+        log.warning("CUDA_PATH not found, inferring it as '{}' "
             "from the nvcc location '{}'".format(
                 cuda_path, nvcc_path))
 
@@ -306,7 +306,7 @@ def dl_cub(cub_url, cub_archive_name):
 
         if (remote_file_size is not None and
                 not local_file_size == remote_file_size):
-            log.warn("Local file size '{}' "
+            log.warning("Local file size '{}' "
                 "does not match remote '{}'".format(
                     local_file_size, remote_file_size))
 
@@ -753,7 +753,7 @@ else:
 log.info('install_requires={}'.format(install_requires))
 
 setup(name='montblanc',
-    version="0.7.0",
+    version="0.7.1",
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',

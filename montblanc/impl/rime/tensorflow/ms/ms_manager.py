@@ -32,7 +32,7 @@ MS_TO_NP_TYPE_MAP = {
     'INT' : np.int32,
     'FLOAT' : np.float32,
     'DOUBLE' : np.float64,
-    'BOOLEAN' : np.bool,
+    'BOOLEAN' : np.bool_,
     'COMPLEX' : np.complex64,
     'DCOMPLEX' : np.complex128
 }
@@ -246,7 +246,7 @@ class MeasurementSetManager(object):
                 d, s in zip(MS_DIM_ORDER, shape))
             row_desc = " x ".join('%s' % s for s in shape)
 
-            montblanc.log.warn("Encountered '{msr}' rows in '{ms}' "
+            montblanc.log.warning("Encountered '{msr}' rows in '{ms}' "
                 "but expected '{rd} = {er}' after finding the following "
                 "dimensions by inspection: [{d}]. Irregular Measurement Sets "
                 "are not fully supported due to the generality of the format.".format(
