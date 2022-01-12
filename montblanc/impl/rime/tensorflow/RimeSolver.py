@@ -242,32 +242,32 @@ class RimeSolver(MontblancTensorflowSolver):
             Must be called inside __enter__ of _feederqueuelock
             """
             def __init__(self, shards):
-                self._feederqueuelock = threading.Lock()
+                self._feederqueuelock = [threading.Lock()] * shards
                 self._inputs_waiting = np.zeros(shape=(shards,), dtype=np.int32)
 
-            def get(self, shard):
-                if self._feederqueuelock.locked():
+            def get(self, shard, skiplock=False):
+                if not skiplock:
+                    with self._feederqueuelock[shard]:
+                        return self._inputs_waiting[shard]
+                else:
                     return self._inputs_waiting[shard]
+
+            def getlock(self, shard):
+                return self._feederqueuelock[shard]
+
+            def increment(self, shard, skiplock=False):
+                if not skiplock:
+                    with self._feederqueuelock[shard]:
+                        self._inputs_waiting[shard] += 1
                 else:
-                    raise RuntimeError("Shard counter not locked. Use object as context manager before calling")
-                    
-            def increment(self, shard):
-                if self._feederqueuelock.locked():
                     self._inputs_waiting[shard] += 1
-                else:
-                    raise RuntimeError("Shard counter not locked. Use object as context manager before calling")
 
-            def decrement(self, shard):
-                if self._feederqueuelock.locked():
+            def decrement(self, shard, skiplock=False):
+                if not skiplock:
+                    with self._feederqueuelock[shard]:
+                        self._inputs_waiting[shard] -= 1
+                else:
                     self._inputs_waiting[shard] -= 1
-                else:
-                    raise RuntimeError("Shard counter not locked. Use object as context manager before calling")
-
-            def __enter__(self):
-                self._feederqueuelock.acquire()
-            
-            def __exit__(self, exc_type, exc_val, exc_tb):
-                self._feederqueuelock.release()
 
         self._inputs_waiting = InputsWaiting(shards)
 
@@ -525,20 +525,19 @@ class RimeSolver(MontblancTensorflowSolver):
                 self._tfrun(staging_area.put_op, feed_dict=feed_dict)
         
         # input finally loaded now increment the number of inputs waiting on the shard
-        with self._inputs_waiting:
-            self._inputs_waiting.increment(shard)
+        self._inputs_waiting.increment(shard)
 
     def _compute(self, feed_dict, shard):
         """ Call the tensorflow compute """
 
         try:
-            with self._inputs_waiting:
+            with self._inputs_waiting.getlock(shard):
                 # only execute once data is indicated to be loaded for
                 # this shard. Otherwise wait for the next iteration of the
                 # main event loop to request another compute on this shard
-                if self._inputs_waiting.get(shard) > 0:
+                if self._inputs_waiting.get(shard, skiplock=True) > 0:
                     descriptor, enq = self._tfrun(self._tf_expr[shard], feed_dict=feed_dict)
-                    self._inputs_waiting.decrement(shard)
+                    self._inputs_waiting.decrement(shard, skiplock=True)
                 else: #postpone work till data becomes available
                     self._compute_executors[shard].submit(self._compute,
                                                           feed_dict, shard)
