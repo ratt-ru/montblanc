@@ -245,12 +245,12 @@ class RimeSolver(MontblancTensorflowSolver):
                 self._feederqueuelock = threading.Lock()
                 self._inputs_waiting = np.zeros(shape=(shards,), dtype=np.int32)
 
-            def get(self):
+            def get(self, shard):
                 if self._feederqueuelock.locked():
-                    return self._inputs_waiting
+                    return self._inputs_waiting[shard]
                 else:
                     raise RuntimeError("Shard counter not locked. Use object as context manager before calling")
-
+                    
             def increment(self, shard):
                 if self._feederqueuelock.locked():
                     self._inputs_waiting[shard] += 1
@@ -418,18 +418,13 @@ class RimeSolver(MontblancTensorflowSolver):
 
             # Find indices of the emptiest staging_areas and, by implication
             # the shard with the least work assigned to it
-            with self._inputs_waiting:
-                emptiest_staging_areas = np.argsort(self._inputs_waiting.get())
-                shard = emptiest_staging_areas[0]
-                shard = next(which_shard)
-
-                feed_f = self._feed_executors[shard].submit(self._feed_actual,
-                    data_sources.copy(), cube.copy(),
-                    descriptor, shard,
-                    src_types, src_strides, src_staging_areas[shard],
-                    global_iter_args)
-                self._inputs_waiting.increment(shard)
-                chunks_fed += 1
+            shard = next(which_shard) # round robin cycle on shards
+            # submit a job - once loaded the shard will be incremented for compute to start
+            feed_f = self._feed_executors[shard].submit(self._feed_actual,
+                data_sources.copy(), cube.copy(),
+                descriptor, shard,
+                src_types, src_strides, src_staging_areas[shard],
+                global_iter_args)
 
             compute_f = self._compute_executors[shard].submit(self._compute,
                 compute_feed_dict, shard)
@@ -438,7 +433,7 @@ class RimeSolver(MontblancTensorflowSolver):
                 data_sinks.copy(), cube.copy(), global_iter_args)
 
             yield (feed_f, compute_f, consume_f)
-
+            chunks_fed += 1
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
     def _feed_actual(self, *args):
@@ -528,14 +523,25 @@ class RimeSolver(MontblancTensorflowSolver):
                     for (a, ph, ds, ad) in gen }
 
                 self._tfrun(staging_area.put_op, feed_dict=feed_dict)
+        
+        # input finally loaded now increment the number of inputs waiting on the shard
+        with self._inputs_waiting:
+            self._inputs_waiting.increment(shard)
 
     def _compute(self, feed_dict, shard):
         """ Call the tensorflow compute """
 
         try:
             with self._inputs_waiting:
-                descriptor, enq = self._tfrun(self._tf_expr[shard], feed_dict=feed_dict)
-                self._inputs_waiting.decrement(shard)
+                # only execute once data is indicated to be loaded for
+                # this shard. Otherwise wait for the next iteration of the
+                # main event loop to request another compute on this shard
+                if self._inputs_waiting.get(shard) > 0:
+                    descriptor, enq = self._tfrun(self._tf_expr[shard], feed_dict=feed_dict)
+                    self._inputs_waiting.decrement(shard)
+                else: #postpone work till data becomes available
+                    self._compute_executors[shard].submit(self._compute,
+                                                          feed_dict, shard)
 
         except Exception as e:
             montblanc.log.exception("Compute Exception")
