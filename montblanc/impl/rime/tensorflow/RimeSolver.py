@@ -523,7 +523,7 @@ class RimeSolver(MontblancTensorflowSolver):
         try:
             with _feederqueuelock:
                 descriptor, enq = self._tfrun(self._tf_expr[shard], feed_dict=feed_dict)
-            self._inputs_waiting.decrement(shard)
+                self._inputs_waiting.decrement(shard)
 
         except Exception as e:
             montblanc.log.exception("Compute Exception")
