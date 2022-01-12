@@ -21,6 +21,7 @@
 import collections
 import copy
 import itertools
+from os import lockf
 import threading
 import sys
 import types
@@ -59,6 +60,8 @@ DataSink = attr.make_class("DataSink", ['sink', 'name'],
     slots=True, frozen=True)
 FeedOnce = attr.make_class("FeedOnce", ['ph', 'var', 'assign_op'],
     slots=True, frozen=True)
+
+_feederqueuelock = threading.Lock()
 
 class RimeSolver(MontblancTensorflowSolver):
     """ RIME Solver Implementation """
@@ -226,34 +229,31 @@ class RimeSolver(MontblancTensorflowSolver):
         #======================
         # Thread pool executors
         #======================
-
         tpe = cf.ThreadPoolExecutor
 
         self._descriptor_executor = tpe(1)
         self._feed_executors = [tpe(1) for i in range(shards)]
         self._compute_executors = [tpe(1) for i in range(shards)]
         self._consumer_executor = tpe(1)
-
+        
         class InputsWaiting(object):
             """
             Keep track of the number of inputs waiting
             to be consumed on each shard
+
+            Must be called inside __enter__ of _feederqueuelock
             """
             def __init__(self, shards):
-                self._lock = threading.Lock()
                 self._inputs_waiting = np.zeros(shape=(shards,), dtype=np.int32)
 
             def get(self):
-                with self._lock:
-                    return self._inputs_waiting
+                return self._inputs_waiting
 
             def increment(self, shard):
-                with self._lock:
-                    self._inputs_waiting[shard] += 1
+                self._inputs_waiting[shard] += 1
 
             def decrement(self, shard):
-                with self._lock:
-                    self._inputs_waiting[shard] -= 1
+                self._inputs_waiting[shard] -= 1
 
         self._inputs_waiting = InputsWaiting(shards)
 
@@ -388,43 +388,44 @@ class RimeSolver(MontblancTensorflowSolver):
             for d, dev in enumerate(self._devices)])
 
         while True:
-            try:
-                # Get the descriptor describing a portion of the RIME
-                result = session.run(LSA.descriptor.get_op)
-                descriptor = result['descriptor']
-            except tf.errors.OutOfRangeError as e:
-                montblanc.log.exception("Descriptor reading exception")
+            with _feederqueuelock:
+                try:
+                    # Get the descriptor describing a portion of the RIME
+                    result = session.run(LSA.descriptor.get_op)
+                    descriptor = result['descriptor']
+                except tf.errors.OutOfRangeError as e:
+                    montblanc.log.exception("Descriptor reading exception")
 
-            # Quit if EOF
-            if descriptor[0] == -1:
-                break
+                # Quit if EOF
+                if descriptor[0] == -1:
+                    break
 
-            # Make it read-only so we can hash the contents
-            descriptor.flags.writeable = False
+                # Make it read-only so we can hash the contents
+                descriptor.flags.writeable = False
 
-            # Find indices of the emptiest staging_areas and, by implication
-            # the shard with the least work assigned to it
-            emptiest_staging_areas = np.argsort(self._inputs_waiting.get())
-            shard = emptiest_staging_areas[0]
-            shard = next(which_shard)
+                # Find indices of the emptiest staging_areas and, by implication
+                # the shard with the least work assigned to it
+                emptiest_staging_areas = np.argsort(self._inputs_waiting.get())
+                shard = emptiest_staging_areas[0]
+                shard = next(which_shard)
 
-            feed_f = self._feed_executors[shard].submit(self._feed_actual,
-                data_sources.copy(), cube.copy(),
-                descriptor, shard,
-                src_types, src_strides, src_staging_areas[shard],
-                global_iter_args)
+                feed_f = self._feed_executors[shard].submit(self._feed_actual,
+                    data_sources.copy(), cube.copy(),
+                    descriptor, shard,
+                    src_types, src_strides, src_staging_areas[shard],
+                    global_iter_args)
 
-            compute_f = self._compute_executors[shard].submit(self._compute,
-                compute_feed_dict, shard)
+                compute_f = self._compute_executors[shard].submit(self._compute,
+                    compute_feed_dict, shard)
 
-            consume_f = self._consumer_executor.submit(self._consume,
-                data_sinks.copy(), cube.copy(), global_iter_args)
+                consume_f = self._consumer_executor.submit(self._consume,
+                    data_sinks.copy(), cube.copy(), global_iter_args)
 
-            self._inputs_waiting.increment(shard)
+                self._inputs_waiting.increment(shard)
 
-            yield (feed_f, compute_f, consume_f)
+                yield (feed_f, compute_f, consume_f)
 
-            chunks_fed += 1
+                chunks_fed += 1
 
         montblanc.log.info("Done feeding {n} chunks.".format(n=chunks_fed))
 
@@ -520,7 +521,8 @@ class RimeSolver(MontblancTensorflowSolver):
         """ Call the tensorflow compute """
 
         try:
-            descriptor, enq = self._tfrun(self._tf_expr[shard], feed_dict=feed_dict)
+            with _feederqueuelock:
+                descriptor, enq = self._tfrun(self._tf_expr[shard], feed_dict=feed_dict)
             self._inputs_waiting.decrement(shard)
 
         except Exception as e:
