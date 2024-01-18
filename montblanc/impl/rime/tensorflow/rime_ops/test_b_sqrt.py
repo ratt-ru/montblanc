@@ -129,7 +129,7 @@ class TestBSqrt(unittest.TestCase):
             square[:, :, :, :, :] *= cpu_invert[:, :, :, None, None]
 
             # And we should obtain the brightness matrix
-            assert np.allclose(b_2x2, square)
+            assert np.allclose(b_2x2, square, **tols)
 
             # Compare with GPU bsqrt and invert flag
             for gpu_bsqrt, gpu_invert in S.run(gpu_ops):

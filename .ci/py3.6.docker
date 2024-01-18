@@ -151,7 +151,7 @@ RUN python3.6 -m pip install /src/montblanc
 
 # run tests
 RUN python3.6 -m pip install nose simms
-RUN python3.6 -m pip install git+https://github.com/ratt-ru/eidos@a47fa43
+RUN python3.6 -m pip install eidos>=1.1.1
 
 WORKDIR /mb_testing
 RUN mkdir data

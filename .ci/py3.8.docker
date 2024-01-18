@@ -151,7 +151,7 @@ RUN pip3 install /src/montblanc
 
 # run tests
 RUN pip3 install nose simms
-RUN pip3 install git+https://github.com/ratt-ru/eidos@a47fa43
+RUN pip3 install 'eidos>=1.1.1'
 
 WORKDIR /mb_testing
 RUN mkdir data
