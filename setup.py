@@ -708,7 +708,7 @@ install_requires = [
     'funcsigs >= 0.4',
     'futures >= 3.0.5; python_version <= "2.7"',
     'hypercube == 0.3.4',
-    'tensorflow >= 2.7.0,<2.8; python_version >="3.8"', #ubuntu 20.04 with distro nvcc/gcc
+    'tensorflow >= 2.7.0,<=2.8.4; python_version >="3.8"', #ubuntu 20.04 with distro nvcc/gcc
     'tensorflow <=2.4.4; python_version <"3.8"', #ubuntu 18.04 with distro nvcc/gcc
 ]
 
