@@ -55,7 +55,7 @@ auto gauss_shape_shape_function = [](InferenceContext* c) {
     // Set the output shape
     c->set_output(0, output);
 
-    return Status::OK();
+    return MB_STAT_OK();
 };
 
 

@@ -1,6 +1,7 @@
 #ifndef RIME_PARALLACTIC_ANGLE_SIN_COS_OP_H
 #define RIME_PARALLACTIC_ANGLE_SIN_COS_OP_H
 
+#include "montblanc_macros.h"
 // montblanc namespace start and stop defines
 #define MONTBLANC_NAMESPACE_BEGIN namespace montblanc {
 #define MONTBLANC_NAMESPACE_STOP }

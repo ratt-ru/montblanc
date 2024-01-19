@@ -23,7 +23,9 @@ import os
 
 from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
-
+import tensorflow as tf
+os.environ["LD_LIBRARY_PATH"] = ":".join([tf.sysconfig.get_lib(), 
+                                          os.environ.get("LD_LIBRARY_PATH", "")])
 __version__ = "0.7.0"
 
 log = setup_logging()

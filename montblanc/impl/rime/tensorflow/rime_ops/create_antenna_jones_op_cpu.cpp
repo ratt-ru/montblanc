@@ -62,7 +62,7 @@ auto ekb_shape_function = [](InferenceContext* c) {
     // Set the output shape
     c->set_output(0, ant_jones);
 
-    return Status::OK();
+    return MB_STAT_OK();
 };
 
 

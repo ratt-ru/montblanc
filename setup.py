@@ -34,6 +34,7 @@ from setuptools.command.build_ext import build_ext
 import shutil
 import subprocess
 import sys
+from setuptools._vendor.packaging import version
 
 try:
     import urllib.request, urllib.error, urllib.parse
@@ -518,7 +519,14 @@ def create_tensorflow_extension(nvcc_settings, device_info):
         ('_GLIBCXX_USE_CXX11_ABI', 0)]
 
     # Common flags
-    flags = ['-std=c++14']
+    pyver = sys.version_info
+    vpyver= version.parse(
+        f"{pyver.major}.{pyver.minor}.{pyver.micro}")
+    if vpyver < version.parse("3.8"):
+        flags = ['-std=c++14']
+        flags += ['-DCOMPAT_TF2_4']
+    else:
+        flags = ['-std=c++14']
 
     gcc_flags = flags + ['-fPIC', '-fopenmp']
     nvcc_flags = flags + []
@@ -704,12 +712,11 @@ def readme():
 install_requires = [
     'attrdict >= 2.0.0',
     'attrs >= 16.3.0',
-    'enum34 >= 1.1.6; python_version <= "2.7"',
     'funcsigs >= 0.4',
-    'futures >= 3.0.5; python_version <= "2.7"',
-    'hypercube == 0.3.4',
-    'tensorflow >= 2.7.0,<=2.8.4; python_version >="3.8"', #ubuntu 20.04 with distro nvcc/gcc
-    'tensorflow <=2.4.4; python_version <"3.8"', #ubuntu 18.04 with distro nvcc/gcc
+    'hypercube >= 0.3.5; python_version >= "3.10"',
+    'hypercube >= 0.3.4; python_version <= "3.9"',
+    'tensorflow >= 2.7.0,<=2.11.1; python_version >="3.8"', 
+    'tensorflow <=2.4.4; python_version <"3.8"',
 ]
 
 # ==================================
@@ -727,7 +734,7 @@ else:
         'astropy >= 2.0.0, < 3.0; python_version <= "2.7"',
         'astropy > 3.0; python_version >= "3.0"',
         'cerberus >= 1.1',
-        'nose >= 1.3.7',
+        'pynose', # replace nose with pynose
         'numba >= 0.36.2',
         'numpy >= 1.11.3',
         'python-casacore >= 2.1.2',

@@ -48,7 +48,7 @@ auto shape_function = [](InferenceContext* c) {
 
     // printf("output shape %s\\n", c->DebugString(out).c_str());;
 
-    return Status::OK();
+    return MB_STAT_OK();
 };
 
 // Register the FeedRotation operator.

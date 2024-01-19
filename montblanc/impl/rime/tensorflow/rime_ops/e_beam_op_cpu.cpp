@@ -94,7 +94,7 @@ auto ebeam_shape_function = [](InferenceContext* c) {
     // Set the output shape
     c->set_output(0, ejones);
 
-    return Status::OK();
+    return MB_STAT_OK();
 };
 
 

@@ -1,6 +1,7 @@
 #ifndef RIME_SUM_COHERENCIES_OP_CPU_H
 #define RIME_SUM_COHERENCIES_OP_CPU_H
 
+#include "montblanc_macros.h"
 #include "sum_coherencies_op.h"
 
 // Required in order for Eigen::ThreadPoolDevice to be an actual type
