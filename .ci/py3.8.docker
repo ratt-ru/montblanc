@@ -112,7 +112,7 @@ RUN git clone -b v1.5.2 https://github.com/ska-sa/purr.git
 RUN git clone -b v1.4.5 https://github.com/ska-sa/kittens.git
 RUN git clone -b v1.7.0 https://github.com/ska-sa/tigger-lsm.git
 RUN git clone -b v1.7.4.2 https://github.com/ska-sa/pyxis.git
-RUN git clone -b v1.7.8.4 https://github.com/ska-sa/owlcat.git
+RUN git clone -b v1.7.9 https://github.com/ska-sa/owlcat.git
 RUN pip3.8 install ./purr ./owlcat ./kittens ./tigger-lsm
 RUN pip3.8 install ./pyxis
 WORKDIR /
@@ -151,7 +151,7 @@ RUN pip3 install /src/montblanc
 
 # run tests
 RUN pip3 install nose simms
-RUN pip3 install git+https://github.com/ratt-ru/eidos@a47fa43
+RUN pip3 install 'eidos>=1.1.1'
 
 WORKDIR /mb_testing
 RUN mkdir data
