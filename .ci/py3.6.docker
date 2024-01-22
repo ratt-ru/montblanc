@@ -111,7 +111,7 @@ WORKDIR /src
 RUN git clone -b v1.7.2 https://github.com/ska-sa/meqtrees-cattery.git
 RUN git clone -b v1.5.2 https://github.com/ska-sa/purr.git
 RUN git clone -b v1.4.5 https://github.com/ska-sa/kittens.git
-RUN git clone -b v1.7.0 https://github.com/ska-sa/tigger-lsm.git
+RUN git clone -b v1.7.3 https://github.com/ska-sa/tigger-lsm.git
 RUN git clone -b v1.7.4.2 https://github.com/ska-sa/pyxis.git
 RUN git clone -b v1.7.6 https://github.com/ska-sa/owlcat.git
 RUN python3.6 -m pip install ./purr ./owlcat ./kittens ./tigger-lsm
