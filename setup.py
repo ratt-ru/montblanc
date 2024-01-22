@@ -509,25 +509,30 @@ def create_tensorflow_extension(nvcc_settings, device_info):
         libraries += map(lambda x: ":{}".format(x), 
                          map(os.path.basename, 
                              glob.glob(os.path.join(ldir, "*.so*"))))
-    #libraries = [':libtensorflow_framework.so.2']
     extra_link_args = ['-fPIC', '-fopenmp']
 
     # Macros
+    # some of these come from tf - parse them out
     define_macros = [
         ('_MWAITXINTRIN_H_INCLUDED', None),
-        ('_FORCE_INLINES', None),
-        ('_GLIBCXX_USE_CXX11_ABI', 0)]
+        ('_FORCE_INLINES', None)]
+    define_macros += list(map(lambda f: tuple(f[2:].split("=")) \
+                                if "=" in f else (f[2:], None),
+                              filter(lambda f: f.startswith("-D"),
+                                     tf.sysconfig.get_compile_flags())))
+    vpyver= version.parse(f"{sys.version_info.major}."
+                          f"{sys.version_info.minor}."
+                          f"{sys.version_info.micro}")
+    if vpyver < version.parse("3.8"):
+        define_macros += ('COMPAT_TF2_4', None)
 
     # Common flags
-    pyver = sys.version_info
-    vpyver= version.parse(
-        f"{pyver.major}.{pyver.minor}.{pyver.micro}")
-    if vpyver < version.parse("3.8"):
-        flags = ['-std=c++14']
-        flags += ['-DCOMPAT_TF2_4']
-    else:
-        flags = ['-std=c++14']
-
+    
+    flags = list(filter(lambda f: "std=c++" in f, 
+                        tf.sysconfig.get_compile_flags()))
+    if not flags:
+        flags = ['--std=c++14'] # required by MB
+    
     gcc_flags = flags + ['-fPIC', '-fopenmp']
     nvcc_flags = flags + []
 
@@ -710,12 +715,16 @@ def readme():
 
 
 install_requires = [
-    'attrdict >= 2.0.0',
+    'attridict >= 0.0.8', #replacement for attrdict
     'attrs >= 16.3.0',
     'funcsigs >= 0.4',
     'hypercube >= 0.3.5; python_version >= "3.10"',
     'hypercube >= 0.3.4; python_version <= "3.9"',
-    'tensorflow >= 2.7.0,<=2.11.1; python_version >="3.8"', 
+    'tensorflow >= 2.7.0,<=2.12.1; python_version >="3.10"',
+    # versions higher than 2.8.4 seems to expect --std=c++17, which is not readily available on the
+    # shipped nvcc for Ubuntu 20.04. We will move upward from Ubuntu 22.04 shipping
+    # Python 3.10
+    'tensorflow >= 2.7.0,<=2.8.4; python_version >="3.8" and python_version <"3.10"',
     'tensorflow <=2.4.4; python_version <"3.8"',
 ]
 
@@ -731,10 +740,10 @@ if on_rtd:
 else:
     # Add binary/C extension type packages
     install_requires += [
-        'astropy >= 2.0.0, < 3.0; python_version <= "2.7"',
         'astropy > 3.0; python_version >= "3.0"',
         'cerberus >= 1.1',
-        'pynose', # replace nose with pynose
+        'pynose; python_version >= "3.10"',
+        'nose; python_version < "3.10"',
         'numba >= 0.36.2',
         'numpy >= 1.11.3',
         'python-casacore >= 2.1.2',
