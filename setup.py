@@ -715,11 +715,12 @@ def readme():
 
 
 install_requires = [
-    'attridict >= 0.0.8', #replacement for attrdict
+    'attridict >= 0.0.8; python_version >= "3.10"', #replacement for attrdict
+    'attrdict >= 2.0.0; python_version < "3.10"', #replacement for attrdict
     'attrs >= 16.3.0',
     'funcsigs >= 0.4',
     'hypercube >= 0.3.5; python_version >= "3.10"',
-    'hypercube >= 0.3.4; python_version <= "3.9"',
+    'hypercube <= 0.3.4; python_version <= "3.9"',
     'tensorflow >= 2.7.0,<=2.12.1; python_version >="3.10"',
     # versions higher than 2.8.4 seems to expect --std=c++17, which is not readily available on the
     # shipped nvcc for Ubuntu 20.04. We will move upward from Ubuntu 22.04 shipping

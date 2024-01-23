@@ -31,7 +31,10 @@ import concurrent.futures as cf
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
-import attridict as AttrDict
+try:
+    import attridict as AttrDict
+except ImportError: # breakage for lower attridict versions on Python 3.8 and below, fallback
+    from attrdict import AttrDict
 
 import attr
 
