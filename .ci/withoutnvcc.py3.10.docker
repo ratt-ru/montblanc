@@ -31,6 +31,7 @@ ADD requirements.readthedocs.txt /src/montblanc/requirements.readthedocs.txt
 ADD setup.cfg /src/montblanc/setup.cfg
 ADD setup.py /src/montblanc/setup.py
 
+RUN pip3 install -U setuptools wheel pip
 RUN pip3 install -e /src/montblanc
 
 # run tests
@@ -57,18 +58,17 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
 # and it does not yet build on newer GCC
 RUN pynose $TESTS_TO_RUN
 
-# TODO (BH): CASA is not available ... no Kern for 22.04...
-# will need to contact NRAO directly to grab it for the next test
-#WORKDIR /mb_testing
-#RUN mkdir data
-#WORKDIR /mb_testing/data
-#RUN pip3 install simms 'eidos>=1.1.1'
-#RUN simms -dir "J2000,00h00m00.0000000s,-10d00m00.00s" -T meerkat -dt 30 -st 0.5 -nc 15 -f0 856MHz -df 57066.66667kHz -pl XX XY YX YY -n mk64.Lwide.0.5hr.30s.856mhz.ms
-#RUN casa --no-logger --log2term --nogui -c "clearcal(vis='mk64.Lwide.0.5hr.30s.856mhz.ms')"
-#RUN eidos -d 4 -r 0.015625 -f 856 1712 142 -P test_beam_ -o8
-#WORKDIR /mb_testing
+RUN pip install git+https://github.com/ratt-ru/simms.git@7984aee13e2d7bd32408ce9388b7960bfc0b2e27
+RUN pip install casadata
+WORKDIR /mb_testing
+RUN mkdir data
+WORKDIR /mb_testing/data
+RUN python3 -m pip install simms 'eidos>=1.1.1'
+RUN simms -dir "J2000,00h00m00.0000000s,-10d00m00.00s" -T meerkat -dt 30 -st 0.5 -nc 15 -f0 856MHz -df 57066.66667kHz -pl XX XY YX YY -n mk64.Lwide.0.5hr.30s.856mhz.ms
+RUN eidos -d 4 -r 0.015625 -f 856 1712 142 -P test_beam_ -o8
 
-# run example montblanc recipe
-#RUN python3 /src/montblanc/montblanc/examples/MS_tf_example.py /mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms \
-#            -b /mb_testing/data/test_beam_
+#run example montblanc recipe
+WORKDIR /mb_testing
+RUN python3 /src/montblanc/montblanc/examples/MS_tf_example.py /mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms \
+            -b /mb_testing/data/test_beam_
 

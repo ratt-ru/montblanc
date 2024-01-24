@@ -1,7 +1,4 @@
-try:
-    import attridict as AttrDict
-except ImportError: # breakage for lower attridict versions on Python 3.8 and below, fallback
-    from attrdict import AttrDict
+import attridict as AttrDict
 
 import tensorflow as tf
 from tensorflow.python.ops import data_flow_ops

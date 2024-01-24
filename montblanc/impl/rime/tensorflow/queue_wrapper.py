@@ -2,10 +2,9 @@ import collections
 import itertools
 import sys
 import six
-try:
-    import attridict as AttrDict
-except ImportError: # breakage for lower attridict versions on Python 3.8 and below, fallback
-    from attrdict import AttrDict
+
+import attridict as AttrDict
+
 import tensorflow as tf
 
 def _get_queue_types(fed_arrays, data_sources):
