@@ -524,7 +524,7 @@ def create_tensorflow_extension(nvcc_settings, device_info):
                           f"{sys.version_info.minor}."
                           f"{sys.version_info.micro}")
     if vpyver < version.parse("3.8"):
-        define_macros += ('COMPAT_TF2_4', None)
+        define_macros += [('COMPAT_TF2_4', None)]
 
     # Common flags
     
