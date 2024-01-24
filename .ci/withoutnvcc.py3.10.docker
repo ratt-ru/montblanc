@@ -32,6 +32,12 @@ ADD setup.cfg /src/montblanc/setup.cfg
 ADD setup.py /src/montblanc/setup.py
 
 RUN pip3 install -U setuptools wheel pip
+RUN pip3 install /src/montblanc
+
+WORKDIR /mb_testing
+RUN python3 -c "from montblanc.impl.rime.tensorflow import load_tf_lib; load_tf_lib()"
+# to run tests we need to be in dev install - pkg_requirements return the path to the source, 
+# not the install otherwise leading to library load path errors
 RUN pip3 install -e /src/montblanc
 
 # run tests
@@ -58,7 +64,7 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
 # and it does not yet build on newer GCC
 RUN pynose $TESTS_TO_RUN
 
-RUN pip install git+https://github.com/ratt-ru/simms.git@7984aee13e2d7bd32408ce9388b7960bfc0b2e27
+RUN pip install git+https://github.com/ratt-ru/simms.git@7984aee13e2d7bd32408ce9388b7960bfc0b2e27 # BH: todo until I can make a release!
 RUN pip install casadata
 WORKDIR /mb_testing
 RUN mkdir data
