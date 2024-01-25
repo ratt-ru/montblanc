@@ -34,6 +34,6 @@ def load_tf_lib():
         from montblanc import ext
         rime_lib_path = os.path.join(os.path.dirname(ext.__file__), 'rime.so')
     if not os.path.isfile(rime_lib_path):
-        raise RuntimeError("Montblanc backend not found: '{rime_lib_path}'. Have you compiled the backend?")
+        raise RuntimeError(f"Montblanc backend not found: '{rime_lib_path}'. Have you compiled the backend?")
     return tf.load_op_library(rime_lib_path)
 

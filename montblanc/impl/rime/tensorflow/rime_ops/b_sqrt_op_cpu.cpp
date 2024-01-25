@@ -40,7 +40,7 @@ auto bsqrt_shape_function = [](InferenceContext* c) {
     c->set_output(0, bsqrt);
     c->set_output(1, sgn_brightness);
 
-    return Status::OK();
+    return MB_STAT_OK();
 };
 
 REGISTER_OP("BSqrt")

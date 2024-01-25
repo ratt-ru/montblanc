@@ -61,7 +61,7 @@ auto sum_coherencies_shape_function = [](InferenceContext* c) {
     // Set the output shape
     c->set_output(0, coherencies);
 
-    return Status::OK();
+    return MB_STAT_OK();
 };
 
 

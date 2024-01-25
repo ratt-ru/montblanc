@@ -31,7 +31,9 @@ import concurrent.futures as cf
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
-from attrdict import AttrDict
+
+import attridict as AttrDict
+
 import attr
 
 import montblanc
@@ -836,12 +838,10 @@ def _construct_tensorflow_feed_data(dfs, cube, iter_dims,
     nr_of_input_staging_areas):
 
     FD = AttrDict()
-    # https://github.com/bcj/AttrDict/issues/34
-    FD._setattr('_sequence_type', list)
+    FD['_sequence_type'] = list
     # Reference local staging_areas
     FD.local = local = AttrDict()
-    # https://github.com/bcj/AttrDict/issues/34
-    local._setattr('_sequence_type', list)
+    local['_sequence_type'] = list
 
     # Create placholder variables for source counts
     FD.src_ph_vars = AttrDict({

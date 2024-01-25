@@ -1,6 +1,7 @@
 #ifndef RIME_SERSIC_SHAPE_OP_H
 #define RIME_SERSIC_SHAPE_OP_H
 
+#include "montblanc_macros.h"
 // montblanc namespace start and stop defines
 #define MONTBLANC_NAMESPACE_BEGIN namespace montblanc {
 #define MONTBLANC_NAMESPACE_STOP }

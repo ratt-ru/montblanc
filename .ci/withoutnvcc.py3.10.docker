@@ -1,0 +1,80 @@
+FROM ubuntu:22.04
+
+WORKDIR /optsoft/tensorflow
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_DEPENDENCIES wget \
+                        build-essential \
+                        python3-pip \
+                        git \
+                        python3-casacore \
+                        casacore-data
+
+# setup base dependencies
+RUN apt update && apt install -y ${DEBIAN_DEPENDENCIES}
+RUN pip3 install -U pip setuptools wheel
+
+#####################################################
+# install montblanc including specified tensorflow
+#####################################################
+# copy into workspace
+WORKDIR /src/montblanc
+ADD docs /src/montblanc/docs
+ADD montblanc /src/montblanc/montblanc
+ADD CHANGELOG.md /src/montblanc/CHANGELOG.log
+ADD CONTRIBUTORS.md /src/montblanc/CONTRIBUTORS.md
+ADD LICENSE.md /src/montblanc/LICENSE.md
+ADD MANIFEST.in /src/montblanc/MANIFEST.in
+ADD pyproject.toml /src/montblanc/pyproject.toml
+ADD README.rst /src/montblanc/README.rst
+ADD readthedocs.yml /src/montblanc/readthedocs.yml
+ADD requirements.readthedocs.txt /src/montblanc/requirements.readthedocs.txt
+ADD setup.cfg /src/montblanc/setup.cfg
+ADD setup.py /src/montblanc/setup.py
+
+RUN pip3 install -U setuptools wheel pip
+RUN pip3 install /src/montblanc
+
+WORKDIR /mb_testing
+RUN python3 -c "from montblanc.impl.rime.tensorflow import load_tf_lib; load_tf_lib()"
+# to run tests we need to be in dev install - pkg_requirements return the path to the source, 
+# not the install otherwise leading to library load path errors
+RUN pip3 install -e /src/montblanc
+
+# run tests
+WORKDIR /mb_testing
+ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
+                 /src/montblanc/montblanc/tests/test_antenna_uvw_decomposition.py \
+                 /src/montblanc/montblanc/tests/test_source_utils.py \
+                 /src/montblanc/montblanc/tests/test_source_utils.py \
+                 /src/montblanc/montblanc/tests/test_utils.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_b_sqrt.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_create_antenna_jones.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_e_beam.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_feed_rotation.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_gauss_shape.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_parallactic_angle_sin_cos.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_phase.py \ 
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_post_process_visibilities.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_radec_to_lm.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_sersic_shape.py \
+                 /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_sum_coherencies.py
+
+# run tests
+# skip meqtrees acceptance test in this case as it is covered by other cases
+# and it does not yet build on newer GCC
+RUN pynose $TESTS_TO_RUN
+
+RUN pip install git+https://github.com/ratt-ru/simms.git@7984aee13e2d7bd32408ce9388b7960bfc0b2e27 # BH: todo until I can make a release!
+RUN pip install casadata
+WORKDIR /mb_testing
+RUN mkdir data
+WORKDIR /mb_testing/data
+RUN python3 -m pip install simms 'eidos>=1.1.1'
+RUN simms -dir "J2000,00h00m00.0000000s,-10d00m00.00s" -T meerkat -dt 30 -st 0.5 -nc 15 -f0 856MHz -df 57066.66667kHz -pl XX XY YX YY -n mk64.Lwide.0.5hr.30s.856mhz.ms
+RUN eidos -d 4 -r 0.015625 -f 856 1712 142 -P test_beam_ -o8
+
+#run example montblanc recipe
+WORKDIR /mb_testing
+RUN python3 /src/montblanc/montblanc/examples/MS_tf_example.py /mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms \
+            -b /mb_testing/data/test_beam_
+

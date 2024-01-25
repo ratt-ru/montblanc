@@ -1,4 +1,4 @@
-from attrdict import AttrDict
+import attridict as AttrDict
 
 import tensorflow as tf
 from tensorflow.python.ops import data_flow_ops

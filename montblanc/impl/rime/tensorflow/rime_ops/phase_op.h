@@ -1,6 +1,7 @@
 #ifndef RIME_PHASE_OP_H_
 #define RIME_PHASE_OP_H_
 
+#include "montblanc_macros.h"
 namespace montblanc {
 namespace phase {
 
