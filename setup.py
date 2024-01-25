@@ -769,7 +769,7 @@ else:
 log.info('install_requires={}'.format(install_requires))
 
 setup(name='montblanc',
-    version="0.7.2.1",
+    version="0.7.3",
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',
