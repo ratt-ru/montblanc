@@ -23,7 +23,6 @@ import os
 
 from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
-import tensorflow as tf
 import pkg_resources
 __version__ = pkg_resources.get_distribution("montblanc").version
 
