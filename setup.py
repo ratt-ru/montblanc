@@ -716,8 +716,6 @@ def readme():
 
 install_requires = [
     'attridict >= 0.0.8',
-    #'attridict >= 0.0.8; python_version >= "3.10"', #replacement for attrdict
-    #'attrdict >= 2.0.0; python_version < "3.10"', #replacement for attrdict
     'attrs >= 16.3.0',
     'funcsigs >= 0.4',
     'hypercube >= 0.3.5; python_version >= "3.10"',
