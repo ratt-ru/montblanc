@@ -6,7 +6,7 @@ except:
 from itertools import islice
 import math
 import numpy as np
-from numba import jit, generated_jit
+from numba import jit
 
 # Coordinate indexing constants
 u, v, w = list(range(3))

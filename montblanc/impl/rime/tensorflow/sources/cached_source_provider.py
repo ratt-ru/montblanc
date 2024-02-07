@@ -84,7 +84,7 @@ class CachedSourceProvider(SourceProvider):
         clear_stop: bool
             clear cache on stop
         """
-        if not isinstance(providers, collections.Sequence):
+        if not isinstance(providers, collections.abc.Sequence):
             providers = [providers]
 
         self._cache = collections.defaultdict(dict)

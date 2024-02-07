@@ -234,7 +234,7 @@ def run_test(msfile="/mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms",
     # Call MeqTrees
     #=========================================
 
-    cmd_list = ['python',
+    cmd_list = ['python3',
         # Meqtree Pipeline script
         meqpipe_actual,
         # Configuration File

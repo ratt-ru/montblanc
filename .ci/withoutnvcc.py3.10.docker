@@ -1,17 +1,93 @@
 FROM ubuntu:22.04
 
 WORKDIR /optsoft/tensorflow
+
+# TODO: needed for now until kern 9 release
+RUN apt update && apt install -y software-properties-common && apt-add-repository -s ppa:kernsuite/kern-dev
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBIAN_DEPENDENCIES wget \
                         build-essential \
                         python3-pip \
                         git \
                         python3-casacore \
-                        casacore-data
+                        casacore-data \
+                        python3-virtualenv \
+                        libgsl-dev \
+                        casacore-dev \
+                        casarest \
+                        casacore-data \
+                        casacore-tools \
+                        python3-casacore \
+                        makems \
+                        libblitz0-dev \
+                        python3-dev \
+                        libblas-dev \
+                        liblapack-dev \
+                        libqdbm-dev wcslib-dev \
+                        libfftw3-dev \
+                        python3-numpy \
+                        libcfitsio-dev \
+                        libboost-all-dev \
+                        libboost-system-dev \
+                        cmake \
+                        gfortran \
+                        libncurses5-dev \
+                        bison \
+                        libbison-dev \
+                        flex \
+                        libreadline6-dev \
+                        python3-pip \
+                        rsync \
+                        python3-virtualenv \
+                        libgsl-dev \
+                        cmake
 
 # setup base dependencies
 RUN apt update && apt install -y ${DEBIAN_DEPENDENCIES}
 RUN pip3 install -U pip setuptools wheel
+
+#####################################################
+# install meqtrees
+#####################################################
+# Get MeqTrees universe python packages
+RUN python3.10 -m pip install purr \
+                              owlcat \
+                              kittens \
+                              'meqtrees-cattery>=1.7.6' \
+                              astro-tigger-lsm
+WORKDIR /src
+RUN wget https://github.com/ska-sa/meqtrees-timba/archive/refs/tags/v1.10.tar.gz && \
+    tar zxvf v1.10.tar.gz && \
+    rm v1.10.tar.gz && \
+    cd meqtrees-timba-1.10 && \
+    mkdir build && \
+    cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/usr \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DENABLE_PYTHON_3=ON \
+          .. && \
+    make -j4 && \
+    make install && \
+    ldconfig && \
+    rm -r /src/meqtrees-timba-1.10
+
+# basic install tests
+RUN flag-ms.py --help
+RUN meqtree-pipeliner.py --help
+RUN pyxis --help
+RUN python3 -c 'from Timba import mequtils'
+
+# run test when built
+WORKDIR /src
+RUN python3 -m pip install pynose
+RUN wget https://github.com/ska-sa/pyxis/archive/v1.7.4.3.tar.gz && \
+    tar -xvf v1.7.4.3.tar.gz && \
+    rm v1.7.4.3.tar.gz && \
+    python3.10 -m pip install /src/pyxis-1.7.4.3 && \
+    cd /src/pyxis-1.7.4.3/Pyxis/recipes/meqtrees-batch-test && \
+    pynose && \
+    rm -r /src/pyxis-1.7.4.3
 
 #####################################################
 # install montblanc including specified tensorflow
@@ -40,6 +116,16 @@ RUN python3 -c "from montblanc.impl.rime.tensorflow import load_tf_lib; load_tf_
 # not the install otherwise leading to library load path errors
 RUN pip3 install -e /src/montblanc
 
+# generate beams and data to test against MT
+RUN pip install simms>=2.0
+RUN pip install casadata
+WORKDIR /mb_testing
+RUN mkdir data
+WORKDIR /mb_testing/data
+RUN python3 -m pip install simms 'eidos>=1.1.1'
+RUN simms -dir "J2000,00h00m00.0000000s,-10d00m00.00s" -T meerkat -dt 30 -st 0.5 -nc 15 -f0 856MHz -df 57066.66667kHz -pl XX XY YX YY -n mk64.Lwide.0.5hr.30s.856mhz.ms
+RUN eidos -d 4 -r 0.015625 -f 856 1712 142 -P test_beam_ -o8
+
 # run tests
 WORKDIR /mb_testing
 ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
@@ -47,6 +133,7 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/tests/test_source_utils.py \
                  /src/montblanc/montblanc/tests/test_source_utils.py \
                  /src/montblanc/montblanc/tests/test_utils.py \
+                 /src/montblanc/montblanc/tests/test_meq_tf.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_b_sqrt.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_create_antenna_jones.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_e_beam.py \
@@ -63,15 +150,6 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
 # skip meqtrees acceptance test in this case as it is covered by other cases
 # and it does not yet build on newer GCC
 RUN pynose $TESTS_TO_RUN
-
-RUN pip install git+https://github.com/ratt-ru/simms.git@7984aee13e2d7bd32408ce9388b7960bfc0b2e27 # BH: todo until I can make a release!
-RUN pip install casadata
-WORKDIR /mb_testing
-RUN mkdir data
-WORKDIR /mb_testing/data
-RUN python3 -m pip install simms 'eidos>=1.1.1'
-RUN simms -dir "J2000,00h00m00.0000000s,-10d00m00.00s" -T meerkat -dt 30 -st 0.5 -nc 15 -f0 856MHz -df 57066.66667kHz -pl XX XY YX YY -n mk64.Lwide.0.5hr.30s.856mhz.ms
-RUN eidos -d 4 -r 0.015625 -f 856 1712 142 -P test_beam_ -o8
 
 #run example montblanc recipe
 WORKDIR /mb_testing
