@@ -156,6 +156,8 @@ RUN pip3 install 'eidos>=1.1.1'
 WORKDIR /mb_testing
 RUN mkdir data
 WORKDIR /mb_testing/data
+RUN mkdir ${HOME}/.casa && \
+    echo rundata = \'/usr/share/casacore/data\' > ${HOME}/.casa/config.py
 RUN simms -dir "J2000,00h00m00.0000000s,-10d00m00.00s" -T meerkat -dt 30 -st 0.5 -nc 15 -f0 856MHz -df 57066.66667kHz -pl XX XY YX YY -n mk64.Lwide.0.5hr.30s.856mhz.ms
 RUN casa --no-logger --log2term --nogui -c "clearcal(vis='mk64.Lwide.0.5hr.30s.856mhz.ms')"
 RUN eidos -d 4 -r 0.015625 -f 856 1712 142 -P test_beam_ -o8
