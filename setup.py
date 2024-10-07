@@ -745,7 +745,7 @@ else:
         'pynose; python_version >= "3.10"',
         'nose; python_version < "3.10"',
         'numba >= 0.36.2',
-        'numpy >= 1.11.3',
+        'numpy >= 1.11.3, < 2.0.0',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
     ]

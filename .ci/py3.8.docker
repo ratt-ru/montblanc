@@ -16,6 +16,7 @@ ENV MT_DEPENDENCIES libblitz0-dev python3-dev libblas-dev liblapack-dev libqdbm-
                     libncurses5-dev bison libbison-dev flex libreadline6-dev python3-pip
 
 # setup base dependencies
+RUN apt update
 RUN docker-apt-install ${DEBIAN_DEPENDENCIES}
 RUN docker-apt-install ${MT_DEPENDENCIES}
 RUN pip3 install -U pip setuptools wheel
@@ -150,7 +151,7 @@ ADD setup.py /src/montblanc/setup.py
 RUN pip3 install /src/montblanc
 
 # run tests
-RUN pip3 install nose simms
+RUN pip3 install nose simms 'casatools<6.6' 'casatasks<6.6'
 RUN pip3 install 'eidos>=1.1.1'
 
 WORKDIR /mb_testing

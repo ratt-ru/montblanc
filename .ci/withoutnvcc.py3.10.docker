@@ -55,7 +55,8 @@ RUN python3.10 -m pip install purr \
                               owlcat \
                               kittens \
                               'meqtrees-cattery>=1.7.6' \
-                              astro-tigger-lsm
+                              astro-tigger-lsm \ 
+                              'numpy==1.21.5' # same as system
 WORKDIR /src
 RUN wget https://github.com/ska-sa/meqtrees-timba/archive/refs/tags/v1.10.tar.gz && \
     tar zxvf v1.10.tar.gz && \
@@ -121,7 +122,7 @@ RUN pip install simms>=2.0
 WORKDIR /mb_testing
 RUN mkdir data
 WORKDIR /mb_testing/data
-RUN python3 -m pip install simms 'eidos>=1.1.1'
+RUN python3 -m pip install simms 'eidos>=1.1.1' 'casatools<6.6.3' 'casatasks<6.6.3'
 RUN mkdir ${HOME}/.casa && \
     echo rundata = \'/usr/share/casacore/data\' > ${HOME}/.casa/config.py
 RUN simms -dir "J2000,00h00m00.0000000s,-10d00m00.00s" -T meerkat -dt 30 -st 0.5 -nc 15 -f0 856MHz -df 57066.66667kHz -pl XX XY YX YY -n mk64.Lwide.0.5hr.30s.856mhz.ms
