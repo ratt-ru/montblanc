@@ -151,7 +151,7 @@ ADD setup.py /src/montblanc/setup.py
 RUN pip3 install /src/montblanc
 
 # run tests
-RUN pip3 install nose simms 'casatools<6.6' 'casatasks<6.6'
+RUN pip3 install nose simms
 RUN pip3 install 'eidos>=1.1.1'
 
 WORKDIR /mb_testing
