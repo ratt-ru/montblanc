@@ -16,6 +16,7 @@ ENV MT_DEPENDENCIES libblitz0-dev python3-dev libblas-dev liblapack-dev libqdbm-
                     libncurses5-dev bison libbison-dev flex libreadline6-dev python3-pip
 
 # setup base dependencies
+RUN apt update
 RUN docker-apt-install ${DEBIAN_DEPENDENCIES}
 RUN docker-apt-install ${MT_DEPENDENCIES}
 RUN pip3 install -U pip setuptools wheel

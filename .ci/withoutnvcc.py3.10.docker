@@ -55,7 +55,8 @@ RUN python3.10 -m pip install purr \
                               owlcat \
                               kittens \
                               'meqtrees-cattery>=1.7.6' \
-                              astro-tigger-lsm
+                              astro-tigger-lsm \ 
+                              'numpy==1.21.5' # same as system
 WORKDIR /src
 RUN wget https://github.com/ska-sa/meqtrees-timba/archive/refs/tags/v1.10.tar.gz && \
     tar zxvf v1.10.tar.gz && \

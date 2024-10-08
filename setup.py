@@ -745,7 +745,7 @@ else:
         'pynose; python_version >= "3.10"',
         'nose; python_version < "3.10"',
         'numba >= 0.36.2',
-        'numpy >= 1.11.3',
+        'numpy >= 1.11.3, < 2.0.0',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
     ]
@@ -769,7 +769,7 @@ else:
 log.info('install_requires={}'.format(install_requires))
 
 setup(name='montblanc',
-    version="0.7.3.1",
+    version="0.7.3.2",
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',
