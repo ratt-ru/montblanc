@@ -720,7 +720,8 @@ install_requires = [
     'funcsigs >= 0.4',
     'hypercube >= 0.3.5; python_version >= "3.10"',
     'hypercube <= 0.3.4; python_version <= "3.9"',
-    'tensorflow >= 2.7.0,<=2.15.0; python_version >="3.10"',
+    'tensorflow >= 2.16.1,<=2.19.0; python_version >="3.12" and python_version < "3.13"',
+    'tensorflow >= 2.7.0,<=2.15.0; python_version >="3.10" and python_version < "3.12"',
     # versions higher than 2.8.4 seems to expect --std=c++17, which is not readily available on the
     # shipped nvcc for Ubuntu 20.04. We will move upward from Ubuntu 22.04 shipping
     # Python 3.10
@@ -745,7 +746,8 @@ else:
         'pynose; python_version >= "3.10"',
         'nose; python_version < "3.10"',
         'numba >= 0.36.2',
-        'numpy >= 1.11.3',
+        'numpy >= 2.0; python_version > "3.10"',
+        'numpy >= 1.11.3, <2.0; python_version <= "3.10"',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
     ]
