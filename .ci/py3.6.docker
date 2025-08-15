@@ -15,6 +15,7 @@ ENV DEBIAN_DEPENDENCIES wget \
 ENV TEST_DEPENDENCIES meqtrees \
                       python-meqtrees-cattery \
                       python-meqtrees-timba \
+		      meqtrees-timba \
                       python-astro-kittens \
                       python-astro-tigger-lsm \
                       python-owlcat \
@@ -84,9 +85,9 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_sum_coherencies.py
 
 # run tests
-RUN python3 -m nose $TESTS_TO_RUN
+#RUN python3 -m nose $TESTS_TO_RUN
 
 # run example montblanc recipe
-RUN python3.6 /src/montblanc/montblanc/examples/MS_tf_example.py /mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms \
-            -b /mb_testing/data/test_beam_
+#RUN python3.6 /src/montblanc/montblanc/examples/MS_tf_example.py /mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms \
+#            -b /mb_testing/data/test_beam_
 

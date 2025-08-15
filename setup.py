@@ -727,6 +727,8 @@ install_requires = [
     # Python 3.10
     'tensorflow >= 2.7.0,<=2.8.4; python_version >="3.8" and python_version <"3.10"',
     'tensorflow <=2.4.4; python_version <"3.8"',
+    'scipy>=1.5.4; python_version>="3.8"',
+    'scipy<=1.4.1; python_version<"3.8"',
 ]
 
 # ==================================
