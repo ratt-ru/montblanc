@@ -743,7 +743,7 @@ if on_rtd:
 else:
     # Add binary/C extension type packages
     install_requires += [
-        'astropy >= 7.0; python_version >= "3.10" and python_version < "3.13"',
+        'astropy >= 6.0; python_version >= "3.10" and python_version < "3.13"',
         'astropy >= 5.0; python_version >= "3.8" and python_version < "3.10"',
         'astropy >= 3.0; python_version < "3.8"',
         'cerberus >= 1.1',
