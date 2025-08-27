@@ -743,13 +743,15 @@ if on_rtd:
 else:
     # Add binary/C extension type packages
     install_requires += [
-        'astropy > 3.0; python_version >= "3.0"',
+        'astropy >= 7.0; python_version >= "3.10" and python_version < "3.13"',
+        'astropy >= 5.0; python_version >= "3.8" and python_version < "3.10"',
+        'astropy >= 3.0; python_version < "3.8"',
         'cerberus >= 1.1',
         'pynose; python_version >= "3.10"',
         'nose; python_version < "3.10"',
         'numba >= 0.36.2',
         'numpy >= 2.0; python_version > "3.10"',
-        'numpy >= 1.11.3, <2.0; python_version <= "3.10"',
+        'numpy >= 1.11.3, <1.24.4; python_version <= "3.10"',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
     ]

@@ -1,4 +1,4 @@
-FROM kernsuite/base:7
+FROM kernsuite/base:8
 
 WORKDIR /optsoft/tensorflow
 
@@ -9,9 +9,25 @@ ENV DEBIAN_DEPENDENCIES wget \
                         casacore-data \
                         casalite
 
+ENV TEST_DEPENDENCIES meqtrees \
+                      python3-meqtrees-cattery \
+                      meqtrees-timba \
+                      python3-meqtrees-timba \
+                      python3-astro-kittens \
+                      python3-astro-tigger-lsm \
+                      python3-owlcat \
+                      python3-purr \
+                      python3-pyxis \
+                      casalite \
+                      libcasa-* \
+                      python3-casacore \
+                      casacore-data \
+                      casarest
+
 # setup base dependencies
 RUN docker-apt-install ${DEBIAN_DEPENDENCIES}
-RUN pip3 install -U pip setuptools wheel
+RUN docker-apt-install ${TEST_DEPENDENCIES}
+RUN pip3 install -U packaging pip setuptools wheel
 
 #####################################################
 # install montblanc including specified tensorflow
@@ -52,6 +68,7 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/tests/test_source_utils.py \
                  /src/montblanc/montblanc/tests/test_source_utils.py \
                  /src/montblanc/montblanc/tests/test_utils.py \
+                 /src/montblanc/montblanc/tests/test_meq_tf.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_b_sqrt.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_create_antenna_jones.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_e_beam.py \
