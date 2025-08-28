@@ -172,7 +172,7 @@ def default_gaussian_shape(self, context):
 
 def rand_gaussian_shape(self, context):
     # Should be (3, ngsrc)
-    if np.product(context.shape) == 0:
+    if np.prod(context.shape) == 0:
         return np.empty(context.shape, context.dtype)
 
     return np.random.random(size=(context.shape)) # el, em, eR

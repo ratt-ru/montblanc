@@ -239,7 +239,7 @@ class MeasurementSetManager(object):
             in zip(UPDATE_DIMENSIONS, updated_sizes) }
 
         shape = tuple(dim_sizes[d] for d in MS_DIM_ORDER)
-        expected_rows = np.product(shape)
+        expected_rows = np.prod(shape)
 
         if not expected_rows == oms.nrows():
             dim_desc = ", ".join('(%s,%s)' % (d, s) for

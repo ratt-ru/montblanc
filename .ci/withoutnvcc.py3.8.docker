@@ -82,7 +82,6 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_sum_coherencies.py
 
 # run tests
-# skip meqtrees acceptance test in this case as it is covered by other cases
 RUN python3 -m nose $TESTS_TO_RUN
 
 # run example montblanc recipe

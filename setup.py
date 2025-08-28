@@ -554,7 +554,10 @@ def create_tensorflow_extension(nvcc_settings, device_info):
         nvcc_flags += cuda_architecture_flags(device_info)
         # Ideally this would be set in define_macros, but
         # this must be set differently for gcc and nvcc
-        nvcc_flags += ['-DGOOGLE_CUDA=%d' % int(use_cuda)]
+        nvcc_flags += [
+            '-DGOOGLE_CUDA=%d' % int(use_cuda),
+            '-DCUB_NS_QUALIFIER=::cub'
+        ]
 
     return Extension(tensorflow_extension_name,
         sources=sources,
@@ -668,7 +671,7 @@ except ImportError:
 else:
     # setuptools will handle version clashes
     tf_installed = True
-    use_tf_cuda = tf.test.is_built_with_cuda()
+    use_tf_cuda = tf.test.is_built_with_cuda() and not os.environ.get("MONTBLANC_BUILD_FORCE_NO_GPU", False)
 
 # ===========================
 # Detect CUDA and GPU Devices
@@ -718,7 +721,7 @@ install_requires = [
     'attridict >= 0.0.8',
     'attrs >= 16.3.0',
     'funcsigs >= 0.4',
-    'hypercube >= 0.3.5; python_version >= "3.10"',
+    'hypercube >= 0.3.6; python_version >= "3.10"',
     'hypercube <= 0.3.4; python_version <= "3.9"',
     'tensorflow >= 2.16.1,<=2.19.0; python_version >="3.12" and python_version < "3.13"',
     'tensorflow >= 2.7.0,<=2.15.0; python_version >="3.10" and python_version < "3.12"',
@@ -729,6 +732,7 @@ install_requires = [
     'tensorflow <=2.4.4; python_version <"3.8"',
     'scipy>=1.5.4; python_version>="3.8"',
     'scipy<=1.4.1; python_version<"3.8"',
+    'astro-tigger-lsm'
 ]
 
 # ==================================
