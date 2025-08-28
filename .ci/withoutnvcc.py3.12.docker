@@ -14,24 +14,9 @@ ENV DEBIAN_DEPENDENCIES wget \
                         python3.12-venv \
                         python3.10-venv
 
-ENV TEST_DEPENDENCIES meqtrees \
-                      python3-meqtrees-cattery \
-                      meqtrees-timba \
-                      python3-meqtrees-timba \
-                      python3-astro-kittens \
-                      python3-astro-tigger-lsm \
-                      python3-owlcat \
-                      python3-purr \
-                      python3-pyxis \
-                      libcasa-* \
-                      python3-casacore \
-                      casacore-data \
-                      casarest
-
 # setup base dependencies
 RUN add-apt-repository -y ppa:deadsnakes/ppa
 RUN docker-apt-install ${DEBIAN_DEPENDENCIES}
-RUN docker-apt-install ${TEST_DEPENDENCIES}
 WORKDIR /optsoft/
 RUN python3.12 -m venv mbinstall
 RUN . /optsoft/mbinstall/bin/activate && python3.12 -m pip install -U packaging pip setuptools wheel
@@ -60,8 +45,9 @@ RUN . /optsoft/mbinstall/bin/activate && python3.12 -m pip install /src/montblan
 
 WORKDIR /mb_testing
 RUN . /optsoft/mbinstall/bin/activate && python3.12 -c "from montblanc.impl.rime.tensorflow import load_tf_lib; load_tf_lib()"
-# to run tests we need to be in dev install - pkg_requirements return the path to the source, 
+# to run tests we need to be in dev install - importlib return the path to the source, 
 # not the install otherwise leading to library load path errors
+
 
 # generate beams and data to test against MT
 RUN mkdir ${HOME}/.casa && \
@@ -76,6 +62,7 @@ RUN . /optsoft/simmsinstall/bin/activate && simms -dir "J2000,00h00m00.0000000s,
 RUN . /optsoft/simmsinstall/bin/activate && eidos -d 4 -r 0.015625 -f 856 1712 142 -P test_beam_ -o8
 
 # run tests
+# TODO: for now exclude meqtrees until Timba is ported to 3.12 and numpy > 2.0
 WORKDIR /mb_testing
 ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/tests/test_antenna_uvw_decomposition.py \

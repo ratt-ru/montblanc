@@ -470,7 +470,7 @@ def cuda_architecture_flags(device_info):
     """
     # Figure out the necessary device architectures
     if len(device_info['devices']) == 0:
-        archs = ['--gpu-architecture=sm_30']
+        archs = ['--gpu-architecture=sm_50']
         log.info("No CUDA devices found, defaulting to architecture '{}'".format(archs[0]))
     else:
         archs = set()
