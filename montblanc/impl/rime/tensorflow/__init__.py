@@ -21,16 +21,34 @@
 def load_tf_lib():
     """ Load the tensorflow library """
     from os.path import join as pjoin
-    from importlib.resources import path
 
-    import tensorflow as tf
-    import os
+    try:
+        from pkg_resources import working_set
+        from pkg_resources import Requirement
 
-    rime_lib_path = pjoin(str(path('montblanc','ext')), 'rime.so')
-    if not os.path.isfile(rime_lib_path):
-        from montblanc import ext
-        rime_lib_path = os.path.join(os.path.dirname(ext.__file__), 'rime.so')
-    if not os.path.isfile(rime_lib_path):
-        raise RuntimeError(f"Montblanc backend not found: '{rime_lib_path}'. Have you compiled the backend?")
-    return tf.load_op_library(rime_lib_path)
+        import tensorflow as tf
+        import os
+
+        path = pjoin('ext', 'rime.so')
+        mbloc = pjoin(working_set.find(Requirement.parse('montblanc')).location, "montblanc")
+        rime_lib_path = pjoin(mbloc, path)
+        if not os.path.isfile(rime_lib_path):
+            from montblanc import ext
+            rime_lib_path = os.path.join(os.path.dirname(ext.__file__), 'rime.so')
+        if not os.path.isfile(rime_lib_path):
+            raise RuntimeError(f"Montblanc backend not found: '{rime_lib_path}'. Have you compiled the backend?")
+        return tf.load_op_library(rime_lib_path)
+    except (ImportError, AttributeError):
+        from importlib.resources import path
+
+        import tensorflow as tf
+        import os
+
+        rime_lib_path = pjoin(str(path('montblanc','ext')), 'rime.so')
+        if not os.path.isfile(rime_lib_path):
+            from montblanc import ext
+            rime_lib_path = os.path.join(os.path.dirname(ext.__file__), 'rime.so')
+        if not os.path.isfile(rime_lib_path):
+            raise RuntimeError(f"Montblanc backend not found: '{rime_lib_path}'. Have you compiled the backend?")
+        return tf.load_op_library(rime_lib_path)
 

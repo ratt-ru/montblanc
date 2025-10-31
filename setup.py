@@ -754,6 +754,7 @@ else:
         'pynose; python_version >= "3.10"',
         'nose; python_version < "3.10"',
         'numba >= 0.36.2',
+        'coverage >= 7.6.1; python_version >= "3.10"',
         'numpy >= 2.0; python_version > "3.10"',
         'numpy >= 1.11.3, <1.24.4; python_version <= "3.10"',
         'python-casacore >= 2.1.2',

@@ -23,8 +23,12 @@ import os
 
 from montblanc.logsetup import setup_logging, setup_test_logging
 from montblanc.tests import test
-from importlib.metadata import version
-__version__ = version("montblanc")
+try:
+    import pkg_resources
+    __version__ = pkg_resources.get_distribution("montblanc").version
+except (ImportError, AttributeError):
+    from importlib.metadata import version
+    __version__ = version("montblanc")
 
 log = setup_logging()
 
