@@ -51,13 +51,12 @@ ADD setup.cfg /src/montblanc/setup.cfg
 ADD setup.py /src/montblanc/setup.py
 
 RUN pip3 install -U setuptools wheel pip
-RUN pip3 install /src/montblanc
+RUN pip3 install -e /src/montblanc
 
 WORKDIR /mb_testing
 RUN python3 -c "from montblanc.impl.rime.tensorflow import load_tf_lib; load_tf_lib()"
 # to run tests we need to be in dev install - pkg_requirements return the path to the source, 
 # not the install otherwise leading to library load path errors
-RUN pip3 install -e /src/montblanc
 
 # generate beams and data to test against MT
 RUN pip install simms>=2.0

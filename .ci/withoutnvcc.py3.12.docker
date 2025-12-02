@@ -40,7 +40,7 @@ ADD setup.cfg /src/montblanc/setup.cfg
 ADD setup.py /src/montblanc/setup.py
 
 RUN . /optsoft/mbinstall/bin/activate && python3.12 -m pip install -U setuptools wheel pip
-RUN . /optsoft/mbinstall/bin/activate && python3.12 -m pip install /src/montblanc
+RUN . /optsoft/mbinstall/bin/activate && python3.12 -m pip install -e /src/montblanc
 
 
 WORKDIR /mb_testing
@@ -82,7 +82,6 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_sum_coherencies.py
 
 # run tests
-RUN . /optsoft/mbinstall/bin/activate && python3.12 -m pip install pynose
 RUN . /optsoft/mbinstall/bin/activate && python3.12 -m nose $TESTS_TO_RUN
 
 #run example montblanc recipe
