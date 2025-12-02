@@ -17,8 +17,8 @@ cd $PROJECTS_DIR/montblanc
 IMAGENAME="mb_py38"
 docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=false -f .ci/py3.8.docker .
 IMAGENAME="mb_py38nonvss"
-docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=false -f .ci/withoutnvcc.py3.8.docker .
+#docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=false -f .ci/withoutnvcc.py3.8.docker .
 IMAGENAME="mb_py310nonvss"
-docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=false -f .ci/withoutnvcc.py3.10.docker .
+#docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=false -f .ci/withoutnvcc.py3.10.docker .
 IMAGENAME="mb_py312nonvss"
-docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=false -f .ci/withoutnvcc.py3.12.docker .
+#docker build -t "$IMAGENAME:$BUILD_NUMBER" --no-cache=false -f .ci/withoutnvcc.py3.12.docker .
