@@ -49,7 +49,7 @@ ADD requirements.readthedocs.txt /src/montblanc/requirements.readthedocs.txt
 ADD setup.cfg /src/montblanc/setup.cfg
 ADD setup.py /src/montblanc/setup.py
 
-RUN pip3 install /src/montblanc
+RUN pip3 install -e /src/montblanc
 
 # run tests
 RUN pip3 install nose simms
