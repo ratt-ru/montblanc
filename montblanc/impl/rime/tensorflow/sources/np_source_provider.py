@@ -97,7 +97,7 @@ class TestNumpySourceProvider(unittest.TestCase):
 
         uvw_schema = cube.array('uvw')
         global_uvw_shape = cube.dim_global_size(*uvw_schema.shape)
-        uvw = (np.arange(np.product(global_uvw_shape))
+        uvw = (np.arange(np.prod(global_uvw_shape))
                     .reshape(global_uvw_shape)
                     .astype(np.float64))
 

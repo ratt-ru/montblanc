@@ -21,19 +21,36 @@
 def load_tf_lib():
     """ Load the tensorflow library """
     from os.path import join as pjoin
-    from pkg_resources import working_set
-    from pkg_resources import Requirement
+    def __pkg_resource_import(): # needed for Python3.6 compatibility
+        from pkg_resources import working_set
+        from pkg_resources import Requirement
 
-    import tensorflow as tf
-    import os
+        import tensorflow as tf
+        import os
 
-    path = pjoin('ext', 'rime.so')
-    mbloc = pjoin(working_set.find(Requirement.parse('montblanc')).location, "montblanc")
-    rime_lib_path = pjoin(mbloc, path)
-    if not os.path.isfile(rime_lib_path):
-        from montblanc import ext
-        rime_lib_path = os.path.join(os.path.dirname(ext.__file__), 'rime.so')
-    if not os.path.isfile(rime_lib_path):
-        raise RuntimeError(f"Montblanc backend not found: '{rime_lib_path}'. Have you compiled the backend?")
-    return tf.load_op_library(rime_lib_path)
+        path = pjoin('ext', 'rime.so')
+        mbloc = pjoin(working_set.find(Requirement.parse('montblanc')).location, "montblanc")
+        rime_lib_path = pjoin(mbloc, path)
+        if not os.path.isfile(rime_lib_path):
+            from montblanc import ext
+            rime_lib_path = os.path.join(os.path.dirname(ext.__file__), 'rime.so')
+        if not os.path.isfile(rime_lib_path):
+            raise RuntimeError(f"Montblanc backend not found: '{rime_lib_path}'. Have you compiled the backend?")
+        return tf.load_op_library(rime_lib_path)
+    def __implib_resource_import():
+        import tensorflow as tf
+        import os
+        import importlib
+        rime_lib_path = os.path.join(os.path.dirname(importlib.import_module('montblanc').__file__),
+                                     'ext', 'rime.so')
+        if not os.path.isfile(rime_lib_path):
+            from montblanc import ext
+            rime_lib_path = os.path.join(os.path.dirname(ext.__file__), 'rime.so')
+        if not os.path.isfile(rime_lib_path):
+            raise RuntimeError(f"Montblanc backend not found: '{rime_lib_path}'. Have you compiled the backend?")
+        return tf.load_op_library(rime_lib_path)
+    try:
+        return __implib_resource_import()
+    except (ImportError, ModuleNotFoundError): # fallback for Python3.6
+        return __pkg_resource_import()
 

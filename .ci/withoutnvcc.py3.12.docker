@@ -1,3 +1,5 @@
+# TODO change me when kern:10 is available
+# for now we're going to use deadsnakes to install onto Python3.12
 FROM kernsuite/base:9
 
 WORKDIR /optsoft/tensorflow
@@ -7,30 +9,17 @@ ENV DEBIAN_DEPENDENCIES wget \
                         build-essential \
                         python3-pip \
                         git \
-                        casacore-data
-
-ENV TEST_DEPENDENCIES meqtrees \
-                      python3-meqtrees-cattery \
-                      meqtrees-timba \
-                      python3-meqtrees-timba \
-                      python3-astro-kittens \
-                      python3-astro-tigger-lsm \
-                      python3-owlcat \
-                      python3-purr \
-                      python3-pyxis \
-                      libcasa-* \
-                      python3-casacore \
-                      casacore-data \
-                      casarest
+                        casacore-data \
+                        python3.12-full \
+                        python3.12-venv \
+                        python3.10-venv
 
 # setup base dependencies
+RUN add-apt-repository -y ppa:deadsnakes/ppa
 RUN docker-apt-install ${DEBIAN_DEPENDENCIES}
-RUN docker-apt-install ${TEST_DEPENDENCIES}
-RUN pip3 install -U packaging pip setuptools wheel
-
-# setup base dependencies
-RUN apt update && apt install -y ${DEBIAN_DEPENDENCIES}
-RUN pip3 install -U packaging pip setuptools wheel
+WORKDIR /optsoft/
+RUN python3.12 -m venv mbinstall
+RUN . /optsoft/mbinstall/bin/activate && python3.12 -m pip install -U packaging pip setuptools wheel
 
 #####################################################
 # install montblanc including specified tensorflow
@@ -50,33 +39,36 @@ ADD requirements.readthedocs.txt /src/montblanc/requirements.readthedocs.txt
 ADD setup.cfg /src/montblanc/setup.cfg
 ADD setup.py /src/montblanc/setup.py
 
-RUN pip3 install -U setuptools wheel pip
-RUN pip3 install -e /src/montblanc
+RUN . /optsoft/mbinstall/bin/activate && python3.12 -m pip install -U setuptools wheel pip
+RUN . /optsoft/mbinstall/bin/activate && python3.12 -m pip install -e /src/montblanc
+
 
 WORKDIR /mb_testing
-RUN python3 -c "from montblanc.impl.rime.tensorflow import load_tf_lib; load_tf_lib()"
-# to run tests we need to be in dev install - pkg_requirements return the path to the source, 
+RUN . /optsoft/mbinstall/bin/activate && python3.12 -c "from montblanc.impl.rime.tensorflow import load_tf_lib; load_tf_lib()"
+# to run tests we need to be in dev install - importlib return the path to the source, 
 # not the install otherwise leading to library load path errors
 
+
 # generate beams and data to test against MT
-RUN pip install simms>=2.0
+RUN mkdir ${HOME}/.casa && \
+    echo rundata = \'/usr/share/casacore/data\' > ${HOME}/.casa/config.py
+WORKDIR /optsoft/
+RUN python3 -m venv simmsinstall
+RUN . /optsoft/simmsinstall/bin/activate && python3.10 -m pip install simms>=2.0 'eidos>=1.1.1'
 WORKDIR /mb_testing
 RUN mkdir data
 WORKDIR /mb_testing/data
-RUN python3 -m pip install 'eidos>=1.1.1'
-RUN mkdir ${HOME}/.casa && \
-    echo rundata = \'/usr/share/casacore/data\' > ${HOME}/.casa/config.py
-RUN simms -dir "J2000,00h00m00.0000000s,-10d00m00.00s" -T meerkat -dt 30 -st 0.5 -nc 15 -f0 856MHz -df 57066.66667kHz -pl XX XY YX YY -n mk64.Lwide.0.5hr.30s.856mhz.ms
-RUN eidos -d 4 -r 0.015625 -f 856 1712 142 -P test_beam_ -o8
+RUN . /optsoft/simmsinstall/bin/activate && simms -dir "J2000,00h00m00.0000000s,-10d00m00.00s" -T meerkat -dt 30 -st 0.5 -nc 15 -f0 856MHz -df 57066.66667kHz -pl XX XY YX YY -n mk64.Lwide.0.5hr.30s.856mhz.ms
+RUN . /optsoft/simmsinstall/bin/activate && eidos -d 4 -r 0.015625 -f 856 1712 142 -P test_beam_ -o8
 
 # run tests
+# TODO: for now exclude meqtrees until Timba is ported to 3.12 and numpy > 2.0
 WORKDIR /mb_testing
 ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/tests/test_antenna_uvw_decomposition.py \
                  /src/montblanc/montblanc/tests/test_source_utils.py \
                  /src/montblanc/montblanc/tests/test_source_utils.py \
                  /src/montblanc/montblanc/tests/test_utils.py \
-                 /src/montblanc/montblanc/tests/test_meq_tf.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_b_sqrt.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_create_antenna_jones.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_e_beam.py \
@@ -90,10 +82,10 @@ ENV TESTS_TO_RUN /src/montblanc/montblanc/tests/beam_factory.py \
                  /src/montblanc/montblanc/impl/rime/tensorflow/rime_ops/test_sum_coherencies.py
 
 # run tests
-RUN pynose $TESTS_TO_RUN
+RUN . /optsoft/mbinstall/bin/activate && python3.12 -m nose $TESTS_TO_RUN
 
 #run example montblanc recipe
 WORKDIR /mb_testing
-RUN python3 /src/montblanc/montblanc/examples/MS_tf_example.py /mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms \
-            -b /mb_testing/data/test_beam_
+RUN . /optsoft/mbinstall/bin/activate && python3.12 /src/montblanc/montblanc/examples/MS_tf_example.py /mb_testing/data/mk64.Lwide.0.5hr.30s.856mhz.ms \
+                                         -b /mb_testing/data/test_beam_
 

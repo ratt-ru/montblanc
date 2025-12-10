@@ -470,7 +470,7 @@ def cuda_architecture_flags(device_info):
     """
     # Figure out the necessary device architectures
     if len(device_info['devices']) == 0:
-        archs = ['--gpu-architecture=sm_30']
+        archs = ['--gpu-architecture=sm_50']
         log.info("No CUDA devices found, defaulting to architecture '{}'".format(archs[0]))
     else:
         archs = set()
@@ -554,7 +554,10 @@ def create_tensorflow_extension(nvcc_settings, device_info):
         nvcc_flags += cuda_architecture_flags(device_info)
         # Ideally this would be set in define_macros, but
         # this must be set differently for gcc and nvcc
-        nvcc_flags += ['-DGOOGLE_CUDA=%d' % int(use_cuda)]
+        nvcc_flags += [
+            '-DGOOGLE_CUDA=%d' % int(use_cuda),
+            '-DCUB_NS_QUALIFIER=::cub'
+        ]
 
     return Extension(tensorflow_extension_name,
         sources=sources,
@@ -668,7 +671,7 @@ except ImportError:
 else:
     # setuptools will handle version clashes
     tf_installed = True
-    use_tf_cuda = tf.test.is_built_with_cuda()
+    use_tf_cuda = tf.test.is_built_with_cuda() and not os.environ.get("MONTBLANC_BUILD_FORCE_NO_GPU", False)
 
 # ===========================
 # Detect CUDA and GPU Devices
@@ -718,14 +721,18 @@ install_requires = [
     'attridict >= 0.0.8',
     'attrs >= 16.3.0',
     'funcsigs >= 0.4',
-    'hypercube >= 0.3.5; python_version >= "3.10"',
+    'hypercube >= 0.3.6; python_version >= "3.10"',
     'hypercube <= 0.3.4; python_version <= "3.9"',
-    'tensorflow >= 2.7.0,<=2.15.0; python_version >="3.10"',
+    'tensorflow >= 2.16.1,<=2.19.0; python_version >="3.12" and python_version < "3.13"',
+    'tensorflow >= 2.7.0,<=2.15.0; python_version >="3.10" and python_version < "3.12"',
     # versions higher than 2.8.4 seems to expect --std=c++17, which is not readily available on the
     # shipped nvcc for Ubuntu 20.04. We will move upward from Ubuntu 22.04 shipping
     # Python 3.10
     'tensorflow >= 2.7.0,<=2.8.4; python_version >="3.8" and python_version <"3.10"',
     'tensorflow <=2.4.4; python_version <"3.8"',
+    'scipy>=1.5.4; python_version>="3.8"',
+    'scipy<=1.4.1; python_version<"3.8"',
+    'astro-tigger-lsm'
 ]
 
 # ==================================
@@ -740,12 +747,16 @@ if on_rtd:
 else:
     # Add binary/C extension type packages
     install_requires += [
-        'astropy > 3.0; python_version >= "3.0"',
+        'astropy >= 6.0; python_version >= "3.10" and python_version < "3.13"',
+        'astropy >= 5.0; python_version >= "3.8" and python_version < "3.10"',
+        'astropy >= 3.0; python_version < "3.8"',
         'cerberus >= 1.1',
         'pynose; python_version >= "3.10"',
         'nose; python_version < "3.10"',
         'numba >= 0.36.2',
-        'numpy >= 1.11.3, < 2.0.0',
+        'coverage >= 7.6.1; python_version >= "3.10"',
+        'numpy >= 2.0; python_version > "3.10"',
+        'numpy >= 1.11.3, <1.24.4; python_version <= "3.10"',
         'python-casacore >= 2.1.2',
         'ruamel.yaml >= 0.15.22',
     ]
@@ -769,7 +780,7 @@ else:
 log.info('install_requires={}'.format(install_requires))
 
 setup(name='montblanc',
-    version="0.7.3.2",
+    version="0.7.4",
     description='GPU-accelerated RIME implementations.',
     long_description=readme(),
     url='http://github.com/ska-sa/montblanc',

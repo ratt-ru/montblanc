@@ -78,7 +78,7 @@ def fmt_bytes(nbytes):
 
 def array_bytes(shape, dtype):
     """ Estimates the memory in bytes required for an array of the supplied shape and dtype """
-    return np.product(shape)*np.dtype(dtype).itemsize
+    return np.prod(shape)*np.dtype(dtype).itemsize
 
 def random_float(shape, dtype):
     return np.random.random(size=shape).astype(dtype)
@@ -171,11 +171,11 @@ def dict_array_bytes_required(arrays, template):
         for ary in arrays])
 
 __DIM_REDUCTION_RE = re.compile(    # Capture Groups and Subgroups
-    "^\s*(?P<name>[A-Za-z0-9_]*?)"  # 1.   Dimension name
-    "(?:\s*?=\s*?"                  # 2.   White spaces and =
-        "(?P<value>[0-9]*?)"        # 2.1  A value
-        "(?P<percent>\%?)"          # 2.2  Possibly followed by a percentage
-    ")?\s*?$")                      #      Capture group 2 possibly occurs
+    r"^\s*(?P<name>[A-Za-z0-9_]*?)"  # 1.   Dimension name
+    r"(?:\s*?=\s*?"                  # 2.   White spaces and =
+        r"(?P<value>[0-9]*?)"        # 2.1  A value
+        r"(?P<percent>\%?)"          # 2.2  Possibly followed by a percentage
+    r")?\s*?$")                      #      Capture group 2 possibly occurs
 
 def viable_dim_config(bytes_available, arrays, template,
         dim_ord, nsolvers=1):
